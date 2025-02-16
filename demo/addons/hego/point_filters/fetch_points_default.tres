@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="HEGoFetchPointsConfig" load_steps=2 format=3 uid="uid://2onyqjvdqaci"]
+
+[ext_resource type="Script" path="res://addons/hego/fetch_points_config.gd" id="1_5r07v"]
+
+[resource]
+script = ExtResource("1_5r07v")
+only_loose_points = true
+read_attribs = PackedStringArray("N", "Cd", "up", "pscale")
+filter_attribs = PackedStringArray()
+filter_attrib_values = []
+split_attribs = PackedStringArray()
