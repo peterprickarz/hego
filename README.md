@@ -2,6 +2,8 @@
  
 Welcome to the hego repository. This is an open source Houdini Engine integration into Godot as a c++ [GDextension](https://docs.godotengine.org/en/stable/tutorials/scripting/gdextension/what_is_gdextension.html)
 
+Check the [wiki](https://github.com/peterprickarz/hego/wiki) to get started
+
 This is in heavy WIP and in a really early stage.
 
 I'm taking quite a different approach compared to the offical Houdini Engine plugins(Unreal, Unity, Maya etc), as I mostly focus on keeping interaction with Houdini scriptable, and mainly focus on building a nice API to be used via GDScript.
