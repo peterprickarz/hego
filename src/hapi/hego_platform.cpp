@@ -20,8 +20,8 @@ const char *HAPI_LIB_OBJECT_MAC = "libHAPIL.dylib";
 void HEGoPlatform::set_env_vars()
 {
 	HEGo::Util::Log::message("Setting in process environment variables...");
-	const char *houdiniBasePath = "C:/Program Files/Side Effects Software/Houdini 20.5.305";
-	const char *houdiniBinPath = "C:/Program Files/Side Effects Software/Houdini 20.5.305/bin";
+	const char *houdiniBasePath = "C:/Program Files/Side Effects Software/Houdini 20.5.487";
+	const char *houdiniBinPath = "C:/Program Files/Side Effects Software/Houdini 20.5.487/bin";
 
 #ifdef _WIN32
 	_putenv(("HFS=" + std::string(houdiniBasePath)).c_str());

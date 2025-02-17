@@ -74,13 +74,12 @@ func cook():
 	var res = load("res://addons/hego/point_filters/fetch_points_default.tres")
 	var dict = hego_asset_node.fetch_points(res)
 	var multimesh = MultiMesh.new()
-	#print(dict)
+
 	multimesh.transform_format = RenderingServer.MULTIMESH_TRANSFORM_3D
 	multimesh.instance_count = dict["ids"].size()
 	multimesh.visible_instance_count = -1
 	multimesh.mesh = load("res://models/test_grass_subnet1.res")
 	
-	print(dict["P"].size())
 
 	for i in range(dict["P"].size()):
 		var normal : Vector3 = dict["N"][i]

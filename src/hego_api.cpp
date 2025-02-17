@@ -12,8 +12,6 @@
 
 namespace HEGo
 {
-const std::string HFS = "C:/Program Files/Side Effects Software/Houdini 20.5.305";
-
 HEGoAPI *HEGoAPI::singleton = nullptr;
 
 HEGoAPI::HEGoAPI() : session_mgr()

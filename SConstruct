@@ -2,7 +2,7 @@
 import os
 import sys
 
-HFS = 'C:/Program Files/Side Effects Software/Houdini 20.5.305'
+HFS = 'C:/Program Files/Side Effects Software/Houdini 20.5.487'
 HB = f'{HFS}/bin'
 
 # Define environment variables
@@ -35,7 +35,7 @@ for p in modified_path:
 # Houdini version information
 env['ENV']['HOUDINI_MAJOR_RELEASE'] = '20'
 env['ENV']['HOUDINI_MINOR_RELEASE'] = '5'
-env['ENV']['HOUDINI_BUILD_VERSION'] = '305'
+env['ENV']['HOUDINI_BUILD_VERSION'] = '487'
 env['ENV']['HOUDINI_VERSION'] = f'{env["ENV"]["HOUDINI_MAJOR_RELEASE"]}.{env["ENV"]["HOUDINI_MINOR_RELEASE"]}.{env["ENV"]["HOUDINI_BUILD_VERSION"]}'
 
 # Build machine information

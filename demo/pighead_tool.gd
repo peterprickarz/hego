@@ -12,34 +12,34 @@ const ASSET_NAME : String = "Sop/hego_testpighead_tool"
 
 var hego_asset_node: HEGoAssetNode
 
-func cook():
-	
-	for child in get_children():
-		child.queue_free()
-	
+func cook():	
 	# Ensure valid AssetNode object
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	hego_asset_node.op_name = ASSET_NAME
 	hego_asset_node.instantiate()
 	hego_asset_node.set_transform(global_transform)
-	# Ensure valid MergeNode object
 	# Fetch and set cook result of AssetNode
 	var res = load("res://hego/surface_configs/fetch_surfaces_split_by_lod.tres")
 	var dict = hego_asset_node.fetch_surfaces(res)
 	
-	
+	# create array mesh var and a corresponding array set to null everywhere
 	var arr_mesh = ArrayMesh.new()
 	var surface_array = []
 	surface_array.resize(Mesh.ARRAY_MAX)
 	for i in surface_array.size():
 		surface_array[i] = null
-	var index_offset = 0
 	
+	# get the surface array with LOD attribute value of 0 and treat as main mesh
+	var lod_0_indices = dict[.0]["surface_array"][12]
+	"""
+	create lods dictionary as needed for add_surface_from_array function
+	the keys of the dictionary are relative to the distance at which they will be shown
+	we need to put all the vertices into one surface array, and adjust the indices for
+	this offset
+	"""
+	var index_offset = 0
 	var lods = {}
 	var dict_keys = dict.keys()
-
-	var lod_0_indices = dict[dict_keys[0]]["surface_array"][12]
-	
 	for key in dict.keys():
 		var lod_array : Array = dict[key]["surface_array"]
 		for i in range(lod_array[12].size()):
@@ -53,9 +53,9 @@ func cook():
 		index_offset += lod_array[0].size()
 		if key != 0:
 			lods[key] = lod_array[12]
-		
+	# finally, assign lod 0 indices to the surface array and add the surface
 	surface_array[12] = lod_0_indices
 	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], lods)
-	
+	# assign mesh
 	self.mesh = arr_mesh
 

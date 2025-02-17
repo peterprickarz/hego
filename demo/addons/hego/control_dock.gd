@@ -16,7 +16,7 @@ func _process(delta):
 
 func _on_start_session_pressed():
 	HEGoAPI.get_singleton().start_session()
-	pass # Replace with function body.
+	pass
 
 
 func _on_stop_session_pressed():

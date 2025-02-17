@@ -4,21 +4,18 @@ class_name HDAScifiPanelGenerator
 
 const ASSET_NAME : String = "Sop/hego_scifipanelgenerator"
 
-
 @export var recook: bool = false:
 	set(value):
 		cook()
-@export var input_nodes: Array[Node] = []
+# array of nodes to support inputting multiple MeshInstance3D objects
+@export var input_nodes: Array[MeshInstance3D] = []
 
 var hego_asset_node: HEGoAssetNode
 var hego_merge_node: HEGoMergeNode
+# create an array of input nodes to keep track of multiple input meshes
 var hego_input_nodes: Array[HEGoInputNode]
 
 func cook():
-	
-	for child in get_children():
-		child.queue_free()
-	
 	# Ensure valid AssetNode object
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	hego_asset_node.op_name = ASSET_NAME
@@ -40,12 +37,9 @@ func cook():
 	# Connect MergeNode to AssetNode and set parameters
 	hego_asset_node.connect_input(hego_merge_node, 0)
 	
-	
 	var res = load("res://hego/surface_configs/fetch_surfaces_split_by_mat.tres")
 	var dict = hego_asset_node.fetch_surfaces(res)
 	var arr_mesh = ArrayMesh.new()
-	
-	
 	
 	var m_accent = load("res://materials/m_accent.tres")
 	var m_default = load("res://materials/m_default.tres")
