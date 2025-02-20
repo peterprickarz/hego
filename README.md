@@ -2,6 +2,8 @@
  
 Welcome to the hego repository. This is an open source Houdini Engine integration into Godot as a c++ [GDextension](https://docs.godotengine.org/en/stable/tutorials/scripting/gdextension/what_is_gdextension.html)
 
+There's also a [houdini2godot](https://github.com/Mandrake0/houdini2godot) plugin made by [Mandrake0](https://github.com/Mandrake0) which allows to export Godot scenes directly from Houdini.
+
 Check the [wiki](https://github.com/peterprickarz/hego/wiki) and/or this [introduction video](https://youtu.be/5iYb76kwDjU) to get started
 
 This is in heavy WIP and in a really early stage.
