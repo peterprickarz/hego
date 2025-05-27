@@ -1,0 +1,434 @@
+@tool
+extends Node3D
+
+class_name HEGoNode3D
+
+# The asset definition name in Houdini, e.g. Sop/my_tool.hda
+@export var asset_name: String
+# Parm stash stores the parameters as a byte blob which stores parms between sessions
+@export var parm_stash: PackedByteArray
+# Input stash to store references to the inputs between sessions
+@export var input_stash: Array
+
+
+# Create var to store reference to the HEGoAssetNode in the session
+var hego_asset_node: HEGoAssetNode
+# Create var to store references to the input and merge nodes in the session
+var hego_input_nodes: Dictionary
+
+func cook():
+	# Ensure valid AssetNode object
+	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
+	# Assign HDA
+	hego_asset_node.op_name = asset_name
+	# Check the id, which is -1 before instantiation
+	var id = hego_asset_node.get_id()
+	# Instantiate - Note, this function auto checks if it already is instantiated!
+	hego_asset_node.instantiate()
+	# Set transform
+	hego_asset_node.set_transform(global_transform)
+	# If the asset node was not instantiated beforehand, retrieve parm stash
+	if id == -1 and parm_stash.size()>0:
+		hego_asset_node.set_preset(parm_stash)
+		
+	var outputs_node = get_node_or_null("Outputs")
+	if outputs_node:
+		outputs_node.free()
+		
+	# SET INPUTS
+	# Retrieve a string array containing the names of inputs
+	var input_names = hego_asset_node.get_input_names()
+	# Loop over inputs
+	for i in range(input_names.size()):
+		# Retrieve godot node refs for input from input stash
+		var inputs = Array()
+		var settings = Dictionary()
+		if input_stash.size() > i:
+			var inputs_dict = input_stash[i]
+			inputs = inputs_dict["inputs"]
+			settings = inputs_dict["settings"]
+		# If the input doesn't exist on Houdini side but does on Godot side, create it
+		if not hego_input_nodes.has(i) and inputs.size() > 0:
+			print("generating input nodes")
+			# We always need a merge node and the array of input nodes to connect to it
+			var input_array = Array()
+			var merge_node = HEGoMergeNode.new()
+			merge_node.instantiate()
+			# fill input_array
+			for input in inputs:
+				var input_node = create_hego_input_node(input, settings)
+				input_array.append(input_node)
+			# Connect inputs to merge and merge to asset node
+			merge_node.connect_inputs(input_array)
+			hego_asset_node.connect_input(merge_node, i)
+			# Create the dictionary to keep track
+			var input_dict = Dictionary()
+			input_dict["merge"] = merge_node
+			input_dict["inputs"] = input_array
+			hego_input_nodes[i] = input_dict
+		# If the input exists on Houdini side, update it if anything changed
+		if hego_input_nodes.has(i):
+			var input_dict = hego_input_nodes[i]
+			var merge_node = input_dict["merge"]
+			var input_array = input_dict["inputs"]
+			# If there's less inputs on godo side than Houdini side, drop the extra inputs
+			if inputs.size() < input_array.size():
+				input_array.resize(inputs.size())
+				# Update correct inputs
+				for j in range(input_array.size()):
+					input_array[j] = update_hego_input_node(input_array[j], inputs[j], settings)
+			# If there's more inputs on godot side than houdini side
+			elif inputs.size() > input_array.size():
+				# loop over inputs on godot side
+				for j in range(inputs.size()):
+					# if input exists, update it
+					if j <= input_array.size()-1:
+						input_array[j] = update_hego_input_node(input_array[j], inputs[j], settings)
+					# if not, create it
+					elif j > input_array.size()-1:
+						var input_node = create_hego_input_node(inputs[j], settings)
+						input_array.append(input_node)
+			# If counts match, just update all inputs
+			elif inputs.size() == input_array.size():
+				for j in range(inputs.size()):
+					input_array[j] = update_hego_input_node(input_array[j], inputs[j], settings)
+			# Reconnect inputs to merge
+			merge_node.connect_inputs(input_array)
+			# Connect merge to asset node
+			hego_asset_node.connect_input(merge_node, i)
+	# FETCH OUTPUTS
+	# use config to fetch output mesh
+	var fetch_surfaces_default_config = load("res://addons/hego/surface_filters/fetch_surfaces_default.tres")
+	# retrieve dictionary output, containing the mesh in godots surface_array format
+	var dict = hego_asset_node.fetch_surfaces(fetch_surfaces_default_config)
+	for hego_mesh_instance_key in dict.keys():
+		var node_name_path = "hego_output_mesh_inst"
+		if hego_mesh_instance_key != null:
+			node_name_path = hego_mesh_instance_key
+		var arr_mesh = ArrayMesh.new()
+		var surface_id = 0
+		for hego_material_key in dict[hego_mesh_instance_key]:
+			var material_ref = hego_material_key
+			var surface_array = dict[hego_mesh_instance_key][hego_material_key]["surface_array"]
+			var hego_lod_array = dict[hego_mesh_instance_key][hego_material_key]["hego_lod"]
+			if hego_lod_array[0] != null:
+				var mesh_indices_array = surface_array[Mesh.ARRAY_INDEX]
+				var lod_dict = float_to_int_triplet_dict(hego_lod_array, mesh_indices_array)
+				surface_array[Mesh.ARRAY_INDEX] = lod_dict[.0]
+				lod_dict.erase(.0)
+				arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array,[], lod_dict)
+			else:
+				arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array)
+			if hego_material_key != null:
+				var material = load(hego_material_key)
+				if material is Material:
+					arr_mesh.surface_set_material(surface_id, material)
+			surface_id += 1
+		# Split the path into parts
+		node_name_path = "Outputs/" + node_name_path
+		var parts = node_name_path.split("/")
+		var current_node = self
+		
+		# Create intermediate Node3Ds
+		for i in range(parts.size() - 1):
+			var node_name = parts[i]
+			var existing_node = current_node.get_node_or_null(node_name)
+			
+			if existing_node:
+				current_node = existing_node
+			else:
+				var new_node = Node3D.new()
+				new_node.name = node_name
+				current_node.add_child(new_node)
+				if Engine.is_editor_hint():
+					new_node.owner = get_tree().edited_scene_root
+				current_node = new_node
+			
+		# Create final MeshInstance3D
+		var final_name = parts[parts.size() - 1]
+		var mesh_instance = MeshInstance3D.new()
+		mesh_instance.name = final_name
+		current_node.add_child(mesh_instance)
+		if Engine.is_editor_hint():
+			mesh_instance.owner = get_tree().edited_scene_root
+		mesh_instance.mesh = arr_mesh
+	parm_stash = hego_asset_node.get_preset()
+	handle_multimesh_output()
+			
+func handle_multimesh_output():
+	print("[HEGoNode3D]: Handling Multimesh Output")
+	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_multimesh_instancing.tres")
+	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config)
+	#print(output_dictionary)
+	for key in output_dictionary.keys():
+		var hego_multimesh = "MultiMesh"
+		if key != null:
+			hego_multimesh = key
+		var resource_dict = output_dictionary[key]
+		for resource_path in resource_dict.keys():
+			if resource_path != null:
+				var mesh_resource = load(resource_path)
+				if mesh_resource is Mesh:
+					var res_name = resource_path.get_file().get_basename()
+					var hego_multimesh_name = "Outputs/" + hego_multimesh + "_" + res_name
+					var point_dict = resource_dict[resource_path]
+					# we now need to spawn mesh_resource in a multimesh
+					# with hego_multimesh_name as path/name
+					# and use points_dict to add instances with attributes
+					setup_multimesh(mesh_resource, hego_multimesh_name, point_dict)
+
+
+func setup_multimesh(mesh_resource: Mesh, hego_multimesh_name: String, point_dict: Dictionary) -> void:
+	# Early exit if no points
+	var point_count = point_dict["P"].size()
+	if point_count == 0:
+		return
+	
+	# Create the MultiMeshInstance3D node
+	var multimesh_instance = MultiMeshInstance3D.new()
+	var path_array = hego_multimesh_name.split("/")
+	var current_node = self
+	for i in range(path_array.size() - 1):
+		var dir_name = path_array[i]
+		if not current_node.has_node(dir_name):
+			var new_dir = Node3D.new()
+			new_dir.name = dir_name
+			current_node.add_child(new_dir)
+			new_dir.owner = get_tree().edited_scene_root
+		current_node = current_node.get_node(dir_name)
+	
+	var multimesh_name = path_array[path_array.size() - 1]
+	multimesh_instance.name = multimesh_name
+	current_node.add_child(multimesh_instance)
+	multimesh_instance.owner = get_tree().edited_scene_root
+	
+	# Create and configure MultiMesh
+	var multimesh = MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = mesh_resource
+	
+	# Calculate center of all points
+	var center = Vector3.ZERO
+	for pos in point_dict["P"]:
+		center += pos
+	center /= point_count
+	
+	# Set MultiMeshInstance3D transform to center
+	multimesh_instance.transform.origin = center
+	
+	# Set instance count
+	multimesh.instance_count = point_count
+	
+	# Default values
+	var default_normal = Vector3(0, 0, 1).normalized()
+	var default_up = Vector3(0, 1, 0).normalized()
+	var default_color = Color(1, 1, 1, 1)
+	var default_pscale = 1.0
+	var default_scale = Vector3(1, 1, 1)
+	var use_color = false
+	
+	if point_dict["Cd"] and point_dict["Cd"][0] != null:
+		use_color = true
+		multimesh.use_colors = true
+	
+	# Process each point
+	for i in range(point_count):
+		# Get position and offset by center
+		var pos = point_dict["P"][i] - center
+		
+		# Get orientation vectors and normalize
+		var normal = point_dict["N"][i].normalized() if point_dict["N"] and point_dict["N"][i] != null else default_normal
+		var up = point_dict["up"][i].normalized() if point_dict["up"] and point_dict["up"][i] != null else default_up
+		
+		# Create basis from normal and up vectors
+		var basis = Basis()
+		var right = up.cross(normal).normalized()
+		basis.x = right
+		basis.y = up
+		basis.z = normal
+		
+		# Apply scaling
+		var scale = point_dict["scale"][i] if point_dict["scale"] and point_dict["scale"][i] != null else default_scale
+		var pscale = point_dict["pscale"][i] if point_dict["pscale"] and point_dict["pscale"][i] != null else default_pscale
+		basis = basis.scaled(scale * pscale)
+		
+		# Create transform
+		var transform = Transform3D(basis, pos)
+		multimesh.set_instance_transform(i, transform)
+		
+		# Set color
+		if use_color:
+			var color = point_dict["Cd"][i] if point_dict["Cd"] and point_dict["Cd"][i] != null else default_color
+			if color is Vector3:
+				color = Color(color.x, color.y, color.z, 1.0)
+			multimesh.set_instance_color(i, color)
+	
+	multimesh_instance.multimesh = multimesh
+			
+			
+func create_mesh_instance_3d(node_name_path, arr_mesh):
+	# Split the path into parts
+	node_name_path = "Outputs/" + node_name_path
+	var parts = node_name_path.split("/")
+	var current_node = self
+	
+	# Create intermediate Node3Ds
+	for i in range(parts.size() - 1):
+		var node_name = parts[i]
+		var existing_node = current_node.get_node_or_null(node_name)
+		
+		if existing_node:
+			current_node = existing_node
+		else:
+			var new_node = Node3D.new()
+			new_node.name = node_name
+			current_node.add_child(new_node)
+			if Engine.is_editor_hint():
+				new_node.owner = get_tree().edited_scene_root
+			current_node = new_node
+		
+	# Create final MeshInstance3D
+	var final_name = parts[parts.size() - 1]
+	var mesh_instance = MeshInstance3D.new()
+	mesh_instance.name = final_name
+	current_node.add_child(mesh_instance)
+	if Engine.is_editor_hint():
+		mesh_instance.owner = get_tree().edited_scene_root
+	mesh_instance.mesh = arr_mesh
+	pass
+		
+		
+func float_to_int_triplet_dict(float_array: Array, int_array: Array) -> Dictionary:
+	var result: Dictionary = {}
+	
+	if int_array.size() != 3 * float_array.size():
+		return result  # Return empty dict if sizes don't match
+	
+	for i in range(float_array.size()):
+		var float_value: float = float_array[i]
+		var triplet: PackedInt32Array = [
+			int_array[3 * i],
+			int_array[3 * i + 1],
+			int_array[3 * i + 2]
+		]
+		if result.has(float_value):
+			result[float_value].append_array(triplet)
+		else:
+			result[float_value] = triplet
+			
+	return result
+
+func array_to_index_dict(float_array: Array) -> Dictionary:
+	var result: Dictionary = {}
+	
+	for i in range(float_array.size()):
+		var value: float = float_array[i]
+		if result.has(value):
+			result[value].append(i)
+		else:
+			result[value] = [i]
+			
+	return result
+	
+			
+			
+			
+	
+func update_hego_input_node(hego_input_node, input_node_path, settings):
+	var scene_root = get_tree().edited_scene_root
+	var input = scene_root.get_node_or_null(input_node_path)
+	if input is Path3D:
+		if not hego_input_node is HEGoCurveInputNode:
+			hego_input_node = HEGoCurveInputNode.new()
+			hego_input_node.instantiate()
+		hego_input_node.set_curve_from_path_3d(input, 1)
+	elif input is MeshInstance3D:
+		if not hego_input_node is HEGoInputNode:
+			hego_input_node = HEGoInputNode.new()
+			hego_input_node.instantiate()
+		hego_input_node.set_geo_from_mesh_instance_3d(input)
+	else:
+		print("[HEGoNode3D]: Input is neither Path3D nor MeshInstance3D")
+	return hego_input_node
+	
+
+
+func create_hego_input_node(input_node_path, settings):
+	var scene_root = get_tree().edited_scene_root
+	var input = scene_root.get_node_or_null(input_node_path)
+	var input_node
+	if input is Path3D:
+		input_node = HEGoCurveInputNode.new()
+		input_node.instantiate()
+		input_node.set_curve_from_path_3d(input, 1)
+	elif input is MeshInstance3D:
+		input_node = HEGoInputNode.new()
+		input_node.instantiate()
+		input_node.set_geo_from_mesh_instance_3d(input)
+	else:
+		print("[HEGoNode3D]: Input is neither Path3D nor MeshInstance3D")
+	return input_node
+
+func hego_use_bottom_panel():
+	return true
+
+func hego_get_asset_node():
+	return hego_asset_node;
+	
+func hego_stash_parms(preset:PackedByteArray):
+	parm_stash = preset
+	
+func hego_get_input_stash():
+	return input_stash
+	
+func hego_set_input_stash(input_array: Array):
+	# input_array is an array of inputs, as each Houdini input can combine
+	# multiple inputs, each input is an array itself, storing node names and ids
+	# Create new array to store actual node refs
+	print("stash inputs")
+	print(input_array)
+	var result = Array()
+	for input in input_array:
+		var ref_array = Array()
+		for ref in input["inputs"]:
+			if ref != "":
+				ref_array.append(ref)
+		var input_dict = Dictionary()
+		input_dict["inputs"] = ref_array
+		input_dict["settings"] = input["settings"]
+		result.append(input_dict)
+	input_stash = result
+	
+func repeat_indent(indent: int) -> String:
+	var result := ""
+	for i in range(indent):
+		result += "    " # 4 spaces
+	return result
+
+func pretty_print(value, indent := 0) -> String:
+	var indent_str = repeat_indent(indent)
+	var next_indent_str = repeat_indent(indent + 1)
+
+	if typeof(value) == TYPE_DICTIONARY:
+		var result = "{\n"
+		for key in value.keys():
+			var key_str = pretty_print(key, indent + 1)
+			var val_str = pretty_print(value[key], indent + 1)
+			result += "%s%s: %s,\n" % [next_indent_str, key_str, val_str]
+		result += indent_str + "}"
+		return result
+
+	elif typeof(value) == TYPE_ARRAY:
+		var result = "[\n"
+		for item in value:
+			result += "%s%s,\n" % [next_indent_str, pretty_print(item, indent + 1)]
+		result += indent_str + "]"
+		return result
+
+	elif typeof(value) == TYPE_STRING:
+		return "\"%s\"" % value
+
+	else:
+		return str(value)
+
+

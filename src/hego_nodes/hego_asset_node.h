@@ -23,6 +23,12 @@ public:
 
 	void instantiate() override;
 	void set_parm(godot::String parm_name, godot::Variant value);
+	void set_preset(godot::PackedByteArray preset);
+	void insert_multiparm_instance(int parm_id, int index);
+	void remove_multiparm_instance(int parm_id, int index);
+	godot::PackedByteArray get_preset();
+	godot::Dictionary get_parms_dict();
+	godot::PackedStringArray get_input_names();
 	godot::Array fetch_output();
 	godot::Dictionary fetch_points(godot::Ref<godot::Resource> fetch_point_config);
 	godot::Dictionary fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config);

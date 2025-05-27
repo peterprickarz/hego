@@ -5,6 +5,7 @@ class_name HEGoFetchSurfacesConfig
 @export var color : bool
 @export var uv : bool
 @export var uv2 : bool
+@export var tangents: bool
 @export var read_attribs : PackedStringArray
 @export var filter_attribs : PackedStringArray
 @export var filter_attrib_values : Array[Variant]:

@@ -1,0 +1,32 @@
+[gd_scene load_steps=2 format=3 uid="uid://crlm53dnx6duw"]
+
+[ext_resource type="Script" path="res://addons/hego/parm_controls/float_parm_ui.gd" id="1_g6fkh"]
+
+[node name="FloatParmUI" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+script = ExtResource("1_g6fkh")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer"]
+layout_mode = 2
+text = "Float1"
+
+[node name="HSlider" type="HSlider" parent="HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+max_value = 1.0
+step = 0.01
+scrollable = false
+
+[node name="SpinBox" type="SpinBox" parent="HBoxContainer"]
+layout_mode = 2
+max_value = 1.0
+step = 0.01

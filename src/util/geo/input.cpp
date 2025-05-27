@@ -18,6 +18,47 @@ namespace Util
 {
 namespace Geo
 {
+godot::PackedStringArray get_input_names(HEGoSessionManager *session_mgr, HAPI_NodeId node_id)
+{
+	godot::PackedStringArray result;
+	// Validate inputs
+	if (!session_mgr || node_id < 0)
+	{
+		return result; // Return empty array on invalid input
+	}
+
+	HAPI_Session *session = session_mgr->get_session();
+	if (!session)
+	{
+		return result; // Return empty array if session is invalid
+	}
+
+	// Get node info
+	HAPI_NodeInfo node_info;
+	if (HoudiniApi::GetNodeInfo(session, node_id, &node_info) != HAPI_RESULT_SUCCESS)
+	{
+		return result; // Return empty array on failure
+	}
+
+	// Iterate over inputs
+	for (int i = 0; i < node_info.inputCount; ++i)
+	{
+		// Get input name handle
+		HAPI_StringHandle name_handle;
+		if (HoudiniApi::GetNodeInputName(session, node_id, i, &name_handle) != HAPI_RESULT_SUCCESS)
+		{
+			continue; // Skip on failure
+		}
+
+		// Get input name using HEGoUtil::get_string
+		std::string input_name = HEGoUtil::get_string(session, name_handle);
+
+		result.append(godot::String(input_name.c_str()));
+	}
+
+	return result;
+}
+
 HAPI_NodeId create_input_from_mesh_instance_3d(HEGoSessionManager *session_mgr, godot::MeshInstance3D *mesh_instance_3d, HAPI_NodeId node_id)
 {
 	HEGo::Util::Log::message("Creating Input node");
@@ -60,7 +101,7 @@ HAPI_NodeId create_input_from_path_3d(HEGoSessionManager *session_mgr, godot::Pa
 	godot::Transform3D transform = path_3d->get_global_transform();
 
 	node_id = create_input_from_curve3d(session_mgr, curve3d, node_id, target_length);
-	session_mgr->wait_for_cook();
+	session_mgr->wait_for_ready();
 
 	set_object_transform(session_mgr, node_id, transform);
 

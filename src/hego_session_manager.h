@@ -35,7 +35,9 @@ public:
 	// Initializes the HAPI session, should be called after successfully creating a session
 	bool initialize(bool use_cooking_thread);
 
-	bool wait_for_cook();
+	bool wait_for_cook(HAPI_NodeId node_id = -1);
+
+	bool wait_for_ready();
 
 	// Get the HAPI session
 	HAPI_Session *get_session();

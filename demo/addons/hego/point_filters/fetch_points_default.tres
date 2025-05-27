@@ -8,4 +8,4 @@ only_loose_points = true
 read_attribs = PackedStringArray("N", "Cd", "up", "pscale")
 filter_attribs = PackedStringArray()
 filter_attrib_values = []
-split_attribs = PackedStringArray()
+split_attribs = PackedStringArray("hego_split_path", "hego_multi_mesh", "hego_resource")

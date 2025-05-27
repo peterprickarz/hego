@@ -1,0 +1,162 @@
+[gd_scene load_steps=4 format=3 uid="uid://0fn3nxqgnidi"]
+
+[ext_resource type="Script" path="res://addons/hego/ui/hego_control.gd" id="1_cqk42"]
+[ext_resource type="Script" path="res://addons/hego/ui/hda_tab.gd" id="1_sp0ki"]
+
+[sub_resource type="Theme" id="Theme_obgjq"]
+HSplitContainer/constants/autohide = 0
+HSplitContainer/constants/minimum_grab_thickness = 10
+HSplitContainer/constants/separation = 20
+HSplitContainer/icons/grabber = null
+
+[node name="Control" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_cqk42")
+
+[node name="TabContainer" type="TabContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+current_tab = 1
+
+[node name="Session" type="VBoxContainer" parent="TabContainer"]
+visible = false
+custom_minimum_size = Vector2(130.35, 86.595)
+layout_mode = 2
+
+[node name="ButtonStartSession" type="Button" parent="TabContainer/Session"]
+layout_mode = 2
+text = "Start Session"
+
+[node name="ButtonStopSession" type="Button" parent="TabContainer/Session"]
+layout_mode = 2
+text = "Stop Session"
+
+[node name="HDA" type="Control" parent="TabContainer"]
+layout_mode = 2
+script = ExtResource("1_sp0ki")
+
+[node name="HSplitContainer" type="HBoxContainer" parent="TabContainer/HDA"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_obgjq")
+
+[node name="Settings" type="Control" parent="TabContainer/HDA/HSplitContainer"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer/Settings"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer/Settings/VBoxContainer"]
+layout_mode = 2
+text = "Settings:"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="TabContainer/HDA/HSplitContainer/Settings/VBoxContainer"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="HBoxContainer" parent="TabContainer/HDA/HSplitContainer/Settings/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer/Settings/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+text = "Auto Cook"
+
+[node name="CheckButton" type="CheckButton" parent="TabContainer/HDA/HSplitContainer/Settings/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ButtonRecook" type="Button" parent="TabContainer/HDA/HSplitContainer/Settings/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Recook"
+
+[node name="VSeparator" type="VSeparator" parent="TabContainer/HDA/HSplitContainer"]
+layout_mode = 2
+
+[node name="Parameters" type="Control" parent="TabContainer/HDA/HSplitContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer/Parameters"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer/Parameters/VBoxContainer"]
+layout_mode = 2
+text = "Parameters:"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="TabContainer/HDA/HSplitContainer/Parameters/VBoxContainer"]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="TabContainer/HDA/HSplitContainer/Parameters/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ScrollContainer" type="ScrollContainer" parent="TabContainer/HDA/HSplitContainer/Parameters/VBoxContainer/Control"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+vertical_scroll_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer/Parameters/VBoxContainer/Control/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="VSeparator2" type="VSeparator" parent="TabContainer/HDA/HSplitContainer"]
+layout_mode = 2
+
+[node name="Inputs" type="Control" parent="TabContainer/HDA/HSplitContainer"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer/Inputs"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer/Inputs/VBoxContainer"]
+layout_mode = 2
+text = "Inputs:"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="TabContainer/HDA/HSplitContainer/Inputs/VBoxContainer"]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="TabContainer/HDA/HSplitContainer/Inputs/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer/Inputs/VBoxContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3

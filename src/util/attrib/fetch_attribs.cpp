@@ -305,7 +305,7 @@ godot::Variant Attribs::fetch_by_name(
 
 			for (int i = 0; i < nprims; i++)
 			{
-				result[i] = godot::String("hego_attr_missing");
+				result[i] = godot::Variant();
 			}
 			values = result;
 		}
@@ -317,7 +317,7 @@ godot::Variant Attribs::fetch_by_name(
 
 			for (int i = 0; i < npts; i++)
 			{
-				result[i] = godot::String("hego_attr_missing");
+				result[i] = godot::Variant();
 			}
 			values = result;
 		}
@@ -329,7 +329,7 @@ godot::Variant Attribs::fetch_by_name(
 
 			for (int i = 0; i < nvertices; i++)
 			{
-				result[i] = godot::String("hego_attr_missing");
+				result[i] = godot::Variant();
 			}
 			values = result;
 		}
@@ -337,7 +337,7 @@ godot::Variant Attribs::fetch_by_name(
 		{
 			godot::Array result;
 			result.resize(1);
-			result[0] = godot::String("hego_attr_missing");
+			result[0] = godot::Variant();
 			values = result;
 		}
 	}

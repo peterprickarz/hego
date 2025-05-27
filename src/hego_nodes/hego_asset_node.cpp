@@ -4,9 +4,12 @@
 #include "hego_asset_node.h"
 #include "util/geo/fetch_points.h"
 #include "util/geo/fetch_surfaces.h"
+#include "util/geo/input.h"
 #include "util/geo/output.h"
 #include "util/log/log.h"
 #include "util/node/create_nodes.h"
+#include "util/parm/get_parms.h"
+#include "util/parm/presets.h"
 #include "util/parm/set_parms.h"
 
 namespace HEGo
@@ -27,10 +30,25 @@ void HEGoAssetNode::instantiate()
 	}
 }
 
-void HEGoAssetNode::set_parm(godot::String parm_name, godot::Variant value)
+void HEGoAssetNode::set_parm(godot::String parm_name, godot::Variant value) { HEGo::Util::Parm::set_parm(get_session_manager(), node_id, parm_name, &value); }
+
+void HEGoAssetNode::set_preset(godot::PackedByteArray preset) { HEGo::Util::Parm::set_preset(get_session_manager(), node_id, preset); }
+
+void HEGoAssetNode::insert_multiparm_instance(int parm_id, int index)
 {
-	HEGo::Util::Parm::set_parm(get_session_manager(), node_id, parm_name, &value);
+	HEGo::Util::Parm::insert_multiparm_instance(get_session_manager(), node_id, parm_id, index);
 }
+
+void HEGoAssetNode::remove_multiparm_instance(int parm_id, int index)
+{
+	HEGo::Util::Parm::remove_multiparm_instance(get_session_manager(), node_id, parm_id, index);
+}
+
+godot::PackedByteArray HEGoAssetNode::get_preset() { return HEGo::Util::Parm::get_preset(get_session_manager(), node_id); }
+
+godot::Dictionary HEGoAssetNode::get_parms_dict() { return HEGo::Util::Parm::get_parm_dict(get_session_manager(), node_id); }
+
+godot::PackedStringArray HEGoAssetNode::get_input_names() { return HEGo::Util::Geo::get_input_names(get_session_manager(), node_id); }
 
 godot::Array HEGoAssetNode::fetch_output()
 {
@@ -70,12 +88,18 @@ godot::String HEGoAssetNode::get_op_name() const { return op_name; }
 void HEGoAssetNode::_bind_methods()
 {
 	godot::ClassDB::bind_method(godot::D_METHOD("set_parm", "parm_name", "value"), &HEGoAssetNode::set_parm);
+	godot::ClassDB::bind_method(godot::D_METHOD("insert_multiparm_instance", "parm_id", "index"), &HEGoAssetNode::insert_multiparm_instance);
+	godot::ClassDB::bind_method(godot::D_METHOD("remove_multiparm_instance", "parm_id", "index"), &HEGoAssetNode::remove_multiparm_instance);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_preset"), &HEGoAssetNode::get_preset);
+	godot::ClassDB::bind_method(godot::D_METHOD("set_preset", "preset"), &HEGoAssetNode::set_preset);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_id"), &HEGoAssetNode::get_id);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_input_names"), &HEGoAssetNode::get_input_names);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_parms_dict"), &HEGoAssetNode::get_parms_dict);
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_output"), &HEGoAssetNode::fetch_output);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_op_name", "name"), &HEGoAssetNode::set_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_op_name"), &HEGoAssetNode::get_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config"), &HEGoAssetNode::fetch_points);
-	godot::ClassDB::bind_method(
-			godot::D_METHOD("fetch_surfaces", "fetch_surface_config"), &HEGoAssetNode::fetch_surfaces);
+	godot::ClassDB::bind_method(godot::D_METHOD("fetch_surfaces", "fetch_surface_config"), &HEGoAssetNode::fetch_surfaces);
 	// godot::ClassDB::add_property("HEGoAssetNode", godot::PropertyInfo(godot::Variant::STRING, "op_name"),
 	// "set_op_name", "get_op_name");
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "op_name"), "set_op_name", "get_op_name");

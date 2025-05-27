@@ -1,0 +1,27 @@
+[gd_scene load_steps=2 format=3 uid="uid://dmls7akqo6b7r"]
+
+[ext_resource type="Script" path="res://addons/hego/parm_controls/toggle_parm_ui.gd" id="1"]
+
+[node name="ToggleParmUI" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+script = ExtResource("1")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+
+[node name="Label" type="Label" parent="HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Toggle"
+
+[node name="CheckBox" type="CheckBox" parent="HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "On/Off"

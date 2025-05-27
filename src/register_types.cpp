@@ -10,7 +10,6 @@
 #include "hego_nodes/hego_merge_node.h"
 
 #include <gdextension_interface.h>
-#include <houdini_asset_node.h>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
@@ -33,7 +32,6 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableNamedNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableInputReceiverNode);
 
-	ClassDB::register_class<HoudiniAssetNode>();
 	// ClassDB::register_abstract_class<HEGo::HEGoBaseNode>();
 	// ClassDB::register_class<HEGo::HEGoInputReceiverNode>(true);
 	// ClassDB::register_class<HEGo::HEGoTransformableNode>(true);

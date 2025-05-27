@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="HEGoFetchPointsConfig" load_steps=2 format=3 uid="uid://bmimu4065ui8b"]
+
+[ext_resource type="Script" path="res://addons/hego/fetch_points_config.gd" id="1_ejwan"]
+
+[resource]
+script = ExtResource("1_ejwan")
+only_loose_points = true
+read_attribs = PackedStringArray("N", "Cd", "up", "pscale", "scale", "hego_output_path", "hego_spawn_type", "hego_object_name", "hego_resource_path")
+filter_attribs = PackedStringArray("hego_object_spawn")
+filter_attrib_values = [1]
+split_attribs = PackedStringArray()

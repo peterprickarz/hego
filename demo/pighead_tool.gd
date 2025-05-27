@@ -59,3 +59,5 @@ func cook():
 	# assign mesh
 	self.mesh = arr_mesh
 
+func _ready():
+	set_meta("hego_asset_node", 1)

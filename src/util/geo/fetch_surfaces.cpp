@@ -46,12 +46,16 @@ godot::Dictionary HEGo::Util::Geo::fetch_surfaces(HEGoSessionManager *session_mg
 
 	bool uv = fetch_surfaces_config->get("uv");
 	bool uv2 = fetch_surfaces_config->get("uv2");
+
+	bool tangents = fetch_surfaces_config->get("tangents");
+
 	godot::PackedStringArray read_attribs = fetch_surfaces_config->get("read_attribs");
 	godot::PackedStringArray filter_attribs = fetch_surfaces_config->get("filter_attribs");
 	godot::Array filter_attrib_values = fetch_surfaces_config->get("filter_attrib_values");
 	godot::PackedStringArray split_attribs = fetch_surfaces_config->get("split_attribs");
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()));
+	session_mgr->wait_for_cook(node_id);
 	HAPI_GeoInfo mesh_geo_info;
 	HOUDINI_CHECK_ERROR(HoudiniApi::GetDisplayGeoInfo(session_mgr->get_session(), node_id, &mesh_geo_info));
 	HAPI_PartInfo mesh_part_info;
@@ -91,6 +95,18 @@ godot::Dictionary HEGo::Util::Geo::fetch_surfaces(HEGoSessionManager *session_mg
 	if (uv2)
 	{
 		point_attrs["uv2"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv2");
+	}
+	if (tangents)
+	{
+		HEGo::Util::Log::message("getting tangent attrs");
+		point_attrs["tangentu"] =
+				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentu");
+		point_attrs["tangentv"] =
+				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentv");
+	}
+	else
+	{
+		HEGo::Util::Log::message("Getting tangents disabled");
 	}
 
 	for (int i = 0; i < read_attribs.size(); i++)
@@ -220,6 +236,51 @@ void modify_base_entries(godot::Dictionary &nested_dict, godot::Array &vertex_po
 			if (uv2_attr.size() > 0)
 			{
 				surface_array[godot::Mesh::ARRAY_TEX_UV2] = godot::PackedVector3Array(uv2_attr);
+			}
+		}
+		// Tangent calculation
+		if (point_attrs.has("tangentu") && point_attrs.has("tangentv") && point_attrs.has("N"))
+		{
+			godot::Array tangentu_attr = point_attrs["tangentu"];
+			godot::Array tangentv_attr = point_attrs["tangentv"];
+			godot::Array normal_attr = point_attrs["N"];
+
+			if (tangentu_attr.size() > 0 && tangentv_attr.size() > 0 && normal_attr.size() > 0)
+			{
+				// Ensure all arrays have the same size
+				int vertex_count = tangentu_attr.size();
+				if (tangentv_attr.size() != vertex_count || normal_attr.size() != vertex_count)
+				{
+					HEGo::Util::Log::error("Tangent arrays and normal array size mismatch!");
+				}
+				else
+				{
+					HEGo::Util::Log::message("Calculating tangents");
+					godot::PackedFloat32Array tangent_array;
+					tangent_array.resize(vertex_count * 4); // 4 floats per vertex: [tangent.x, tangent.y, tangent.z, bitangent_sign]
+
+					for (int i = 0; i < vertex_count; i++)
+					{
+						godot::Vector3 tangent = tangentu_attr[i];
+						godot::Vector3 bitangent = tangentv_attr[i];
+						godot::Vector3 normal = normal_attr[i];
+
+						// Compute expected bitangent: cross(normal, tangent)
+						godot::Vector3 expected_bitangent = normal.cross(tangent).normalized();
+
+						// Compute bitangent sign: dot(cross(normal, tangent), tangentv)
+						float bitangent_sign = expected_bitangent.dot(bitangent) >= 0.0f ? 1.0f : -1.0f;
+
+						// Godot tangent format: [tangent.x, tangent.y, tangent.z, bitangent_sign]
+						int idx = i * 4;
+						tangent_array[idx + 0] = tangent.x;
+						tangent_array[idx + 1] = tangent.y;
+						tangent_array[idx + 2] = tangent.z;
+						tangent_array[idx + 3] = bitangent_sign;
+					}
+
+					surface_array[godot::Mesh::ARRAY_TANGENT] = tangent_array;
+				}
 			}
 		}
 
