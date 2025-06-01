@@ -2,11 +2,23 @@
 #define HEGO_SESSION_MANAGER_H
 
 #include "hapi/houdini_api.h"
+#include "hego_nodes/hego_trackable_node.h"
 #include <string>
 
 #define DEFAULT_NAMED_PIPE "hapi"
 #define DEFAULT_HOST_NAME "127.0.0.1"
 #define DEFAULT_TCP_PORT 9090
+
+#define RETURN_IF_VALID_NODE_ID(node_id, session)                                                                                                              \
+	if (node_id != -1 && session != nullptr)                                                                                                                   \
+	{                                                                                                                                                          \
+		HAPI_NodeInfo node_info;                                                                                                                               \
+		HAPI_Result result = HoudiniApi::GetNodeInfo(session, node_id, &node_info);                                                                            \
+		if (result == HAPI_RESULT_SUCCESS && node_info.id == node_id)                                                                                          \
+		{                                                                                                                                                      \
+			return node_id;                                                                                                                                    \
+		}                                                                                                                                                      \
+	}
 
 class HEGoSessionManager
 {
@@ -51,6 +63,9 @@ public:
 	// Query and list the point, vertex, prim and detail attributes of the given node
 	bool get_attribs(HAPI_NodeId node_id, HAPI_PartId part_id);
 
+	void register_node(HEGo::HEGoTrackableNode *node);
+	void unregister_node(HEGo::HEGoTrackableNode *node);
+
 private:
 	void *libHAPIL;
 
@@ -60,6 +75,7 @@ private:
 	std::string my_named_pipe = DEFAULT_NAMED_PIPE;
 	int my_tcp_port = DEFAULT_TCP_PORT;
 	std::string my_shared_memory_name;
+	std::vector<HEGo::HEGoTrackableNode *> nodes;
 };
 
 #endif // HEGO_NODE_MANAGER_H

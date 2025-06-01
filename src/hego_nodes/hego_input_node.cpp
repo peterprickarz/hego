@@ -18,7 +18,11 @@ HEGoInputNode::~HEGoInputNode()
 	// Destructor code, if any
 }
 
-void HEGoInputNode::instantiate() { node_id = HEGo::Util::Node::create_and_cook_input_node(get_session_manager(), node_name, node_id); }
+void HEGoInputNode::instantiate()
+{
+	node_id = HEGo::Util::Node::create_and_cook_input_node(get_session_manager(), node_name, node_id);
+	get_session_manager()->register_node(this);
+}
 
 void HEGoInputNode::set_geo_from_mesh_instance_3d(godot::MeshInstance3D *mesh_instance)
 {

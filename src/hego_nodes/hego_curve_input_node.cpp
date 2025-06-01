@@ -9,7 +9,11 @@ HEGo::HEGoCurveInputNode::HEGoCurveInputNode() {}
 
 HEGo::HEGoCurveInputNode::~HEGoCurveInputNode() {}
 
-void HEGo::HEGoCurveInputNode::instantiate() { node_id = HEGo::Util::Node::create_and_cook_input_curve_node(get_session_manager(), node_name, node_id); }
+void HEGo::HEGoCurveInputNode::instantiate()
+{
+	node_id = HEGo::Util::Node::create_and_cook_input_curve_node(get_session_manager(), node_name, node_id);
+	get_session_manager()->register_node(this);
+}
 
 void HEGo::HEGoCurveInputNode::set_curve_from_path_3d(godot::Path3D *path3d, float target_length)
 {

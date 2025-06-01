@@ -104,6 +104,13 @@ bool HEGoSessionManager::stop_session()
 	HoudiniApi::finalize_hapi();
 	HEGoPlatform::free_lib_hapil(libHAPIL);
 
+	// Reset node_id for all tracked nodes
+	for (HEGo::HEGoTrackableNode *node : nodes)
+	{
+		HEGo::Util::Log::message("resetting node id");
+		node->reset_node_id();
+	}
+
 	HEGo::Util::Log::message("Closed Session, finalized hapi and freed libHAPIL.");
 	return true;
 }
@@ -361,6 +368,33 @@ bool HEGoSessionManager::get_attribs(HAPI_NodeId node_id, HAPI_PartId part_id)
 
 	return true;
 }
+
+void HEGoSessionManager::register_node(HEGo::HEGoTrackableNode *node)
+{
+	if (node == nullptr)
+	{
+		return;
+	}
+
+	// Check if the node is already in the registered_nodes vector
+	bool is_already_registered = false;
+	for (unsigned int i = 0; i < nodes.size(); i++)
+	{
+		if (nodes[i] == node)
+		{
+			is_already_registered = true;
+			break;
+		}
+	}
+
+	// Add the node only if it is not already registered
+	if (!is_already_registered)
+	{
+		nodes.push_back(node);
+	}
+}
+
+void HEGoSessionManager::unregister_node(HEGo::HEGoTrackableNode *node) { nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end()); }
 
 bool HEGoSessionManager::wait_for_cook(HAPI_NodeId node_id)
 {

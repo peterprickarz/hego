@@ -8,6 +8,7 @@
 #include "hego_nodes/hego_curve_input_node.h"
 #include "hego_nodes/hego_input_node.h"
 #include "hego_nodes/hego_merge_node.h"
+#include "hego_nodes/hego_trackable_node.h"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/classes/engine.hpp>
@@ -25,8 +26,8 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);
-
-	GDREGISTER_ABSTRACT_CLASS(HEGo::HEGoBaseNode);
+	GDREGISTER_ABSTRACT_CLASS(HEGo::HEGoTrackableNode);
+	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoBaseNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoInputReceiverNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableNamedNode);

@@ -3,6 +3,7 @@
 
 #include "hapi/houdini_api.h"
 
+#include "hego_nodes/hego_trackable_node.h"
 #include "hego_session_manager.h"
 
 #include <godot_cpp/classes/ref_counted.hpp>
@@ -12,9 +13,9 @@
 
 namespace HEGo
 {
-class HEGoBaseNode : public godot::RefCounted
+class HEGoBaseNode : public HEGoTrackableNode
 {
-	GDCLASS(HEGoBaseNode, godot::RefCounted)
+	GDCLASS(HEGoBaseNode, HEGoTrackableNode)
 protected:
 	HAPI_NodeId node_id;
 
@@ -25,6 +26,8 @@ public:
 	~HEGoBaseNode();
 
 	HAPI_NodeId get_id() const;
+
+	void reset_node_id() override;
 
 	virtual void instantiate();
 

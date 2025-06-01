@@ -2,7 +2,7 @@
 extends Control
 
 @onready var header_label = $PanelContainer/VBoxContainer/HeaderLabel
-@onready var content_container = $PanelContainer/VBoxContainer/MarginContainer/VBoxContainer/ContentContainer
+@onready var content_container = $"PanelContainer/VBoxContainer/TabContainer/▼/VBoxContainer/ContentContainer"
 
 var param: Dictionary = {}
 

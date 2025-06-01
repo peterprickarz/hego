@@ -6,12 +6,62 @@
 #include "fetch_attribs.h"
 #include <vector>
 
+#include "godot_cpp/classes/json.hpp"
+
 namespace HEGo
 {
 namespace Util
 {
 namespace Attribs
 {
+godot::Variant fetch_dict(
+		const HAPI_Session *session, const HAPI_GeoInfo &mesh_geo_info, const HAPI_PartInfo &mesh_part_info, HAPI_AttributeOwner owner, const char *attrib_name)
+{
+	HAPI_AttributeInfo attrib_info;
+	HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeInfo(session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, owner, &attrib_info));
+
+	if (!attrib_info.exists)
+	{
+		return godot::Variant();
+	}
+
+	// Verify that the attribute is a dictionary type
+	if (attrib_info.storage != HAPI_STORAGETYPE_DICTIONARY)
+	{
+		HEGo::Util::Log::error(godot::String(attrib_name) + " is not a dictionary attribute!");
+		return godot::Variant();
+	}
+
+	// Allocate array for string handles
+	std::vector<HAPI_StringHandle> temp_data(attrib_info.count * attrib_info.tupleSize);
+	HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeDictionaryData(
+			session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, temp_data.data(), 0, attrib_info.count));
+
+	godot::Array attrib_data;
+	for (int i = 0; i < attrib_info.count * attrib_info.tupleSize; ++i)
+	{
+		// Retrieve the string immediately as handles are only valid until the next call
+		std::string json_string = HEGoUtil::get_string(session, temp_data[i]);
+		if (json_string.empty())
+		{
+			attrib_data.append(godot::Variant());
+			continue;
+		}
+		// Parse the JSON string into a Godot dictionary
+		godot::Variant parsed = godot::JSON::parse_string(json_string.c_str());
+		if (parsed.get_type() == godot::Variant::DICTIONARY)
+		{
+			attrib_data.append(parsed);
+		}
+		else
+		{
+			HEGo::Util::Log::error(godot::String(attrib_name) + " contains invalid JSON dictionary format at index: " + std::to_string(i).c_str());
+		}
+	}
+
+	HEGo::Util::Log::message(godot::String(attrib_name) + " dictionary attribute count: " + std::to_string(attrib_data.size()).c_str());
+	return attrib_data;
+}
 godot::Variant fetch_float(
 		const HAPI_Session *session, const HAPI_GeoInfo &mesh_geo_info, const HAPI_PartInfo &mesh_part_info, HAPI_AttributeOwner owner, const char *attrib_name)
 {
@@ -384,6 +434,10 @@ godot::Variant Attribs::fetch_by_name(
 		else if (attrib_info.storage == HAPI_STORAGETYPE_STRING)
 		{
 			values = fetch_string(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
+		}
+		else if (attrib_info.storage == HAPI_STORAGETYPE_DICTIONARY)
+		{
+			values = fetch_dict(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
 		}
 	}
 	return values;

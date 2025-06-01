@@ -27,6 +27,7 @@ void HEGoAssetNode::instantiate()
 	else
 	{
 		node_id = HEGo::Util::Node::instantiate_hda_from_name(get_session_manager(), op_name, node_id);
+		get_session_manager()->register_node(this);
 	}
 }
 

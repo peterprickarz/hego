@@ -1,50 +1,34 @@
 shader_type spatial;
 render_mode depth_draw_opaque, specular_schlick_ggx, depth_prepass_alpha;
 
-// Uniforms for base colors
+// Uniforms remain unchanged
 uniform vec4 TopColor : source_color = vec4(0.24, 0.47, 0.27, 1.0);
 uniform vec4 BottomColor : source_color = vec4(0.13, 0.33, 0.25, 1.0);
 uniform float ColorRamp : hint_range(0.05, 5.0) = 0.3;
-
-// Uniform for alpha texture
 uniform sampler2D Alpha;
-
-// Uniforms for Fresnel effect
-uniform vec4 FresnelTopColor : source_color = vec4(0.58, 0.65, 0.33, 1.0); // Fresnel color for top (normal points up)
-uniform vec4 FresnelBottomColor : source_color = vec4(0.2, 0.3, 0.1, 1.0); // Fresnel color for bottom (normal points down)
+uniform vec4 FresnelTopColor : source_color = vec4(0.58, 0.65, 0.33, 1.0);
+uniform vec4 FresnelBottomColor : source_color = vec4(0.2, 0.3, 0.1, 1.0);
 uniform float FresnelStrength : hint_range(0.0, 2.0) = 0.5;
-
-// Uniform for billboarding scale
 uniform float MeshScale : hint_range(0.0, 5.0) = 0.333;
-
-// Uniforms for scale randomization
-uniform float MinScale : hint_range(0.1, 2.0) = 0.8; // Minimum scale factor
-uniform float MaxScale : hint_range(0.1, 2.0) = 1.2; // Maximum scale factor
-
-// Uniform for specular exponent and intensity
+uniform float MinScale : hint_range(0.1, 2.0) = 0.8;
+uniform float MaxScale : hint_range(0.1, 2.0) = 1.2;
 uniform float SpecularExponent : hint_range(1.0, 128.0) = 16.0;
 uniform float SpecularIntensity : hint_range(0.0, 1.0) = 0.5;
-
-// Uniform for ambient lighting
 uniform vec3 AmbientLight : source_color = vec3(0.1, 0.1, 0.1);
+uniform vec3 WindDirection : source_color = vec3(1.0, 0.0, 0.0);
+uniform float WindSpeed : hint_range(0.0, 10.0) = 2.0;
+uniform float WindStrength : hint_range(0.0, 1.0) = 0.2;
+uniform float WindHeightScale : hint_range(0.0, 5.0) = 1.0;
+uniform float WindRotationStrength : hint_range(0.0, 1.0) = 0.1;
 
-// Uniforms for wind animation
-uniform vec3 WindDirection : source_color = vec3(1.0, 0.0, 0.0); // Default wind along X-axis
-uniform float WindSpeed : hint_range(0.0, 10.0) = 2.0; // Speed of wind animation
-uniform float WindStrength : hint_range(0.0, 1.0) = 0.2; // Strength of wind sway
-uniform float WindHeightScale : hint_range(0.0, 5.0) = 1.0; // How much height affects sway
-uniform float WindRotationStrength : hint_range(0.0, 1.0) = 0.1; // Strength of wind rotation
-
-// Varyings to pass data to fragment shader
 varying float color_gradient;
 varying vec3 world_original_normal;
 
-// Simple pseudo-random function based on position
+// Random and rotation functions remain unchanged
 float random(vec3 pos) {
     return fract(sin(dot(pos, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
 }
 
-// Function to rotate a vector around an axis by an angle (Rodrigues' rotation formula)
 vec3 rotate_around_axis(vec3 v, vec3 axis, float angle) {
     float cos_a = cos(angle);
     float sin_a = sin(angle);
@@ -54,7 +38,7 @@ vec3 rotate_around_axis(vec3 v, vec3 axis, float angle) {
 
 void vertex() {
     // Store the original normal in world space for lighting and Fresnel
-    world_original_normal = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+    world_original_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
     
     // Compute the color gradient factor based on the original vertex position
     color_gradient = clamp(VERTEX.y * ColorRamp, 0.0, 1.0);
@@ -62,9 +46,8 @@ void vertex() {
     // Billboarding: Compute camera-facing coordinate system
     vec3 world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
     vec3 camera_pos = (INV_VIEW_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-    // In Godot, camera looks down negative Z, so point from camera to quad
     vec3 to_camera = normalize(world_pos - camera_pos);
-    vec3 up = vec3(0.0, 1.0, 0.0); // World up (Y-up in Godot)
+    vec3 up = vec3(0.0, 1.0, 0.0);
     vec3 right = normalize(cross(to_camera, up));
     up = normalize(cross(right, to_camera));
 
@@ -76,7 +59,7 @@ void vertex() {
     vec3 offset = right * uv_offset.x + up * uv_offset.y;
 
     // Wind animation (sway)
-    float wind_mask = clamp(VERTEX.y * WindHeightScale, 0.0, 1.0); // More sway at the top
+    float wind_mask = clamp(VERTEX.y * WindHeightScale, 0.0, 1.0);
     float wind_offset = sin(TIME * WindSpeed + (world_pos.x + world_pos.z)) * WindStrength * wind_mask;
     vec3 wind_displacement = WindDirection * wind_offset;
 
@@ -104,28 +87,25 @@ void fragment() {
     float alpha = texture(Alpha, UV).r;
 
     // Fresnel effect using the original normal
-    vec3 view_dir = normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz); // Transform VIEW to world space
+    vec3 view_dir = normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz);
     float fresnel = pow(1.0 - clamp(dot(normalize(world_original_normal), view_dir), 0.0, 1.0), 3.0);
 
-    // Interpolate between FresnelTopColor and FresnelBottomColor based on the original normal's Y component
+    // Interpolate between FresnelTopColor and FresnelBottomColor
     float fresnel_gradient = clamp((world_original_normal.y + 1.0) * 0.5, 0.0, 1.0);
     vec3 fresnel_color = mix(FresnelBottomColor.rgb, FresnelTopColor.rgb, fresnel_gradient);
     float fresnel_factor = fresnel * FresnelStrength;
 
     // Apply Fresnel effect differently based on normal direction
     if (world_original_normal.y >= 0.0) {
-        // Normal points up: Add FresnelTopColor to highlight
         albedo += FresnelTopColor.rgb * fresnel_factor;
     } else {
-        // Normal points down: Multiply by a stronger FresnelBottomColor to simulate shadow
-        vec3 shadow_color = mix(FresnelBottomColor.rgb, vec3(1.0), 0.2); // Reduced mixing with vec3(1.0) for stronger darkening
-        albedo *= mix(vec3(1.0), shadow_color, fresnel * 0.8); // Increased fresnel influence for stronger effect
+        vec3 shadow_color = mix(FresnelBottomColor.rgb, vec3(1.0), 0.2);
+        albedo *= mix(vec3(1.0), shadow_color, fresnel * 0.8);
     }
 
     // Clamp albedo to prevent overexposure
     albedo = clamp(albedo, 0.0, 1.0);
 
-    // Set albedo and alpha for the fragment shader
     ALBEDO = albedo;
     ALPHA = alpha;
 }
@@ -135,14 +115,21 @@ void light() {
     vec3 light_dir = normalize(LIGHT);
     vec3 normal = normalize(world_original_normal);
 
+    // Two-sided lighting: Ensure the normal is oriented correctly relative to the light
+    float NdotL = dot(normal, light_dir);
+    // Use absolute value or flip normal to ensure positive diffuse contribution
+    NdotL = max(abs(NdotL), 0.0); // Two-sided lighting
+    // Alternatively, flip normal if facing away from light
+    // if (NdotL < 0.0) normal = -normal;
+    // NdotL = max(dot(normal, light_dir), 0.0);
+
     // Diffuse lighting
-    float NdotL = max(dot(normal, light_dir), 0.0);
     DIFFUSE_LIGHT = ALBEDO * LIGHT_COLOR * NdotL * ATTENUATION;
 
     // Add ambient light to prevent underexposure
     DIFFUSE_LIGHT += ALBEDO * AmbientLight;
 
-    // Specular lighting (Blinn-Phong approximation with custom exponent)
+    // Specular lighting (Blinn-Phong approximation)
     vec3 view_dir = normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz);
     vec3 halfway_dir = normalize(light_dir + view_dir);
     float NdotH = max(dot(normal, halfway_dir), 0.0);

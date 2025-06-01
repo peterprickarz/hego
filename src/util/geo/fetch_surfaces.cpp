@@ -60,6 +60,10 @@ godot::Dictionary HEGo::Util::Geo::fetch_surfaces(HEGoSessionManager *session_mg
 	HOUDINI_CHECK_ERROR(HoudiniApi::GetDisplayGeoInfo(session_mgr->get_session(), node_id, &mesh_geo_info));
 	HAPI_PartInfo mesh_part_info;
 	HOUDINI_CHECK_ERROR(HoudiniApi::GetPartInfo(session_mgr->get_session(), mesh_geo_info.nodeId, 0, &mesh_part_info));
+	if (mesh_part_info.faceCount <= 0)
+	{
+		return godot::Dictionary();
+	}
 	std::vector<int> face_counts(mesh_part_info.faceCount);
 	HOUDINI_CHECK_ERROR(HoudiniApi::GetFaceCounts(session_mgr->get_session(), node_id, 0, face_counts.data(), 0, mesh_part_info.faceCount));
 	std::vector<int> vertex_point_indices(mesh_part_info.vertexCount);

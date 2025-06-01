@@ -88,6 +88,11 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Recook"
 
+[node name="CheckButton" type="CheckButton" parent="TabContainer/HDA/HSplitContainer/Settings/VBoxContainer"]
+layout_mode = 2
+button_pressed = true
+text = "Auto Start Session"
+
 [node name="VSeparator" type="VSeparator" parent="TabContainer/HDA/HSplitContainer"]
 layout_mode = 2
 

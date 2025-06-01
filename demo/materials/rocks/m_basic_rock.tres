@@ -5,10 +5,14 @@
 [ext_resource type="Texture2D" uid="uid://bg2rf8o11oel1" path="res://textures/stone/natural/Rock006_1K-JPG_Roughness_kuwahara.jpg" id="3_rh3ob"]
 
 [resource]
+specular_mode = 1
 albedo_texture = ExtResource("1_qpgbi")
 roughness_texture = ExtResource("3_rh3ob")
 normal_enabled = true
 normal_texture = ExtResource("2_ve02u")
+rim_enabled = true
+rim = 0.71
+rim_tint = 0.32
 uv1_scale = Vector3(0.21, 0.21, 0.21)
 uv1_triplanar = true
 uv1_triplanar_sharpness = 15.4549

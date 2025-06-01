@@ -19,6 +19,8 @@ HEGoBaseNode::~HEGoBaseNode()
 
 HAPI_NodeId HEGoBaseNode::get_id() const { return node_id; }
 
+void HEGoBaseNode::reset_node_id() { node_id = -1; }
+
 HEGoSessionManager *HEGoBaseNode::get_session_manager() { return HEGo::HEGoAPI::get_singleton()->get_session_manager(); }
 
 void HEGoBaseNode::instantiate()

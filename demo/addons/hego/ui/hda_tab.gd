@@ -6,6 +6,7 @@ var hego_tool_node: Node
 var hego_asset_node: HEGoAssetNode
 
 var auto_recook_toggle: CheckButton
+var auto_start_session_toggle: CheckButton
 
 var input_nodes: Array
 
@@ -13,6 +14,7 @@ var input_nodes: Array
 func _ready():
 	root_control = $"../.."
 	auto_recook_toggle = $HSplitContainer/Settings/VBoxContainer/VBoxContainer/CheckButton
+	auto_start_session_toggle = $HSplitContainer/Settings/VBoxContainer/CheckButton
 	var recook_button = $HSplitContainer/Settings/VBoxContainer/VBoxContainer/ButtonRecook
 	recook_button.button_down.connect(_on_recook_button_pressed)
 	root_control.selected_hego_node_changed.connect(_on_selection_changed)
@@ -27,19 +29,21 @@ func _process(delta):
 func update_ui():
 	var parm_vbox = $HSplitContainer/Parameters/VBoxContainer/Control/ScrollContainer/VBoxContainer
 	var input_vbox = $HSplitContainer/Inputs/VBoxContainer/ScrollContainer/VBoxContainer
-	
+	for child in parm_vbox.get_children():
+		child.queue_free()
+	for child in input_vbox.get_children():
+			child.queue_free()
 	hego_asset_node = hego_tool_node.hego_get_asset_node()
 	if hego_asset_node != null:
 		var parm_dict = hego_asset_node.get_parms_dict()
+		
 		if parm_dict and parm_dict.keys().size() != 0:
-			for child in parm_vbox.get_children():
-				child.queue_free()
+			
 			for key in parm_dict.keys():
 				add_parm_ui(parm_dict[key], parm_vbox)
 				
 		var input_names = hego_asset_node.get_input_names()
-		for child in input_vbox.get_children():
-			child.queue_free()
+		
 		input_nodes = Array()
 		for i in range(input_names.size()):
 			var input_node = preload("res://addons/hego/ui/input_ui.tscn").instantiate()
@@ -52,6 +56,10 @@ func update_ui():
 			input_node.setup(input_names[i], inputs)
 			input_node.inputs_changed.connect(_on_input_changed)
 			input_nodes.append(input_node)
+	else:
+		var hint_label = Label.new()
+		hint_label.text = "HDA not instantiated. Recook to see parameters!"
+		parm_vbox.add_child(hint_label)
 
 func add_parm_ui(parm_dict: Dictionary, parent: Control):
 	var parm_ui: Control = null
@@ -172,6 +180,8 @@ func _on_input_changed():
 		recook()
 	
 func _on_recook_button_pressed():
+	if auto_start_session_toggle.button_pressed:
+		HEGoAPI.get_singleton().start_session()
 	recook()
 	update_ui()
 		

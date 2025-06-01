@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_ejwan")
 only_loose_points = true
-read_attribs = PackedStringArray("N", "Cd", "up", "pscale", "scale", "hego_output_path", "hego_spawn_type", "hego_object_name", "hego_resource_path")
-filter_attribs = PackedStringArray("hego_object_spawn")
+read_attribs = PackedStringArray("N", "up", "pscale", "scale", "hego_node_path", "hego_spawn_type", "hego_resource_path", "hego_class_name", "hego_custom_properties")
+filter_attribs = PackedStringArray("hego_spawn")
 filter_attrib_values = [1]
 split_attribs = PackedStringArray()

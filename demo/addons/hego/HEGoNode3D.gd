@@ -70,6 +70,7 @@ func cook():
 		if hego_input_nodes.has(i):
 			var input_dict = hego_input_nodes[i]
 			var merge_node = input_dict["merge"]
+			merge_node.instantiate()
 			var input_array = input_dict["inputs"]
 			# If there's less inputs on godo side than Houdini side, drop the extra inputs
 			if inputs.size() < input_array.size():
@@ -154,7 +155,230 @@ func cook():
 		mesh_instance.mesh = arr_mesh
 	parm_stash = hego_asset_node.get_preset()
 	handle_multimesh_output()
+	handle_object_spawn_output()
 			
+func handle_object_spawn_output():
+	print("[HEGoNode3D]: Handling Object Spawn Output")
+	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_object_spawning.tres")
+	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config)
+	
+	# Validate output dictionary
+	if not output_dictionary or not output_dictionary.has("P") or not output_dictionary.P is Array:
+		push_error("[HEGoNode3D]: Invalid output dictionary or missing P attribute")
+		return
+	
+	var point_count = output_dictionary.P.size()
+	if point_count == 0:
+		print("[HEGoNode3D]: No points to process")
+		return
+	
+	# Get the Outputs node, create if it doesn't exist
+	var outputs_node = get_node_or_null("Outputs")
+	if not outputs_node:
+		outputs_node = Node3D.new()
+		outputs_node.name = "Outputs"
+		add_child(outputs_node)
+		if Engine.is_editor_hint():
+			outputs_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+	
+	# Cache for PackedScene resources
+	var scene_cache = {}
+	
+	# Default values (aligned with multimesh)
+	var default_normal = Vector3(0, 0, 1).normalized()
+	var default_up = Vector3(0, 1, 0).normalized()
+	var default_pscale = 1.0
+	var default_scale = Vector3(1, 1, 1)
+	
+	# Process each point
+	for i in range(point_count):
+		# Fetch attributes with defaults
+		var p = output_dictionary.P[i] if i < output_dictionary.P.size() else Vector3.ZERO
+		var normal = output_dictionary.N[i].normalized() if output_dictionary.has("N") and i < output_dictionary.N.size() and output_dictionary.N[i] is Vector3 and output_dictionary.N[i] != null else default_normal
+		var up = output_dictionary.up[i].normalized() if output_dictionary.has("up") and i < output_dictionary.up.size() and output_dictionary.up[i] is Vector3 and output_dictionary.up[i] != null else default_up
+		var pscale = output_dictionary.pscale[i] if output_dictionary.has("pscale") and i < output_dictionary.pscale.size() and output_dictionary.pscale[i] is float and output_dictionary.pscale[i] != null else default_pscale
+		var spawn_scale = output_dictionary.scale[i] if output_dictionary.has("scale") and i < output_dictionary.scale.size() and output_dictionary.scale[i] is Vector3 and output_dictionary.scale[i] != null else default_scale
+		var node_path = output_dictionary.hego_node_path[i] if output_dictionary.has("hego_node_path") and i < output_dictionary.hego_node_path.size() and output_dictionary.hego_node_path[i] is String else "Objects"
+		var spawn_type = output_dictionary.hego_spawn_type[i] if output_dictionary.has("hego_spawn_type") and i < output_dictionary.hego_spawn_type.size() and output_dictionary.hego_spawn_type[i] is int else 0
+		var resource_path = output_dictionary.hego_resource_path[i] if output_dictionary.has("hego_resource_path") and i < output_dictionary.hego_resource_path.size() and output_dictionary.hego_resource_path[i] is String else ""
+		var spawn_class_name = output_dictionary.hego_class_name[i] if output_dictionary.has("hego_class_name") and i < output_dictionary.hego_class_name.size() and output_dictionary.hego_class_name[i] is String else "Node3D"
+		
+		# Fetch custom properties dictionary
+		var custom_properties = output_dictionary.hego_custom_properties[i] if output_dictionary.has("hego_custom_properties") and i < output_dictionary.hego_custom_properties.size() and output_dictionary.hego_custom_properties[i] is Dictionary else {}
+		
+		# Ensure valid node path and create intermediate nodes
+		var parent_node = outputs_node
+		var path_parts = node_path.split("/", false)
+		var current_path = "Outputs"
+		for j in range(path_parts.size() - 1):
+			var part = path_parts[j]
+			current_path += "/" + part
+			var next_node = get_node_or_null(current_path)
+			if not next_node:
+				next_node = Node3D.new()
+				next_node.name = part
+				parent_node.add_child(next_node)
+				if Engine.is_editor_hint():
+					next_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+				parent_node = next_node
+			else:
+				parent_node = next_node
+		
+		# Create the final node name (last part of hego_node_path or default)
+		var final_node_name = path_parts[-1] if path_parts.size() > 0 else "Object_" + str(i)
+		
+		# Handle name conflicts
+		var base_name = final_node_name
+		var suffix = 0
+		while parent_node.get_node_or_null(final_node_name):
+			suffix += 1
+			final_node_name = base_name + "_" + str(suffix).pad_zeros(3)
+		
+		# Spawn the object based on spawn_type
+		var new_node: Node3D = null
+		if spawn_type == 0:
+			# Spawn registered class by name
+			if ClassDB.class_exists(spawn_class_name):
+				new_node = ClassDB.instantiate(spawn_class_name)
+				if not new_node is Node3D:
+					push_warning("[HEGoNode3D]: Class '%s' is not a Node3D, falling back to Node3D" % spawn_class_name)
+					new_node.queue_free()
+					new_node = Node3D.new()
+			else:
+				push_warning("[HEGoNode3D]: Invalid class name '%s', falling back to Node3D" % spawn_class_name)
+				new_node = Node3D.new()
+		elif spawn_type == 1:
+			# Spawn scene from resource path
+			if ResourceLoader.exists(resource_path):
+				if not scene_cache.has(resource_path):
+					scene_cache[resource_path] = load(resource_path) as PackedScene
+				var scene = scene_cache[resource_path]
+				if scene and scene.can_instantiate():
+					new_node = scene.instantiate() as Node3D
+					if not new_node:
+						push_warning("[HEGoNode3D]: Resource %s is not a Node3D scene, falling back to Node3D" % resource_path)
+						new_node = Node3D.new()
+				else:
+					push_warning("[HEGoNode3D]: Invalid scene at %s, falling back to Node3D" % resource_path)
+					new_node = Node3D.new()
+			else:
+				push_warning("[HEGoNode3D]: Resource path %s does not exist, falling back to Node3D" % resource_path)
+				new_node = Node3D.new()
+		else:
+			push_warning("[HEGoNode3D]: Invalid spawn type %d, falling back to Node3D" % spawn_type)
+			new_node = Node3D.new()
+		
+		# Set node properties
+		new_node.name = final_node_name
+		new_node.transform.origin = p
+		
+		# Create basis from normal and up vectors (aligned with multimesh)
+		var basis = Basis()
+		var right = up.cross(normal).normalized()
+		if right == Vector3.ZERO:
+			push_warning("[HEGoNode3D]: Invalid normal or up vector for point %d (collinear), using default basis" % i)
+			basis = Basis()
+		else:
+			basis.x = right
+			basis.y = up
+			basis.z = normal
+		
+		# Apply scaling
+		basis = basis.scaled(spawn_scale * pscale)
+		new_node.transform.basis = basis
+		
+		# Apply custom properties from hego_custom_properties dictionary
+		if not custom_properties.is_empty():
+			apply_custom_properties(new_node, custom_properties)
+		
+		# Add to scene tree
+		parent_node.add_child(new_node)
+		if Engine.is_editor_hint():
+			new_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+		
+		# Log for debugging
+		#print("[HEGoNode3D]: Spawned %s at %s under %s" % [new_node.name, p, parent_node.get_path()])
+
+# Helper function to apply custom properties from a nested dictionary
+func apply_custom_properties(obj: Object, properties: Dictionary):
+	for key in properties.keys():
+		var value = properties[key]
+		
+		if value is Dictionary and value.has("hego_val"):
+			var actual_value = value["hego_val"]
+			
+			# Check for nested dictionaries
+			var nested_properties = {}
+			for sub_key in value.keys():
+				if sub_key != "hego_val" and value[sub_key] is Dictionary:
+					nested_properties[sub_key] = value[sub_key]
+			
+			# Set the property if it's a leaf value
+			if nested_properties.is_empty():
+				set_property(obj, key, actual_value)
+			else:
+				# If the property is an object, instantiate it first
+				if actual_value is String and ClassDB.class_exists(actual_value):
+					var new_obj = ClassDB.instantiate(actual_value)
+					set_property(obj, key, new_obj)
+					# Apply nested properties to the new object
+					apply_custom_properties(new_obj, nested_properties)
+				elif actual_value is String and ResourceLoader.exists(actual_value):
+					var resource = load(actual_value)
+					set_property(obj, key, resource)
+					# Apply nested properties to the resource if applicable
+					if resource is Object:
+						apply_custom_properties(resource, nested_properties)
+				else:
+					set_property(obj, key, actual_value)
+					# Apply nested properties to the object if it was set
+					var target_obj = obj.get(key) if obj.get_property_list().any(func(p): return p.name == key) else null
+					if target_obj is Object:
+						apply_custom_properties(target_obj, nested_properties)
+		else:
+			push_warning("[HEGoNode3D]: Invalid property format for %s, expected dictionary with hego_val" % key)
+
+# Helper function to set a single property
+func set_property(obj: Object, property: String, value):
+	var prop_info = obj.get_property_list().filter(func(p): return p.name == property)
+	if prop_info.size() > 0:
+		if is_compatible_type(value, prop_info[0].type, prop_info[0].class_name if prop_info[0].class_name else ""):
+			obj.set(property, value)
+			#print("[HEGoNode3D]: Set %s.%s = %s" % [obj.get_class(), property, value])
+		else:
+			var prop_type = prop_info[0].type
+			var value_type = typeof(value)
+			var prop_class = prop_info[0].class_name if prop_info[0].class_name else "unknown"
+			var value_class = value.get_class() if value is Object else "none"
+			push_warning("[HEGoNode3D]: Type mismatch for %s.%s (expected %s:%s, got %s:%s), skipping" % [obj.get_class(), property, prop_type, prop_class, value_type, value_class])
+	else:
+		push_warning("[HEGoNode3D]: Property %s does not exist on %s, skipping" % [property, obj.get_class()])
+
+# Helper function to check type compatibility
+func is_compatible_type(value, expected_type: int, expected_class: String) -> bool:
+	var actual_type = typeof(value)
+	
+	# For TYPE_OBJECT, check if the value's class is compatible with the expected class
+	if expected_type == TYPE_OBJECT and value is Object:
+		if expected_class.is_empty():
+			return true
+		var value_class = value.get_class()
+		return ClassDB.class_exists(value_class) and ClassDB.is_parent_class(value_class, expected_class)
+	
+	# For non-object types, check type equality
+	if actual_type == expected_type:
+		return true
+	
+	# Allow common type conversions
+	if expected_type == TYPE_VECTOR3 and actual_type == TYPE_VECTOR2:
+		return true # Vector2 can be converted to Vector3
+	if expected_type == TYPE_COLOR and actual_type == TYPE_VECTOR3:
+		return true # Vector3 can be converted to Color
+	if expected_type == TYPE_FLOAT and actual_type == TYPE_INT:
+		return true # Int can be converted to float
+	
+	return false
+
 func handle_multimesh_output():
 	print("[HEGoNode3D]: Handling Multimesh Output")
 	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_multimesh_instancing.tres")
@@ -340,12 +564,12 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 	if input is Path3D:
 		if not hego_input_node is HEGoCurveInputNode:
 			hego_input_node = HEGoCurveInputNode.new()
-			hego_input_node.instantiate()
+		hego_input_node.instantiate()
 		hego_input_node.set_curve_from_path_3d(input, 1)
 	elif input is MeshInstance3D:
 		if not hego_input_node is HEGoInputNode:
 			hego_input_node = HEGoInputNode.new()
-			hego_input_node.instantiate()
+		hego_input_node.instantiate()
 		hego_input_node.set_geo_from_mesh_instance_3d(input)
 	else:
 		print("[HEGoNode3D]: Input is neither Path3D nor MeshInstance3D")

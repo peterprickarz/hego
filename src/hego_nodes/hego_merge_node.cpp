@@ -22,6 +22,7 @@ void HEGoMergeNode::instantiate()
 {
 	// Always instantiate merge sop
 	node_id = HEGo::Util::Geo::create_merge_sop(get_session_manager(), node_id);
+	get_session_manager()->register_node(this);
 }
 
 void HEGoMergeNode::connect_inputs(godot::Array inputs)
@@ -40,9 +41,6 @@ void HEGoMergeNode::connect_inputs(godot::Array inputs)
 	HEGo::Util::Geo::connect_to_merge(get_session_manager(), node_id, node_ids);
 }
 
-void HEGoMergeNode::_bind_methods()
-{
-	godot::ClassDB::bind_method(godot::D_METHOD("connect_inputs", "inputs"), &HEGoMergeNode::connect_inputs);
-}
+void HEGoMergeNode::_bind_methods() { godot::ClassDB::bind_method(godot::D_METHOD("connect_inputs", "inputs"), &HEGoMergeNode::connect_inputs); }
 
 } // namespace HEGo

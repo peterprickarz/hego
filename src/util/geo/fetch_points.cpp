@@ -79,18 +79,21 @@ godot::Dictionary HEGo::Util::Geo::fetch_points(HEGoSessionManager *session_mgr,
 				continue;
 			}
 		}
-
+		bool all_filters_pass = true;
 		for (int j = 0; j < filter_attribs.size(); j++)
 		{
 			godot::Array values = filter_attribs_dict[filter_attribs[j]];
 			godot::Variant attr_value = values[i];
 			if (attr_value != filter_attrib_values[j])
 			{
-				continue;
+				all_filters_pass = false;
+				break;
 			}
 		}
-
-		filtered_indices.append(i);
+		if (all_filters_pass)
+		{
+			filtered_indices.append(i);
+		}
 	}
 	godot::Dictionary split_point_dictionary =
 			HEGo::Util::Geo::build_nested_dictionary(split_attribs, split_attribs_dict, filtered_indices, read_attribs_dict, 0);

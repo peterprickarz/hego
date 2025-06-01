@@ -7,6 +7,9 @@ uniform sampler2D NormalTexture : hint_normal, filter_linear_mipmap; // Normal m
 uniform sampler2D AOTexture : hint_default_white, filter_linear_mipmap; // Ambient occlusion
 uniform sampler2D RoughnessTexture : hint_roughness_r, filter_linear_mipmap; // Roughness (red channel)
 
+// Uniform for tint color
+uniform vec4 TintColor : source_color = vec4(1.0, 1.0, 1.0, 0.0); // Default to white with no tint
+
 // Uniforms for wind animation (matching the leaves shader)
 uniform vec3 WindDirection : source_color = vec3(1.0, 0.0, 0.0); // Default wind along X-axis
 uniform float WindSpeed : hint_range(0.0, 10.0) = 2.0; // Speed of wind animation
@@ -31,10 +34,14 @@ void vertex() {
 
 void fragment() {
     // Sample PBR textures
-    vec3 color = texture(ColorTexture, UV).rgb;
+    vec4 color_tex = texture(ColorTexture, UV);
+    vec3 color = color_tex.rgb;
     vec3 normal = texture(NormalTexture, UV).rgb;
     float ao = texture(AOTexture, UV).r;
     float roughness = texture(RoughnessTexture, UV).r;
+
+    // Mix tint color with albedo texture (using TintColor alpha to control blend)
+    color = mix(color, TintColor.rgb, TintColor.a);
 
     // Set PBR material properties
     ALBEDO = color;
@@ -44,5 +51,5 @@ void fragment() {
     AO_LIGHT_AFFECT = 1.0; // Enable AO effect
 
     // Use color texture's alpha for transparency (if any)
-    ALPHA = texture(ColorTexture, UV).a;
+    ALPHA = color_tex.a;
 }

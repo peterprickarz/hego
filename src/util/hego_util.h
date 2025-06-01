@@ -8,13 +8,6 @@
 
 #include <string>
 
-// Node validity check. Returns node ID if it's valid, to prevent duplicate node creation
-#define RETURN_IF_VALID_NODE_ID(node_id)                                                                                                                       \
-	if (node_id != -1)                                                                                                                                         \
-	{                                                                                                                                                          \
-		return node_id;                                                                                                                                        \
-	}
-
 // Error checking - this macro will check the status and return specified parameter in case of failure.
 #define HOUDINI_CHECK_ERROR_RETURN(HAPI_PARAM_CALL, HAPI_PARAM_RETURN)                                                                                         \
 	do                                                                                                                                                         \
