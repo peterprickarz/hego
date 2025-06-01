@@ -124,7 +124,7 @@ void light() {
     // NdotL = max(dot(normal, light_dir), 0.0);
 
     // Diffuse lighting
-    DIFFUSE_LIGHT = ALBEDO * LIGHT_COLOR * NdotL * ATTENUATION;
+    DIFFUSE_LIGHT = ALBEDO * LIGHT_COLOR * NdotL * (ATTENUATION*.45);
 
     // Add ambient light to prevent underexposure
     DIFFUSE_LIGHT += ALBEDO * AmbientLight;
