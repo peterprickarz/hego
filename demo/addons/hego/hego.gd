@@ -1,7 +1,6 @@
 @tool
 extends EditorPlugin
 
-var dock
 var bottom_panel
 var import_plugin
 var editor_selection: EditorSelection
@@ -11,9 +10,7 @@ const ImportPlugin = preload("hda_import_plugin.gd")
 
 func _enter_tree():
 	# Initialization of the plugin goes here.
-	dock = preload("res://addons/hego/control_dock.tscn").instantiate()
 	bottom_panel = preload("res://addons/hego/hego_control.tscn").instantiate()
-	add_control_to_dock(DOCK_SLOT_LEFT_UR, dock)
 	add_control_to_bottom_panel(bottom_panel, "HEGo")
 	
 	editor_selection = get_editor_interface().get_selection()
@@ -24,8 +21,6 @@ func _enter_tree():
 
 func _exit_tree():
 	# Clean-up of the plugin goes here.
-	remove_control_from_docks(dock)
-	dock.free()
 	
 	if editor_selection and editor_selection.selection_changed.is_connected(_on_selection_changed):
 		editor_selection.selection_changed.disconnect(_on_selection_changed)

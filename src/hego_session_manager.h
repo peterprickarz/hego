@@ -57,12 +57,6 @@ public:
 	// Get the cook options used to initialize the HAPI session
 	HAPI_CookOptions *get_cook_options();
 
-	// Query and list the paramters of the given node
-	bool get_parms(HAPI_NodeId node_id);
-
-	// Query and list the point, vertex, prim and detail attributes of the given node
-	bool get_attribs(HAPI_NodeId node_id, HAPI_PartId part_id);
-
 	void register_node(HEGo::HEGoTrackableNode *node);
 	void unregister_node(HEGo::HEGoTrackableNode *node);
 

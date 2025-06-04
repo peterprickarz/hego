@@ -10,14 +10,24 @@ var auto_start_session_toggle: CheckButton
 
 var input_nodes: Array
 
+@onready var load_preset_button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/LoadPresetButton
+@onready var save_preset_button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/SavePresetButton
+@onready var new_preset_button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/NewPresetButton
+@onready var preset_dropdown = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer/PresetDropdownOptionButton
+@onready var new_preset_name_diag = $"../../NewPresetNameDiag"
+@onready var new_preset_name_line_edit = $"../../NewPresetNameDiag/NewPresetNameLineEdit"
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	root_control = $"../.."
-	auto_recook_toggle = $HSplitContainer/Settings/VBoxContainer/VBoxContainer/CheckButton
-	auto_start_session_toggle = $HSplitContainer/Settings/VBoxContainer/CheckButton
-	var recook_button = $HSplitContainer/Settings/VBoxContainer/VBoxContainer/ButtonRecook
+	auto_recook_toggle = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer/CheckButton
+	auto_start_session_toggle = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2/CheckButton
+	var recook_button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/ButtonRecook
 	recook_button.button_down.connect(_on_recook_button_pressed)
 	root_control.selected_hego_node_changed.connect(_on_selection_changed)
+	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
+	new_preset_name_diag.confirmed.connect(_on_preset_dialog_confirmed)
+	load_preset_button.pressed.connect(_on_load_preset_button_pressed)
+	save_preset_button.pressed.connect(_on_save_preset_button_pressed)
 	pass # Replace with function body.
 
 
@@ -25,10 +35,24 @@ func _ready():
 func _process(delta):
 	pass
 
+func _on_new_preset_button_pressed():
+	new_preset_name_diag.dialog_text = "Please enter a name for the preset:"
+	new_preset_name_line_edit.text = ""
+	new_preset_name_line_edit.placeholder_text = "Preset Name"
+
+	new_preset_name_diag.popup_centered()
+	new_preset_name_line_edit.grab_focus()
+
+func _on_preset_dialog_confirmed():
+	var preset_name = new_preset_name_line_edit.text.strip_edges()
+	if preset_name != "":
+		create_preset_file(preset_name)
+	else:
+		print("No preset name entered")
 
 func update_ui():
-	var parm_vbox = $HSplitContainer/Parameters/VBoxContainer/Control/ScrollContainer/VBoxContainer
-	var input_vbox = $HSplitContainer/Inputs/VBoxContainer/ScrollContainer/VBoxContainer
+	var parm_vbox = $HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer/VBoxContainer
+	var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
 	for child in parm_vbox.get_children():
 		child.queue_free()
 	for child in input_vbox.get_children():
@@ -60,6 +84,7 @@ func update_ui():
 		var hint_label = Label.new()
 		hint_label.text = "HDA not instantiated. Recook to see parameters!"
 		parm_vbox.add_child(hint_label)
+	update_preset_dropdown()
 
 func add_parm_ui(parm_dict: Dictionary, parent: Control):
 	var parm_ui: Control = null
@@ -183,7 +208,9 @@ func _on_recook_button_pressed():
 	if auto_start_session_toggle.button_pressed:
 		HEGoAPI.get_singleton().start_session()
 	recook()
+	var preset_index = preset_dropdown.get_selected_id()
 	update_ui()
+	preset_dropdown.select(preset_index)
 		
 func recook():
 	if hego_tool_node.has_method("cook"):
@@ -192,5 +219,150 @@ func recook():
 		if not hego_asset_node:
 			hego_asset_node = hego_tool_node.hego_get_asset_node()
 		hego_tool_node.hego_set_parm_stash(hego_asset_node.get_preset())
+		
+
+func create_preset_file(preset_name: String) -> void:
+	print("[HEGo]: Creating preset")
+	if hego_asset_node and hego_tool_node.has_method("hego_get_asset_name"):
+		var preset = hego_asset_node.get_preset()
+		if preset:
+			var asset_name = hego_tool_node.hego_get_asset_name()
+			var res_path = "res://hego/presets/" + asset_name + ".tres"
+			var presets_res: HEGoHDAPreset
+			# Check if the resource exists
+			if ResourceLoader.exists(res_path):
+				print("[HEGo]: Adding preset to existing file at " + res_path)
+				# Load existing resource
+				presets_res = ResourceLoader.load(res_path)
+				# Verify the resource is of type HEGoHDAPreset
+				if presets_res is HEGoHDAPreset:
+					# Check if preset_name already exists in presets dictionary
+					if preset_name in presets_res.presets.keys():
+						push_error("[HEGo]: Preset with this name already exists, aborting. Select the preset and save instead, or give a different name!")
+						return
+				else:
+					push_error("[HEGo]: Failed to save preset. A file exists at the path, but it's not of type HEGoHDAPreset")
+					return
+			else:
+				print("[HEGo]: Creating new preset file at " + res_path)
+				# Create a new HEGoHDAPreset resource
+				presets_res = HEGoHDAPreset.new()
+				presets_res.presets = {} # Initialize the presets dictionary
+			# Add the new preset to the presets dictionary
+			presets_res.presets[preset_name] = preset
+			# Save the resource to the specified path
+			var error = ResourceSaver.save(presets_res, res_path)
+			if error == OK:
+				print("[HEGo]: Preset saved successfully")
+				# Update UI to refresh dropdown
+				update_ui()
+				# Select the newly created preset in the dropdown
+				for i in range(preset_dropdown.get_item_count()):
+					if preset_dropdown.get_item_text(i) == preset_name:
+						preset_dropdown.select(i)
+						break
+			else:
+				print("[HEGo]: Failed to save preset. Error code: ", error)
+		else:
+			push_error("[HEGo]: Failed to retrieve parms from Houdini - Perhaps the node is not instantiated correctly?")
+	else:
+		push_error("[HEGo]: Invalid hego_asset_node or hego_tool_node. Cannot create preset.")
 	
 	
+func update_preset_dropdown():
+	if hego_tool_node and hego_tool_node.has_method("hego_get_asset_name"):
+		var asset_name = hego_tool_node.hego_get_asset_name()
+		var res_path = "res://hego/presets/" + asset_name + ".tres"
+		
+		# Clear existing items in the dropdown
+		preset_dropdown.clear()
+		
+		# Add a default item
+		preset_dropdown.add_item("Select Preset")
+		preset_dropdown.set_item_disabled(0, true)
+		
+		# Check if the resource exists and is a HEGoHDAPreset
+		if ResourceLoader.exists(res_path):
+			var presets_res = ResourceLoader.load(res_path)
+			if presets_res is HEGoHDAPreset and presets_res.presets is Dictionary:
+				# Add each preset name to the dropdown
+				for preset_name in presets_res.presets.keys():
+					preset_dropdown.add_item(preset_name)
+			else:
+				print("[HEGo]: No valid HEGoHDAPreset at ", res_path)
+	else:
+		# Clear dropdown if no valid tool node
+		preset_dropdown.clear()
+		preset_dropdown.add_item("No Asset Selected")
+		preset_dropdown.set_item_disabled(0, true)
+		
+func _on_load_preset_button_pressed():
+	print("load preset")
+	if hego_asset_node and hego_tool_node and hego_tool_node.has_method("hego_get_asset_name"):
+		var selected_index = preset_dropdown.get_selected()
+		if selected_index > 0: # Skip the disabled "Select Preset" item at index 0
+			var preset_name = preset_dropdown.get_item_text(selected_index)
+			var asset_name = hego_tool_node.hego_get_asset_name()
+			var res_path = "res://hego/presets/" + asset_name + ".tres"
+			if ResourceLoader.exists(res_path):
+				var presets_res = ResourceLoader.load(res_path)
+				if presets_res is HEGoHDAPreset and presets_res.presets is Dictionary:
+					if preset_name in presets_res.presets:
+						hego_asset_node.set_preset(presets_res.presets[preset_name])
+						print("[HEGo]: Loaded preset: ", preset_name)
+						update_ui()
+						# Reselect the saved preset in the dropdown
+						for i in range(preset_dropdown.get_item_count()):
+							if preset_dropdown.get_item_text(i) == preset_name:
+								preset_dropdown.select(i)
+								break
+					else:
+						push_error("[HEGo]: Selected preset '", preset_name, "' not found in resource")
+				else:
+					push_error("[HEGo]: Failed to load preset. Resource at ", res_path, " is not a valid HEGoHDAPreset")
+			else:
+				push_error("[HEGo]: No preset resource found at ", res_path)
+		else:
+			push_error("[HEGo]: No valid preset selected")
+	else:
+		push_error("[HEGo]: Invalid hego_asset_node or hego_tool_node. Cannot load preset.")
+		
+func _on_save_preset_button_pressed():
+	print("save preset")
+	if hego_asset_node and hego_tool_node and hego_tool_node.has_method("hego_get_asset_name"):
+		var selected_index = preset_dropdown.get_selected()
+		if selected_index > 0: # Skip the disabled "Select Preset" item at index 0
+			var preset_name = preset_dropdown.get_item_text(selected_index)
+			var asset_name = hego_tool_node.hego_get_asset_name()
+			var res_path = "res://hego/presets/" + asset_name + ".tres"
+			var preset = hego_asset_node.get_preset()
+			if preset:
+				if ResourceLoader.exists(res_path):
+					var presets_res = ResourceLoader.load(res_path)
+					if presets_res is HEGoHDAPreset and presets_res.presets is Dictionary:
+						if preset_name in presets_res.presets:
+							# Overwrite the existing preset
+							presets_res.presets[preset_name] = preset
+							var error = ResourceSaver.save(presets_res, res_path)
+							if error == OK:
+								print("[HEGo]: Preset '", preset_name, "' saved successfully")
+								update_ui()
+								# Reselect the saved preset in the dropdown
+								for i in range(preset_dropdown.get_item_count()):
+									if preset_dropdown.get_item_text(i) == preset_name:
+										preset_dropdown.select(i)
+										break
+							else:
+								push_error("[HEGo]: Failed to save preset '", preset_name, "'. Error code: ", error)
+						else:
+							push_error("[HEGo]: Selected preset '", preset_name, "' not found in resource")
+					else:
+						push_error("[HEGo]: Failed to save preset. Resource at ", res_path, " is not a valid HEGoHDAPreset")
+				else:
+					push_error("[HEGo]: No preset resource found at ", res_path)
+			else:
+				push_error("[HEGo]: Failed to retrieve parms from Houdini - Perhaps the node is not instantiated correctly?")
+		else:
+			push_error("[HEGo]: No valid preset selected")
+	else:
+		push_error("[HEGo]: Invalid hego_asset_node or hego_tool_node. Cannot save preset.")

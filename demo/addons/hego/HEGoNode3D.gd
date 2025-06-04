@@ -20,7 +20,7 @@ func cook():
 	# Ensure valid AssetNode object
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	# Assign HDA
-	hego_asset_node.op_name = asset_name
+	hego_asset_node.op_name = "Sop/"+asset_name
 	# Check the id, which is -1 before instantiation
 	var id = hego_asset_node.get_id()
 	# Instantiate - Note, this function auto checks if it already is instantiated!
@@ -554,10 +554,6 @@ func array_to_index_dict(float_array: Array) -> Dictionary:
 			
 	return result
 	
-			
-			
-			
-	
 func update_hego_input_node(hego_input_node, input_node_path, settings):
 	var scene_root = get_tree().edited_scene_root
 	var input = scene_root.get_node_or_null(input_node_path)
@@ -602,6 +598,9 @@ func hego_get_asset_node():
 func hego_stash_parms(preset:PackedByteArray):
 	parm_stash = preset
 	
+func hego_get_parm_stash(preset: PackedByteArray):
+	return parm_stash
+	
 func hego_get_input_stash():
 	return input_stash
 	
@@ -622,6 +621,9 @@ func hego_set_input_stash(input_array: Array):
 		input_dict["settings"] = input["settings"]
 		result.append(input_dict)
 	input_stash = result
+
+func hego_get_asset_name():
+	return asset_name
 	
 func repeat_indent(indent: int) -> String:
 	var result := ""

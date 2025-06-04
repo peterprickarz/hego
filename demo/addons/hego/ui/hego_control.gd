@@ -5,11 +5,10 @@ signal selected_hego_node_changed(node: Node)
 
 var hego_tool_node: Node
 
-
 # Called when the node enters the scene tree for the first time.
 func _ready():
-	var start_button = $TabContainer/Session/ButtonStartSession
-	var stop_button = $TabContainer/Session/ButtonStopSession
+	var start_button = $"TabContainer/Houdini Engine/ButtonStartSession"
+	var stop_button = $"TabContainer/Houdini Engine/ButtonStopSession"
 	start_button.pressed.connect(_on_start_session_button_pressed)
 	stop_button.pressed.connect(_on_stop_session_button_pressed)
 	pass # Replace with function body.
@@ -28,3 +27,4 @@ func _on_start_session_button_pressed():
 	
 func _on_stop_session_button_pressed():
 	HEGoAPI.get_singleton().stop_session()
+	

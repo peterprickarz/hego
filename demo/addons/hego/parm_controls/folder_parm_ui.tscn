@@ -36,28 +36,17 @@ layout_mode = 2
 text = "Folder"
 vertical_alignment = 1
 
-[node name="TabContainer" type="TabContainer" parent="PanelContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="▼" type="MarginContainer" parent="PanelContainer/VBoxContainer/TabContainer"]
-layout_mode = 2
-theme_override_constants/margin_left = 20
-
-[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/VBoxContainer/TabContainer/▼"]
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/VBoxContainer"]
 layout_mode = 2
 alignment = 1
 
-[node name="HSeparator2" type="HSeparator" parent="PanelContainer/VBoxContainer/TabContainer/▼/VBoxContainer"]
+[node name="HSeparator2" type="HSeparator" parent="PanelContainer/VBoxContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="ContentContainer" type="VBoxContainer" parent="PanelContainer/VBoxContainer/TabContainer/▼/VBoxContainer"]
+[node name="ContentContainer" type="VBoxContainer" parent="PanelContainer/VBoxContainer/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_constants/separation = 4
 
-[node name="HSeparator" type="HSeparator" parent="PanelContainer/VBoxContainer/TabContainer/▼/VBoxContainer"]
-layout_mode = 2
-
-[node name="▲" type="Control" parent="PanelContainer/VBoxContainer/TabContainer"]
-visible = false
+[node name="HSeparator" type="HSeparator" parent="PanelContainer/VBoxContainer/VBoxContainer"]
 layout_mode = 2
