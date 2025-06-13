@@ -20,7 +20,10 @@ func cook():
 	# Ensure valid AssetNode object
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	# Assign HDA
-	hego_asset_node.op_name = "Sop/"+asset_name
+	if asset_name.split("/").size() == 1:
+		hego_asset_node.op_name = "Sop/"+asset_name
+	else:
+		hego_asset_node.op_name = asset_name
 	# Check the id, which is -1 before instantiation
 	var id = hego_asset_node.get_id()
 	# Instantiate - Note, this function auto checks if it already is instantiated!
