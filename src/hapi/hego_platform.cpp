@@ -60,7 +60,7 @@ void HEGoPlatform::set_env_vars()
 	setenv("PATH", path.c_str(), 1);
 #endif
 	
-	HEGo::Util::Log::message(std::string("Using Houdini installation: ") + houdiniBasePath);
+	HEGo::Util::Log::message(godot::String("Using Houdini installation: ") + godot::String(houdiniBasePath));
 }
 
 void *HEGoPlatform::load_lib_hapil()
