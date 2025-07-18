@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://batgu6nu2r52p"]
 
-[ext_resource type="Script" path="res://addons/hego/parm_controls/string_parm_ui.gd" id="1"]
-[ext_resource type="Script" path="res://addons/hego/parm_controls/string_parm_line_edit.gd" id="2_jmfd8"]
+[ext_resource type="Script" uid="uid://41rpb64csbcu" path="res://addons/hego/parm_controls/string_parm_ui.gd" id="1"]
+[ext_resource type="Script" uid="uid://bd0t66w25f1ih" path="res://addons/hego/parm_controls/string_parm_line_edit.gd" id="2_jmfd8"]
 
 [node name="StringParmUI" type="VBoxContainer"]
 anchors_preset = 15

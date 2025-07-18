@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://cyh0h7u5wth2g"]
 
-[ext_resource type="Script" path="res://addons/hego/parm_controls/folder_parm_ui.gd" id="1"]
+[ext_resource type="Script" uid="uid://rne3wn28f302" path="res://addons/hego/parm_controls/folder_parm_ui.gd" id="1"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_crtq4"]
 content_margin_left = 5.0

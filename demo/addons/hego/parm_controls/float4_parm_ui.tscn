@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://cvhqrmajyhnid"]
 
-[ext_resource type="Script" path="res://addons/hego/parm_controls/float4_parm_ui.gd" id="1"]
+[ext_resource type="Script" uid="uid://dfvq4mw43qpku" path="res://addons/hego/parm_controls/float4_parm_ui.gd" id="1"]
 
 [node name="Float4ParmUI" type="VBoxContainer"]
 anchors_preset = 15

@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://bnnqk32icf3tu"]
 
-[ext_resource type="Script" path="res://addons/hego/parm_controls/int2_parm_ui.gd" id="1"]
+[ext_resource type="Script" uid="uid://b3lblgk524182" path="res://addons/hego/parm_controls/int2_parm_ui.gd" id="1"]
 
 [node name="Int2ParmUI" type="VBoxContainer"]
 anchors_preset = 15

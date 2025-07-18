@@ -2,8 +2,10 @@
 extends MeshInstance3D # node can directly contain a mesh to be rendered
 class_name HDACurveTest # makes this node placeable directly
 
-const ASSET_NAME : String = "Sop/hego_curvetests" # defines which operator to use
+const ASSET_NAME: String = "Sop/hego_curvetests" # defines which operator to use
 
+@export_tool_button("cook", "Cook")
+var action_cool = func(): cook() # button to trigger cook function
 @export var input_node: Node = null # expose node input reference
 @export var stash: PackedByteArray
 		
@@ -18,7 +20,7 @@ func cook():
 	var id = hego_asset_node.get_id()
 	hego_asset_node.instantiate()
 	hego_asset_node.set_transform(global_transform)
-	if id == -1 and stash.size()>0:
+	if id == -1 and stash.size() > 0:
 		hego_asset_node.set_preset(stash)
 	
 
@@ -39,7 +41,7 @@ func cook():
 	hego_set_parm_stash(hego_asset_node.get_preset())
 	
 
-func hego_set_parm_stash(preset:PackedByteArray):
+func hego_set_parm_stash(preset: PackedByteArray):
 	stash = preset
 	
 func hego_get_stashed_parms():

@@ -62,7 +62,6 @@ func update_ui():
 		var parm_dict = hego_asset_node.get_parms_dict()
 		
 		if parm_dict and parm_dict.keys().size() != 0:
-			
 			for key in parm_dict.keys():
 				add_parm_ui(parm_dict[key], parm_vbox)
 				
@@ -153,7 +152,7 @@ func add_parm_ui(parm_dict: Dictionary, parent: Control):
 			var id = parm_dict["id"]
 			var multiparm_instance_ui = preload("res://addons/hego/parm_controls/multiparm_instance_parm_ui.tscn").instantiate()
 			multiparm_instance_container.add_child(multiparm_instance_ui)
-			multiparm_instance_ui.setup(i+instance_start_offset, id, label)
+			multiparm_instance_ui.setup(i + instance_start_offset, id, label)
 			var instance_parm_container = multiparm_instance_ui.get_container()
 			instance_containers.append(instance_parm_container)
 			multiparm_instance_ui.insert_instance.connect(_on_insert_multiparm_instance)
@@ -164,9 +163,6 @@ func add_parm_ui(parm_dict: Dictionary, parent: Control):
 				add_parm_ui(instance_parm_dict, instance_containers[instance_index])
 			
 			
-		
-		
-
 func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary):
 	hego_asset_node.set_parm(parm_dict["name"], value)
 	update_ui()
@@ -180,7 +176,7 @@ func _on_remove_multiparm_instance(id: int, index: int):
 	update_ui()
 
 
-func _on_selection_changed(node:Node):
+func _on_selection_changed(node: Node):
 	hego_tool_node = node
 	update_ui()
 	
