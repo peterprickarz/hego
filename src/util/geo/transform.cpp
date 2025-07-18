@@ -18,7 +18,7 @@ HAPI_TransformEuler godot_to_houdini_transform(const godot::Transform3D &transfo
 	// some hacky basis -> quat -> vector stuff to avoid a bug on get_global_rotation_degrees
 	godot::Basis global_basis = transform.get_basis();
 	godot::Quaternion global_quat = global_basis.get_rotation_quaternion();
-	godot::Vector3 q_rot = global_quat.get_euler_yxz();
+	godot::Vector3 q_rot = global_quat.get_euler();
 
 	godot::Vector3 origin = transform.origin;
 	godot::Vector3 rotation(
