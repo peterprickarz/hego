@@ -9,6 +9,7 @@ public:
 	static bool free_lib_hapil(void *libHAPIL);
 	static void *get_dll_export(void *library_handle, const char *export_name);
 	static void *load_lib_hapil();
+	static const char* get_houdini_path();
 };
 
 #endif // HEGO_PLATFORM_H
