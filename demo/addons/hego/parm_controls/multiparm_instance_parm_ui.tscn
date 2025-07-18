@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://cpd1rbi3xns30"]
 
-[ext_resource type="Script" path="res://addons/hego/parm_controls/multiparm_instance_parm_ui.gd" id="1_capc2"]
+[ext_resource type="Script" uid="uid://hb4w1uwql2k7" path="res://addons/hego/parm_controls/multiparm_instance_parm_ui.gd" id="1_capc2"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_k0rx6"]
 content_margin_left = 5.0

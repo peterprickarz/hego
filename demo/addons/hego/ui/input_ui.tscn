@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://d8abwv00x8pb"]
 
-[ext_resource type="Script" path="res://addons/hego/ui/input_ui.gd" id="1_8ly8x"]
+[ext_resource type="Script" uid="uid://clblipaqvbvwy" path="res://addons/hego/ui/input_ui.gd" id="1_8ly8x"]
 
 [node name="Control" type="VBoxContainer"]
 anchors_preset = 15

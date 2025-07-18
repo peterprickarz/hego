@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="HEGoFetchPointsConfig" load_steps=2 format=3 uid="uid://dtxr2nwk5dvqf"]
 
-[ext_resource type="Script" path="res://addons/hego/fetch_points_config.gd" id="1_hwtad"]
+[ext_resource type="Script" uid="uid://c4ty4hgb3cgww" path="res://addons/hego/fetch_points_config.gd" id="1_hwtad"]
 
 [resource]
 script = ExtResource("1_hwtad")

@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://dmls7akqo6b7r"]
 
-[ext_resource type="Script" path="res://addons/hego/parm_controls/toggle_parm_ui.gd" id="1"]
+[ext_resource type="Script" uid="uid://w48j4ibfxewa" path="res://addons/hego/parm_controls/toggle_parm_ui.gd" id="1"]
 
 [node name="ToggleParmUI" type="VBoxContainer"]
 anchors_preset = 15

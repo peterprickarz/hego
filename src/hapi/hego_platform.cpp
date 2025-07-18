@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <godot_cpp/classes/project_settings.hpp>
 
 #ifdef _WIN32
 #include <tchar.h>
@@ -17,11 +18,38 @@ const char *HAPI_LIB_OBJECT_WINDOWS = "libHAPIL.dll";
 const char *HAPI_LIB_OBJECT_LINUX = "libHAPIL.so";
 const char *HAPI_LIB_OBJECT_MAC = "libHAPIL.dylib";
 
+const char* HEGoPlatform::get_houdini_path()
+{
+	static std::string cached_path;
+	
+	// First try to get from Godot project settings
+	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
+	if (project_settings && project_settings->has_setting("hego/houdini_installation_path")) {
+		godot::String setting_path = project_settings->get_setting("hego/houdini_installation_path");
+		cached_path = setting_path.utf8().get_data();
+		return cached_path.c_str();
+	}
+	
+	// Fall back to environment variable
+	const char *env_path = std::getenv("HFS");
+	if (env_path) {
+		cached_path = env_path;
+		return cached_path.c_str();
+	}
+	
+	// Final fallback to default
+	cached_path = "C:/Program Files/Side Effects Software/Houdini 20.5.654";
+	return cached_path.c_str();
+}
+
 void HEGoPlatform::set_env_vars()
 {
 	HEGo::Util::Log::message("Setting in process environment variables...");
-	const char *houdiniBasePath = "C:/Program Files/Side Effects Software/Houdini 20.5.487";
-	const char *houdiniBinPath = "C:/Program Files/Side Effects Software/Houdini 20.5.487/bin";
+	
+	// Get Houdini path from project setting first, then environment variable, then fallback
+	const char *houdiniBasePath = get_houdini_path();
+	
+	std::string houdiniBinPath = std::string(houdiniBasePath) + "/bin";
 
 #ifdef _WIN32
 	_putenv(("HFS=" + std::string(houdiniBasePath)).c_str());
@@ -31,6 +59,8 @@ void HEGoPlatform::set_env_vars()
 	std::string path = std::string(getenv("PATH")) + ":" + houdiniBinPath;
 	setenv("PATH", path.c_str(), 1);
 #endif
+	
+	HEGo::Util::Log::message(godot::String("Using Houdini installation: ") + godot::String(houdiniBasePath));
 }
 
 void *HEGoPlatform::load_lib_hapil()
@@ -38,27 +68,17 @@ void *HEGoPlatform::load_lib_hapil()
 	void *libHAPIL = nullptr;
 
 #if defined(_WIN32)
-	char *buf;
-	size_t len;
-	if (_dupenv_s(&buf, &len, "HFS") == 0 && buf != nullptr)
+	const char *houdiniBasePath = get_houdini_path();
+	std::string libHAPIL_dir(houdiniBasePath);
+	libHAPIL_dir.append("\\bin\\"); // Use backslashes for Windows paths
+	
+	if (SetDllDirectoryA(libHAPIL_dir.c_str()) != 0)
 	{
-		std::string libHAPIL_dir(buf);
-		free(buf);
-
-		libHAPIL_dir.append("\\bin\\"); // Use backslashes for Windows paths
-		if (SetDllDirectoryA(libHAPIL_dir.c_str()) != 0)
-		{
-			libHAPIL = LoadLibraryA(HAPI_LIB_OBJECT_WINDOWS);
-		}
-		else
-		{
-			std::cerr << "Failed to set DLL directory to " << libHAPIL_dir << std::endl;
-		}
+		libHAPIL = LoadLibraryA(HAPI_LIB_OBJECT_WINDOWS);
 	}
 	else
 	{
-		std::cerr << "Unable to retrieve the value of the HFS environment variable." << std::endl;
-		return nullptr;
+		std::cerr << "Failed to set DLL directory to " << libHAPIL_dir << std::endl;
 	}
 #elif defined(__linux__)
 	libHAPIL = dlopen(HAPI_LIB_OBJECT_LINUX, RTLD_LAZY);

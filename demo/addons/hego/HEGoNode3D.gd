@@ -1,3 +1,4 @@
+@icon('res://addons/hego/assets/houdini.svg')
 @tool
 extends Node3D
 
@@ -21,7 +22,7 @@ func cook():
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	# Assign HDA
 	if asset_name.split("/").size() == 1:
-		hego_asset_node.op_name = "Sop/"+asset_name
+		hego_asset_node.op_name = "Sop/" + asset_name
 	else:
 		hego_asset_node.op_name = asset_name
 	# Check the id, which is -1 before instantiation
@@ -31,7 +32,7 @@ func cook():
 	# Set transform
 	hego_asset_node.set_transform(global_transform)
 	# If the asset node was not instantiated beforehand, retrieve parm stash
-	if id == -1 and parm_stash.size()>0:
+	if id == -1 and parm_stash.size() > 0:
 		hego_asset_node.set_preset(parm_stash)
 		
 	var outputs_node = get_node_or_null("Outputs")
@@ -86,10 +87,10 @@ func cook():
 				# loop over inputs on godot side
 				for j in range(inputs.size()):
 					# if input exists, update it
-					if j <= input_array.size()-1:
+					if j <= input_array.size() - 1:
 						input_array[j] = update_hego_input_node(input_array[j], inputs[j], settings)
 					# if not, create it
-					elif j > input_array.size()-1:
+					elif j > input_array.size() - 1:
 						var input_node = create_hego_input_node(inputs[j], settings)
 						input_array.append(input_node)
 			# If counts match, just update all inputs
@@ -120,7 +121,7 @@ func cook():
 				var lod_dict = float_to_int_triplet_dict(hego_lod_array, mesh_indices_array)
 				surface_array[Mesh.ARRAY_INDEX] = lod_dict[.0]
 				lod_dict.erase(.0)
-				arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array,[], lod_dict)
+				arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], lod_dict)
 			else:
 				arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array)
 			if hego_material_key != null:
@@ -529,7 +530,7 @@ func float_to_int_triplet_dict(float_array: Array, int_array: Array) -> Dictiona
 	var result: Dictionary = {}
 	
 	if int_array.size() != 3 * float_array.size():
-		return result  # Return empty dict if sizes don't match
+		return result # Return empty dict if sizes don't match
 	
 	for i in range(float_array.size()):
 		var float_value: float = float_array[i]
@@ -575,7 +576,6 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 	return hego_input_node
 	
 
-
 func create_hego_input_node(input_node_path, settings):
 	var scene_root = get_tree().edited_scene_root
 	var input = scene_root.get_node_or_null(input_node_path)
@@ -598,7 +598,7 @@ func hego_use_bottom_panel():
 func hego_get_asset_node():
 	return hego_asset_node;
 	
-func hego_stash_parms(preset:PackedByteArray):
+func hego_stash_parms(preset: PackedByteArray):
 	parm_stash = preset
 	
 func hego_get_parm_stash(preset: PackedByteArray):
@@ -659,5 +659,3 @@ func pretty_print(value, indent := 0) -> String:
 
 	else:
 		return str(value)
-
-

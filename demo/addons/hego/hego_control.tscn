@@ -1,7 +1,7 @@
 [gd_scene load_steps=7 format=3 uid="uid://0fn3nxqgnidi"]
 
-[ext_resource type="Script" path="res://addons/hego/ui/hego_control.gd" id="1_cqk42"]
-[ext_resource type="Script" path="res://addons/hego/ui/hda_tab.gd" id="1_sp0ki"]
+[ext_resource type="Script" uid="uid://nddq401i7fhb" path="res://addons/hego/ui/hego_control.gd" id="1_cqk42"]
+[ext_resource type="Script" uid="uid://c7b8dciokihp8" path="res://addons/hego/ui/hda_tab.gd" id="1_sp0ki"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_v64h4"]
 bg_color = Color(0.6, 0.6, 0.6, 0)

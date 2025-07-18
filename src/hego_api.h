@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
 
 #include "hego_session_manager.h"
 
@@ -25,6 +26,11 @@ public:
 	void start_session();
 	void stop_session();
 	HEGoSessionManager *get_session_manager();
+	void set_houdini_installation_path(const godot::String &path);
+	godot::String get_houdini_installation_path() const;
+	
+	// Get list of available HDAs from all loaded libraries
+	godot::PackedStringArray get_available_hdas();
 
 	static HEGoAPI *get_singleton();
 

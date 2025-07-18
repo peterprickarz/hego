@@ -1,12 +1,13 @@
+@icon('res://addons/hego/assets/houdini.svg')
 @tool
 extends MeshInstance3D
 class_name HDAScifiPanelGenerator
 
-const ASSET_NAME : String = "Sop/hego_scifipanelgenerator"
+const ASSET_NAME: String = "Sop/hego_scifipanelgenerator"
 
-@export var recook: bool = false:
-	set(value):
-		cook()
+@export_tool_button("Cook", "Bake")
+var action_cook = func(): cook() # button to trigger cook function
+
 # array of nodes to support inputting multiple MeshInstance3D objects
 @export var input_nodes: Array[MeshInstance3D] = []
 
@@ -28,7 +29,7 @@ func cook():
 	if hego_input_nodes.size() > input_nodes.size():
 		hego_input_nodes.resize(input_nodes.size())
 	for i in range(input_nodes.size()):
-		if(hego_input_nodes.size()<i+1):
+		if (hego_input_nodes.size() < i + 1):
 			hego_input_nodes.append(HEGoInputNode.new())
 		hego_input_nodes[i].instantiate()
 		hego_input_nodes[i].set_geo_from_mesh_instance_3d(input_nodes[i])
@@ -49,16 +50,16 @@ func cook():
 	var m_main = load("res://materials/m_main.tres")
 	
 	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["Main"]["surface_array"])
-	arr_mesh.surface_set_material(0,m_main)
+	arr_mesh.surface_set_material(0, m_main)
 	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["DarkGrey"]["surface_array"])
-	arr_mesh.surface_set_material(1,m_dark_grey)
+	arr_mesh.surface_set_material(1, m_dark_grey)
 	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["Accent"]["surface_array"])
-	arr_mesh.surface_set_material(2,m_accent)
+	arr_mesh.surface_set_material(2, m_accent)
 	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["DarkAccent"]["surface_array"])
-	arr_mesh.surface_set_material(3,m_dark_accent)
+	arr_mesh.surface_set_material(3, m_dark_accent)
 	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["Black"]["surface_array"])
-	arr_mesh.surface_set_material(4,m_black)
+	arr_mesh.surface_set_material(4, m_black)
 	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["default"]["surface_array"])
-	arr_mesh.surface_set_material(5,m_default)
+	arr_mesh.surface_set_material(5, m_default)
 	
 	self.mesh = arr_mesh
