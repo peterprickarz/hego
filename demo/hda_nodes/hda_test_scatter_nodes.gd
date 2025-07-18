@@ -1,3 +1,4 @@
+@icon('res://addons/hego/assets/houdini.svg')
 @tool
 extends MeshInstance3D
 class_name HDATestScatterNodes

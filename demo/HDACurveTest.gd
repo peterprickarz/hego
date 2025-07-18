@@ -1,3 +1,4 @@
+@icon('res://addons/hego/assets/houdini.svg')
 @tool
 extends MeshInstance3D # node can directly contain a mesh to be rendered
 class_name HDACurveTest # makes this node placeable directly
