@@ -2,18 +2,17 @@
 extends MeshInstance3D
 class_name HDATestScatterNodes
 
-const ASSET_NAME : String = "Sop/hego_testscatter_tool"
+const ASSET_NAME: String = "Sop/hego_testscatter_tool"
 #const PARM_NAME_SPIKE_SCALE : String = "spike_scale"
-const PARM_NAME_SPIKE_DENSITY : String = "spike_density"
-const PARM_NAME_NORMAL_ALIGNED : String = "normal_aligned"
-const PARM_NAME_DENSITY_BIAS : String = "density_bias"
-const PARM_NAME_MIN_SCALE : String = "min_scale"
-const PARM_NAME_MAX_SCALE : String = "max_scale"
+const PARM_NAME_SPIKE_DENSITY: String = "spike_density"
+const PARM_NAME_NORMAL_ALIGNED: String = "normal_aligned"
+const PARM_NAME_DENSITY_BIAS: String = "density_bias"
+const PARM_NAME_MIN_SCALE: String = "min_scale"
+const PARM_NAME_MAX_SCALE: String = "max_scale"
 
 
-@export var recook: bool = false:
-	set(value):
-		cook()
+@export_tool_button("Cook", "Bake")
+var action_cook = func(): cook() # button to trigger cook function
 @export var input_nodes: Array[Node] = []
 @export var dist_input_nodes: Array[Node] = []
 @export var normal_aligned = true
@@ -30,7 +29,6 @@ var hego_dist_merge_node: HEGoMergeNode
 var hego_dist_input_nodes: Array[HEGoInputNode]
 
 func cook():
-	
 	for child in get_children():
 		child.queue_free()
 	
@@ -48,14 +46,14 @@ func cook():
 	if hego_input_nodes.size() > input_nodes.size():
 		hego_input_nodes.resize(input_nodes.size())
 	for i in range(input_nodes.size()):
-		if(hego_input_nodes.size()<i+1):
+		if (hego_input_nodes.size() < i + 1):
 			hego_input_nodes.append(HEGoInputNode.new())
 		hego_input_nodes[i].instantiate()
 		hego_input_nodes[i].set_geo_from_mesh_instance_3d(input_nodes[i])
 	if hego_dist_input_nodes.size() > dist_input_nodes.size():
 		hego_dist_input_nodes.resize(dist_input_nodes.size())
 	for i in range(dist_input_nodes.size()):
-		if(hego_dist_input_nodes.size()<i+1):
+		if (hego_dist_input_nodes.size() < i + 1):
 			hego_dist_input_nodes.append(HEGoInputNode.new())
 		hego_dist_input_nodes[i].instantiate()
 		hego_dist_input_nodes[i].set_geo_from_mesh_instance_3d(dist_input_nodes[i])
@@ -64,7 +62,7 @@ func cook():
 	hego_dist_merge_node.connect_inputs(hego_dist_input_nodes)
 	# Connect MergeNode to AssetNode and set parameters
 	hego_asset_node.connect_input(hego_merge_node, 0)
-	hego_asset_node.connect_input(hego_dist_merge_node,1)
+	hego_asset_node.connect_input(hego_dist_merge_node, 1)
 	hego_asset_node.set_parm(PARM_NAME_DENSITY_BIAS, density_bias)
 	hego_asset_node.set_parm(PARM_NAME_MIN_SCALE, min_scale)
 	hego_asset_node.set_parm(PARM_NAME_MAX_SCALE, max_scale)
@@ -82,14 +80,14 @@ func cook():
 	
 
 	for i in range(dict["P"].size()):
-		var normal : Vector3 = dict["N"][i]
-		var up : Vector3  = dict["up"][i]
-		var pos : Vector3 = dict["P"][i]
-		var pscale : float = dict["pscale"][i]
+		var normal: Vector3 = dict["N"][i]
+		var up: Vector3 = dict["up"][i]
+		var pos: Vector3 = dict["P"][i]
+		var pscale: float = dict["pscale"][i]
 		
 		normal = normal.normalized()
 		up = up.normalized()
-		var cross : Vector3 = normal.cross(up)
+		var cross: Vector3 = normal.cross(up)
 		cross = cross.normalized()
 		
 		var basis = Basis(cross, up, normal)

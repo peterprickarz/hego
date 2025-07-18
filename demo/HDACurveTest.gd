@@ -4,8 +4,8 @@ class_name HDACurveTest # makes this node placeable directly
 
 const ASSET_NAME: String = "Sop/hego_curvetests" # defines which operator to use
 
-@export_tool_button("cook", "Cook")
-var action_cool = func(): cook() # button to trigger cook function
+@export_tool_button("Cook", "Bake")
+var action_cook = func(): cook() # button to trigger cook function
 @export var input_node: Node = null # expose node input reference
 @export var stash: PackedByteArray
 		

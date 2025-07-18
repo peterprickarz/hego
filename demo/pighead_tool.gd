@@ -2,17 +2,15 @@
 extends MeshInstance3D
 class_name HDAPigHead
 
-const ASSET_NAME : String = "Sop/hego_testpighead_tool"
+const ASSET_NAME: String = "Sop/hego_testpighead_tool"
 
 
-@export var recook: bool = false:
-	set(value):
-		print("cooking")
-		cook()
+@export_tool_button("Cook", "Bake")
+var action_cook = func(): cook() # button to trigger cook function
 
 var hego_asset_node: HEGoAssetNode
 
-func cook():	
+func cook():
 	# Ensure valid AssetNode object
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	hego_asset_node.op_name = ASSET_NAME
@@ -41,7 +39,7 @@ func cook():
 	var lods = {}
 	var dict_keys = dict.keys()
 	for key in dict.keys():
-		var lod_array : Array = dict[key]["surface_array"]
+		var lod_array: Array = dict[key]["surface_array"]
 		for i in range(lod_array[12].size()):
 			lod_array[12][i] += index_offset
 		for i in range(lod_array.size()):
