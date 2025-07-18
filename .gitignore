@@ -3,3 +3,4 @@ build
 demo/.godot
 *.TMP
 /godot-cpp
+otls/demo/.godot
