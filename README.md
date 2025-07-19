@@ -1,6 +1,10 @@
-# HEGo - Houdini Engine in Godot
-
-A C++ GDExtension that integrates Houdini Engine into Godot 4, enabling procedural content generation using Houdini Digital Assets (HDAs) with a scriptable API.
+<div align="center">
+  <img src="demo/addons/hego/assets/logo.png" alt="HEGo Logo" width="128">
+  
+  # HEGo - Houdini Engine in Godot
+  
+  A C++ GDExtension that integrates Houdini Engine into Godot 4, enabling procedural content generation using Houdini Digital Assets (HDAs) with a scriptable API.
+</div>
 
 ## 🚀 Getting Started
 
