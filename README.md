@@ -10,7 +10,7 @@ This is in heavy WIP and in an early stage.
 
 I'm taking quite a different approach compared to the offical Houdini Engine plugins(Unreal, Unity, Maya etc), as I mostly focus on keeping interaction with Houdini scriptable, and mainly focus on building a nice API to be used via GDScript. However, there is also a default HEGoNode3D, which comes with basic support for generating Meshes, Instances via MultiMeshInstance and spawning other node types/instancing scenes.
 
-Currently, this is built for Houdini 20.5.654, and Godot 4.2.2 stable, but should be upwards compatible on the Godot side. When submitting pull requests, please stick to those versions for now.
+Currently, this is built for Houdini 20.5.654, and Godot 4.4.1 stable, but should be upwards compatible on the Godot side. When submitting pull requests, please stick to those versions for now.
 
 If you have any questions or problems, feel free to message me on [X](https://x.com/prickarz) where I will try to help as much as I can.
 
