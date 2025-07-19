@@ -137,6 +137,7 @@ func handle_mesh_output():
 		var hego_mat_keys = dict[hego_mesh_instance_key].keys()
 		var hego_storage_mode = dict[hego_mesh_instance_key][hego_mat_keys[0]]["hego_storage_mode"][0]
 		var hego_resource_save_path = dict[hego_mesh_instance_key][hego_mat_keys[0]]["hego_resource_save_path"][0]
+		
 		if hego_storage_mode == null:
 			hego_storage_mode = 0
 		if hego_resource_save_path == null and hego_storage_mode > 0:
@@ -186,6 +187,46 @@ func handle_mesh_output():
 				mesh_instance.mesh = arr_mesh
 			else:
 				mesh_instance.mesh = load(hego_resource_save_path)
+			var hego_col_type = dict[hego_mesh_instance_key][hego_mat_keys[0]]["hego_col_type"][0]
+			if hego_col_type == null:
+				hego_col_type = 0
+			if hego_col_type == 1:
+				var decomp_settings = MeshConvexDecompositionSettings.new()
+				var hego_col_decomp_settings: Dictionary = dict[hego_mesh_instance_key][hego_mat_keys[0]]["hego_col_decomp_settings"][0]
+				if hego_col_decomp_settings != null:
+					if hego_col_decomp_settings.has("convex_hull_approximation"):
+						if hego_col_decomp_settings["convex_hull_approximation"] == 0:
+							decomp_settings.convex_hull_approximation = false
+					if hego_col_decomp_settings.has("convex_hull_downsampling"):
+						decomp_settings.convex_hull_downsampling = hego_col_decomp_settings["convex_hull_downsampling"]
+					if hego_col_decomp_settings.has("max_concavity"):
+						decomp_settings.max_concavity = hego_col_decomp_settings["max_concavity"]
+					if hego_col_decomp_settings.has("max_convex_hulls"):
+						decomp_settings.max_convex_hulls = hego_col_decomp_settings["max_convex_hulls"]
+					if hego_col_decomp_settings.has("max_num_vertices_per_convex_hull"):
+						decomp_settings.max_num_vertices_per_convex_hull = hego_col_decomp_settings["max_num_vertices_per_convex_hull"]
+					if hego_col_decomp_settings.has("min_volume_per_convex_hull"):
+						decomp_settings.min_volume_per_convex_hull = hego_col_decomp_settings["min_volume_per_convex_hull"]
+					if hego_col_decomp_settings.has("mode"):
+						decomp_settings.mode = hego_col_decomp_settings["mode"]
+					if hego_col_decomp_settings.has("normalize_mesh"):
+						decomp_settings.normalize_mesh = hego_col_decomp_settings["normalize_mesh"]
+					if hego_col_decomp_settings.has("plane_downsampling"):
+						decomp_settings.plane_downsampling = hego_col_decomp_settings["plane_downsampling"]
+					if hego_col_decomp_settings.has("project_hull_vertices"):
+						decomp_settings.project_hull_vertices = hego_col_decomp_settings["project_hull_vertices"]
+					if hego_col_decomp_settings.has("resolution"):
+						decomp_settings.resolution = hego_col_decomp_settings["resolution"]
+					if hego_col_decomp_settings.has("resolution_axes_clipping_bias"):
+						decomp_settings.resolution_axes_clipping_bias = hego_col_decomp_settings["resolution_axes_clipping_bias"]
+					if hego_col_decomp_settings.has("symmetry_planes_clipping_bias"):
+						decomp_settings.symmetry_planes_clipping_bias = hego_col_decomp_settings["symmetry_planes_clipping_bias"]
+				mesh_instance.create_multiple_convex_collisions(decomp_settings)
+			elif hego_col_type == 2:
+				mesh_instance.create_convex_collision()
+			elif hego_col_type == 3:
+				mesh_instance.create_trimesh_collision()
+			
 
 			
 func handle_object_spawn_output():
