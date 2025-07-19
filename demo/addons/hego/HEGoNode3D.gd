@@ -101,15 +101,20 @@ func cook():
 			merge_node.connect_inputs(input_array)
 			# Connect merge to asset node
 			hego_asset_node.connect_input(merge_node, i)
+	parm_stash = hego_asset_node.get_preset()
 	# FETCH OUTPUTS
+	
+	handle_mesh_output()
+	handle_multimesh_output()
+	handle_object_spawn_output()
+	
+func handle_mesh_output():
 	# use config to fetch output mesh
 	var fetch_surfaces_default_config = load("res://addons/hego/surface_filters/fetch_surfaces_default.tres")
 	# retrieve dictionary output, containing the mesh in godots surface_array format
 	var dict = hego_asset_node.fetch_surfaces(fetch_surfaces_default_config)
 	for hego_mesh_instance_key in dict.keys():
-		var node_name_path = "hego_output_mesh_inst"
-		if hego_mesh_instance_key != null:
-			node_name_path = hego_mesh_instance_key
+		
 		var arr_mesh = ArrayMesh.new()
 		var surface_id = 0
 		for hego_material_key in dict[hego_mesh_instance_key]:
@@ -129,37 +134,59 @@ func cook():
 				if material is Material:
 					arr_mesh.surface_set_material(surface_id, material)
 			surface_id += 1
-		# Split the path into parts
-		node_name_path = "Outputs/" + node_name_path
-		var parts = node_name_path.split("/")
-		var current_node = self
+		var hego_mat_keys = dict[hego_mesh_instance_key].keys()
+		var hego_storage_mode = dict[hego_mesh_instance_key][hego_mat_keys[0]]["hego_storage_mode"][0]
+		var hego_resource_save_path = dict[hego_mesh_instance_key][hego_mat_keys[0]]["hego_resource_save_path"][0]
+		if hego_storage_mode == null:
+			hego_storage_mode = 0
+		if hego_resource_save_path == null and hego_storage_mode > 0:
+			push_error("[HEGoNode3D]: Save mode set to resource, but no resource save path specified.")
+			push_warning("[HEGoNode3D]: Spawning as mesh instance instead.")
+			hego_storage_mode = 0
 		
-		# Create intermediate Node3Ds
-		for i in range(parts.size() - 1):
-			var node_name = parts[i]
-			var existing_node = current_node.get_node_or_null(node_name)
-			
-			if existing_node:
-				current_node = existing_node
+		if hego_storage_mode > 0:
+			var result := ResourceSaver.save(arr_mesh, hego_resource_save_path)
+			if result == OK:
+				print("[HEGoNode3D]: Successfully saved mesh to ", hego_resource_save_path)
 			else:
-				var new_node = Node3D.new()
-				new_node.name = node_name
-				current_node.add_child(new_node)
-				if Engine.is_editor_hint():
-					new_node.owner = get_tree().edited_scene_root
-				current_node = new_node
+				print("[HEGoNode3D]: Failed to save. Error code: %d", %result)
 			
-		# Create final MeshInstance3D
-		var final_name = parts[parts.size() - 1]
-		var mesh_instance = MeshInstance3D.new()
-		mesh_instance.name = final_name
-		current_node.add_child(mesh_instance)
-		if Engine.is_editor_hint():
-			mesh_instance.owner = get_tree().edited_scene_root
-		mesh_instance.mesh = arr_mesh
-	parm_stash = hego_asset_node.get_preset()
-	handle_multimesh_output()
-	handle_object_spawn_output()
+		if hego_storage_mode == 0 or hego_storage_mode == 2:
+			var node_name_path = "hego_output_mesh_inst"
+			if hego_mesh_instance_key != null:
+				node_name_path = hego_mesh_instance_key
+			# Split the path into parts
+			node_name_path = "Outputs/" + node_name_path
+			var parts = node_name_path.split("/")
+			var current_node = self
+			
+			# Create intermediate Node3Ds
+			for i in range(parts.size() - 1):
+				var node_name = parts[i]
+				var existing_node = current_node.get_node_or_null(node_name)
+				
+				if existing_node:
+					current_node = existing_node
+				else:
+					var new_node = Node3D.new()
+					new_node.name = node_name
+					current_node.add_child(new_node)
+					if Engine.is_editor_hint():
+						new_node.owner = get_tree().edited_scene_root
+					current_node = new_node
+				
+			# Create final MeshInstance3D
+			var final_name = parts[parts.size() - 1]
+			var mesh_instance = MeshInstance3D.new()
+			mesh_instance.name = final_name
+			current_node.add_child(mesh_instance)
+			if Engine.is_editor_hint():
+				mesh_instance.owner = get_tree().edited_scene_root
+			if hego_storage_mode == 0:
+				mesh_instance.mesh = arr_mesh
+			else:
+				mesh_instance.mesh = load(hego_resource_save_path)
+
 			
 func handle_object_spawn_output():
 	print("[HEGoNode3D]: Handling Object Spawn Output")
