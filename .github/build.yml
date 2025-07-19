@@ -1,8 +1,8 @@
-name: 🛠️ Builds
+name: 🛠️ Build HEGo
 on:
   push:
-  pull_request:
-  workflow_dispatch:
+    branches:
+      - main # or your preferred branch
 
 jobs:
   build:
