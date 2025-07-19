@@ -2,11 +2,11 @@ name: 🛠️ Build HEGo
 on:
   push:
     branches:
-      - main # or your preferred branch
+      - deploy # or your preferred branch
 
 jobs:
   build:
-    runs-on: ${{ matrix.runner }}
+    runs-on: self-hosted
     name: ${{ matrix.name }}
     strategy:
       fail-fast: false
@@ -90,6 +90,12 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+
+      - name: Set Houdini Environment
+        shell: bash
+        run: |
+          # Set HFS to your Houdini installation path on the self-hosted runner
+          echo "HFS=$HFS" >> $GITHUB_ENV
 
       - name: Set up SCons cache
         uses: actions/cache@v3
