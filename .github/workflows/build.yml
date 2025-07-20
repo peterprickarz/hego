@@ -20,20 +20,30 @@ jobs:
 
       - name: Create or update release branch
         run: |
+          # Get commit info for descriptive message
+          COMMIT_SHA="${{ github.sha }}"
+          COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" $COMMIT_SHA)
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an" $COMMIT_SHA)
+          SHORT_SHA=$(echo $COMMIT_SHA | cut -c1-7)
+          
           # Create new release branch from main or update existing one
           git checkout -B release
 
           # Clear everything except .git
           find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} +
 
-          # Copy addon contents to root
-          git checkout main -- demo/addons/hego
+          # Copy README.md to addon folder first, then copy addon contents to root
+          git checkout main -- README.md demo/addons/hego
+          cp README.md demo/addons/hego/
           cp -r demo/addons/hego/* .
           rm -rf demo
 
-          # Add and commit changes
+          # Add and commit changes with descriptive message
           git add .
-          git commit -m "Released New Version" || echo "No changes to commit"
+          git commit -m "Release: Update addon for submodule use
+
+          Based on commit $SHORT_SHA by $COMMIT_AUTHOR:
+          $COMMIT_MESSAGE" || echo "No changes to commit"
 
           # Push to release branch
           git push origin release --force
