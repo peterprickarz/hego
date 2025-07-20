@@ -23,8 +23,9 @@ private:
 	void *libHAPIL;
 
 public:
-	void start_session();
-	void stop_session();
+	bool start_session(int connection_type = 2, const godot::String &connection_data = "hapi");
+	bool stop_session();
+	bool is_session_active();
 	HEGoSessionManager *get_session_manager();
 	void set_houdini_installation_path(const godot::String &path);
 	godot::String get_houdini_installation_path() const;

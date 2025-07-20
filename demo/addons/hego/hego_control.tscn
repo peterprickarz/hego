@@ -1,7 +1,17 @@
-[gd_scene load_steps=7 format=3 uid="uid://0fn3nxqgnidi"]
+[gd_scene load_steps=12 format=3 uid="uid://0fn3nxqgnidi"]
 
 [ext_resource type="Script" uid="uid://nddq401i7fhb" path="res://addons/hego/ui/hego_control.gd" id="1_cqk42"]
 [ext_resource type="Script" uid="uid://c7b8dciokihp8" path="res://addons/hego/ui/hda_tab.gd" id="1_sp0ki"]
+
+[sub_resource type="Theme" id="Theme_7h1cx"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_7h1cx"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fsb3y"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_3tvfr"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_lp8es"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_v64h4"]
 bg_color = Color(0.6, 0.6, 0.6, 0)
@@ -15,7 +25,7 @@ content_margin_left = 6.0
 content_margin_top = 6.0
 content_margin_right = 6.0
 content_margin_bottom = 6.0
-bg_color = Color(0.6, 0.6, 0.6, 0.188235)
+bg_color = Color(0.6, 0.6, 0.6, 0)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
@@ -51,24 +61,99 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-current_tab = 1
+current_tab = 0
 
-[node name="Houdini Engine" type="VBoxContainer" parent="TabContainer"]
-visible = false
+[node name="Session" type="MarginContainer" parent="TabContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+metadata/_tab_index = 0
+
+[node name="Vbox" type="VBoxContainer" parent="TabContainer/Session"]
 custom_minimum_size = Vector2(130.35, 86.595)
 layout_mode = 2
 
-[node name="ButtonStartSession" type="Button" parent="TabContainer/Houdini Engine"]
+[node name="Connection" type="RichTextLabel" parent="TabContainer/Session/Vbox"]
+layout_mode = 2
+theme = SubResource("Theme_7h1cx")
+theme_override_styles/background = SubResource("StyleBoxEmpty_7h1cx")
+theme_override_styles/normal = SubResource("StyleBoxEmpty_fsb3y")
+text = "Connection:"
+fit_content = true
+scroll_active = false
+vertical_alignment = 1
+
+[node name="ConnectionHBox" type="HBoxContainer" parent="TabContainer/Session/Vbox"]
+layout_mode = 2
+
+[node name="ButtonStartSession" type="Button" parent="TabContainer/Session/Vbox/ConnectionHBox"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Start Session"
 
-[node name="ButtonStopSession" type="Button" parent="TabContainer/Houdini Engine"]
+[node name="ButtonStopSession" type="Button" parent="TabContainer/Session/Vbox/ConnectionHBox"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "Stop Session"
 
+[node name="ConnectionType" type="OptionButton" parent="TabContainer/Session/Vbox/ConnectionHBox"]
+unique_name_in_owner = true
+layout_mode = 2
+selected = 1
+item_count = 3
+popup/item_0/text = "TCP  Port"
+popup/item_0/id = 0
+popup/item_1/text = "Named Pipe"
+popup/item_1/id = 1
+popup/item_2/text = "Shared Memory"
+popup/item_2/id = 2
+
+[node name="ConnectionData" type="TextEdit" parent="TabContainer/Session/Vbox/ConnectionHBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(250, 0)
+layout_mode = 2
+text = "hapi"
+scroll_fit_content_height = true
+
+[node name="HSeparator" type="HSeparator" parent="TabContainer/Session/Vbox"]
+layout_mode = 2
+
+[node name="SessionSyncStatusLabel" type="RichTextLabel" parent="TabContainer/Session/Vbox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+theme_override_colors/default_color = Color(1, 0.647059, 0, 1)
+theme_override_styles/normal = SubResource("StyleBoxEmpty_3tvfr")
+text = "SessionSync is connected"
+fit_content = true
+vertical_alignment = 1
+
+[node name="HSeparator2" type="HSeparator" parent="TabContainer/Session/Vbox"]
+layout_mode = 2
+
+[node name="LogLabel" type="RichTextLabel" parent="TabContainer/Session/Vbox"]
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxEmpty_lp8es")
+text = "Logs:"
+fit_content = true
+vertical_alignment = 1
+
+[node name="Logs" type="TextEdit" parent="TabContainer/Session/Vbox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+text = "Log capture connected.
+"
+editable = false
+wrap_mode = 1
+
 [node name="HDA" type="Control" parent="TabContainer"]
+visible = false
 layout_mode = 2
 script = ExtResource("1_sp0ki")
+metadata/_tab_index = 1
 
 [node name="HSplitContainer2" type="HSplitContainer" parent="TabContainer/HDA"]
 layout_mode = 1
