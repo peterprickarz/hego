@@ -8,12 +8,21 @@
 
 HEGoSessionManager::HEGoSessionManager() : my_session{}, myCookOptions{} {}
 
-bool HEGoSessionManager::start_session()
+bool HEGoSessionManager::start_session(SessionType session_type, const std::string &connection_data)
 {
-	// GET SETTINGS TO BE IMPLEMENTED LATER HERE
-	SessionType session_type = NewNamedPipe;
-	std::string named_pipe = DEFAULT_NAMED_PIPE;
+	// Parse connection data based on session type
+	std::string named_pipe = connection_data;
 	int tcp_port = DEFAULT_TCP_PORT;
+	
+	// For TCP sessions, try to parse port from connection_data
+	if (session_type == NewTCPSocket || session_type == ExistingTCPSocket)
+	{
+		try {
+			tcp_port = std::stoi(connection_data);
+		} catch (...) {
+			tcp_port = DEFAULT_TCP_PORT;
+		}
+	}
 
 	// Only start a new Session if we dont already have a valid one
 	if (HAPI_RESULT_SUCCESS == HoudiniApi::IsSessionValid(&my_session))
@@ -201,6 +210,11 @@ bool HEGoSessionManager::initialize(bool use_cooking_thread)
 }
 
 HAPI_Session *HEGoSessionManager::get_session() { return &my_session; }
+
+bool HEGoSessionManager::is_session_active() 
+{ 
+	return HAPI_RESULT_SUCCESS == HoudiniApi::IsSessionValid(&my_session); 
+}
 
 HAPI_CookOptions *HEGoSessionManager::get_cook_options() { return &myCookOptions; }
 

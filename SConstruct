@@ -75,7 +75,8 @@ if env["PLATFORM"] == "posix":
 
 else:
     houdini_hapi_headers = os.path.join(env["ENV"]["HFS"], "toolkit/include")
-    env.Append(CCFLAGS=["/std:c++17"])
+    # /EHsc enables proper C++ exception handling (required for std::stoi and other exception-based code)
+    env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
 env.Append(CPPPATH=[houdini_hapi_headers])
 
