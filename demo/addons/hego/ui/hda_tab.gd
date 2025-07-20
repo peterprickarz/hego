@@ -202,7 +202,7 @@ func _on_input_changed():
 	
 func _on_recook_button_pressed():
 	if auto_start_session_toggle.button_pressed:
-		HEGoAPI.get_singleton().start_session()
+		HEGoAPI.get_singleton().start_session(2, 'hapi')
 	recook()
 	var preset_index = preset_dropdown.get_selected_id()
 	update_ui()

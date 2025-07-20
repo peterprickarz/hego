@@ -121,10 +121,12 @@ scroll_fit_content_height = true
 layout_mode = 2
 
 [node name="SessionSyncStatusLabel" type="RichTextLabel" parent="TabContainer/Session/Vbox"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
+theme_override_colors/default_color = Color(1, 0.647059, 0, 1)
 theme_override_styles/normal = SubResource("StyleBoxEmpty_3tvfr")
-text = "SessionSync is not running"
+text = "SessionSync is connected"
 fit_content = true
 vertical_alignment = 1
 
@@ -142,8 +144,10 @@ vertical_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-text = "Click Start Session to being SessionSync"
+text = "Log capture connected.
+"
 editable = false
+wrap_mode = 1
 
 [node name="HDA" type="Control" parent="TabContainer"]
 visible = false

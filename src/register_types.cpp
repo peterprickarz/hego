@@ -1,6 +1,7 @@
 #include "register_types.h"
 
 #include "hego_api.h"
+#include "util/log/log.h"
 
 #include "hego_nodes/hego_base_node.h"
 
@@ -26,6 +27,10 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);
+	
+	ClassDB::register_class<HEGo::Util::Log::HEGoLogManager>();
+	memnew(HEGo::Util::Log::HEGoLogManager);
+	
 	GDREGISTER_ABSTRACT_CLASS(HEGo::HEGoTrackableNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoBaseNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoInputReceiverNode);
