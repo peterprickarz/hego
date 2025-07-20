@@ -13,9 +13,20 @@
 - 🎥 **[Introduction Video](https://youtu.be/cviGlmKmFQ8)** - Visual walkthrough
 
 ### Quick Install
+
+**Option 1: Git Submodule (Recommended)**
+```bash
+# Add HEGo as a submodule in your Godot project
+git submodule add -b release https://github.com/peterprickarz/hego.git addons/hego
+git submodule update --init --recursive
+```
+
+**Option 2: Manual Download**
 1. Download the latest release
 2. Extract to your Godot project's `addons/` folder
 3. Enable the plugin in Project Settings
+
+> **Note**: The `release` branch is automatically updated with each commit to `main` and contains only the addon files, making it perfect for submodule use.
 
 ## Features
 
