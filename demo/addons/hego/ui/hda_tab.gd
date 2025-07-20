@@ -1,6 +1,40 @@
 @tool
 extends Control
 
+## Represents a Parm Type from Houdini
+enum HEGoParmType {
+	INT = 0,
+	MULTIPARM = 1,
+	TOGGLE = 2,
+	BUTTON = 3,
+	FLOAT = 4,
+	STRING = 6,
+	FOLDER = 13,
+}
+
+# These mappings are used to instantiate the correct UI controls for each parameter type.
+const PARM_UI_SCENES = {
+	HEGoParmType.INT: [
+		preload("res://addons/hego/parm_controls/int_parm_ui.tscn"),
+		preload("res://addons/hego/parm_controls/int2_parm_ui.tscn"),
+		preload("res://addons/hego/parm_controls/int3_parm_ui.tscn"),
+		preload("res://addons/hego/parm_controls/int4_parm_ui.tscn"),
+	],
+	HEGoParmType.TOGGLE: [preload("res://addons/hego/parm_controls/toggle_parm_ui.tscn")],
+	HEGoParmType.BUTTON: [preload("res://addons/hego/parm_controls/button_parm_ui.tscn")],
+	HEGoParmType.FLOAT: [
+		preload("res://addons/hego/parm_controls/float_parm_ui.tscn"),
+		preload("res://addons/hego/parm_controls/float2_parm_ui.tscn"),
+		preload("res://addons/hego/parm_controls/float3_parm_ui.tscn"),
+		preload("res://addons/hego/parm_controls/float4_parm_ui.tscn"),
+	],
+	HEGoParmType.STRING: [preload("res://addons/hego/parm_controls/string_parm_ui.tscn")],
+	HEGoParmType.FOLDER: [preload("res://addons/hego/parm_controls/folder_parm_ui.tscn")],
+	HEGoParmType.MULTIPARM: [
+		preload("res://addons/hego/parm_controls/multiparm_parm_ui.tscn"),
+		preload("res://addons/hego/parm_controls/multiparm_instance_parm_ui.tscn")
+	]
+}
 
 var hego_tool_node: Node
 var hego_asset_node: HEGoAssetNode
@@ -94,81 +128,77 @@ func update_ui():
 
 
 func add_parm_ui(parm_dict: Dictionary, parent: Control):
-	var parm_ui: Control = null
-
-	if parm_dict["type"] == 0:
-		match parm_dict["size"]:
-			1:
-				parm_ui = preload("res://addons/hego/parm_controls/int_parm_ui.tscn").instantiate()
-			2:
-				parm_ui = preload("res://addons/hego/parm_controls/int2_parm_ui.tscn").instantiate()
-			3:
-				parm_ui = preload("res://addons/hego/parm_controls/int3_parm_ui.tscn").instantiate()
-			4:
-				parm_ui = preload("res://addons/hego/parm_controls/int4_parm_ui.tscn").instantiate()
-
-	elif parm_dict["type"] == 2:
-		parm_ui = preload("res://addons/hego/parm_controls/toggle_parm_ui.tscn").instantiate()
-
-	elif parm_dict["type"] == 3:
-		parm_ui = preload("res://addons/hego/parm_controls/button_parm_ui.tscn").instantiate()
-
-	elif parm_dict["type"] == 4:
-		match parm_dict["size"]:
-			1:
-				parm_ui = preload("res://addons/hego/parm_controls/float_parm_ui.tscn").instantiate()
-			2:
-				parm_ui = preload("res://addons/hego/parm_controls/float2_parm_ui.tscn").instantiate()
-			3:
-				parm_ui = preload("res://addons/hego/parm_controls/float3_parm_ui.tscn").instantiate()
-			4:
-				parm_ui = preload("res://addons/hego/parm_controls/float4_parm_ui.tscn").instantiate()
-
-	elif parm_dict["type"] == 6:
-		parm_ui = preload("res://addons/hego/parm_controls/string_parm_ui.tscn").instantiate()
-
-	elif parm_dict["type"] == 13:
-		parm_ui = preload("res://addons/hego/parm_controls/folder_parm_ui.tscn").instantiate()
-		parent.add_child(parm_ui)
-		parm_ui.setup(parm_dict)
-		if parm_ui.has_signal("value_changed"):
-			parm_ui.value_changed.connect(_on_value_changed)
-		for child in parm_dict["children"]:
-			add_parm_ui(child, parm_ui.get_container())
-		return
-
-	# Common setup for all types except multiparms
-	if parm_ui:
-		parent.add_child(parm_ui)
-		parm_ui.setup(parm_dict)
-		if parm_ui.has_signal("value_changed"):
-			parm_ui.value_changed.connect(_on_value_changed)
+	var parm_type = parm_dict["type"]
 	
-	# Setup for multiparms
-	if parm_dict["type"] == 1:
-		var multiparm_ui = preload("res://addons/hego/parm_controls/multiparm_parm_ui.tscn").instantiate()
-		parent.add_child(multiparm_ui)
-		multiparm_ui.setup(parm_dict)
-		multiparm_ui.instance_count_changed.connect(_on_multiparm_instance_count_changed)
-		var multiparm_instance_container = multiparm_ui.get_instance_container()
-		var instance_containers = Array()
-		var instance_start_offset = parm_dict["instance_start_offset"]
-		if instance_start_offset == 1:
-			instance_containers.append(null)
-		for i in range(parm_dict["instance_count"]):
-			var label = parm_dict["label"]
-			var id = parm_dict["id"]
-			var multiparm_instance_ui = preload("res://addons/hego/parm_controls/multiparm_instance_parm_ui.tscn").instantiate()
-			multiparm_instance_container.add_child(multiparm_instance_ui)
-			multiparm_instance_ui.setup(i + instance_start_offset, id, label)
-			var instance_parm_container = multiparm_instance_ui.get_container()
-			instance_containers.append(instance_parm_container)
-			multiparm_instance_ui.insert_instance.connect(_on_insert_multiparm_instance)
-			multiparm_instance_ui.remove_instance.connect(_on_remove_multiparm_instance)
-		for instance in parm_dict["instances"]:
-			for instance_parm_dict in instance:
-				var instance_index = instance_parm_dict["instance_num"]
-				add_parm_ui(instance_parm_dict, instance_containers[instance_index])
+	# Handle special cases that need custom logic
+	if parm_type == HEGoParmType.FOLDER:
+		_handle_folder_parm(parm_dict, parent)
+		return
+	elif parm_type == HEGoParmType.MULTIPARM:
+		_handle_multiparm_parm(parm_dict, parent)
+		return
+	
+	# Handle regular parameters using mapping
+	var parm_ui = _create_parm_ui(parm_type, parm_dict.get("size", 1))
+	if parm_ui:
+		_setup_common_parm(parm_ui, parm_dict, parent)
+
+
+func _create_parm_ui(parm_type: int, size: int) -> Control:
+	if not parm_type in PARM_UI_SCENES:
+		return null
+		
+	var scenes = PARM_UI_SCENES[parm_type]
+	var scene_index = 0
+	
+	# For types with size-based variants (INT, FLOAT), select based on size
+	if parm_type in [HEGoParmType.INT, HEGoParmType.FLOAT]:
+		scene_index = max(0, min(size - 1, scenes.size() - 1))
+	
+	return scenes[scene_index].instantiate()
+
+
+func _setup_common_parm(parm_ui: Control, parm_dict: Dictionary, parent: Control):
+	parent.add_child(parm_ui)
+	parm_ui.setup(parm_dict)
+	if parm_ui.has_signal("value_changed"):
+		parm_ui.value_changed.connect(_on_value_changed)
+
+
+func _handle_folder_parm(parm_dict: Dictionary, parent: Control):
+	var parm_ui = PARM_UI_SCENES[HEGoParmType.FOLDER][0].instantiate()
+	parent.add_child(parm_ui)
+	parm_ui.setup(parm_dict)
+	if parm_ui.has_signal("value_changed"):
+		parm_ui.value_changed.connect(_on_value_changed)
+	for child in parm_dict["children"]:
+		add_parm_ui(child, parm_ui.get_container())
+
+
+func _handle_multiparm_parm(parm_dict: Dictionary, parent: Control):
+	var multiparm_ui = PARM_UI_SCENES[HEGoParmType.MULTIPARM][0].instantiate()
+	parent.add_child(multiparm_ui)
+	multiparm_ui.setup(parm_dict)
+	multiparm_ui.instance_count_changed.connect(_on_multiparm_instance_count_changed)
+	var multiparm_instance_container = multiparm_ui.get_instance_container()
+	var instance_containers = Array()
+	var instance_start_offset = parm_dict["instance_start_offset"]
+	if instance_start_offset == 1:
+		instance_containers.append(null)
+	for i in range(parm_dict["instance_count"]):
+		var label = parm_dict["label"]
+		var id = parm_dict["id"]
+		var multiparm_instance_ui = PARM_UI_SCENES[HEGoParmType.MULTIPARM][1].instantiate()
+		multiparm_instance_container.add_child(multiparm_instance_ui)
+		multiparm_instance_ui.setup(i + instance_start_offset, id, label)
+		var instance_parm_container = multiparm_instance_ui.get_container()
+		instance_containers.append(instance_parm_container)
+		multiparm_instance_ui.insert_instance.connect(_on_insert_multiparm_instance)
+		multiparm_instance_ui.remove_instance.connect(_on_remove_multiparm_instance)
+	for instance in parm_dict["instances"]:
+		for instance_parm_dict in instance:
+			var instance_index = instance_parm_dict["instance_num"]
+			add_parm_ui(instance_parm_dict, instance_containers[instance_index])
 			
 			
 func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary):
