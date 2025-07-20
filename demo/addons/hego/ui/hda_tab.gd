@@ -1,47 +1,50 @@
 @tool
 extends Control
 
-var root_control
+
 var hego_tool_node: Node
 var hego_asset_node: HEGoAssetNode
-
-var auto_recook_toggle: CheckButton
-var auto_start_session_toggle: CheckButton
-
 var input_nodes: Array
+var allow_cook: bool = false
 
-@onready var load_preset_button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/LoadPresetButton
-@onready var save_preset_button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/SavePresetButton
-@onready var new_preset_button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/NewPresetButton
-@onready var preset_dropdown = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer/PresetDropdownOptionButton
+@onready var root_control = $"../.."
+@onready var auto_recook_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer/CheckButton
+@onready var auto_start_session_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2/CheckButton
+@onready var recook_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/ButtonRecook
+@onready var load_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/LoadPresetButton
+@onready var save_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/SavePresetButton
+@onready var new_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/NewPresetButton
+@onready var preset_dropdown: OptionButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer/PresetDropdownOptionButton
 @onready var new_preset_name_diag = $"../../NewPresetNameDiag"
 @onready var new_preset_name_line_edit = $"../../NewPresetNameDiag/NewPresetNameLineEdit"
-# Called when the node enters the scene tree for the first time.
+@onready var parm_vbox = $HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer/VBoxContainer
+@onready var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
+
+
 func _ready():
-	root_control = $"../.."
-	auto_recook_toggle = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer/CheckButton
-	auto_start_session_toggle = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2/CheckButton
-	var recook_button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/ButtonRecook
 	recook_button.button_down.connect(_on_recook_button_pressed)
 	root_control.selected_hego_node_changed.connect(_on_selection_changed)
 	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
 	new_preset_name_diag.confirmed.connect(_on_preset_dialog_confirmed)
 	load_preset_button.pressed.connect(_on_load_preset_button_pressed)
 	save_preset_button.pressed.connect(_on_save_preset_button_pressed)
-	pass # Replace with function body.
+	_set_buttons_disabled(true)
 
 
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta):
-	pass
+func _set_buttons_disabled(disabled: bool):
+	recook_button.disabled = disabled
+	load_preset_button.disabled = disabled
+	save_preset_button.disabled = disabled
+	new_preset_button.disabled = disabled
+
 
 func _on_new_preset_button_pressed():
 	new_preset_name_diag.dialog_text = "Please enter a name for the preset:"
 	new_preset_name_line_edit.text = ""
 	new_preset_name_line_edit.placeholder_text = "Preset Name"
-
 	new_preset_name_diag.popup_centered()
 	new_preset_name_line_edit.grab_focus()
+
 
 func _on_preset_dialog_confirmed():
 	var preset_name = new_preset_name_line_edit.text.strip_edges()
@@ -50,9 +53,13 @@ func _on_preset_dialog_confirmed():
 	else:
 		print("No preset name entered")
 
+
 func update_ui():
-	var parm_vbox = $HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer/VBoxContainer
-	var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
+	if allow_cook:
+		_set_buttons_disabled(false)
+	else:
+		_set_buttons_disabled(true)
+
 	for child in parm_vbox.get_children():
 		child.queue_free()
 	for child in input_vbox.get_children():
@@ -84,6 +91,7 @@ func update_ui():
 		hint_label.text = "HDA not instantiated. Recook to see parameters!"
 		parm_vbox.add_child(hint_label)
 	update_preset_dropdown()
+
 
 func add_parm_ui(parm_dict: Dictionary, parent: Control):
 	var parm_ui: Control = null
@@ -167,25 +175,30 @@ func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary):
 	hego_asset_node.set_parm(parm_dict["name"], value)
 	update_ui()
 	
+
 func _on_insert_multiparm_instance(id: int, index: int):
 	hego_asset_node.insert_multiparm_instance(id, index)
 	update_ui()
 	
+
 func _on_remove_multiparm_instance(id: int, index: int):
 	hego_asset_node.remove_multiparm_instance(id, index)
 	update_ui()
 
 
 func _on_selection_changed(node: Node):
+	# These are the only nodes that can be cooked by the HEGo HDA Tab
+	allow_cook = node is HEGoNode3D
 	hego_tool_node = node
 	update_ui()
 	
+
 func _on_value_changed(name, value):
 	hego_asset_node.set_parm(name, value)
 	if auto_recook_toggle.button_pressed:
 		recook()
-	pass
 	
+
 func _on_input_changed():
 	var inputs = Array()
 	for input_node in input_nodes:
@@ -200,6 +213,7 @@ func _on_input_changed():
 	if auto_recook_toggle.button_pressed:
 		recook()
 	
+
 func _on_recook_button_pressed():
 	if auto_start_session_toggle.button_pressed:
 		HEGoAPI.get_singleton().start_session()
@@ -207,6 +221,7 @@ func _on_recook_button_pressed():
 	var preset_index = preset_dropdown.get_selected_id()
 	update_ui()
 	preset_dropdown.select(preset_index)
+		
 		
 func recook():
 	if hego_tool_node.has_method("cook"):
