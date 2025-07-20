@@ -35,8 +35,8 @@ public:
 
 	HEGoSessionManager();
 
-	// Creates a new session
-	bool start_session();
+	// Creates a new session with specified connection type and data
+	bool start_session(SessionType session_type = NewNamedPipe, const std::string &connection_data = DEFAULT_NAMED_PIPE);
 
 	// Stop the existing session if valid, and creates a new session
 	bool restart_session(SessionType session_type, bool use_cooking_thread);
@@ -53,6 +53,9 @@ public:
 
 	// Get the HAPI session
 	HAPI_Session *get_session();
+
+	// Check if session is currently active
+	bool is_session_active();
 
 	// Get the cook options used to initialize the HAPI session
 	HAPI_CookOptions *get_cook_options();

@@ -37,17 +37,27 @@ HEGoAPI::~HEGoAPI()
 
 HEGoAPI *HEGoAPI::get_singleton() { return singleton; }
 
-void HEGoAPI::start_session()
+bool HEGoAPI::start_session(int connection_type, const godot::String &connection_data)
 {
 	HEGoPlatform::initialize_hapi();
-	session_mgr.start_session();
-	return;
+	
+	// Convert Godot connection type to SessionManager enum
+	HEGoSessionManager::SessionType session_type = static_cast<HEGoSessionManager::SessionType>(connection_type);
+	
+	// Convert Godot string to std::string
+	std::string connection_data_str = std::string(connection_data.utf8().get_data());
+	
+	return session_mgr.start_session(session_type, connection_data_str);
 }
 
-void HEGoAPI::stop_session()
+bool HEGoAPI::stop_session()
 {
-	session_mgr.stop_session();
-	return;
+	return session_mgr.stop_session();
+}
+
+bool HEGoAPI::is_session_active()
+{
+	return session_mgr.is_session_active();
 }
 
 HEGoSessionManager *HEGoAPI::get_session_manager() { return &session_mgr; }
@@ -135,8 +145,9 @@ godot::PackedStringArray HEGoAPI::get_available_hdas()
 
 void HEGoAPI::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("start_session"), &HEGoAPI::start_session);
+	godot::ClassDB::bind_method(godot::D_METHOD("start_session", "connection_type", "connection_data"), &HEGoAPI::start_session);
 	godot::ClassDB::bind_method(godot::D_METHOD("stop_session"), &HEGoAPI::stop_session);
+	godot::ClassDB::bind_method(godot::D_METHOD("is_session_active"), &HEGoAPI::is_session_active);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_houdini_installation_path", "path"), &HEGoAPI::set_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_houdini_installation_path"), &HEGoAPI::get_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_available_hdas"), &HEGoAPI::get_available_hdas);
