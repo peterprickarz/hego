@@ -35,6 +35,10 @@ jobs:
           # Copy README.md to addon folder first, then copy addon contents to root
           git checkout main -- README.md demo/addons/hego
           cp README.md demo/addons/hego/
+          
+          # Fix image paths in README.md for new structure
+          sed -i 's|demo/addons/hego/assets/|assets/|g' demo/addons/hego/README.md
+          
           cp -r demo/addons/hego/* .
           rm -rf demo
 
