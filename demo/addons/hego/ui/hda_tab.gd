@@ -224,6 +224,15 @@ func create_preset_file(preset_name: String) -> void:
 		if preset:
 			var asset_name = hego_tool_node.hego_get_asset_name()
 			var res_path = "res://hego/presets/" + asset_name + ".tres"
+			
+			# Ensure directory exists
+			var dir = DirAccess.open("res://")
+			var asset_dir = asset_name.get_base_dir()
+			if asset_dir != "":
+				var preset_dir = "hego/presets/" + asset_dir
+				if not dir.dir_exists(preset_dir):
+					dir.make_dir_recursive(preset_dir)
+
 			var presets_res: HEGoHDAPreset
 			# Check if the resource exists
 			if ResourceLoader.exists(res_path):
