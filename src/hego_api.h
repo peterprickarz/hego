@@ -21,6 +21,7 @@ private:
 	static HEGoAPI *singleton;
 	HEGoSessionManager session_mgr;
 	void *libHAPIL;
+	
 
 public:
 	bool start_session(int connection_type = 2, const godot::String &connection_data = "hapi");
@@ -30,8 +31,8 @@ public:
 	void set_houdini_installation_path(const godot::String &path);
 	godot::String get_houdini_installation_path() const;
 	
-	// Get list of available HDAs from all loaded libraries
-	godot::PackedStringArray get_available_hdas();
+	// Get dictionary of all loaded HDA libraries with their assets
+	godot::Dictionary get_hda_libraries();
 
 	static HEGoAPI *get_singleton();
 

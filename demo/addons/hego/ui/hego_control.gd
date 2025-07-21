@@ -6,12 +6,13 @@ extends Control
 
 signal selected_hego_node_changed(node: Node)
 
-@onready var start_button: Button = %ButtonStartSession
-@onready var stop_button: Button = %ButtonStopSession
-@onready var connection_type: OptionButton = %ConnectionType
-@onready var connection_data: TextEdit = %ConnectionData
-@onready var session_sync_status: RichTextLabel = %SessionSyncStatusLabel
-@onready var logs: TextEdit = %Logs
+@onready var start_button: Button = %Session/%ButtonStartSession
+@onready var stop_button: Button = %Session/%ButtonStopSession
+@onready var connection_type: OptionButton =  %Session/%ConnectionType
+@onready var connection_data: TextEdit =  %Session/%ConnectionData
+@onready var session_sync_status: RichTextLabel =  %Session/%SessionSyncStatusLabel
+@onready var logs: TextEdit =  %Session/%Logs
+@onready var library_control: Control = $TabContainer/Library
 
 var hego_tool_node: Node
 
@@ -22,6 +23,13 @@ func _ready():
 	stop_button.pressed.connect(_on_stop_session_button_pressed)
 	# Defer log capture setup to ensure HEGoLogManager singleton is fully initialized
 	call_deferred("_setup_log_capture")
+
+func _notification(what):
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_EXIT_TREE:
+		# Emergency cleanup when control is being destroyed
+		if HEGoAPI.get_singleton() and HEGoAPI.get_singleton().is_session_active():
+			print("[HEGo]: Control cleanup - stopping active session")
+			HEGoAPI.get_singleton().stop_session()
 
 	
 ## Update the currently selected HEGo asset node
@@ -104,9 +112,15 @@ func _update_session_status():
 func _set_session_status_connected():
 	session_sync_status.text = "SessionSync is connected"
 	session_sync_status.add_theme_color_override("default_color", Color.GREEN)
+	# Refresh library control when session becomes active
+	if library_control and library_control.has_method("refresh_all"):
+		library_control.refresh_all()
 
 
 ## Set session status indicator to disconnected (red)
 func _set_session_status_disconnected():
 	session_sync_status.text = "SessionSync is not connected"
 	session_sync_status.add_theme_color_override("default_color", Color.RED)
+	# Clear library control when session becomes inactive
+	if library_control and library_control.has_method("refresh_all"):
+		library_control.refresh_all()
