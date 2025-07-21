@@ -75,8 +75,10 @@ HAPI_NodeId create_and_cook_node(HEGoSessionManager *session_mgr, const char *op
 {
 	RETURN_IF_VALID_NODE_ID(node_id, session_mgr->get_session());
 	HEGo::Util::Log::message("Creating and cooking node: " + godot::String(operator_name) + "...");
-	HOUDINI_CHECK_ERROR(HoudiniApi::CreateNode(session_mgr->get_session(), -1, operator_name, "", false, &node_id));
-	HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()));
+	
+	// Use HOUDINI_CHECK_ERROR_RETURN to gracefully handle license failures and return invalid node
+	HOUDINI_CHECK_ERROR_RETURN(HoudiniApi::CreateNode(session_mgr->get_session(), -1, operator_name, "", false, &node_id), -1);
+	HOUDINI_CHECK_ERROR_RETURN(HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()), -1);
 
 	session_mgr->wait_for_ready();
 	return node_id;
