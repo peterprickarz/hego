@@ -8,8 +8,10 @@ signal asset_selected(asset_name: String)
 @onready var asset_tree: Tree = %AssetTree
 @onready var refresh_button: Button = %RefreshButton
 @onready var selected_label: Label = $VBoxContainer/HBoxContainer/Label2
+@onready var search_line_edit: LineEdit = $VBoxContainer/SearchLineEdit
 
 var selected_asset: String = ""
+var search_filter: String = ""
 const CACHE_FILE_PATH = "res://hego_library.json"
 
 func _ready():
@@ -17,6 +19,7 @@ func _ready():
 	asset_tree.item_selected.connect(_on_asset_selected)
 	asset_tree.item_activated.connect(_on_asset_activated)
 	confirmed.connect(_on_confirmed)
+	search_line_edit.text_changed.connect(_on_search_changed)
 	
 	_populate_tree()
 
@@ -39,6 +42,27 @@ func _load_cached_libraries() -> Dictionary:
 	
 	return cached_libraries
 
+func _fuzzy_match(text: String, pattern: String) -> bool:
+	if pattern.is_empty():
+		return true
+	
+	text = text.to_lower()
+	pattern = pattern.to_lower()
+	
+	var text_index = 0
+	var pattern_index = 0
+	
+	while text_index < text.length() and pattern_index < pattern.length():
+		if text[text_index] == pattern[pattern_index]:
+			pattern_index += 1
+		text_index += 1
+	
+	return pattern_index == pattern.length()
+
+func _on_search_changed(new_text: String):
+	search_filter = new_text
+	_populate_tree()
+
 func _populate_tree():
 	asset_tree.clear()
 	var root = asset_tree.create_item()
@@ -55,14 +79,22 @@ func _populate_tree():
 		var library_data = cached_libraries[library_name]
 		var assets = library_data.get("assets", [])
 		
-		var library_item = asset_tree.create_item(root)
-		library_item.set_text(0, library_name + " (" + str(assets.size()) + " assets)")
-		library_item.set_selectable(0, false)
-		
+		# Filter assets based on search
+		var filtered_assets = []
 		for asset_name in assets:
-			var asset_item = asset_tree.create_item(library_item)
-			asset_item.set_text(0, asset_name)
-			asset_item.set_metadata(0, asset_name)
+			if _fuzzy_match(asset_name, search_filter):
+				filtered_assets.append(asset_name)
+		
+		# Only create library item if it has matching assets or no search filter
+		if filtered_assets.size() > 0:
+			var library_item = asset_tree.create_item(root)
+			library_item.set_text(0, library_name + " (" + str(filtered_assets.size()) + " assets)")
+			library_item.set_selectable(0, false)
+			
+			for asset_name in filtered_assets:
+				var asset_item = asset_tree.create_item(library_item)
+				asset_item.set_text(0, asset_name)
+				asset_item.set_metadata(0, asset_name)
 
 func _on_refresh_pressed():
 	# Simply reload the tree from the JSON file

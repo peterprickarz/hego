@@ -4,6 +4,7 @@
 
 [node name="AssetPickerDialog" type="AcceptDialog"]
 title = "Select HDA Asset"
+position = Vector2i(0, 36)
 size = Vector2i(600, 400)
 visible = true
 script = ExtResource("1_picker_script")
@@ -22,6 +23,10 @@ size_flags_vertical = 3
 [node name="Label" type="Label" parent="VBoxContainer"]
 layout_mode = 2
 text = "Select an HDA asset from your cached libraries:"
+
+[node name="SearchLineEdit" type="LineEdit" parent="VBoxContainer"]
+layout_mode = 2
+placeholder_text = "Search...."
 
 [node name="HSeparator" type="HSeparator" parent="VBoxContainer"]
 layout_mode = 2
