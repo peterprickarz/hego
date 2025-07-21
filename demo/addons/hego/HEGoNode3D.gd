@@ -1,14 +1,14 @@
 @icon('res://addons/hego/assets/houdini.svg')
 @tool
 extends Node3D
-
 class_name HEGoNode3D
 
-# The asset definition name in Houdini, e.g. Sop/my_tool.hda
+@export_tool_button('Select HDA', "FileDialog") var select_hda_btn = _show_select_hda_dialog
+## The asset definition name in Houdini, e.g. Sop/my_tool.hda
 @export var asset_name: String
-# Parm stash stores the parameters as a byte blob which stores parms between sessions
+## Parm stash stores the parameters as a byte blob which stores parms between sessions
 @export var parm_stash: PackedByteArray
-# Input stash to store references to the inputs between sessions
+## Input stash to store references to the inputs between sessions
 @export var input_stash: Array
 
 
@@ -16,6 +16,7 @@ class_name HEGoNode3D
 var hego_asset_node: HEGoAssetNode
 # Create var to store references to the input and merge nodes in the session
 var hego_input_nodes: Dictionary
+
 
 func cook():
 	# Ensure valid AssetNode object
@@ -107,14 +108,14 @@ func cook():
 	handle_mesh_output()
 	handle_multimesh_output()
 	handle_object_spawn_output()
-	
+
+
 func handle_mesh_output():
 	# use config to fetch output mesh
 	var fetch_surfaces_default_config = load("res://addons/hego/surface_filters/fetch_surfaces_default.tres")
 	# retrieve dictionary output, containing the mesh in godots surface_array format
 	var dict = hego_asset_node.fetch_surfaces(fetch_surfaces_default_config)
 	for hego_mesh_instance_key in dict.keys():
-		
 		var arr_mesh = ArrayMesh.new()
 		var surface_id = 0
 		for hego_material_key in dict[hego_mesh_instance_key]:
@@ -226,9 +227,8 @@ func handle_mesh_output():
 				mesh_instance.create_convex_collision()
 			elif hego_col_type == 3:
 				mesh_instance.create_trimesh_collision()
-			
 
-			
+
 func handle_object_spawn_output():
 	print("[HEGoNode3D]: Handling Object Spawn Output")
 	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_object_spawning.tres")
@@ -371,6 +371,7 @@ func handle_object_spawn_output():
 		# Log for debugging
 		#print("[HEGoNode3D]: Spawned %s at %s under %s" % [new_node.name, p, parent_node.get_path()])
 
+
 # Helper function to apply custom properties from a nested dictionary
 func apply_custom_properties(obj: Object, properties: Dictionary):
 	for key in properties.keys():
@@ -410,6 +411,7 @@ func apply_custom_properties(obj: Object, properties: Dictionary):
 		else:
 			push_warning("[HEGoNode3D]: Invalid property format for %s, expected dictionary with hego_val" % key)
 
+
 # Helper function to set a single property
 func set_property(obj: Object, property: String, value):
 	var prop_info = obj.get_property_list().filter(func(p): return p.name == property)
@@ -425,6 +427,7 @@ func set_property(obj: Object, property: String, value):
 			push_warning("[HEGoNode3D]: Type mismatch for %s.%s (expected %s:%s, got %s:%s), skipping" % [obj.get_class(), property, prop_type, prop_class, value_type, value_class])
 	else:
 		push_warning("[HEGoNode3D]: Property %s does not exist on %s, skipping" % [property, obj.get_class()])
+
 
 # Helper function to check type compatibility
 func is_compatible_type(value, expected_type: int, expected_class: String) -> bool:
@@ -450,6 +453,7 @@ func is_compatible_type(value, expected_type: int, expected_class: String) -> bo
 		return true # Int can be converted to float
 	
 	return false
+
 
 func handle_multimesh_output():
 	print("[HEGoNode3D]: Handling Multimesh Output")
@@ -614,6 +618,7 @@ func float_to_int_triplet_dict(float_array: Array, int_array: Array) -> Dictiona
 			
 	return result
 
+
 func array_to_index_dict(float_array: Array) -> Dictionary:
 	var result: Dictionary = {}
 	
@@ -625,7 +630,8 @@ func array_to_index_dict(float_array: Array) -> Dictionary:
 			result[value] = [i]
 			
 	return result
-	
+
+
 func update_hego_input_node(hego_input_node, input_node_path, settings):
 	var scene_root = get_tree().edited_scene_root
 	var input = scene_root.get_node_or_null(input_node_path)
@@ -642,7 +648,7 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 	else:
 		print("[HEGoNode3D]: Input is neither Path3D nor MeshInstance3D")
 	return hego_input_node
-	
+
 
 func create_hego_input_node(input_node_path, settings):
 	var scene_root = get_tree().edited_scene_root
@@ -660,21 +666,27 @@ func create_hego_input_node(input_node_path, settings):
 		print("[HEGoNode3D]: Input is neither Path3D nor MeshInstance3D")
 	return input_node
 
+
 func hego_use_bottom_panel():
 	return true
+
 
 func hego_get_asset_node():
 	return hego_asset_node;
 	
+
 func hego_stash_parms(preset: PackedByteArray):
 	parm_stash = preset
-	
+
+
 func hego_get_parm_stash(preset: PackedByteArray):
 	return parm_stash
-	
+
+
 func hego_get_input_stash():
 	return input_stash
-	
+
+
 func hego_set_input_stash(input_array: Array):
 	# input_array is an array of inputs, as each Houdini input can combine
 	# multiple inputs, each input is an array itself, storing node names and ids
@@ -693,14 +705,17 @@ func hego_set_input_stash(input_array: Array):
 		result.append(input_dict)
 	input_stash = result
 
+
 func hego_get_asset_name():
 	return asset_name
-	
+
+
 func repeat_indent(indent: int) -> String:
 	var result := ""
 	for i in range(indent):
 		result += "    " # 4 spaces
 	return result
+
 
 func pretty_print(value, indent := 0) -> String:
 	var indent_str = repeat_indent(indent)
@@ -727,3 +742,26 @@ func pretty_print(value, indent := 0) -> String:
 
 	else:
 		return str(value)
+
+
+func _show_select_hda_dialog():
+	if Engine.is_editor_hint():
+		var viewport = EditorInterface.get_editor_viewport_3d()
+		var picker_scene = preload("res://addons/hego/ui/asset_picker_dialog.tscn")
+		var picker = picker_scene.instantiate()
+		
+		# Add to the scene tree temporarily
+		viewport.add_child(picker)
+		
+		# Connect the signal to handle the selection
+		picker.asset_selected.connect(_on_asset_selected)
+		
+		# Show the dialog
+		picker._populate_tree()
+		picker.popup_centered()
+
+
+func _on_asset_selected(selected_asset: String):
+	asset_name = selected_asset
+	notify_property_list_changed()
+	print("[HEGoNode3D]: Selected asset: ", selected_asset)

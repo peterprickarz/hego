@@ -40,24 +40,28 @@ var hego_tool_node: Node
 var hego_asset_node: HEGoAssetNode
 var input_nodes: Array
 var allow_cook: bool = false
+var new_preset_name_diag: ConfirmationDialog
+var new_preset_name_line_edit: LineEdit
 
-@onready var root_control = $"../.."
 @onready var auto_recook_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer/CheckButton
 @onready var auto_start_session_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2/CheckButton
+@onready var asset_picker_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/AssetPickerButton
 @onready var recook_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/ButtonRecook
 @onready var load_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/LoadPresetButton
 @onready var save_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/SavePresetButton
 @onready var new_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/NewPresetButton
 @onready var preset_dropdown: OptionButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer/PresetDropdownOptionButton
-@onready var new_preset_name_diag = $"../../NewPresetNameDiag"
-@onready var new_preset_name_line_edit = $"../../NewPresetNameDiag/NewPresetNameLineEdit"
 @onready var parm_vbox = $HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer/VBoxContainer
 @onready var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
 
 
 func _ready():
+	new_preset_name_diag = preload("res://addons/hego/ui/new_preset_name_diag.tscn").instantiate()
+	new_preset_name_line_edit = new_preset_name_diag.get_node("%LineEdit")
+	add_child(new_preset_name_diag)
 	recook_button.button_down.connect(_on_recook_button_pressed)
-	root_control.selected_hego_node_changed.connect(_on_selection_changed)
+	asset_picker_button.pressed.connect(_on_asset_picker_button_pressed)
+	EditorInterface.get_selection().selection_changed.connect(_on_selection_changed)
 	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
 	new_preset_name_diag.confirmed.connect(_on_preset_dialog_confirmed)
 	load_preset_button.pressed.connect(_on_load_preset_button_pressed)
@@ -67,6 +71,7 @@ func _ready():
 
 func _set_buttons_disabled(disabled: bool):
 	recook_button.disabled = disabled
+	asset_picker_button.disabled = disabled
 	load_preset_button.disabled = disabled
 	save_preset_button.disabled = disabled
 	new_preset_button.disabled = disabled
@@ -92,7 +97,7 @@ func update_ui():
 	if allow_cook:
 		_set_buttons_disabled(false)
 	else:
-		_set_buttons_disabled(true)
+		return _set_buttons_disabled(true)
 
 	for child in parm_vbox.get_children():
 		child.queue_free()
@@ -216,8 +221,13 @@ func _on_remove_multiparm_instance(id: int, index: int):
 	update_ui()
 
 
-func _on_selection_changed(node: Node):
+func _on_selection_changed():
 	# These are the only nodes that can be cooked by the HEGo HDA Tab
+	var nodes = EditorInterface.get_selection().get_selected_nodes()
+	if nodes.size() == 0:
+		_set_buttons_disabled(true)
+		return
+	var node = nodes[0]
 	allow_cook = node is HEGoNode3D
 	hego_tool_node = node
 	update_ui()
@@ -435,3 +445,28 @@ func _select_preset_in_dropdown(preset_name: String) -> void:
 		if preset_dropdown.get_item_text(i) == preset_name:
 			preset_dropdown.select(i)
 			break
+
+# Handle asset picker button press
+func _on_asset_picker_button_pressed():
+	if not hego_tool_node or not hego_tool_node is HEGoNode3D:
+		push_error("[HEGo]: No HEGoNode3D selected. Please select a HEGoNode3D first.")
+		return
+	
+	# Load the asset picker dialog
+	var picker_scene = preload("res://addons/hego/ui/asset_picker_dialog.tscn")
+	var picker = picker_scene.instantiate()
+	add_child(picker)
+	
+	# Show the picker and wait for selection
+	picker.asset_selected.connect(_on_asset_picked)
+	picker.popup_centered()
+
+# Handle asset selection from picker
+func _on_asset_picked(asset_name: String):
+	if hego_tool_node and hego_tool_node is HEGoNode3D:
+		hego_tool_node.asset_name = asset_name
+		print("[HEGo]: Set asset_name to: ", asset_name)
+		
+		# Optionally auto-recook if enabled
+		if auto_recook_toggle.button_pressed:
+			recook()

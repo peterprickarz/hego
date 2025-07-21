@@ -1,49 +1,9 @@
-[gd_scene load_steps=12 format=3 uid="uid://0fn3nxqgnidi"]
+[gd_scene load_steps=5 format=3 uid="uid://0fn3nxqgnidi"]
 
 [ext_resource type="Script" uid="uid://nddq401i7fhb" path="res://addons/hego/ui/hego_control.gd" id="1_cqk42"]
-[ext_resource type="Script" uid="uid://c7b8dciokihp8" path="res://addons/hego/ui/hda_tab.gd" id="1_sp0ki"]
-
-[sub_resource type="Theme" id="Theme_7h1cx"]
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_7h1cx"]
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fsb3y"]
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_3tvfr"]
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_lp8es"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_v64h4"]
-bg_color = Color(0.6, 0.6, 0.6, 0)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_l06bi"]
-content_margin_left = 6.0
-content_margin_top = 6.0
-content_margin_right = 6.0
-content_margin_bottom = 6.0
-bg_color = Color(0.6, 0.6, 0.6, 0)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_luq18"]
-bg_color = Color(0.6, 0.6, 0.6, 0)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_330cn"]
-bg_color = Color(0.6, 0.6, 0.6, 0)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
+[ext_resource type="PackedScene" uid="uid://dgy20wwtpiuvb" path="res://addons/hego/ui/hego_control_session_tab.tscn" id="2_3tvfr"]
+[ext_resource type="PackedScene" uid="uid://dextswpkwodbg" path="res://addons/hego/ui/hego_control_hda_tab.tscn" id="3_fsb3y"]
+[ext_resource type="PackedScene" uid="uid://bo41metlftc8d" path="res://addons/hego/ui/hego_control_library.tscn" id="4_fsb3y"]
 
 [node name="Control" type="Control"]
 layout_mode = 3
@@ -61,299 +21,45 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-current_tab = 0
+current_tab = 1
 
-[node name="Session" type="MarginContainer" parent="TabContainer"]
-layout_mode = 2
-theme_override_constants/margin_left = 10
-theme_override_constants/margin_top = 10
-theme_override_constants/margin_right = 10
-theme_override_constants/margin_bottom = 10
-metadata/_tab_index = 0
-
-[node name="Vbox" type="VBoxContainer" parent="TabContainer/Session"]
-custom_minimum_size = Vector2(130.35, 86.595)
-layout_mode = 2
-
-[node name="Connection" type="RichTextLabel" parent="TabContainer/Session/Vbox"]
-layout_mode = 2
-theme = SubResource("Theme_7h1cx")
-theme_override_styles/background = SubResource("StyleBoxEmpty_7h1cx")
-theme_override_styles/normal = SubResource("StyleBoxEmpty_fsb3y")
-text = "Connection:"
-fit_content = true
-scroll_active = false
-vertical_alignment = 1
-
-[node name="ConnectionHBox" type="HBoxContainer" parent="TabContainer/Session/Vbox"]
-layout_mode = 2
-
-[node name="ButtonStartSession" type="Button" parent="TabContainer/Session/Vbox/ConnectionHBox"]
+[node name="Session" parent="TabContainer" instance=ExtResource("2_3tvfr")]
 unique_name_in_owner = true
-layout_mode = 2
-text = "Start Session"
-
-[node name="ButtonStopSession" type="Button" parent="TabContainer/Session/Vbox/ConnectionHBox"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Stop Session"
-
-[node name="ConnectionType" type="OptionButton" parent="TabContainer/Session/Vbox/ConnectionHBox"]
-unique_name_in_owner = true
-layout_mode = 2
-selected = 1
-item_count = 3
-popup/item_0/text = "TCP  Port"
-popup/item_0/id = 0
-popup/item_1/text = "Named Pipe"
-popup/item_1/id = 1
-popup/item_2/text = "Shared Memory"
-popup/item_2/id = 2
-
-[node name="ConnectionData" type="TextEdit" parent="TabContainer/Session/Vbox/ConnectionHBox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(250, 0)
-layout_mode = 2
-text = "hapi"
-scroll_fit_content_height = true
-
-[node name="HSeparator" type="HSeparator" parent="TabContainer/Session/Vbox"]
-layout_mode = 2
-
-[node name="SessionSyncStatusLabel" type="RichTextLabel" parent="TabContainer/Session/Vbox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 50)
-layout_mode = 2
-theme_override_colors/default_color = Color(1, 0.647059, 0, 1)
-theme_override_styles/normal = SubResource("StyleBoxEmpty_3tvfr")
-text = "SessionSync is connected"
-fit_content = true
-vertical_alignment = 1
-
-[node name="HSeparator2" type="HSeparator" parent="TabContainer/Session/Vbox"]
-layout_mode = 2
-
-[node name="LogLabel" type="RichTextLabel" parent="TabContainer/Session/Vbox"]
-layout_mode = 2
-theme_override_styles/normal = SubResource("StyleBoxEmpty_lp8es")
-text = "Logs:"
-fit_content = true
-vertical_alignment = 1
-
-[node name="Logs" type="TextEdit" parent="TabContainer/Session/Vbox"]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_vertical = 3
-text = "Log capture connected.
-"
-editable = false
-wrap_mode = 1
-
-[node name="HDA" type="Control" parent="TabContainer"]
 visible = false
 layout_mode = 2
-script = ExtResource("1_sp0ki")
-metadata/_tab_index = 1
 
-[node name="HSplitContainer2" type="HSplitContainer" parent="TabContainer/HDA"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="SessionSyncStatusLabel" parent="TabContainer/Session/Vbox" index="3"]
+theme_override_colors/default_color = Color(0, 1, 0, 1)
+text = "SessionSync is connected"
 
-[node name="Settings" type="Control" parent="TabContainer/HDA/HSplitContainer2"]
-clip_contents = true
-custom_minimum_size = Vector2(400, 0)
-layout_mode = 2
-
-[node name="PanelContainer" type="PanelContainer" parent="TabContainer/HDA/HSplitContainer2/Settings"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_v64h4")
-
-[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
-clip_contents = true
-layout_mode = 2
-text = "Settings:"
-horizontal_alignment = 1
-
-[node name="HSeparator" type="HSeparator" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="VBoxContainer" type="HBoxContainer" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer"]
-layout_mode = 2
-text = "Auto Cook"
-
-[node name="CheckButton" type="CheckButton" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="HBoxContainer2" type="HBoxContainer" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2"]
-layout_mode = 2
-text = "Auto Start Session"
-
-[node name="CheckButton" type="CheckButton" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2"]
-layout_mode = 2
-size_flags_horizontal = 3
-button_pressed = true
-
-[node name="ButtonRecook" type="Button" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Recook"
-
-[node name="MarginContainer" type="MarginContainer" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
-layout_mode = 2
-theme_override_constants/margin_left = 2
-theme_override_constants/margin_top = 2
-theme_override_constants/margin_right = 2
-theme_override_constants/margin_bottom = 2
-
-[node name="PanelContainer" type="PanelContainer" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer"]
-layout_mode = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_l06bi")
-
-[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer"]
-layout_mode = 2
-
-[node name="HBoxContainer" type="HBoxContainer" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-text = "Preset:"
-
-[node name="PresetDropdownOptionButton" type="OptionButton" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-item_count = 3
-popup/item_0/text = "test"
-popup/item_0/id = 0
-popup/item_1/text = "dsfsdf"
-popup/item_1/id = 1
-popup/item_2/text = "jaaaaa"
-popup/item_2/id = 2
-
-[node name="HBoxContainer3" type="HBoxContainer" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="LoadPresetButton" type="Button" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Load"
-
-[node name="SavePresetButton" type="Button" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "Save
+[node name="Logs" parent="TabContainer/Session/Vbox" index="6"]
+text = "Log capture connected.
+Cleaning up and closing session...
+Closed Session, finalized hapi and freed libHAPIL.
+Loaded and initialized libHAPIL.
+Started Session.
+Initialized HAPI
+Cleaning up and closing session...
+Closed Session, finalized hapi and freed libHAPIL.
+Loaded and initialized libHAPIL.
+HAPI failed:   (src\\hego_session_manager.cpp:49)
+Started Session.
+Initialized HAPI
 "
+scroll_vertical = 13.0
 
-[node name="NewPresetButton" type="Button" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3"]
-layout_mode = 2
-size_flags_horizontal = 3
-text = "New"
-
-[node name="HSplitContainer3" type="HSplitContainer" parent="TabContainer/HDA/HSplitContainer2"]
+[node name="HDA" parent="TabContainer" instance=ExtResource("3_fsb3y")]
+unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Parameters" type="Control" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3"]
-clip_contents = true
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="AssetPickerButton" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer" index="5"]
+disabled = true
 
-[node name="PanelContainer" type="PanelContainer" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Parameters"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_luq18")
-
-[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Parameters/PanelContainer"]
+[node name="Library" parent="TabContainer" instance=ExtResource("4_fsb3y")]
+unique_name_in_owner = true
+visible = false
 layout_mode = 2
 
-[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer"]
-clip_contents = true
-layout_mode = 2
-text = "Parameters:"
-horizontal_alignment = 1
-
-[node name="HSeparator" type="HSeparator" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="Control" type="Control" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="ScrollContainer" type="ScrollContainer" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="Inputs" type="Control" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3"]
-clip_contents = true
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="PanelContainer" type="PanelContainer" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Inputs"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_330cn")
-
-[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Inputs/PanelContainer"]
-layout_mode = 2
-
-[node name="Label" type="Label" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer"]
-clip_contents = true
-layout_mode = 2
-text = "Inputs:"
-horizontal_alignment = 1
-
-[node name="HSeparator" type="HSeparator" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer"]
-layout_mode = 2
-
-[node name="ScrollContainer" type="ScrollContainer" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/HDA/HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-
-[node name="NewPresetNameDiag" type="ConfirmationDialog" parent="."]
-title = "Set Preset Name"
-
-[node name="NewPresetNameLineEdit" type="LineEdit" parent="NewPresetNameDiag"]
-offset_left = 8.0
-offset_top = 8.0
-offset_right = 192.0
-offset_bottom = 51.0
+[editable path="TabContainer/Session"]
+[editable path="TabContainer/HDA"]
+[editable path="TabContainer/Library"]

@@ -21,14 +21,47 @@ func _enter_tree():
 	
 	# Add HEGo project settings
 	_add_project_settings()
+	
+	# Connect to application exit signal for emergency cleanup
+	if get_tree():
+		get_tree().tree_exiting.connect(_on_application_exit)
 
 func _exit_tree():
 	# Clean-up of the plugin goes here.
+	print("[HEGo]: Plugin exiting, cleaning up Houdini session...")
+	
+	# Disconnect from application exit signal
+	if get_tree() and get_tree().tree_exiting.is_connected(_on_application_exit):
+		get_tree().tree_exiting.disconnect(_on_application_exit)
+	
+	# Stop any active Houdini session
+	_cleanup_houdini_session()
+	
 	if editor_selection and editor_selection.selection_changed.is_connected(_on_selection_changed):
 		editor_selection.selection_changed.disconnect(_on_selection_changed)
 	
 	remove_import_plugin(import_plugin)
 	import_plugin = null
+	
+	# Remove bottom panel
+	if bottom_panel:
+		remove_control_from_bottom_panel(bottom_panel)
+		bottom_panel = null
+	
+	print("[HEGo]: Plugin cleanup completed")
+
+func _cleanup_houdini_session():
+	if HEGoAPI.get_singleton() and HEGoAPI.get_singleton().is_session_active():
+		print("[HEGo]: Stopping active Houdini session...")
+		var stop_success = HEGoAPI.get_singleton().stop_session()
+		if stop_success:
+			print("[HEGo]: Houdini session stopped successfully")
+		else:
+			print("[HEGo]: Warning: Failed to stop Houdini session")
+
+func _on_application_exit():
+	print("[HEGo]: Application exiting, performing emergency cleanup...")
+	_cleanup_houdini_session()
 
 func _on_selection_changed():
 	var selected_nodes = editor_selection.get_selected_nodes()

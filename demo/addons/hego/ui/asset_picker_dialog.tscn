@@ -1,0 +1,51 @@
+[gd_scene load_steps=2 format=3 uid="uid://cb4l2m3tjuqnr"]
+
+[ext_resource type="Script" uid="uid://68lnan1bm1kf" path="res://addons/hego/ui/asset_picker_dialog.gd" id="1_picker_script"]
+
+[node name="AssetPickerDialog" type="AcceptDialog"]
+title = "Select HDA Asset"
+size = Vector2i(600, 400)
+visible = true
+script = ExtResource("1_picker_script")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -49.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Label" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Select an HDA asset from your cached libraries:"
+
+[node name="HSeparator" type="HSeparator" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="AssetTree" type="Tree" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+allow_reselect = true
+hide_root = true
+
+[node name="HSeparator2" type="HSeparator" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="RefreshButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Refresh Libraries"
+
+[node name="Label2" type="Label" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Selected: None"
+horizontal_alignment = 2
