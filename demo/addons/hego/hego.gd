@@ -21,18 +21,11 @@ func _enter_tree():
 	
 	# Add HEGo project settings
 	_add_project_settings()
-	
-	# Connect to application exit signal for emergency cleanup
-	if get_tree():
-		get_tree().tree_exiting.connect(_on_application_exit)
+
 
 func _exit_tree():
 	# Clean-up of the plugin goes here.
 	print("[HEGo]: Plugin exiting, cleaning up Houdini session...")
-	
-	# Disconnect from application exit signal
-	if get_tree() and get_tree().tree_exiting.is_connected(_on_application_exit):
-		get_tree().tree_exiting.disconnect(_on_application_exit)
 	
 	# Stop any active Houdini session
 	_cleanup_houdini_session()
@@ -50,6 +43,7 @@ func _exit_tree():
 	
 	print("[HEGo]: Plugin cleanup completed")
 
+
 func _cleanup_houdini_session():
 	if HEGoAPI.get_singleton() and HEGoAPI.get_singleton().is_session_active():
 		print("[HEGo]: Stopping active Houdini session...")
@@ -59,9 +53,6 @@ func _cleanup_houdini_session():
 		else:
 			print("[HEGo]: Warning: Failed to stop Houdini session")
 
-func _on_application_exit():
-	print("[HEGo]: Application exiting, performing emergency cleanup...")
-	_cleanup_houdini_session()
 
 func _on_selection_changed():
 	var selected_nodes = editor_selection.get_selected_nodes()
@@ -71,6 +62,7 @@ func _on_selection_changed():
 			if selected_node.hego_use_bottom_panel():
 				if bottom_panel:
 					bottom_panel.update_hego_asset_node(selected_node)
+
 
 func _add_project_settings():
 	# Add Houdini installation path setting if it doesn't exist
