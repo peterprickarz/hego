@@ -762,6 +762,28 @@ func _show_select_hda_dialog():
 
 
 func _on_asset_selected(selected_asset: String):
+	# Clear old HDA data when selecting a new asset
+	_clear_hda_data()
+	
 	asset_name = selected_asset
 	notify_property_list_changed()
 	print("[HEGoNode3D]: Selected asset: ", selected_asset)
+
+func _clear_hda_data():
+	# Reset the asset node's internal HAPI node ID to force re-instantiation
+	if hego_asset_node:
+		hego_asset_node.reset_node_id()
+	
+	# Clear parameter stash so we start fresh
+	parm_stash = PackedByteArray()
+	
+	# Clear input references
+	input_stash.clear()
+	hego_input_nodes.clear()
+	
+	# Clear any existing output nodes
+	var outputs_node = get_node_or_null("Outputs")
+	if outputs_node:
+		outputs_node.queue_free()
+	
+	print("[HEGoNode3D]: Cleared old HDA data and reset node ID")

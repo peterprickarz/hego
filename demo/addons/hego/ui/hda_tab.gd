@@ -464,6 +464,10 @@ func _on_asset_picker_button_pressed():
 # Handle asset selection from picker
 func _on_asset_picked(asset_name: String):
 	if hego_tool_node and hego_tool_node is HEGoNode3D:
+		# Clear old HDA data before setting new asset
+		if hego_tool_node.has_method("_clear_hda_data"):
+			hego_tool_node._clear_hda_data()
+		
 		hego_tool_node.asset_name = asset_name
 		print("[HEGo]: Set asset_name to: ", asset_name)
 		
