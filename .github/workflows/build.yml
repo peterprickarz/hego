@@ -51,3 +51,61 @@ jobs:
 
           # Push to release branch
           git push origin release --force
+
+  make-addon:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create or update addon branch
+        run: |
+          # Get commit info for descriptive message
+          COMMIT_SHA="${{ github.sha }}"
+          COMMIT_MESSAGE=$(git log -1 --pretty=format:"%s" $COMMIT_SHA)
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an" $COMMIT_SHA)
+          SHORT_SHA=$(echo $COMMIT_SHA | cut -c1-7)
+          
+          # Create new addon branch from main or update existing one
+          git checkout -B addon
+
+          # Clear everything except .git
+          find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} +
+
+          # Create addon directory structure
+          mkdir -p addons/HEGo
+
+          # Copy addon contents and other necessary files
+          git checkout main -- README.md LICENSE demo/addons/hego
+          
+          # Copy addon contents to addons/HEGo
+          cp -r demo/addons/hego/* addons/HEGo/
+          
+          # Copy README.md to addon folder
+          cp README.md addons/HEGo/
+          
+          # Copy LICENSE to addon folder
+          cp LICENSE addons/HEGo/
+          
+          # Fix image paths in README.md for addon structure
+          sed -i 's|demo/addons/hego/assets/|assets/|g' addons/HEGo/README.md
+          
+          # Clean up demo folder
+          rm -rf demo
+
+          # Add and commit changes with descriptive message
+          git add .
+          git commit -m "Addon: Update for Godot addon structure
+
+          Based on commit $SHORT_SHA by $COMMIT_AUTHOR:
+          $COMMIT_MESSAGE" || echo "No changes to commit"
+
+          # Push to addon branch
+          git push origin addon --force
