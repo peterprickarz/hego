@@ -277,16 +277,14 @@ func create_preset_file(preset_name: String) -> void:
 	if hego_asset_node and hego_tool_node.has_method("hego_get_asset_name"):
 		var preset = hego_asset_node.get_preset()
 		if preset:
-			var asset_name = hego_tool_node.hego_get_asset_name()
-			var res_path = "res://hego/presets/" + asset_name + ".tres"
+			var res_path = get_preset_res_path()
 			
 			# Ensure directory exists
 			var dir = DirAccess.open("res://")
-			var asset_dir = asset_name.get_base_dir()
+			var asset_dir = res_path.get_base_dir()
 			if asset_dir != "":
-				var preset_dir = "hego/presets/" + asset_dir
-				if not dir.dir_exists(preset_dir):
-					dir.make_dir_recursive(preset_dir)
+				if not DirAccess.dir_exists_absolute(asset_dir):
+					dir.make_dir_recursive(asset_dir)
 
 			var presets_res: HEGoHDAPreset
 			# Check if the resource exists
@@ -325,11 +323,17 @@ func create_preset_file(preset_name: String) -> void:
 	else:
 		push_error("[HEGo]: Invalid hego_asset_node or hego_tool_node. Cannot create preset.")
 	
+
+func get_preset_res_path():
+	var asset_name : String = hego_tool_node.hego_get_asset_name()
+	if asset_name.begins_with("Sop/"):
+		asset_name = asset_name.split("/")[1]
+	var res_path = "res://hego/presets/" + asset_name + ".tres"
+	return res_path
 	
 func update_preset_dropdown():
 	if hego_tool_node and hego_tool_node.has_method("hego_get_asset_name"):
-		var asset_name = hego_tool_node.hego_get_asset_name()
-		var res_path = "res://hego/presets/" + asset_name + ".tres"
+		var res_path = get_preset_res_path()
 		
 		# Clear existing items in the dropdown
 		preset_dropdown.clear()
@@ -367,8 +371,7 @@ func _on_load_preset_button_pressed():
 		return
 	
 	var preset_name = preset_dropdown.get_item_text(selected_index)
-	var asset_name = hego_tool_node.hego_get_asset_name()
-	var res_path = "res://hego/presets/" + asset_name + ".tres"
+	var res_path = get_preset_res_path()
 	
 	if not ResourceLoader.exists(res_path):
 		push_error("[HEGo]: No preset resource found at ", res_path)
@@ -405,8 +408,7 @@ func _on_save_preset_button_pressed():
 		return
 	
 	var preset_name = preset_dropdown.get_item_text(selected_index)
-	var asset_name = hego_tool_node.hego_get_asset_name()
-	var res_path = "res://hego/presets/" + asset_name + ".tres"
+	var res_path = get_preset_res_path()
 	
 	var preset = hego_asset_node.get_preset()
 	if not preset:
