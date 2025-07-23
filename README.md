@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="demo/addons/hego/assets/logo.png" alt="HEGo Logo" width="128">
+  <img src="assets/logo.png" alt="HEGo Logo" width="128">
   
   # HEGo - Houdini Engine in Godot
   
