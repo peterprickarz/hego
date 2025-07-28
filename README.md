@@ -9,8 +9,10 @@
 ## 🚀 Getting Started
 
 - 📦 **[Download Latest Release](https://github.com/peterprickarz/hego/releases/latest)** - Pre-built binaries for Windows
-- 📖 **[Wiki](https://github.com/peterprickarz/hego/wiki)** - Complete documentation and guides  
+- 📖 **[Wiki](https://github.com/peterprickarz/hego/wiki)** - Complete documentation and guides
+- 💬 **[Discord](https://discord.gg/bAw7Pv8ETG)** - Chat with other users and contributors
 - 🎥 **[Introduction Video](https://youtu.be/cviGlmKmFQ8)** - Visual walkthrough
+
 
 ### Quick Install
 
@@ -111,7 +113,9 @@ If the build task fails, update `.vscode/tasks.json`:
 
 ## Get Help
 
-If you have any questions or problems, feel free to message me on [X](https://x.com/prickarz) where I will try to help as much as I can.
+Join the 💬[Discord](https://discord.gg/bAw7Pv8ETG) where other users or contributors can help you.
+
+If you don't have discord, feel free to message me on [X](https://x.com/prickarz) where I will try to help as much as I can.
 
 
 ## Shoutouts
