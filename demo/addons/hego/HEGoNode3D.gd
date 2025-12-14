@@ -517,7 +517,7 @@ func setup_multimesh(mesh_resource: Mesh, hego_multimesh_name: String, point_dic
 	multimesh_instance.transform.origin = center
 	
 	# Set instance count
-	multimesh.instance_count = point_count
+	
 	
 	# Default values
 	var default_normal = Vector3(0, 0, 1).normalized()
@@ -530,7 +530,8 @@ func setup_multimesh(mesh_resource: Mesh, hego_multimesh_name: String, point_dic
 	if point_dict["Cd"] and point_dict["Cd"][0] != null:
 		use_color = true
 		multimesh.use_colors = true
-	
+		
+	multimesh.instance_count = point_count
 	# Process each point
 	for i in range(point_count):
 		# Get position and offset by center
