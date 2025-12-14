@@ -645,8 +645,14 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 			hego_input_node = HEGoInputNode.new()
 		hego_input_node.instantiate()
 		hego_input_node.set_geo_from_mesh_instance_3d(input)
+	elif input is CSGShape3D:
+		if not hego_input_node is HEGoInputNode:
+			hego_input_node = HEGoInputNode.new()
+		hego_input_node.instantiate()
+		hego_input_node.set_geo_from_mesh(input.bake_static_mesh())
+		hego_input_node.set_transform(input.global_transform)
 	else:
-		print("[HEGoNode3D]: Input is neither Path3D nor MeshInstance3D")
+		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D or CSGShape3D")
 	return hego_input_node
 
 
@@ -662,8 +668,13 @@ func create_hego_input_node(input_node_path, settings):
 		input_node = HEGoInputNode.new()
 		input_node.instantiate()
 		input_node.set_geo_from_mesh_instance_3d(input)
+	elif input is CSGShape3D:
+		input_node = HEGoInputNode.new()
+		input_node.instantiate()
+		input_node.set_geo_from_mesh(input.bake_static_mesh())
+		input_node.set_transform(input.global_transform)
 	else:
-		print("[HEGoNode3D]: Input is neither Path3D nor MeshInstance3D")
+		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D or CSGShape3D")
 	return input_node
 
 
