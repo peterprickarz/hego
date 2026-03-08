@@ -66,8 +66,8 @@ public:
    typedef HAPI_Result(*RemoveCustomStringFuncPtr)(const HAPI_Session * session, const HAPI_StringHandle string_handle);
    typedef HAPI_Result(*GetStringBatchSizeFuncPtr)(const HAPI_Session * session, const int * string_handle_array, int string_handle_count, int * string_buffer_size);
    typedef HAPI_Result(*GetStringBatchFuncPtr)(const HAPI_Session * session, char * char_buffer, int char_array_length);
-   typedef HAPI_Result(*GetTimeFuncPtr)(const HAPI_Session * session, float * time);
-   typedef HAPI_Result(*SetTimeFuncPtr)(const HAPI_Session * session, float time);
+   typedef HAPI_Result(*GetTimeFuncPtr)(const HAPI_Session * session, double * time);
+   typedef HAPI_Result(*SetTimeFuncPtr)(const HAPI_Session * session, double time);
    typedef HAPI_Result(*GetUseHoudiniTimeFuncPtr)(const HAPI_Session * session, HAPI_Bool * enabled);
    typedef HAPI_Result(*SetUseHoudiniTimeFuncPtr)(const HAPI_Session * session, HAPI_Bool enabled);
    typedef HAPI_Result(*GetTimelineOptionsFuncPtr)(const HAPI_Session * session, HAPI_TimelineOptions * timeline_options);
@@ -283,6 +283,7 @@ public:
    typedef HAPI_Result(*GetMaterialNodeIdsOnFacesFuncPtr)(const HAPI_Session * session, HAPI_NodeId geometry_node_id, HAPI_PartId part_id, HAPI_Bool * are_all_the_same, HAPI_NodeId * material_ids_array, int start, int length);
    typedef HAPI_Result(*GetMaterialInfoFuncPtr)(const HAPI_Session * session, HAPI_NodeId material_node_id, HAPI_MaterialInfo * material_info);
    typedef HAPI_Result(*RenderCOPToImageFuncPtr)(const HAPI_Session * session, HAPI_NodeId cop_node_id);
+   typedef HAPI_Result(*RenderCOPOutputToImageFuncPtr)(const HAPI_Session * session, HAPI_NodeId cop_node_id, const char * cop_output_name);
    typedef HAPI_Result(*RenderTextureToImageFuncPtr)(const HAPI_Session * session, HAPI_NodeId material_node_id, HAPI_ParmId parm_id);
    typedef HAPI_Result(*GetImageInfoFuncPtr)(const HAPI_Session * session, HAPI_NodeId material_node_id, HAPI_ImageInfo * image_info);
    typedef HAPI_Result(*SetImageInfoFuncPtr)(const HAPI_Session * session, HAPI_NodeId material_node_id, const HAPI_ImageInfo * image_info);
@@ -294,6 +295,7 @@ public:
    typedef HAPI_Result(*GetImageMemoryBufferFuncPtr)(const HAPI_Session * session, HAPI_NodeId material_node_id, char * buffer, int length);
    typedef HAPI_Result(*GetSupportedImageFileFormatCountFuncPtr)(const HAPI_Session * session, int * file_format_count);
    typedef HAPI_Result(*GetSupportedImageFileFormatsFuncPtr)(const HAPI_Session * session, HAPI_ImageFileFormat * formats_array, int file_format_count);
+   typedef HAPI_Result(*CreateCOPImageFuncPtr)(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length);
    typedef HAPI_Result(*SetAnimCurveFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_ParmId parm_id, int parm_index, const HAPI_Keyframe * curve_keyframes_array, int keyframe_count);
    typedef HAPI_Result(*SetTransformAnimCurveFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_TransformComponent trans_comp, const HAPI_Keyframe * curve_keyframes_array, int keyframe_count);
    typedef HAPI_Result(*ResetSimulationFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id);
@@ -710,6 +712,7 @@ public:
    static GetMaterialNodeIdsOnFacesFuncPtr GetMaterialNodeIdsOnFaces;
    static GetMaterialInfoFuncPtr GetMaterialInfo;
    static RenderCOPToImageFuncPtr RenderCOPToImage;
+   static RenderCOPOutputToImageFuncPtr RenderCOPOutputToImage;
    static RenderTextureToImageFuncPtr RenderTextureToImage;
    static GetImageInfoFuncPtr GetImageInfo;
    static SetImageInfoFuncPtr SetImageInfo;
@@ -721,6 +724,7 @@ public:
    static GetImageMemoryBufferFuncPtr GetImageMemoryBuffer;
    static GetSupportedImageFileFormatCountFuncPtr GetSupportedImageFileFormatCount;
    static GetSupportedImageFileFormatsFuncPtr GetSupportedImageFileFormats;
+   static CreateCOPImageFuncPtr CreateCOPImage;
    static SetAnimCurveFuncPtr SetAnimCurve;
    static SetTransformAnimCurveFuncPtr SetTransformAnimCurve;
    static ResetSimulationFuncPtr ResetSimulation;
@@ -920,8 +924,8 @@ public:
    static HAPI_Result RemoveCustomStringEmptyStub(const HAPI_Session * session, const HAPI_StringHandle string_handle);
    static HAPI_Result GetStringBatchSizeEmptyStub(const HAPI_Session * session, const int * string_handle_array, int string_handle_count, int * string_buffer_size);
    static HAPI_Result GetStringBatchEmptyStub(const HAPI_Session * session, char * char_buffer, int char_array_length);
-   static HAPI_Result GetTimeEmptyStub(const HAPI_Session * session, float * time);
-   static HAPI_Result SetTimeEmptyStub(const HAPI_Session * session, float time);
+   static HAPI_Result GetTimeEmptyStub(const HAPI_Session * session, double * time);
+   static HAPI_Result SetTimeEmptyStub(const HAPI_Session * session, double time);
    static HAPI_Result GetUseHoudiniTimeEmptyStub(const HAPI_Session * session, HAPI_Bool * enabled);
    static HAPI_Result SetUseHoudiniTimeEmptyStub(const HAPI_Session * session, HAPI_Bool enabled);
    static HAPI_Result GetTimelineOptionsEmptyStub(const HAPI_Session * session, HAPI_TimelineOptions * timeline_options);
@@ -1137,6 +1141,7 @@ public:
    static HAPI_Result GetMaterialNodeIdsOnFacesEmptyStub(const HAPI_Session * session, HAPI_NodeId geometry_node_id, HAPI_PartId part_id, HAPI_Bool * are_all_the_same, HAPI_NodeId * material_ids_array, int start, int length);
    static HAPI_Result GetMaterialInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId material_node_id, HAPI_MaterialInfo * material_info);
    static HAPI_Result RenderCOPToImageEmptyStub(const HAPI_Session * session, HAPI_NodeId cop_node_id);
+   static HAPI_Result RenderCOPOutputToImageEmptyStub(const HAPI_Session * session, HAPI_NodeId cop_node_id, const char * cop_output_name);
    static HAPI_Result RenderTextureToImageEmptyStub(const HAPI_Session * session, HAPI_NodeId material_node_id, HAPI_ParmId parm_id);
    static HAPI_Result GetImageInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId material_node_id, HAPI_ImageInfo * image_info);
    static HAPI_Result SetImageInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId material_node_id, const HAPI_ImageInfo * image_info);
@@ -1148,6 +1153,7 @@ public:
    static HAPI_Result GetImageMemoryBufferEmptyStub(const HAPI_Session * session, HAPI_NodeId material_node_id, char * buffer, int length);
    static HAPI_Result GetSupportedImageFileFormatCountEmptyStub(const HAPI_Session * session, int * file_format_count);
    static HAPI_Result GetSupportedImageFileFormatsEmptyStub(const HAPI_Session * session, HAPI_ImageFileFormat * formats_array, int file_format_count);
+   static HAPI_Result CreateCOPImageEmptyStub(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length);
    static HAPI_Result SetAnimCurveEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_ParmId parm_id, int parm_index, const HAPI_Keyframe * curve_keyframes_array, int keyframe_count);
    static HAPI_Result SetTransformAnimCurveEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_TransformComponent trans_comp, const HAPI_Keyframe * curve_keyframes_array, int keyframe_count);
    static HAPI_Result ResetSimulationEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id);

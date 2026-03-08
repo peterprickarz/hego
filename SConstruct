@@ -3,7 +3,7 @@ import os
 import sys
 
 # Get Houdini path from environment variable, with fallback
-HFS = os.environ.get("HFS", "C:/Program Files/Side Effects Software/Houdini 20.5.654")
+HFS = os.environ.get("HFS", "C:/Program Files/Side Effects Software/Houdini 21.0.631")
 HB = f"{HFS}/bin"
 
 # Define environment variables
@@ -34,17 +34,17 @@ for p in modified_path:
     print(f"  {p}")
 
 # Houdini version information
-env["ENV"]["HOUDINI_MAJOR_RELEASE"] = "20"
-env["ENV"]["HOUDINI_MINOR_RELEASE"] = "5"
-env["ENV"]["HOUDINI_BUILD_VERSION"] = "445"
-env["ENV"][
-    "HOUDINI_VERSION"
-] = f'{env["ENV"]["HOUDINI_MAJOR_RELEASE"]}.{env["ENV"]["HOUDINI_MINOR_RELEASE"]}.{env["ENV"]["HOUDINI_BUILD_VERSION"]}'
+#env["ENV"]["HOUDINI_MAJOR_RELEASE"] = "20"
+#env["ENV"]["HOUDINI_MINOR_RELEASE"] = "5"
+#env["ENV"]["HOUDINI_BUILD_VERSION"] = "445"
+#env["ENV"][
+#    "HOUDINI_VERSION"
+#] = f'{env["ENV"]["HOUDINI_MAJOR_RELEASE"]}.{env["ENV"]["HOUDINI_MINOR_RELEASE"]}.{env["ENV"]["HOUDINI_BUILD_VERSION"]}'
 
 # Build machine information
-env["ENV"]["HOUDINI_BUILD_KERNEL"] = "10.0.19045"
-env["ENV"]["HOUDINI_BUILD_PLATFORM"] = "Windows"
-env["ENV"]["HOUDINI_BUILD_COMPILER"] = "19.35.32217.1"
+#env["ENV"]["HOUDINI_BUILD_KERNEL"] = "10.0.19045"
+#env["ENV"]["HOUDINI_BUILD_PLATFORM"] = "Windows"
+#env["ENV"]["HOUDINI_BUILD_COMPILER"] = "19.35.32217.1"
 
 
 # For reference:
@@ -81,7 +81,7 @@ else:
 env.Append(CPPPATH=[houdini_hapi_headers])
 
 # Define the source and build directories
-src_dir = "src"
+src_dir = "src" 
 build_dir = "build"
 
 # Use VariantDir to map the source directory to the build directory

@@ -813,6 +813,9 @@
   HoudiniApi::RenderCOPToImageFuncPtr
   HoudiniApi::RenderCOPToImage = &HoudiniApi::RenderCOPToImageEmptyStub;
   
+  HoudiniApi::RenderCOPOutputToImageFuncPtr
+  HoudiniApi::RenderCOPOutputToImage = &HoudiniApi::RenderCOPOutputToImageEmptyStub;
+  
   HoudiniApi::RenderTextureToImageFuncPtr
   HoudiniApi::RenderTextureToImage = &HoudiniApi::RenderTextureToImageEmptyStub;
   
@@ -845,6 +848,9 @@
   
   HoudiniApi::GetSupportedImageFileFormatsFuncPtr
   HoudiniApi::GetSupportedImageFileFormats = &HoudiniApi::GetSupportedImageFileFormatsEmptyStub;
+  
+  HoudiniApi::CreateCOPImageFuncPtr
+  HoudiniApi::CreateCOPImage = &HoudiniApi::CreateCOPImageEmptyStub;
   
   HoudiniApi::SetAnimCurveFuncPtr
   HoudiniApi::SetAnimCurve = &HoudiniApi::SetAnimCurveEmptyStub;
@@ -1549,6 +1555,7 @@ HoudiniApi::initialize_hapi(void* library_handle)
   HoudiniApi::GetMaterialNodeIdsOnFaces = (GetMaterialNodeIdsOnFacesFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetMaterialNodeIdsOnFaces");
   HoudiniApi::GetMaterialInfo = (GetMaterialInfoFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetMaterialInfo");
   HoudiniApi::RenderCOPToImage = (RenderCOPToImageFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_RenderCOPToImage");
+  HoudiniApi::RenderCOPOutputToImage = (RenderCOPOutputToImageFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_RenderCOPOutputToImage");
   HoudiniApi::RenderTextureToImage = (RenderTextureToImageFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_RenderTextureToImage");
   HoudiniApi::GetImageInfo = (GetImageInfoFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetImageInfo");
   HoudiniApi::SetImageInfo = (SetImageInfoFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_SetImageInfo");
@@ -1560,6 +1567,7 @@ HoudiniApi::initialize_hapi(void* library_handle)
   HoudiniApi::GetImageMemoryBuffer = (GetImageMemoryBufferFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetImageMemoryBuffer");
   HoudiniApi::GetSupportedImageFileFormatCount = (GetSupportedImageFileFormatCountFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetSupportedImageFileFormatCount");
   HoudiniApi::GetSupportedImageFileFormats = (GetSupportedImageFileFormatsFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetSupportedImageFileFormats");
+  HoudiniApi::CreateCOPImage = (CreateCOPImageFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_CreateCOPImage");
   HoudiniApi::SetAnimCurve = (SetAnimCurveFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_SetAnimCurve");
   HoudiniApi::SetTransformAnimCurve = (SetTransformAnimCurveFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_SetTransformAnimCurve");
   HoudiniApi::ResetSimulation = (ResetSimulationFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_ResetSimulation");
@@ -1981,6 +1989,7 @@ HoudiniApi::finalize_hapi()
   HoudiniApi::GetMaterialNodeIdsOnFaces = &HoudiniApi::GetMaterialNodeIdsOnFacesEmptyStub;
   HoudiniApi::GetMaterialInfo = &HoudiniApi::GetMaterialInfoEmptyStub;
   HoudiniApi::RenderCOPToImage = &HoudiniApi::RenderCOPToImageEmptyStub;
+  HoudiniApi::RenderCOPOutputToImage = &HoudiniApi::RenderCOPOutputToImageEmptyStub;
   HoudiniApi::RenderTextureToImage = &HoudiniApi::RenderTextureToImageEmptyStub;
   HoudiniApi::GetImageInfo = &HoudiniApi::GetImageInfoEmptyStub;
   HoudiniApi::SetImageInfo = &HoudiniApi::SetImageInfoEmptyStub;
@@ -1992,6 +2001,7 @@ HoudiniApi::finalize_hapi()
   HoudiniApi::GetImageMemoryBuffer = &HoudiniApi::GetImageMemoryBufferEmptyStub;
   HoudiniApi::GetSupportedImageFileFormatCount = &HoudiniApi::GetSupportedImageFileFormatCountEmptyStub;
   HoudiniApi::GetSupportedImageFileFormats = &HoudiniApi::GetSupportedImageFileFormatsEmptyStub;
+  HoudiniApi::CreateCOPImage = &HoudiniApi::CreateCOPImageEmptyStub;
   HoudiniApi::SetAnimCurve = &HoudiniApi::SetAnimCurveEmptyStub;
   HoudiniApi::SetTransformAnimCurve = &HoudiniApi::SetTransformAnimCurveEmptyStub;
   HoudiniApi::ResetSimulation = &HoudiniApi::ResetSimulationEmptyStub;
@@ -2413,12 +2423,12 @@ HoudiniApi::GetStringBatchEmptyStub(const HAPI_Session * session, char * char_bu
     return HAPI_RESULT_FAILURE;
 }
 HAPI_Result
-HoudiniApi::GetTimeEmptyStub(const HAPI_Session * session, float * time)
+HoudiniApi::GetTimeEmptyStub(const HAPI_Session * session, double * time)
 {
     return HAPI_RESULT_FAILURE;
 }
 HAPI_Result
-HoudiniApi::SetTimeEmptyStub(const HAPI_Session * session, float time)
+HoudiniApi::SetTimeEmptyStub(const HAPI_Session * session, double time)
 {
     return HAPI_RESULT_FAILURE;
 }
@@ -3498,6 +3508,11 @@ HoudiniApi::RenderCOPToImageEmptyStub(const HAPI_Session * session, HAPI_NodeId 
     return HAPI_RESULT_FAILURE;
 }
 HAPI_Result
+HoudiniApi::RenderCOPOutputToImageEmptyStub(const HAPI_Session * session, HAPI_NodeId cop_node_id, const char * cop_output_name)
+{
+    return HAPI_RESULT_FAILURE;
+}
+HAPI_Result
 HoudiniApi::RenderTextureToImageEmptyStub(const HAPI_Session * session, HAPI_NodeId material_node_id, HAPI_ParmId parm_id)
 {
     return HAPI_RESULT_FAILURE;
@@ -3549,6 +3564,11 @@ HoudiniApi::GetSupportedImageFileFormatCountEmptyStub(const HAPI_Session * sessi
 }
 HAPI_Result
 HoudiniApi::GetSupportedImageFileFormatsEmptyStub(const HAPI_Session * session, HAPI_ImageFileFormat * formats_array, int file_format_count)
+{
+    return HAPI_RESULT_FAILURE;
+}
+HAPI_Result
+HoudiniApi::CreateCOPImageEmptyStub(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length)
 {
     return HAPI_RESULT_FAILURE;
 }
