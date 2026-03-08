@@ -53,7 +53,7 @@ var new_preset_name_line_edit: LineEdit
 @onready var preset_dropdown: OptionButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer/PresetDropdownOptionButton
 @onready var parm_vbox = $HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer/VBoxContainer
 @onready var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
-
+@onready var root_control = $"../.."
 
 func _ready():
 	new_preset_name_diag = preload("res://addons/hego/ui/new_preset_name_diag.tscn").instantiate()
@@ -61,7 +61,7 @@ func _ready():
 	add_child(new_preset_name_diag)
 	recook_button.button_down.connect(_on_recook_button_pressed)
 	asset_picker_button.pressed.connect(_on_asset_picker_button_pressed)
-	EditorInterface.get_selection().selection_changed.connect(_on_selection_changed)
+	root_control.selected_hego_node_changed.connect(_on_selection_changed)
 	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
 	new_preset_name_diag.confirmed.connect(_on_preset_dialog_confirmed)
 	load_preset_button.pressed.connect(_on_load_preset_button_pressed)
@@ -221,14 +221,15 @@ func _on_remove_multiparm_instance(id: int, index: int):
 	update_ui()
 
 
-func _on_selection_changed():
+func _on_selection_changed(node):
 	# These are the only nodes that can be cooked by the HEGo HDA Tab
-	var nodes = EditorInterface.get_selection().get_selected_nodes()
-	if nodes.size() == 0:
-		_set_buttons_disabled(true)
-		return
-	var node = nodes[0]
+	#var nodes = EditorInterface.get_selection().get_selected_nodes()
+	#if nodes.size() == 0:
+	#	_set_buttons_disabled(true)
+	#	return
+	#var node = nodes[0]
 	allow_cook = node is HEGoNode3D
+	_set_buttons_disabled(false)
 	hego_tool_node = node
 	update_ui()
 	

@@ -6,7 +6,6 @@
 #include <iostream>
 #include <string>
 
-
 #ifdef _WIN32
 #include <tchar.h>
 #include <windows.h>
@@ -68,33 +67,45 @@ void HEGoPlatform::set_env_vars()
 
 void *HEGoPlatform::load_lib_hapil()
 {
-	void *libHAPIL = nullptr;
-
 #if defined(_WIN32)
 	const char *houdiniBasePath = get_houdini_path();
-	std::string libHAPIL_dir(houdiniBasePath);
-	libHAPIL_dir.append("\\bin\\"); // Use backslashes for Windows paths
+	std::string full_path = std::string(houdiniBasePath) + "\\bin\\libHAPIL.dll";
 
-	if (SetDllDirectoryA(libHAPIL_dir.c_str()) != 0)
+	HMODULE libHAPIL = LoadLibraryA(full_path.c_str());
+
+	if (!libHAPIL)
 	{
+		DWORD err = GetLastError();
+
+		// Log full path and exact Windows error code
+		godot::String msg = godot::String("Failed to load libHAPIL.dll from:\n") + godot::String(full_path.c_str()) +
+				"\nError code: " + godot::String(std::to_string(err).c_str());
+
+		HEGo::Util::Log::error(msg);
+
+		// Optional: fallback to old SetDllDirectory method
+		std::string bin_dir = std::string(houdiniBasePath) + "\\bin";
+		SetDllDirectoryA(bin_dir.c_str());
 		libHAPIL = LoadLibraryA(HAPI_LIB_OBJECT_WINDOWS);
+
+		if (!libHAPIL)
+		{
+			HEGo::Util::Log::error("Fallback load also failed: " + godot::String(std::to_string(GetLastError()).c_str()));
+		}
 	}
-	else
-	{
-		std::cerr << "Failed to set DLL directory to " << libHAPIL_dir << std::endl;
-	}
+
+	// Return as void* to match original API
+	return static_cast<void *>(libHAPIL);
+
 #elif defined(__linux__)
-	libHAPIL = dlopen(HAPI_LIB_OBJECT_LINUX, RTLD_LAZY);
+	return dlopen(HAPI_LIB_OBJECT_LINUX, RTLD_LAZY);
 #else
-	libHAPIL = dlopen(HAPI_LIB_OBJECT_MAC, RTLD_LAZY);
+	return dlopen(HAPI_LIB_OBJECT_MAC, RTLD_LAZY);
 #endif
 
-	if (libHAPIL == nullptr)
-	{
-		std::cerr << "Failed to load the libHAPIL module." << std::endl;
-	}
+	std::cerr << "Failed to load the libHAPIL module." << std::endl;
 
-	return libHAPIL;
+	return nullptr;
 }
 
 bool HEGoPlatform::free_lib_hapil(void *libHAPIL)

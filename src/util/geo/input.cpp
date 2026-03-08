@@ -192,14 +192,21 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 		godot::PackedInt32Array indices = surface_array[12];
 		npoints += positions.size();
 		nvertices += indices.size();
+
+		if (indices.size() == 0)
+		{
+			nvertices += positions.size();
+		}
 	}
 
 	std::vector<float> positions;
+	std::vector<float> colors;
 	std::vector<int> surface_ids;
 	std::vector<int> vertices;
 	std::vector<int> face_counts;
 
 	positions.reserve(npoints * 3);
+	colors.reserve(npoints * 3);
 	surface_ids.reserve(npoints);
 	vertices.reserve(nvertices);
 	face_counts.reserve(nvertices / 3);
@@ -208,7 +215,10 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 	{
 		godot::Array surface_array = mesh->surface_get_arrays(i);
 		godot::PackedVector3Array vector_positions = surface_array[0];
+		godot::PackedColorArray source_colors = surface_array[3];
 		godot::PackedInt32Array indices = surface_array[12];
+
+		int position_start_id = surface_ids.size();
 
 		for (int j = 0; j < vector_positions.size(); j++)
 		{
@@ -216,10 +226,33 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 			positions.push_back(vector_positions[j].y);
 			positions.push_back(vector_positions[j].z);
 			surface_ids.push_back(i);
+
+			if (source_colors.size() > 0)
+			{
+				colors.push_back(source_colors[j].r);
+				colors.push_back(source_colors[j].g);
+				colors.push_back(source_colors[j].b);
+			}
+			else
+			{
+				colors.push_back(1.0);
+				colors.push_back(1.0);
+				colors.push_back(1.0);
+			}
 		}
-		for (int j = 0; j < indices.size(); j++)
+		if (indices.size() > 0)
 		{
-			vertices.push_back(indices[j]);
+			for (int j = 0; j < indices.size(); j++)
+			{
+				vertices.push_back(indices[j]);
+			}
+		}
+		else
+		{
+			for (int j = 0; j < vector_positions.size(); j++)
+			{
+				vertices.push_back(position_start_id + j);
+			}
 		}
 	}
 
@@ -251,6 +284,17 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 	HOUDINI_CHECK_ERROR(HoudiniApi::AddAttribute(session, node_id, 0, "P", &node_point_info_P));
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::SetAttributeFloatData(session, node_id, 0, "P", &node_point_info_P, positions.data(), 0, npoints));
+
+	HAPI_AttributeInfo node_point_info_Cd = HoudiniApi::AttributeInfo_Create();
+	node_point_info_Cd.count = npoints;
+	node_point_info_Cd.tupleSize = 3;
+	node_point_info_Cd.exists = true;
+	node_point_info_Cd.storage = HAPI_STORAGETYPE_FLOAT;
+	node_point_info_Cd.owner = HAPI_ATTROWNER_POINT;
+
+	HOUDINI_CHECK_ERROR(HoudiniApi::AddAttribute(session, node_id, 0, "Cd", &node_point_info_Cd));
+
+	HOUDINI_CHECK_ERROR(HoudiniApi::SetAttributeFloatData(session, node_id, 0, "Cd", &node_point_info_Cd, colors.data(), 0, npoints));
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::SetVertexList(session, node_id, 0, vertices.data(), 0, nvertices));
 
