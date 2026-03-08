@@ -5,6 +5,7 @@
 #include "util/hego_util.h"
 #include "util/log/log.h"
 
+#include <algorithm>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 namespace HEGo
@@ -13,7 +14,7 @@ namespace Util
 {
 namespace Geo
 {
-godot::Dictionary HEGo::Util::Geo::fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_point_config)
+godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_point_config)
 {
 	bool only_loose_points = fetch_point_config->get("only_loose_points");
 	godot::PackedStringArray read_attribs = fetch_point_config->get("read_attribs");

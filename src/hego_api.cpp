@@ -48,6 +48,8 @@ bool HEGoAPI::start_session(int connection_type, const godot::String &connection
 {
 	HEGoPlatform::initialize_hapi();
 
+	HEGo::Util::Log::message(connection_data);
+
 	// Convert Godot connection type to SessionManager enum
 	HEGoSessionManager::SessionType session_type = static_cast<HEGoSessionManager::SessionType>(connection_type);
 
@@ -208,7 +210,7 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 		library_info["assets"] = assets;
 
 		// Use library name as key, fallback to ID if name not available
-		godot::String key = library_info.has("name") ? library_info["name"] : godot::String::num_int64(library_ids[i]);
+		godot::String key = library_info.has("name") ? library_info["name"] : godot::Variant(godot::String::num_int64(library_ids[i]));
 		result[key] = library_info;
 	}
 

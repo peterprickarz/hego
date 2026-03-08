@@ -32,7 +32,7 @@ godot::Array convert_face_counts_to_array(const std::vector<int> &face_counts)
 
 	return prims;
 }
-godot::Dictionary HEGo::Util::Geo::fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config)
+godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config)
 {
 	HEGo::Util::Log::line();
 	HEGo::Util::Log::message("Fetching Surface Dictionary");

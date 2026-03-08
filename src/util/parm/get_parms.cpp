@@ -183,7 +183,7 @@ godot::Dictionary build_parm_dict(HAPI_Session *session, HAPI_NodeId node_id, HA
 	return parm_dict;
 }
 
-godot::Dictionary HEGo::Util::Parm::get_parm_dict(HEGoSessionManager *session_mgr, HAPI_NodeId node_id)
+godot::Dictionary get_parm_dict(HEGoSessionManager *session_mgr, HAPI_NodeId node_id)
 {
 	godot::Dictionary result;
 

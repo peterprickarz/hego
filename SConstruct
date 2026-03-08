@@ -1,113 +1,119 @@
 #!/usr/bin/env python
 import os
 import sys
+import platform
 
-# Get Houdini path from environment variable, with fallback
-HFS = os.environ.get("HFS", "C:/Program Files/Side Effects Software/Houdini 21.0.631")
-HB = f"{HFS}/bin"
+# ───────────────────────────────────────────────
+# Determine Houdini root (HFS) with sensible defaults
+# ───────────────────────────────────────────────
+default_hfs = {
+    "Windows": r"C:\Program Files\Side Effects Software\Houdini 21.0.631",
+    "Linux":   "/opt/hfs21.0",                    # ← adjusted to match your actual path
+    "Darwin":  "/Applications/Houdini/Houdini21.0.631/Houdini.framework/Versions/Current/Resources"
+}
 
-# Define environment variables
+sys_name = platform.system()
+HFS = os.environ.get("HFS", default_hfs.get(sys_name, ""))
+
+if not HFS or not os.path.isdir(HFS):
+    print("Error: HFS not found and no valid default for this OS.")
+    print("Please set environment variable HFS to your Houdini installation folder.")
+    print(f"Typical locations:\n  Windows → {default_hfs['Windows']}\n  Linux   → {default_hfs['Linux']}")
+    sys.exit(1)
+
+print(f"Using HFS = {HFS}")
+
+HB = os.path.join(HFS, "bin")
+
+# ───────────────────────────────────────────────
+# Load godot-cpp environment
+# ───────────────────────────────────────────────
 env = SConscript("godot-cpp/SConstruct")
-env["ENV"]["HFS"] = HFS
-env["ENV"]["HB"] = HB
-env["ENV"]["H"] = HFS
-env["ENV"]["HH"] = f"{HFS}/houdini"
-env["ENV"]["HHC"] = f"{HFS}/houdini/config"
-env["ENV"]["HHP"] = f"{HFS}/houdini/python3.11libs"
-env["ENV"]["HT"] = f"{HFS}/toolkit"
 
-# Print original PATH for debugging purposes in a readable format
-original_path = env["ENV"]["PATH"].split(";")
-print("Original PATH:")
-for p in original_path:
-    print(f"  {p}")
+# ───────────────────────────────────────────────
+# Common Houdini-related environment variables
+# ───────────────────────────────────────────────
+houdini_vars = {
+    "HFS": HFS,
+    "HB":  HB,
+    "H":   HFS,
+    "HH":  os.path.join(HFS, "houdini"),
+    "HHC": os.path.join(HFS, "houdini", "config"),
+    "HHP": os.path.join(HFS, "houdini", "python3.11libs"),  # adjust python version if needed
+    "HT":  os.path.join(HFS, "toolkit"),
+}
 
-# Append HB to PATH instead of overriding
-env.PrependENVPath("PATH", f"{HB}")
-env.PrependENVPath("PATH", f'{os.environ["PATH"]}')
-env.PrependENVPath("PATH", f"{HFS}")
+for k, v in houdini_vars.items():
+    env["ENV"][k] = v
 
-# Print modified PATH for debugging purposes in a readable format
-modified_path = env["ENV"]["PATH"].split(";")
-print("\nModified PATH:")
-for p in modified_path:
-    print(f"  {p}")
+# ───────────────────────────────────────────────
+# PATH handling – only PREPEND Houdini paths (safest for Linux)
+# ───────────────────────────────────────────────
+env.PrependENVPath('PATH', HB)                      # Houdini bin first
 
-# Houdini version information
-#env["ENV"]["HOUDINI_MAJOR_RELEASE"] = "20"
-#env["ENV"]["HOUDINI_MINOR_RELEASE"] = "5"
-#env["ENV"]["HOUDINI_BUILD_VERSION"] = "445"
-#env["ENV"][
-#    "HOUDINI_VERSION"
-#] = f'{env["ENV"]["HOUDINI_MAJOR_RELEASE"]}.{env["ENV"]["HOUDINI_MINOR_RELEASE"]}.{env["ENV"]["HOUDINI_BUILD_VERSION"]}'
+# Optional – sometimes helps find Houdini .so files earlier
+# env.PrependENVPath('PATH', os.path.join(HFS, 'dsolib'))
+# env.PrependENVPath('PATH', HFS)
 
-# Build machine information
-#env["ENV"]["HOUDINI_BUILD_KERNEL"] = "10.0.19045"
-#env["ENV"]["HOUDINI_BUILD_PLATFORM"] = "Windows"
-#env["ENV"]["HOUDINI_BUILD_COMPILER"] = "19.35.32217.1"
+# Debug: show what PATH looks like now
+print("\nModified PATH (first 10 entries shown):")
+path_entries = env["ENV"]["PATH"].split(os.pathsep)
+for i, p in enumerate(path_entries[:10]):
+    if p.strip():
+        print(f"  {i+1:2d}. {p}")
+if len(path_entries) > 10:
+    print(f"  ... ({len(path_entries)-10} more entries)")
 
+# ───────────────────────────────────────────────
+# Platform-specific compiler / linker flags
+# ───────────────────────────────────────────────
+houdini_include = os.path.join(HFS, "toolkit", "include")
+env.Append(CPPPATH=[houdini_include])
 
-# For reference:
-# - CCFLAGS are compilation flags shared between C and C++
-# - CFLAGS are for C-specific compilation flags
-# - CXXFLAGS are for C++-specific compilation flags
-# - CPPFLAGS are for pre-processor flags
-# - CPPDEFINES are for pre-processor defines
-# - LINKFLAGS are for linking flags
-
-# tweak this if you want to use different folders, or more folders, to store your source code in.
-"""
-if 'HFS' not in os.environ:
-    raise EnvironmentError("The HFS environment variable must be set to your Houdini installation directory to build the HoudiniEngineSample.")
-"""
-
-# Platform-specific settings
-if env["PLATFORM"] == "posix":
-    if env["HOST_OS"] == "linux":
-        houdini_hapi_headers = os.path.join(os.environ["HFS"], "toolkit/include")
-        env.Append(RPATH=[os.path.join(os.environ["HFS"], "dsolib")])
-        env.Append(LIBS=["dl"])
-
-    elif env["HOST_OS"] == "darwin":
-        houdini_hapi_headers = os.path.join(os.environ["HFS"], "toolkit/include")
-        env.Append(CCFLAGS=["-std=c++17"])
-        env.Append(RPATH=[os.path.join(os.environ["HFS"], "../Libraries")])
-
-else:
-    houdini_hapi_headers = os.path.join(env["ENV"]["HFS"], "toolkit/include")
-    # /EHsc enables proper C++ exception handling (required for std::stoi and other exception-based code)
+if env["platform"] == "windows" or sys_name == "Windows":
     env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
-env.Append(CPPPATH=[houdini_hapi_headers])
+elif env["platform"] == "linux" or sys_name == "Linux":
+    env.Append(CCFLAGS=["-std=c++17"])
+    # RPATH so the .so can find Houdini libraries at runtime
+    env.Append(LINKFLAGS=[f"-Wl,-rpath,{os.path.join(HFS, 'dsolib')}"])
+    env.Append(LIBS=["dl"])
+    env.Append(LIBPATH=[os.path.join(HFS, "dsolib")])
 
-# Define the source and build directories
-src_dir = "src" 
+elif env["platform"] == "macos" or sys_name == "Darwin":
+    env.Append(CCFLAGS=["-std=c++17"])
+    env.Append(LINKFLAGS=["-Wl,-rpath,@loader_path/../Frameworks/Houdini.framework/Versions/Current/Resources/dsolib"])
+
+# ───────────────────────────────────────────────
+# Source collection
+# ───────────────────────────────────────────────
+src_dir = "src"
 build_dir = "build"
 
-# Use VariantDir to map the source directory to the build directory
 VariantDir(build_dir, src_dir, duplicate=0)
 
-# Collect the source files from the build directory
-sources = Glob(f"{build_dir}/*.cpp")
-sources.append(Glob(f"{build_dir}/hapi/*.cpp", strings=True))
-sources.append(Glob(f"{build_dir}/hego_nodes/*.cpp", strings=True))
-sources.append(Glob(f"{build_dir}/util/**/*.cpp", strings=True))
-sources.append(Glob(f"{build_dir}/util/*.cpp", strings=True))
+cpp_sources = (
+    Glob(f"{build_dir}/*.cpp") +
+    Glob(f"{build_dir}/hapi/*.cpp") +
+    Glob(f"{build_dir}/hego_nodes/*.cpp") +
+    Glob(f"{build_dir}/util/**/*.cpp") +
+    Glob(f"{build_dir}/util/*.cpp")
+)
 
-# Append the source directory to the include path
 env.Append(CPPPATH=[src_dir])
 
+# ───────────────────────────────────────────────
+# Output library
+# ───────────────────────────────────────────────
 if env["platform"] == "macos":
     library = env.SharedLibrary(
-        "demo/addons/hego/bin/hego.{}.{}.framework/hego.{}.{}".format(
-            env["platform"], env["target"], env["platform"], env["target"]
-        ),
-        source=sources,
+        f"demo/addons/hego/bin/hego.{env['platform']}.{env['target']}.framework/hego.{env['platform']}.{env['target']}",
+        source=cpp_sources,
     )
 else:
     library = env.SharedLibrary(
-        "demo/addons/hego/bin/hego{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
-        source=sources,
+        f"demo/addons/hego/bin/hego{env['suffix']}{env['SHLIBSUFFIX']}",
+        source=cpp_sources,
     )
 
 Default(library)

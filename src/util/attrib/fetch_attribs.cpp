@@ -338,7 +338,7 @@ godot::Variant fetch_string(
 	return attrib_data;
 }
 
-godot::Variant Attribs::fetch_by_name(
+godot::Variant fetch_by_name(
 		const HAPI_Session *session, const HAPI_GeoInfo &mesh_geo_info, const HAPI_PartInfo &mesh_part_info, HAPI_AttributeOwner owner, const char *attrib_name)
 {
 	godot::Array values;

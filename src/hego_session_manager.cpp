@@ -5,6 +5,7 @@
 #include "hapi/hego_platform.h"
 
 #include <vector>
+#include <algorithm>
 
 HEGoSessionManager::HEGoSessionManager() : my_session{}, myCookOptions{} {}
 
@@ -17,11 +18,10 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	// For TCP sessions, try to parse port from connection_data
 	if (session_type == NewTCPSocket || session_type == ExistingTCPSocket)
 	{
-		try {
-			tcp_port = std::stoi(connection_data);
-		} catch (...) {
-			tcp_port = DEFAULT_TCP_PORT;
-		}
+		
+		tcp_port = std::stoi(connection_data);
+		
+		
 	}
 
 	// Only start a new Session if we dont already have a valid one
@@ -39,7 +39,8 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	my_session_type = session_type;
 	my_named_pipe = named_pipe;
 	my_tcp_port = tcp_port;
-
+	std::cout << "session type\n";
+	std::cout << session_type;
 	HAPI_Result SessionResult = HAPI_RESULT_FAILURE;
 	if (session_type == SessionType::NewNamedPipe)
 	{
@@ -64,6 +65,9 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 		std::cout << "Connecting to the TCP socket session...\n";
 		HAPI_SessionInfo SessionInfo = HoudiniApi::SessionInfo_Create();
 		SessionResult = HoudiniApi::CreateThriftSocketSession(&my_session, DEFAULT_HOST_NAME, my_tcp_port, &SessionInfo);
+	}
+	else{
+		std::cout << "Invalid session type... \n";
 	}
 
 	if (SessionResult != HAPI_RESULT_SUCCESS)
