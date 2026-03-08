@@ -22,6 +22,10 @@ project/assembly_name="Demo"
 
 enabled=PackedStringArray("res://addons/hego/plugin.cfg")
 
+[hego]
+
+houdini_installation_path="C:/Program Files/Side Effects Software/Houdini 21.0.631"
+
 [input]
 
 left={
