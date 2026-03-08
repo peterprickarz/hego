@@ -66,6 +66,23 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 		HAPI_SessionInfo SessionInfo = HoudiniApi::SessionInfo_Create();
 		SessionResult = HoudiniApi::CreateThriftSocketSession(&my_session, DEFAULT_HOST_NAME, my_tcp_port, &SessionInfo);
 	}
+	else if (session_type == SessionType::InProcess){
+		/*std::cout << "Starting a Shared Memory server...\n";
+		HAPI_ProcessId process_id;
+		HOUDINI_CHECK_ERROR(HoudiniApi::StartThriftSharedMemoryServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
+		std::cout << "Connecting to shared memory session...\n";
+		HAPI_SessionInfo SessionInfo = HoudiniApi::SessionInfo_Create();
+		SessionResult = HoudiniApi::CreateThriftSharedMemorySession(&my_session, my_named_pipe.c_str(), &SessionInfo);
+		*/
+	
+		std::cout << "In Process session...";
+	
+		
+		HAPI_SessionInfo SessionInfo = HoudiniApi::SessionInfo_Create();
+		std::cout << "In Process session...";
+		HoudiniApi::CreateInProcessSession(&my_session, &SessionInfo);
+
+	}
 	else{
 		std::cout << "Invalid session type... \n";
 	}

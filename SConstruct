@@ -29,6 +29,8 @@ HB = os.path.join(HFS, "bin")
 # Load godot-cpp environment
 # ───────────────────────────────────────────────
 env = SConscript("godot-cpp/SConstruct")
+# Remove static C++ runtime flags (they break Houdini / USD)
+env["LINKFLAGS"] = [f for f in env.get("LINKFLAGS", []) if f not in ["-static-libstdc++", "-static-libgcc"]]
 
 # ───────────────────────────────────────────────
 # Common Houdini-related environment variables
@@ -41,6 +43,8 @@ houdini_vars = {
     "HHC": os.path.join(HFS, "houdini", "config"),
     "HHP": os.path.join(HFS, "houdini", "python3.11libs"),  # adjust python version if needed
     "HT":  os.path.join(HFS, "toolkit"),
+    "HDSO": os.path.join(HFS, "dsolib"),
+    "HSB": os.path.join(HFS, "houdini", "sbin"),
 }
 
 for k, v in houdini_vars.items():
@@ -73,16 +77,33 @@ env.Append(CPPPATH=[houdini_include])
 if env["platform"] == "windows" or sys_name == "Windows":
     env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
-elif env["platform"] == "linux" or sys_name == "Linux":
-    env.Append(CCFLAGS=["-std=c++17"])
-    # RPATH so the .so can find Houdini libraries at runtime
-    env.Append(LINKFLAGS=[f"-Wl,-rpath,{os.path.join(HFS, 'dsolib')}"])
-    env.Append(LIBS=["dl"])
+elif env["platform"] == "linux":
+    env["CC"] = "gcc-11"
+    env["CXX"] = "g++-11"
+    env.Append(CCFLAGS=["-std=c++17", "-fPIC"])
+
+    # Ensure dynamic linking of C++ runtime
+    env["LINKFLAGS"] = [f for f in env.get("LINKFLAGS", []) if f not in ["-static-libstdc++", "-static-libgcc"]]
+
+    env.Append(LINKFLAGS=[
+        f"-Wl,-rpath,{os.path.join(HFS, 'dsolib')}",
+        "-shared"
+    ])
+
+    env.Append(LIBS=["dl", "pthread"])
     env.Append(LIBPATH=[os.path.join(HFS, "dsolib")])
 
 elif env["platform"] == "macos" or sys_name == "Darwin":
     env.Append(CCFLAGS=["-std=c++17"])
     env.Append(LINKFLAGS=["-Wl,-rpath,@loader_path/../Frameworks/Houdini.framework/Versions/Current/Resources/dsolib"])
+
+# Build machine info (optional, but matches setup script)
+if env["platform"] == "linux":
+    env["ENV"]["HOUDINI_BUILD_PLATFORM"] = "Linux"
+    env["ENV"]["HOUDINI_BUILD_COMPILER"] = "11.2.1"  # from your setup script
+    env["ENV"]["HOUDINI_BUILD_LIBC"] = "glibc 2.28"
+
+
 
 # ───────────────────────────────────────────────
 # Source collection

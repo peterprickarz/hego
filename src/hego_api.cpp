@@ -8,6 +8,8 @@
 #include "util/node/create_nodes.h"
 #include "util/parm/set_parms.h"
 
+#include <clocale>
+#include <locale>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -46,6 +48,10 @@ HEGoAPI *HEGoAPI::get_singleton() { return singleton; }
 
 bool HEGoAPI::start_session(int connection_type, const godot::String &connection_data)
 {
+	// In your init or before starting session
+	std::setlocale(LC_ALL, "C");
+	std::setlocale(LC_NUMERIC, "C");   // Critical for number-to-string conversions
+	std::setlocale(LC_CTYPE, "C");
 	HEGoPlatform::initialize_hapi();
 
 	HEGo::Util::Log::message(connection_data);
