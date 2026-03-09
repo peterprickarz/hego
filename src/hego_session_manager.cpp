@@ -4,8 +4,8 @@
 
 #include "hapi/hego_platform.h"
 
-#include <vector>
 #include <algorithm>
+#include <vector>
 
 HEGoSessionManager::HEGoSessionManager() : my_session{}, myCookOptions{} {}
 
@@ -14,14 +14,11 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	// Parse connection data based on session type
 	std::string named_pipe = connection_data;
 	int tcp_port = DEFAULT_TCP_PORT;
-	
+
 	// For TCP sessions, try to parse port from connection_data
 	if (session_type == NewTCPSocket || session_type == ExistingTCPSocket)
 	{
-		
 		tcp_port = std::stoi(connection_data);
-		
-		
 	}
 
 	// Only start a new Session if we dont already have a valid one
@@ -39,8 +36,6 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	my_session_type = session_type;
 	my_named_pipe = named_pipe;
 	my_tcp_port = tcp_port;
-	std::cout << "session type\n";
-	std::cout << session_type;
 	HAPI_Result SessionResult = HAPI_RESULT_FAILURE;
 	if (session_type == SessionType::NewNamedPipe)
 	{
@@ -66,24 +61,17 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 		HAPI_SessionInfo SessionInfo = HoudiniApi::SessionInfo_Create();
 		SessionResult = HoudiniApi::CreateThriftSocketSession(&my_session, DEFAULT_HOST_NAME, my_tcp_port, &SessionInfo);
 	}
-	else if (session_type == SessionType::InProcess){
-		/*std::cout << "Starting a Shared Memory server...\n";
+	else if (session_type == SessionType::InProcess)
+	{
+		std::cout << "Starting a Shared Memory server...\n";
 		HAPI_ProcessId process_id;
 		HOUDINI_CHECK_ERROR(HoudiniApi::StartThriftSharedMemoryServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
 		std::cout << "Connecting to shared memory session...\n";
 		HAPI_SessionInfo SessionInfo = HoudiniApi::SessionInfo_Create();
 		SessionResult = HoudiniApi::CreateThriftSharedMemorySession(&my_session, my_named_pipe.c_str(), &SessionInfo);
-		*/
-	
-		std::cout << "In Process session...";
-	
-		
-		HAPI_SessionInfo SessionInfo = HoudiniApi::SessionInfo_Create();
-		std::cout << "In Process session...";
-		HoudiniApi::CreateInProcessSession(&my_session, &SessionInfo);
-
 	}
-	else{
+	else
+	{
 		std::cout << "Invalid session type... \n";
 	}
 
@@ -232,10 +220,7 @@ bool HEGoSessionManager::initialize(bool use_cooking_thread)
 
 HAPI_Session *HEGoSessionManager::get_session() { return &my_session; }
 
-bool HEGoSessionManager::is_session_active() 
-{ 
-	return HAPI_RESULT_SUCCESS == HoudiniApi::IsSessionValid(&my_session); 
-}
+bool HEGoSessionManager::is_session_active() { return HAPI_RESULT_SUCCESS == HoudiniApi::IsSessionValid(&my_session); }
 
 HAPI_CookOptions *HEGoSessionManager::get_cook_options() { return &myCookOptions; }
 

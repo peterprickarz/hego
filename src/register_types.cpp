@@ -16,9 +16,6 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
-#include <clocale>
-#include <locale>
-
 using namespace godot;
 
 void initialize_hego_module(ModuleInitializationLevel p_level)
@@ -28,17 +25,12 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 		return;
 	}
 
-	std::setlocale(LC_ALL, "C");
-    std::setlocale(LC_NUMERIC, "C");
-    std::setlocale(LC_CTYPE, "C");
-    std::locale::global(std::locale::classic());  // Aggressive: resets global locale
-
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);
-	
+
 	ClassDB::register_class<HEGo::Util::Log::HEGoLogManager>();
 	memnew(HEGo::Util::Log::HEGoLogManager);
-	
+
 	GDREGISTER_ABSTRACT_CLASS(HEGo::HEGoTrackableNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoBaseNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoInputReceiverNode);
