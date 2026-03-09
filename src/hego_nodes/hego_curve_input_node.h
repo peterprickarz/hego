@@ -8,9 +8,9 @@
 
 namespace HEGo
 {
-class HEGoCurveInputNode : public HEGoTransformableNode
+class HEGoCurveInputNode : public HEGoBaseInputNode
 {
-	GDCLASS(HEGoCurveInputNode, HEGoTransformableNode)
+	GDCLASS(HEGoCurveInputNode, HEGoBaseInputNode)
 
 private:
 	godot::String node_name;

@@ -36,6 +36,7 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoInputReceiverNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableNamedNode);
+	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoBaseInputNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableInputReceiverNode);
 
 	// ClassDB::register_abstract_class<HEGo::HEGoBaseNode>();

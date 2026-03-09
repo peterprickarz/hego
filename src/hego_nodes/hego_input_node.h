@@ -8,9 +8,9 @@
 
 namespace HEGo
 {
-class HEGoInputNode : public HEGoTransformableNamedNode
+class HEGoInputNode : public HEGoBaseInputNode
 {
-	GDCLASS(HEGoInputNode, HEGoTransformableNamedNode)
+	GDCLASS(HEGoInputNode, HEGoBaseInputNode)
 
 private:
 	godot::String node_name;
@@ -20,8 +20,8 @@ public:
 	~HEGoInputNode();
 
 	void instantiate() override;
-	void set_geo_from_mesh_instance_3d(godot::MeshInstance3D *mesh_instance);
-	void set_geo_from_mesh(godot::Mesh *mesh);
+	void set_geo_from_mesh_instance_3d(godot::MeshInstance3D *mesh_instance, const godot::Array &attributes = godot::Array());
+	void set_geo_from_mesh(godot::Mesh *mesh, const godot::Array &attributes = godot::Array());
 
 	static void _bind_methods();
 };

@@ -77,6 +77,19 @@ public:
 	static void _bind_methods();
 };
 
+class HEGoBaseInputNode : public HEGoTransformableNamedNode
+{
+	GDCLASS(HEGoBaseInputNode, HEGoTransformableNamedNode)
+
+public:
+	HEGoBaseInputNode();
+	~HEGoBaseInputNode();
+
+	void set_prim_attr(godot::String name, godot::Variant value);
+
+	static void _bind_methods();
+};
+
 class HEGoTransformableInputReceiverNode : public HEGoTransformableNode
 {
 	GDCLASS(HEGoTransformableInputReceiverNode, HEGoTransformableNode)

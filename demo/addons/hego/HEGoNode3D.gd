@@ -634,6 +634,7 @@ func array_to_index_dict(float_array: Array) -> Dictionary:
 
 
 func update_hego_input_node(hego_input_node, input_node_path, settings):
+	var attrs = [{name = "test", type = "prim", value = "juergen"}]
 	var scene_root = get_tree().edited_scene_root
 	var input = scene_root.get_node_or_null(input_node_path)
 	if input is Path3D:
@@ -645,7 +646,7 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 		if not hego_input_node is HEGoInputNode:
 			hego_input_node = HEGoInputNode.new()
 		hego_input_node.instantiate()
-		hego_input_node.set_geo_from_mesh_instance_3d(input)
+		hego_input_node.set_geo_from_mesh_instance_3d(input, attrs)
 	elif input is CSGShape3D:
 		if not hego_input_node is HEGoInputNode:
 			hego_input_node = HEGoInputNode.new()
@@ -658,6 +659,7 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 
 
 func create_hego_input_node(input_node_path, settings):
+	var attrs = [{name = "test", type = "prim", value = "juergen"}]
 	var scene_root = get_tree().edited_scene_root
 	var input = scene_root.get_node_or_null(input_node_path)
 	var input_node
@@ -668,7 +670,7 @@ func create_hego_input_node(input_node_path, settings):
 	elif input is MeshInstance3D:
 		input_node = HEGoInputNode.new()
 		input_node.instantiate()
-		input_node.set_geo_from_mesh_instance_3d(input)
+		input_node.set_geo_from_mesh_instance_3d(input, attrs)
 	elif input is CSGShape3D:
 		input_node = HEGoInputNode.new()
 		input_node.instantiate()

@@ -1,6 +1,7 @@
 #include "util/geo/input.h"
 
 #include "hapi/houdini_api.h"
+#include "util/attrib/set_attribs.h"
 #include "util/geo/transform.h"
 #include "util/hego_util.h"
 #include "util/log/log.h"
@@ -59,7 +60,8 @@ godot::PackedStringArray get_input_names(HEGoSessionManager *session_mgr, HAPI_N
 	return result;
 }
 
-HAPI_NodeId create_input_from_mesh_instance_3d(HEGoSessionManager *session_mgr, godot::MeshInstance3D *mesh_instance_3d, HAPI_NodeId node_id)
+HAPI_NodeId create_input_from_mesh_instance_3d(
+		HEGoSessionManager *session_mgr, godot::MeshInstance3D *mesh_instance_3d, HAPI_NodeId node_id, const godot::Array &attributes)
 {
 	HEGo::Util::Log::message("Creating Input node");
 	if (mesh_instance_3d == nullptr)
@@ -76,7 +78,7 @@ HAPI_NodeId create_input_from_mesh_instance_3d(HEGoSessionManager *session_mgr, 
 
 	godot::Transform3D transform = mesh_instance_3d->get_global_transform();
 
-	node_id = create_input_from_mesh(session_mgr, mesh, node_id);
+	node_id = create_input_from_mesh(session_mgr, mesh, node_id, attributes);
 
 	set_object_transform(session_mgr, node_id, transform);
 
@@ -174,7 +176,7 @@ HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, godot::Re
 	return node_id;
 }
 
-HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<godot::Mesh> mesh, HAPI_NodeId node_id)
+HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<godot::Mesh> mesh, HAPI_NodeId node_id, const godot::Array &attributes)
 {
 	const HAPI_CookOptions *cook_options = session_mgr->get_cook_options();
 	const HAPI_Session *session = session_mgr->get_session();
@@ -266,6 +268,7 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 	node_id = HEGo::Util::Node::create_and_cook_input_node(session_mgr, name, node_id);
 
 	HEGo::Util::Log::message("Setting mesh");
+
 	HAPI_PartInfo node_part = HoudiniApi::PartInfo_Create();
 	node_part.type = HAPI_PARTTYPE_MESH;
 	node_part.faceCount = nvertices / 3;
@@ -295,6 +298,8 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 	HOUDINI_CHECK_ERROR(HoudiniApi::AddAttribute(session, node_id, 0, "Cd", &node_point_info_Cd));
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::SetAttributeFloatData(session, node_id, 0, "Cd", &node_point_info_Cd, colors.data(), 0, npoints));
+
+	HEGo::Util::Attribs::apply_attributes(session, node_id, 0, attributes, nvertices, nvertices / 3);
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::SetVertexList(session, node_id, 0, vertices.data(), 0, nvertices));
 
