@@ -634,19 +634,44 @@ func array_to_index_dict(float_array: Array) -> Dictionary:
 
 
 func update_hego_input_node(hego_input_node, input_node_path, settings):
-	var attrs = [{name = "test", type = "prim", value = "juergen"}]
 	var scene_root = get_tree().edited_scene_root
 	var input = scene_root.get_node_or_null(input_node_path)
+	var attrs = Array()
+	attrs.append({
+		name = "_hego_node_path",
+		type = "prim",
+		value = input_node_path
+	})
 	if input is Path3D:
 		if not hego_input_node is HEGoCurveInputNode:
 			hego_input_node = HEGoCurveInputNode.new()
 		hego_input_node.instantiate()
 		hego_input_node.set_curve_from_path_3d(input, 1)
 	elif input is MeshInstance3D:
+		print("mattest")
+		print(input.mesh.surface_get_material(0))
 		if not hego_input_node is HEGoInputNode:
 			hego_input_node = HEGoInputNode.new()
+		attrs.append({
+			name = "_hego_resource_path",
+			type = "prim",
+			value = input.mesh.resource_path
+		})
+		var override_mat_count = input.get_surface_override_material_count()
+		for i in range(override_mat_count):
+			var mat = input.get_surface_override_material(i)
+			var attr_dict = {
+				name = "_hego_surface_override_material_"+str(i),
+				type = "prim"
+			}
+			if mat:
+				attr_dict["value"] = mat.resource_path
+			else:
+				attr_dict["value"] = "empty"
+			attrs.append(attr_dict)
 		hego_input_node.instantiate()
-		hego_input_node.set_geo_from_mesh_instance_3d(input, attrs)
+		hego_input_node.set_geo_from_mesh(input.mesh, attrs)
+		hego_input_node.set_transform(input.global_transform)
 	elif input is CSGShape3D:
 		if not hego_input_node is HEGoInputNode:
 			hego_input_node = HEGoInputNode.new()
@@ -659,18 +684,43 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 
 
 func create_hego_input_node(input_node_path, settings):
-	var attrs = [{name = "test", type = "prim", value = "juergen"}]
 	var scene_root = get_tree().edited_scene_root
 	var input = scene_root.get_node_or_null(input_node_path)
+	var attrs = Array()
+	attrs.append({
+		name = "_hego_node_path",
+		type = "prim",
+		value = input_node_path
+	})
 	var input_node
 	if input is Path3D:
 		input_node = HEGoCurveInputNode.new()
 		input_node.instantiate()
 		input_node.set_curve_from_path_3d(input, 1)
 	elif input is MeshInstance3D:
+		print("mattest")
+		print(input.mesh.surface_get_material(0))
+		attrs.append({
+			name = "_hego_resource_path",
+			type = "prim",
+			value = input.mesh.resource_path
+		})
+		var override_mat_count = input.get_surface_override_material_count()
+		for i in range(override_mat_count):
+			var mat = input.get_surface_override_material(i)
+			var attr_dict = {
+				name = "_hego_surface_override_material_"+str(i),
+				type = "prim"
+			}
+			if mat:
+				attr_dict["value"] = mat.resource_path
+			else:
+				attr_dict["value"] = "empty"
+			attrs.append(attr_dict)
 		input_node = HEGoInputNode.new()
 		input_node.instantiate()
-		input_node.set_geo_from_mesh_instance_3d(input, attrs)
+		input_node.set_geo_from_mesh(input.mesh, attrs)
+		input_node.set_transform(input.global_transform)
 	elif input is CSGShape3D:
 		input_node = HEGoInputNode.new()
 		input_node.instantiate()

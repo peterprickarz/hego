@@ -8,6 +8,7 @@
 #include "util/node/create_nodes.h"
 
 #include "input.h"
+#include <godot_cpp/classes/base_material3d.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/core/math.hpp>
 #include <godot_cpp/variant/quaternion.hpp>
@@ -204,14 +205,28 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 	std::vector<float> positions;
 	std::vector<float> colors;
 	std::vector<int> surface_ids;
+	std::vector<int> prim_surface_ids;
 	std::vector<int> vertices;
 	std::vector<int> face_counts;
+	std::vector<std::string> materials;
+
+	std::vector<const char *> material_pointers;
 
 	positions.reserve(npoints * 3);
 	colors.reserve(npoints * 3);
 	surface_ids.reserve(npoints);
 	vertices.reserve(nvertices);
 	face_counts.reserve(nvertices / 3);
+	materials.reserve(surface_count);
+	material_pointers.reserve(nvertices / 3);
+	prim_surface_ids.reserve(nvertices / 3);
+
+	for (int i = 0; i < surface_count; i++)
+	{
+		godot::Ref<godot::Material> mat = mesh->surface_get_material(i);
+		godot::String path = mat.is_valid() ? mat->get_path() : "empty";
+		materials.push_back(std::string(path.utf8().get_data()));
+	}
 
 	for (int i = 0; i < surface_count; i++)
 	{
@@ -242,6 +257,12 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 				colors.push_back(1.0);
 			}
 		}
+		for (int j = 0; j < indices.size() / 3; j++)
+		{
+			prim_surface_ids.push_back(i);
+			material_pointers.push_back(materials[i].c_str());
+		}
+
 		if (indices.size() > 0)
 		{
 			for (int j = 0; j < indices.size(); j++)
@@ -261,6 +282,8 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 	for (int i = 0; i < nvertices / 3; i++)
 	{
 		face_counts.push_back(3);
+		// prim_surface_ids.push_back(0);
+		// material_pointers.push_back(materials[0].c_str());
 	}
 
 	godot::String name = mesh->get_name();
@@ -298,6 +321,28 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 	HOUDINI_CHECK_ERROR(HoudiniApi::AddAttribute(session, node_id, 0, "Cd", &node_point_info_Cd));
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::SetAttributeFloatData(session, node_id, 0, "Cd", &node_point_info_Cd, colors.data(), 0, npoints));
+
+	HAPI_AttributeInfo node_prim_info_hego_surface_id = HoudiniApi::AttributeInfo_Create();
+	node_prim_info_hego_surface_id.count = nvertices / 3;
+	node_prim_info_hego_surface_id.tupleSize = 1;
+	node_prim_info_hego_surface_id.exists = true;
+	node_prim_info_hego_surface_id.storage = HAPI_STORAGETYPE_INT;
+	node_prim_info_hego_surface_id.owner = HAPI_ATTROWNER_PRIM;
+
+	HOUDINI_CHECK_ERROR(HoudiniApi::AddAttribute(session, node_id, 0, "_hego_surface_id", &node_prim_info_hego_surface_id));
+	HOUDINI_CHECK_ERROR(HoudiniApi::SetAttributeIntData(
+			session, node_id, 0, "_hego_surface_id", &node_prim_info_hego_surface_id, prim_surface_ids.data(), 0, nvertices / 3));
+
+	HAPI_AttributeInfo node_prim_info_hego_material = HoudiniApi::AttributeInfo_Create();
+	node_prim_info_hego_material.count = nvertices / 3;
+	node_prim_info_hego_material.tupleSize = 1;
+	node_prim_info_hego_material.exists = true;
+	node_prim_info_hego_material.storage = HAPI_STORAGETYPE_STRING;
+	node_prim_info_hego_material.owner = HAPI_ATTROWNER_PRIM;
+
+	HOUDINI_CHECK_ERROR(HoudiniApi::AddAttribute(session, node_id, 0, "_hego_surface_material", &node_prim_info_hego_material));
+	HOUDINI_CHECK_ERROR(HoudiniApi::SetAttributeStringData(
+			session, node_id, 0, "_hego_surface_material", &node_prim_info_hego_material, material_pointers.data(), 0, nvertices / 3));
 
 	HEGo::Util::Attribs::apply_attributes(session, node_id, 0, attributes, nvertices, nvertices / 3);
 
