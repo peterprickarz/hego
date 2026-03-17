@@ -234,6 +234,8 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 		godot::PackedVector3Array vector_positions = surface_array[0];
 		godot::PackedColorArray source_colors = surface_array[3];
 		godot::PackedInt32Array indices = surface_array[12];
+		const bool has_indices = indices.size() > 0;
+		const int prim_count = has_indices ? indices.size() / 3 : vector_positions.size() / 3;
 
 		int position_start_id = surface_ids.size();
 
@@ -257,17 +259,17 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 				colors.push_back(1.0);
 			}
 		}
-		for (int j = 0; j < indices.size() / 3; j++)
+		for (int j = 0; j < prim_count; j++)
 		{
 			prim_surface_ids.push_back(i);
 			material_pointers.push_back(materials[i].c_str());
 		}
 
-		if (indices.size() > 0)
+		if (has_indices)
 		{
 			for (int j = 0; j < indices.size(); j++)
 			{
-				vertices.push_back(indices[j]);
+				vertices.push_back(position_start_id + indices[j]);
 			}
 		}
 		else

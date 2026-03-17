@@ -1,0 +1,54 @@
+[gd_scene load_steps=6 format=4 uid="uid://bphe0uc68g1x4"]
+
+[ext_resource type="Material" uid="uid://dlu4pvg3m2snq" path="res://materials/m_accent.tres" id="1_wav4o"]
+[ext_resource type="Material" uid="uid://d0op1p2wt0cvn" path="res://materials/m_dark_accent.tres" id="2_i6ner"]
+[ext_resource type="Material" uid="uid://bmuf2plv787lv" path="res://materials/m_default.tres" id="3_qpp1s"]
+[ext_resource type="Script" uid="uid://blnvgo8r28r5p" path="res://addons/hego/HEGoNode3D.gd" id="4_i6ner"]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_i6ner"]
+_surfaces = [{
+"aabb": AABB(-5.12792, -0.513575, -6.82724, 6, 13.5424, 8.7),
+"attribute_data": PackedByteArray("////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"),
+"format": 34359742473,
+"index_count": 120,
+"index_data": PackedByteArray("AAABAAIAAwAEAAUABgAHAAgACQAKAAsADAANAA4ADwAQABEAEgATABQAFQAWABcAGAAZABoAGwAcAB0AHgAfACAAIQAiACMAJAAlACYAJwAoACkAKgArACwALQAuAC8AMAAxADIAMwA0ADUANgA3ADgAOQA6ADsAPAA9AD4APwBAAEEAQgBDAEQARQBGAEcASABJAEoASwBMAE0ATgBPAFAAUQBSAFMAVABVAFYAVwBYAFkAWgBbAFwAXQBeAF8AYABhAGIAYwBkAGUAZgBnAGgAaQBqAGsAbABtAG4AbwBwAHEAcgBzAHQAdQB2AHcA"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 120,
+"vertex_data": PackedByteArray("OCyUPqZ5A78a/9HAOCyUPqZ5A79MZx8/OCyUPkeKGEBMZx8/VMuWwKZ5A78a/9HAOCyUPkeKGEAa/9HAVMuWwEeKGEAa/9HAOCyUPqZ5A79MZx8/VMuWwEeKGEBMZx8/OCyUPkeKGEBMZx8/VMuWwKZ5A79MZx8/OCyUPqZ5A78a/9HAVMuWwKZ5A78a/9HAVMuWwKZ5A79MZx8/OCyUPqZ5A79MZx8/OCyUPqZ5A78a/9HAVMuWwEeKGEAa/9HAVMuWwEeKGEBMZx8/VMuWwKZ5A79MZx8/OCyUPqZ5A78a/9HAOCyUPkeKGEBMZx8/OCyUPkeKGEAa/9HAVMuWwEeKGEBMZx8/OCyUPqZ5A79MZx8/VMuWwKZ5A79MZx8/VMuWwKZ5A79MZx8/VMuWwKZ5A78a/9HAVMuWwEeKGEAa/9HAOCyUPkeKGEAa/9HAVMuWwKZ5A78a/9HAOCyUPqZ5A78a/9HABMWdwHcVB0FcONLApEBfP3cVB0HAeNrA7BekwHcVB0HAeNrA1FcwP3cVB0FcONLApEBfP3cVB0HAeNrABMWdwHcVB0FcONLAsG0FwDZ2UEHAeNrAsG0FwDZ2UEGatu8/7BekwHcVB0Gatu8/BMWdwHcVB0HkrnU/7BekwHcVB0Gatu8/1FcwP3cVB0HkrnU/pEBfP3cVB0HAeNrAsG0FwDZ2UEHAeNrA7BekwHcVB0HAeNrABMWdwHcVB0HkrnU/7BekwHcVB0HAeNrA7BekwHcVB0Gatu8/7BekwHcVB0Gatu8/7BekwHcVB0HAeNrAsG0FwDZ2UEHAeNrABMWdwHcVB0FcONLA7BekwHcVB0HAeNrABMWdwHcVB0HkrnU/pEBfP3cVB0HAeNrAsG0FwDZ2UEGatu8/sG0FwDZ2UEHAeNrApEBfP3cVB0HAeNrA1FcwP3cVB0FcONLA1FcwP3cVB0HkrnU/1FcwP3cVB0HkrnU/7BekwHcVB0Gatu8/pEBfP3cVB0Gatu8/sG0FwDZ2UEGatu8/pEBfP3cVB0Gatu8/7BekwHcVB0Gatu8/pEBfP3cVB0HAeNrA1FcwP3cVB0HkrnU/pEBfP3cVB0Gatu8/pEBfP3cVB0Gatu8/sG0FwDZ2UEGatu8/pEBfP3cVB0HAeNrAOCyUPkeKGEAa/9HA1FcwP0eKGEBcONLAVMuWwEeKGEAa/9HA1FcwP0eKGEBcONLA1FcwP3cVB0FcONLABMWdwHcVB0FcONLA1FcwP3cVB0HkrnU/1FcwP3cVB0FcONLA1FcwP0eKGEDkrnU/OCyUPkeKGEBMZx8/1FcwP0eKGEDkrnU/1FcwP0eKGEBcONLA1FcwP3cVB0HkrnU/1FcwP0eKGEDkrnU/BMWdwEeKGEDkrnU/VMuWwEeKGEBMZx8/1FcwP0eKGEDkrnU/OCyUPkeKGEBMZx8/1FcwP0eKGEBcONLA1FcwP0eKGEDkrnU/1FcwP3cVB0FcONLA1FcwP0eKGEBcONLAOCyUPkeKGEAa/9HAOCyUPkeKGEBMZx8/BMWdwHcVB0HkrnU/1FcwP3cVB0HkrnU/BMWdwEeKGEDkrnU/BMWdwHcVB0HkrnU/BMWdwEeKGEBcONLABMWdwHcVB0FcONLA1FcwP0eKGEDkrnU/VMuWwEeKGEBMZx8/BMWdwEeKGEDkrnU/BMWdwEeKGEBcONLABMWdwHcVB0HkrnU/BMWdwEeKGEDkrnU/VMuWwEeKGEBMZx8/BMWdwEeKGEBcONLABMWdwEeKGEDkrnU/BMWdwHcVB0FcONLABMWdwEeKGEBcONLA1FcwP0eKGEBcONLAVMuWwEeKGEAa/9HA1FcwP0eKGEBcONLABMWdwEeKGEBcONLAVMuWwEeKGEAa/9HABMWdwEeKGEBcONLAVMuWwEeKGEBMZx8/")
+}]
+
+[node name="Node3D" type="Node3D"]
+
+[node name="CSGCombiner3D" type="CSGCombiner3D" parent="."]
+
+[node name="CSGBox3D" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.21146, 1.08234, -2.96986)
+material_override = ExtResource("1_wav4o")
+size = Vector3(5.00172, 3.19183, 7.18506)
+
+[node name="CSGPolygon3D" type="CSGPolygon3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.12792, 8.44274, 1.87276)
+material_override = ExtResource("2_i6ner")
+polygon = PackedVector2Array(-2, 0, 1.0431, 4.58612, 4, 0)
+depth = 8.7
+
+[node name="CSGBox3D2" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.12073, 5.43277, -2.80484)
+material_override = ExtResource("3_qpp1s")
+size = Vector3(5.61914, 6.09866, 7.52908)
+
+[node name="HEGoNode3D" type="Node3D" parent="."]
+script = ExtResource("4_i6ner")
+asset_name = "Sop/HEGo_BuildingGenerator"
+parm_stash = PackedByteArray("I1BTSV9QUkVTRVQKdmVyc2lvbiAyLjBhCm9wdmFsdWVzCnsKdmVyc2lvbiAwLjgKfQo=")
+input_stash = [{
+"inputs": ["CSGCombiner3D"],
+"settings": {}
+}]
+metadata/_custom_type_script = "uid://blnvgo8r28r5p"
+
+[node name="Outputs" type="Node3D" parent="HEGoNode3D"]
+
+[node name="hego_output_mesh_inst" type="MeshInstance3D" parent="HEGoNode3D/Outputs"]
+mesh = SubResource("ArrayMesh_i6ner")
