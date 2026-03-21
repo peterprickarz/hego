@@ -39,7 +39,7 @@ vec3 rotate_around_axis(vec3 v, vec3 axis, float angle) {
 void vertex() {
     // Store the original normal in world space for lighting and Fresnel
     world_original_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
-    
+
     // Compute the color gradient factor based on the original vertex position
     color_gradient = clamp(VERTEX.y * ColorRamp, 0.0, 1.0);
 

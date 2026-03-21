@@ -1,9 +1,10 @@
-[gd_scene load_steps=6 format=4 uid="uid://bphe0uc68g1x4"]
+[gd_scene load_steps=7 format=4 uid="uid://bphe0uc68g1x4"]
 
 [ext_resource type="Material" uid="uid://dlu4pvg3m2snq" path="res://materials/m_accent.tres" id="1_wav4o"]
 [ext_resource type="Material" uid="uid://d0op1p2wt0cvn" path="res://materials/m_dark_accent.tres" id="2_i6ner"]
 [ext_resource type="Material" uid="uid://bmuf2plv787lv" path="res://materials/m_default.tres" id="3_qpp1s"]
 [ext_resource type="Script" uid="uid://blnvgo8r28r5p" path="res://addons/hego/HEGoNode3D.gd" id="4_i6ner"]
+[ext_resource type="Script" uid="uid://bjaa82msmmw8v" path="res://hda_nodes/heightfield_input_test.gd" id="5_qpp1s"]
 
 [sub_resource type="ArrayMesh" id="ArrayMesh_i6ner"]
 _surfaces = [{
@@ -52,3 +53,6 @@ metadata/_custom_type_script = "uid://blnvgo8r28r5p"
 
 [node name="hego_output_mesh_inst" type="MeshInstance3D" parent="HEGoNode3D/Outputs"]
 mesh = SubResource("ArrayMesh_i6ner")
+
+[node name="Node3D" type="Node3D" parent="."]
+script = ExtResource("5_qpp1s")
