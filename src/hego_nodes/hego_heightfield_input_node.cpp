@@ -315,13 +315,19 @@ void HEGoHeightfieldInputNode::instantiate()
 			" mask_node_id=" + godot::String::num_int64(mask_node_id) + " merge_node_id=" + godot::String::num_int64(merge_node_id));
 }
 
-void HEGoHeightfieldInputNode::set_layers(godot::Dictionary layers, float voxel_size_value)
+void HEGoHeightfieldInputNode::set_layers(godot::Dictionary layers, float voxel_size_value, float height_scale_value)
 {
-	debug_log("set_layers: begin with layer count=" + godot::String::num_int64(layers.size()) + " voxel_size=" + godot::String::num(voxel_size_value));
+	debug_log("set_layers: begin with layer count=" + godot::String::num_int64(layers.size()) + " voxel_size=" + godot::String::num(voxel_size_value) +
+			" height_scale=" + godot::String::num(height_scale_value));
 
 	if (voxel_size_value <= 0.0f)
 	{
 		HEGo::Util::Log::error("set_layers requires voxel_size > 0");
+		return;
+	}
+	if (height_scale_value <= 0.0f)
+	{
+		HEGo::Util::Log::error("set_layers requires height_scale > 0");
 		return;
 	}
 	voxel_size = voxel_size_value;
@@ -464,11 +470,20 @@ void HEGoHeightfieldInputNode::set_layers(godot::Dictionary layers, float voxel_
 
 	HAPI_Transform volume_transform = HoudiniApi::Transform_Create();
 	HoudiniApi::Transform_Init(&volume_transform);
-	volume_transform.scale[0] = (static_cast<float>(x_size) * voxel_size) * 0.5f;
-	volume_transform.scale[1] = (static_cast<float>(y_size) * voxel_size) * 0.5f;
-	volume_transform.scale[2] = voxel_size * 0.5f;
+	volume_transform.scale[0] = (static_cast<float>(x_size) * voxel_size_value) * 0.5f;
+	volume_transform.scale[1] = (static_cast<float>(y_size) * voxel_size_value) * 0.5f;
+	volume_transform.scale[2] = voxel_size_value * 0.5f;
 
-	if (!commit_layer_to_node(session, volume_transform, "height", layer_values["height"], layer_attrs["height"], height_node_id))
+	std::vector<float> scaled_height_values = layer_values["height"];
+	if (height_scale_value != 1.0f)
+	{
+		for (size_t i = 0; i < scaled_height_values.size(); ++i)
+		{
+			scaled_height_values[i] *= height_scale_value;
+		}
+	}
+
+	if (!commit_layer_to_node(session, volume_transform, "height", scaled_height_values, layer_attrs["height"], height_node_id))
 	{
 		return;
 	}
@@ -520,7 +535,8 @@ void HEGoHeightfieldInputNode::set_layers(godot::Dictionary layers, float voxel_
 
 void HEGoHeightfieldInputNode::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("set_layers", "layers", "voxel_size"), &HEGoHeightfieldInputNode::set_layers, DEFVAL(1.0f));
+	godot::ClassDB::bind_method(
+			godot::D_METHOD("set_layers", "layers", "voxel_size", "height_scale"), &HEGoHeightfieldInputNode::set_layers, DEFVAL(1.0f), DEFVAL(1.0f));
 }
 
 } // namespace HEGo

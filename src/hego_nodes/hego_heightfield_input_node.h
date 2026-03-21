@@ -66,8 +66,10 @@ public:
 	 * @param layers Dictionary of layer-name -> layer-definition.
 	 * @param voxel_size World-units per pixel/voxel in X/Y. Must be > 0.
 	 *                   Final XY size is resolution * voxel_size.
+	 * @param height_scale Multiplier applied only to the "height" layer values. Must be > 0.
+	 *                     Controls how the 0-1 normalized height values map to world height.
 	 */
-	void set_layers(godot::Dictionary layers, float voxel_size = 1.0f);
+	void set_layers(godot::Dictionary layers, float voxel_size = 1.0f, float height_scale = 1.0f);
 
 	/** Bind methods to Godot ClassDB. */
 	static void _bind_methods();

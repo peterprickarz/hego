@@ -2,6 +2,7 @@
 
 #include "util/attrib/fetch_attribs.h"
 #include "util/geo/output.h"
+#include "util/geo/part_selection.h"
 #include "util/hego_util.h"
 #include "util/log/log.h"
 
@@ -54,27 +55,27 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::Array filter_attrib_values = fetch_surfaces_config->get("filter_attrib_values");
 	godot::PackedStringArray split_attribs = fetch_surfaces_config->get("split_attribs");
 
-	HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()));
-	session_mgr->wait_for_cook(node_id);
 	HAPI_GeoInfo mesh_geo_info;
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetDisplayGeoInfo(session_mgr->get_session(), node_id, &mesh_geo_info));
+	if (!get_display_geo_info(session_mgr, node_id, mesh_geo_info))
+	{
+		return godot::Dictionary();
+	}
 	HAPI_PartInfo mesh_part_info;
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetPartInfo(session_mgr->get_session(), mesh_geo_info.nodeId, 0, &mesh_part_info));
+	if (!find_part_by_type(session_mgr->get_session(), mesh_geo_info, HAPI_PARTTYPE_MESH, mesh_part_info))
+	{
+		HEGo::Util::Log::error("Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
+		return godot::Dictionary();
+	}
 	if (mesh_part_info.faceCount <= 0)
 	{
 		return godot::Dictionary();
 	}
 	std::vector<int> face_counts(mesh_part_info.faceCount);
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetFaceCounts(session_mgr->get_session(), node_id, 0, face_counts.data(), 0, mesh_part_info.faceCount));
+	HOUDINI_CHECK_ERROR(
+			HoudiniApi::GetFaceCounts(session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, face_counts.data(), 0, mesh_part_info.faceCount));
 	std::vector<int> vertex_point_indices(mesh_part_info.vertexCount);
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetVertexList(session_mgr->get_session(), node_id, 0, vertex_point_indices.data(), 0, mesh_part_info.vertexCount));
-
-	if (mesh_part_info.type != HAPI_PARTTYPE_MESH)
-	{
-		HEGo::Util::Log::error("Requested mesh(HAPI_PARTTYPE_MESH) but "
-							   "received something else instead!");
-		return godot::Dictionary();
-	}
+	HOUDINI_CHECK_ERROR(HoudiniApi::GetVertexList(
+			session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, vertex_point_indices.data(), 0, mesh_part_info.vertexCount));
 
 	godot::Array prims = convert_face_counts_to_array(face_counts);
 
