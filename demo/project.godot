@@ -20,7 +20,7 @@ project/assembly_name="Demo"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/hego/plugin.cfg")
+enabled=PackedStringArray("res://addons/hego/plugin.cfg", "res://addons/terrain_3d/plugin.cfg")
 
 [hego]
 
