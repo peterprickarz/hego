@@ -1,12 +1,20 @@
-[gd_scene load_steps=9 format=4 uid="uid://buxe638771yg6"]
+[gd_scene load_steps=21 format=4 uid="uid://buxe638771yg6"]
 
 [ext_resource type="Script" uid="uid://blnvgo8r28r5p" path="res://addons/hego/HEGoNode3D.gd" id="1_gac77"]
+[ext_resource type="Texture2D" uid="uid://bsjyh442dx1vj" path="res://textures/terrain3d/grass_04_1k_packed_albedo_height.png" id="2_kgjcq"]
+[ext_resource type="Texture2D" uid="uid://dpkf2jkr4yybb" path="res://textures/terrain3d/grass_04_1k_packed_normal_roughness.png" id="3_ycyjt"]
+[ext_resource type="Texture2D" uid="uid://dtbotr5pgsbi" path="res://textures/terrain3d/cliff_rocks_07_1k_packed_albedo_height.png" id="4_qfa3p"]
+[ext_resource type="Texture2D" uid="uid://pn2gcwx2ru8g" path="res://textures/terrain3d/cliff_rocks_07_1k_packed_normal_roughness.png" id="5_8haj8"]
+[ext_resource type="Texture2D" uid="uid://dci4451sx6h10" path="res://textures/terrain3d/ground_with_rocks_01_1k_packed_albedo_height.png" id="6_1cmpo"]
+[ext_resource type="Texture2D" uid="uid://cdvxkrbb77ivv" path="res://textures/terrain3d/ground_with_rocks_01_1k_packed_normal_roughness.png" id="7_koh5d"]
+[ext_resource type="Texture2D" uid="uid://bxnpuq66y0nnt" path="res://textures/terrain3d/snow_01_1k_packed_albedo_height.png" id="8_6m35y"]
+[ext_resource type="Texture2D" uid="uid://dcx73lgac7a4q" path="res://textures/terrain3d/snow_01_1k_packed_normal_roughness.png" id="9_v08p1"]
 
-[sub_resource type="Gradient" id="Gradient_gac77"]
+[sub_resource type="Gradient" id="Gradient_kgjcq"]
 offsets = PackedFloat32Array(0.2, 1)
 colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1)
 
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_n4f46"]
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_ycyjt"]
 noise_type = 2
 frequency = 0.03
 cellular_jitter = 3.0
@@ -18,12 +26,12 @@ domain_warp_fractal_type = 2
 domain_warp_fractal_lacunarity = 1.5
 domain_warp_fractal_gain = 1.0
 
-[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_siwhs"]
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_qfa3p"]
 seamless = true
-color_ramp = SubResource("Gradient_gac77")
-noise = SubResource("FastNoiseLite_n4f46")
+color_ramp = SubResource("Gradient_kgjcq")
+noise = SubResource("FastNoiseLite_ycyjt")
 
-[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_ccbel"]
+[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_8haj8"]
 _shader_parameters = {
 &"bias_distance": 512.0,
 &"blend_sharpness": 0.5,
@@ -39,13 +47,12 @@ _shader_parameters = {
 &"noise1_offset": Vector2(0.5, 0.5),
 &"noise1_scale": 0.04,
 &"noise2_scale": 0.076,
-&"noise_texture": SubResource("NoiseTexture2D_siwhs"),
+&"noise_texture": SubResource("NoiseTexture2D_qfa3p"),
 &"projection_threshold": 0.8
 }
 world_background = 0
-show_checkered = true
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tgl5v"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_1cmpo"]
 transparency = 4
 cull_mode = 2
 vertex_color_use_as_albedo = true
@@ -55,16 +62,40 @@ distance_fade_mode = 1
 distance_fade_min_distance = 128.0
 distance_fade_max_distance = 96.0
 
-[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_mfjwy"]
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_koh5d"]
 generated_type = 1
 height_offset = 0.5
-material_override = SubResource("StandardMaterial3D_tgl5v")
+material_override = SubResource("StandardMaterial3D_1cmpo")
 last_lod = 0
 last_shadow_lod = 0
 lod0_range = 128.0
 
-[sub_resource type="Terrain3DAssets" id="Terrain3DAssets_q3x2e"]
-mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_mfjwy")])
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_6m35y"]
+name = "grass"
+albedo_texture = ExtResource("2_kgjcq")
+normal_texture = ExtResource("3_ycyjt")
+
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_v08p1"]
+name = "cliff"
+id = 1
+albedo_texture = ExtResource("4_qfa3p")
+normal_texture = ExtResource("5_8haj8")
+
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_tv678"]
+name = "gravel"
+id = 2
+albedo_texture = ExtResource("6_1cmpo")
+normal_texture = ExtResource("7_koh5d")
+
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_yq8lh"]
+name = "snow"
+id = 3
+albedo_texture = ExtResource("8_6m35y")
+normal_texture = ExtResource("9_v08p1")
+
+[sub_resource type="Terrain3DAssets" id="Terrain3DAssets_y50al"]
+mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_koh5d")])
+texture_list = Array[Terrain3DTextureAsset]([SubResource("Terrain3DTextureAsset_6m35y"), SubResource("Terrain3DTextureAsset_v08p1"), SubResource("Terrain3DTextureAsset_tv678"), SubResource("Terrain3DTextureAsset_yq8lh")])
 
 [node name="Node3D" type="Node3D"]
 
@@ -76,8 +107,7 @@ metadata/_custom_type_script = "uid://blnvgo8r28r5p"
 
 [node name="Terrain3D" type="Terrain3D" parent="HEGoNode3D"]
 data_directory = "res://hegot3d_data/"
-material = SubResource("Terrain3DMaterial_ccbel")
-assets = SubResource("Terrain3DAssets_q3x2e")
-show_checkered = true
+material = SubResource("Terrain3DMaterial_8haj8")
+assets = SubResource("Terrain3DAssets_y50al")
 top_level = true
 metadata/_edit_lock_ = true

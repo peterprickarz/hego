@@ -1412,8 +1412,8 @@ func _t3d_set_optional_property(obj: Object, property_name: String, value) -> vo
 
 
 func _t3d_build_control_bits_for_pixel(texture_layers: Array, terrain3d_util: Object, pixel_x: int, pixel_z: int, lowest_valid_texture_slot: int, hole_image: Image):
-	var base_slot = lowest_valid_texture_slot
-	var overlay_slot = lowest_valid_texture_slot
+	var best_slot = lowest_valid_texture_slot
+	var second_slot = lowest_valid_texture_slot
 	var best_weight = 0.0
 	var second_weight = 0.0
 
@@ -1426,21 +1426,39 @@ func _t3d_build_control_bits_for_pixel(texture_layers: Array, terrain3d_util: Ob
 		var layer_weight = clampf(weight_image.get_pixel(pixel_x, pixel_z).r, 0.0, 1.0)
 		if layer_weight > best_weight:
 			second_weight = best_weight
-			overlay_slot = base_slot
+			second_slot = best_slot
 			best_weight = layer_weight
-			base_slot = int(texture_layer["slot"])
+			best_slot = int(texture_layer["slot"])
 		elif layer_weight > second_weight:
 			second_weight = layer_weight
-			overlay_slot = int(texture_layer["slot"])
+			second_slot = int(texture_layer["slot"])
+
+	var base_slot = lowest_valid_texture_slot
+	var overlay_slot = lowest_valid_texture_slot
+	var normalized_overlay_weight = 0.0
 
 	if best_weight <= 0.0:
 		base_slot = lowest_valid_texture_slot
 		overlay_slot = lowest_valid_texture_slot
-		second_weight = 0.0
+		normalized_overlay_weight = 0.0
 	elif second_weight <= 0.0:
-		overlay_slot = base_slot
+		base_slot = best_slot
+		overlay_slot = best_slot
+		normalized_overlay_weight = 0.0
+	else:
+		var combined_weight = best_weight + second_weight
+		if best_slot <= second_slot:
+			base_slot = best_slot
+			overlay_slot = second_slot
+			if combined_weight > 0.0:
+				normalized_overlay_weight = second_weight / combined_weight
+		else:
+			base_slot = second_slot
+			overlay_slot = best_slot
+			if combined_weight > 0.0:
+				normalized_overlay_weight = best_weight / combined_weight
 
-	var blend_value = clampi(int(round(second_weight * 255.0)), 0, 255)
+	var blend_value = clampi(int(round(normalized_overlay_weight * 255.0)), 0, 255)
 	var is_hole = false
 	if hole_image != null and pixel_x >= 0 and pixel_z >= 0 and pixel_x < hole_image.get_width() and pixel_z < hole_image.get_height():
 		is_hole = hole_image.get_pixel(pixel_x, pixel_z).r >= 0.5
@@ -1451,7 +1469,7 @@ func _t3d_build_control_bits_for_pixel(texture_layers: Array, terrain3d_util: Ob
 func _t3d_encode_control_bits(terrain3d_util: Object, base_slot: int, overlay_slot: int, blend_value: int, is_hole: bool) -> int:
 	var bits = int(terrain3d_util.call("enc_base", base_slot))
 	bits |= int(terrain3d_util.call("enc_overlay", overlay_slot))
-	bits |= int(terrain3d_util.call("enc_blend", blend_value))
+	bits |= terrain3d_util.call("enc_blend", blend_value)
 	bits |= int(terrain3d_util.call("enc_uv_rotation", 0))
 	bits |= int(terrain3d_util.call("enc_uv_scale", 0))
 	bits |= int(terrain3d_util.call("enc_auto", false))
