@@ -74,24 +74,44 @@ lod0_range = 128.0
 name = "grass"
 albedo_texture = ExtResource("2_kgjcq")
 normal_texture = ExtResource("3_ycyjt")
+normal_depth = 1.0
+ao_strength = 1.0
+uv_scale = 1.0
+detiling_rotation = 1.0
+detiling_shift = 1.0
 
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_v08p1"]
 name = "cliff"
 id = 1
 albedo_texture = ExtResource("4_qfa3p")
 normal_texture = ExtResource("5_8haj8")
+normal_depth = 1.0
+ao_strength = 1.0
+uv_scale = 0.425
+detiling_rotation = 0.62
+detiling_shift = 0.633
 
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_tv678"]
 name = "gravel"
 id = 2
 albedo_texture = ExtResource("6_1cmpo")
 normal_texture = ExtResource("7_koh5d")
+normal_depth = 1.0
+ao_strength = 1.0
+uv_scale = 1.0
+detiling_rotation = 1.0
+detiling_shift = 1.0
 
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_yq8lh"]
 name = "snow"
 id = 3
 albedo_texture = ExtResource("8_6m35y")
 normal_texture = ExtResource("9_v08p1")
+normal_depth = 1.0
+ao_strength = 1.0
+uv_scale = 1.0
+detiling_rotation = 1.0
+detiling_shift = 1.0
 
 [sub_resource type="Terrain3DAssets" id="Terrain3DAssets_y50al"]
 mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_koh5d")])

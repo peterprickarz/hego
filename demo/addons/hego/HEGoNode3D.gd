@@ -109,6 +109,7 @@ func cook():
 	handle_multimesh_output()
 	handle_object_spawn_output()
 	handle_terrain3d_output()
+	handle_terrain3d_instancer_output()
 
 
 func handle_mesh_output():
@@ -717,6 +718,147 @@ func handle_terrain3d_output():
 
 	terrain_data.call("calc_height_range", true)
 	terrain_data.call("save_directory", terrain_data_directory)
+
+
+func handle_terrain3d_instancer_output():
+	if not ClassDB.class_exists("Terrain3D"):
+		return
+
+	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_terrain3d.tres")
+	if fetch_points_config == null:
+		push_warning("[HEGoNode3D]: Terrain3D instancer fetch config could not be loaded.")
+		return
+
+	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config)
+	if not output_dictionary is Dictionary or output_dictionary.is_empty():
+		return
+
+	for terrain_path_value in output_dictionary.keys():
+		if terrain_path_value == null:
+			continue
+
+		var terrain_path = str(terrain_path_value)
+		if terrain_path.strip_edges().is_empty():
+			continue
+
+		var per_mesh_points = output_dictionary[terrain_path_value]
+		if not per_mesh_points is Dictionary:
+			push_warning("[HEGoNode3D]: Unexpected Terrain3D instancer fetch structure for %s." % terrain_path)
+			continue
+
+		var terrain = _t3d_find_node_from_path(terrain_path)
+		if terrain == null:
+			push_warning("[HEGoNode3D]: Terrain3D node %s was not found, skipping instancer output." % terrain_path)
+			continue
+
+		if not terrain.has_method("get_instancer"):
+			push_warning("[HEGoNode3D]: Node %s does not expose a Terrain3D instancer." % terrain_path)
+			continue
+
+		var instancer = terrain.call("get_instancer")
+		if instancer == null:
+			push_warning("[HEGoNode3D]: Terrain3D instancer is unavailable on %s." % terrain_path)
+			continue
+
+		var assets = _t3d_get_terrain_assets(terrain)
+		if assets == null:
+			push_warning("[HEGoNode3D]: Terrain3D assets are unavailable on %s." % terrain_path)
+			continue
+
+		_t3d_clear_generated_mesh_slots(assets, instancer)
+		if assets.has_signal("meshes_changed"):
+			assets.emit_signal("meshes_changed")
+
+		for scene_path_value in per_mesh_points.keys():
+			if scene_path_value == null:
+				continue
+
+			var scene_path = str(scene_path_value)
+			if scene_path.strip_edges().is_empty():
+				continue
+
+			var point_dict = per_mesh_points[scene_path_value]
+			if not point_dict is Dictionary:
+				push_warning("[HEGoNode3D]: Invalid point dictionary for Terrain3D scene %s." % scene_path)
+				continue
+
+			if not point_dict.has("P") or not point_dict["P"] is Array:
+				push_warning("[HEGoNode3D]: Missing P attribute for Terrain3D scene %s." % scene_path)
+				continue
+
+			var positions: Array = point_dict["P"]
+			if positions.is_empty():
+				continue
+
+			var mesh_slot = _t3d_find_mesh_slot_by_scene_path(assets, scene_path)
+			if mesh_slot < 0:
+				mesh_slot = _t3d_assign_generated_mesh_slot(assets, scene_path)
+				if mesh_slot < 0:
+					push_warning("[HEGoNode3D]: Could not allocate Terrain3D mesh slot for %s." % scene_path)
+					continue
+
+			if instancer.has_method("clear_by_mesh"):
+				instancer.call("clear_by_mesh", mesh_slot)
+
+			var transforms: Array[Transform3D] = []
+			var colors: Array[Color] = []
+
+			var default_normal = Vector3(0.0, 0.0, 1.0)
+			var default_up = Vector3(0.0, 1.0, 0.0)
+			var default_scale = Vector3.ONE
+			var default_pscale = 1.0
+			var default_color = Color(1.0, 1.0, 1.0, 1.0)
+
+			for i in range(positions.size()):
+				var pos = positions[i]
+				if not pos is Vector3:
+					continue
+
+				var normal = default_normal
+				if point_dict.has("N") and point_dict["N"] is Array and i < point_dict["N"].size() and point_dict["N"][i] is Vector3 and point_dict["N"][i] != null:
+					normal = point_dict["N"][i].normalized()
+
+				var up = default_up
+				if point_dict.has("up") and point_dict["up"] is Array and i < point_dict["up"].size() and point_dict["up"][i] is Vector3 and point_dict["up"][i] != null:
+					up = point_dict["up"][i].normalized()
+
+				var scale = default_scale
+				if point_dict.has("scale") and point_dict["scale"] is Array and i < point_dict["scale"].size() and point_dict["scale"][i] is Vector3 and point_dict["scale"][i] != null:
+					scale = point_dict["scale"][i]
+
+				var pscale = default_pscale
+				if point_dict.has("pscale") and point_dict["pscale"] is Array and i < point_dict["pscale"].size() and point_dict["pscale"][i] is float and point_dict["pscale"][i] != null:
+					pscale = point_dict["pscale"][i]
+
+				var basis = Basis()
+				var right = up.cross(normal).normalized()
+				if right != Vector3.ZERO:
+					basis.x = right
+					basis.y = up
+					basis.z = normal
+				basis = basis.scaled(scale * pscale)
+				transforms.append(Transform3D(basis, pos))
+
+				var color = default_color
+				if point_dict.has("Cd") and point_dict["Cd"] is Array and i < point_dict["Cd"].size() and point_dict["Cd"][i] != null:
+					if point_dict["Cd"][i] is Color:
+						color = point_dict["Cd"][i]
+					elif point_dict["Cd"][i] is Vector3:
+						var c = point_dict["Cd"][i]
+						color = Color(c.x, c.y, c.z, 1.0)
+				colors.append(color)
+
+			if transforms.is_empty():
+				continue
+
+			if not instancer.has_method("add_transforms"):
+				push_warning("[HEGoNode3D]: Terrain3D instancer on %s does not support add_transforms." % terrain_path)
+				break
+
+			instancer.call("add_transforms", mesh_slot, transforms, colors, false)
+
+		if instancer.has_method("update_mmis"):
+			instancer.call("update_mmis", false)
 
 
 # Helper function to apply custom properties from a nested dictionary
@@ -1476,3 +1618,134 @@ func _t3d_encode_control_bits(terrain3d_util: Object, base_slot: int, overlay_sl
 	bits |= int(terrain3d_util.call("enc_nav", false))
 	bits |= int(terrain3d_util.call("enc_hole", is_hole))
 	return bits
+
+
+func _t3d_find_node_from_path(node_path_text: String) -> Node:
+	if node_path_text.is_empty():
+		return null
+
+	var direct_node = get_node_or_null(node_path_text)
+	if direct_node != null:
+		return direct_node
+
+	var scene_root = get_tree().edited_scene_root
+	if scene_root != null:
+		return scene_root.get_node_or_null(node_path_text)
+
+	return null
+
+
+func _t3d_get_terrain_assets(terrain: Node):
+	if terrain == null:
+		return null
+
+	if terrain.has_method("get_assets"):
+		var assets = terrain.call("get_assets")
+		if assets != null:
+			return assets
+
+	return terrain.get("assets")
+
+
+func _t3d_clear_generated_mesh_slots(assets, instancer) -> Array:
+	var removed_slots: Array = []
+	if assets == null or not assets.has_method("get_mesh_count"):
+		return removed_slots
+
+	var mesh_count = int(assets.call("get_mesh_count"))
+	for slot in range(mesh_count):
+		var mesh_asset = assets.call("get_mesh_asset", slot)
+		if mesh_asset == null:
+			continue
+
+		var mesh_name = _t3d_get_mesh_asset_name(mesh_asset)
+		if not mesh_name.begins_with("hegot3d_"):
+			continue
+
+		if instancer != null and instancer.has_method("clear_by_mesh"):
+			instancer.call("clear_by_mesh", slot)
+		assets.call("set_mesh_asset", slot, null)
+		removed_slots.append(slot)
+
+	return removed_slots
+
+
+func _t3d_find_mesh_slot_by_scene_path(assets, scene_path: String) -> int:
+	if assets == null or scene_path.is_empty() or not assets.has_method("get_mesh_count"):
+		return -1
+
+	var mesh_count = int(assets.call("get_mesh_count"))
+	for slot in range(mesh_count):
+		var mesh_asset = assets.call("get_mesh_asset", slot)
+		if mesh_asset == null:
+			continue
+
+		# Only reuse procedural slots owned by HEGo to avoid touching hand-authored mesh assets.
+		var mesh_name = _t3d_get_mesh_asset_name(mesh_asset)
+		if not mesh_name.begins_with("hegot3d_"):
+			continue
+
+		var mesh_scene_path = _t3d_get_mesh_asset_scene_path(mesh_asset)
+		if mesh_scene_path == scene_path:
+			return slot
+
+	return -1
+
+
+func _t3d_assign_generated_mesh_slot(assets, scene_path: String) -> int:
+	if assets == null or scene_path.is_empty() or not assets.has_method("get_mesh_count"):
+		return -1
+
+	if not ResourceLoader.exists(scene_path):
+		push_warning("[HEGoNode3D]: Terrain3D scene resource does not exist: %s" % scene_path)
+		return -1
+
+	var scene_res = load(scene_path)
+	if not scene_res is PackedScene:
+		push_warning("[HEGoNode3D]: Terrain3D mesh asset expects PackedScene at %s." % scene_path)
+		return -1
+
+	var mesh_asset = Terrain3DMeshAsset.new()
+	mesh_asset.call("set_scene_file", scene_res)
+	if mesh_asset.has_method("set_name"):
+		var generated_name = "hegot3d_" + scene_path.get_file().get_basename()
+		mesh_asset.call("set_name", generated_name)
+
+	var mesh_count = int(assets.call("get_mesh_count"))
+	for slot in range(mesh_count):
+		if assets.call("get_mesh_asset", slot) == null:
+			assets.call("set_mesh_asset", slot, mesh_asset)
+			return slot
+
+	if ClassDB.class_exists("Terrain3DAssets") and mesh_count >= int(Terrain3DAssets.MAX_MESHES):
+		push_warning("[HEGoNode3D]: Terrain3D mesh asset limit reached, cannot assign %s." % scene_path)
+		return -1
+
+	assets.call("set_mesh_asset", mesh_count, mesh_asset)
+	return mesh_count
+
+
+func _t3d_get_mesh_asset_scene_path(mesh_asset) -> String:
+	if mesh_asset == null:
+		return ""
+
+	if mesh_asset.has_method("get_scene_file"):
+		var scene_res = mesh_asset.call("get_scene_file")
+		if scene_res is Resource and not scene_res.resource_path.is_empty():
+			return scene_res.resource_path
+
+	var scene_prop = mesh_asset.get("scene_file")
+	if scene_prop is Resource and not scene_prop.resource_path.is_empty():
+		return scene_prop.resource_path
+
+	return ""
+
+
+func _t3d_get_mesh_asset_name(mesh_asset) -> String:
+	if mesh_asset == null:
+		return ""
+
+	if mesh_asset.has_method("get_name"):
+		return str(mesh_asset.call("get_name"))
+
+	return str(mesh_asset.get("name"))
