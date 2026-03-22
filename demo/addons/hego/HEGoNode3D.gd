@@ -108,6 +108,7 @@ func cook():
 	handle_mesh_output()
 	handle_multimesh_output()
 	handle_object_spawn_output()
+	handle_terrain3d_output()
 
 
 func handle_mesh_output():
@@ -370,6 +371,352 @@ func handle_object_spawn_output():
 		
 		# Log for debugging
 		#print("[HEGoNode3D]: Spawned %s at %s under %s" % [new_node.name, p, parent_node.get_path()])
+
+
+func handle_terrain3d_output():
+	if not ClassDB.class_exists("Terrain3D"):
+		push_warning("[HEGoNode3D]: Terrain3D addon is not installed, skipping Terrain3D output.")
+		return
+
+	var requested_attrs = PackedStringArray([
+		"hegot3d_spawn_terrain",
+		"hegot3d_data_directory",
+		"hegot3d_node_path",
+		"hegot3d_region_size",
+		"hegot3d_albedo_texture",
+		"hegot3d_normal_texture",
+		"hegot3d_ao_strength",
+		"hegot3d_detiling_rotation",
+		"hegot3d_detiling_shift",
+		"hegot3d_id",
+		"hegot3d_name",
+		"hegot3d_normal_depth",
+		"hegot3d_roughness",
+		"hegot3d_uv_scale"
+	])
+	var layers = hego_asset_node.get_heightfield_layers(requested_attrs)
+	var height_layer = _t3d_get_layer_by_name(layers, "height")
+	if height_layer.is_empty():
+		push_error("[HEGoNode3D]: No height layer found for Terrain3D output.")
+		return
+
+	var spawn_terrain_attr = _t3d_get_attr_value(height_layer, "hegot3d_spawn_terrain")
+	if spawn_terrain_attr == null or int(spawn_terrain_attr) != 1:
+		return
+
+	var transform_rotation = height_layer.get("transform_rotation", Vector3.ZERO)
+	if not _t3d_approx_equal_vec3(transform_rotation, Vector3(-90.0, -90.0, 0.0), 0.5):
+		push_warning("[HEGoNode3D]: Heightfield rotation is not default (-90,-90,0). Terrain3D output may be incorrect.")
+
+	var voxel_scale_x = float(height_layer.get("voxel_scale_x", 1.0))
+	var voxel_scale_y = float(height_layer.get("voxel_scale_y", voxel_scale_x))
+	if abs(voxel_scale_x - voxel_scale_y) > 0.0001:
+		push_warning("[HEGoNode3D]: voxel_scale_x and voxel_scale_y differ. Terrain3D uses uniform vertex spacing.")
+
+	if voxel_scale_x <= 0.0:
+		push_error("[HEGoNode3D]: Invalid voxel_scale_x for Terrain3D output.")
+		return
+
+	var node_path_attr = _t3d_get_attr_value(height_layer, "hegot3d_node_path")
+	var terrain_node_path = "Terrain3D"
+	if node_path_attr != null and node_path_attr is String and not node_path_attr.strip_edges().is_empty():
+		terrain_node_path = node_path_attr.strip_edges()
+
+	var data_dir_attr = _t3d_get_attr_value(height_layer, "hegot3d_data_directory")
+	if data_dir_attr == null or not data_dir_attr is String or data_dir_attr.strip_edges().is_empty():
+		push_error("[HEGoNode3D]: hegot3d_data_directory is required for Terrain3D output.")
+		return
+	var terrain_data_directory = data_dir_attr.strip_edges()
+
+	var region_size_attr = _t3d_get_attr_value(height_layer, "hegot3d_region_size")
+	var region_size = 256
+	if _t3d_is_valid_region_size(region_size_attr):
+		region_size = int(region_size_attr)
+	elif region_size_attr != null:
+		push_warning("[HEGoNode3D]: Invalid hegot3d_region_size. Using default value 256.")
+
+	var region_map_layer = _t3d_get_layer_by_name(layers, "hegot3d_region_map")
+	var hole_layer = _t3d_get_layer_by_name(layers, "hegot3d_hole")
+	var texture_layers = _t3d_collect_texture_layers(layers)
+	var validated_texture_layers: Array = []
+	var control_generation_enabled = false
+	var lowest_valid_texture_slot = -1
+	var terrain3d_util = null
+	if not texture_layers.is_empty():
+		var validation_result = _t3d_validate_texture_layers(texture_layers)
+		if not validation_result.get("ok", false):
+			push_warning(validation_result.get("warning", "[HEGoNode3D]: Skipping Terrain3D control maps."))
+		else:
+			if not ClassDB.class_exists("Terrain3DUtil"):
+				push_warning("[HEGoNode3D]: Terrain3DUtil is unavailable, skipping Terrain3D control maps.")
+			else:
+				terrain3d_util = ClassDB.instantiate("Terrain3DUtil")
+				if terrain3d_util == null:
+					push_warning("[HEGoNode3D]: Failed to instantiate Terrain3DUtil, skipping Terrain3D control maps.")
+				else:
+					validated_texture_layers = validation_result.get("layers", [])
+					lowest_valid_texture_slot = int(validation_result.get("lowest_slot", -1))
+					control_generation_enabled = lowest_valid_texture_slot >= 0
+
+	var path_parts = terrain_node_path.split("/", false)
+	if path_parts.is_empty():
+		push_error("[HEGoNode3D]: hegot3d_node_path is invalid.")
+		return
+
+	var current_node = self
+	for i in range(path_parts.size() - 1):
+		var part_name = path_parts[i]
+		if part_name.is_empty():
+			continue
+		var next_node = current_node.get_node_or_null(part_name)
+		if not next_node:
+			next_node = Node3D.new()
+			next_node.name = part_name
+			current_node.add_child(next_node)
+			if Engine.is_editor_hint():
+				next_node.owner = get_tree().edited_scene_root
+		current_node = next_node
+
+	var terrain_name = path_parts[path_parts.size() - 1]
+	if terrain_name.is_empty():
+		push_error("[HEGoNode3D]: hegot3d_node_path is invalid.")
+		return
+
+	var existing_terrain = current_node.get_node_or_null(terrain_name)
+	if existing_terrain:
+		existing_terrain.free()
+
+	var terrain = ClassDB.instantiate("Terrain3D")
+	if terrain == null:
+		push_error("[HEGoNode3D]: Failed to instantiate Terrain3D.")
+		return
+
+	terrain.name = terrain_name
+	current_node.add_child(terrain)
+	if Engine.is_editor_hint():
+		terrain.owner = get_tree().edited_scene_root
+
+	terrain.set("region_size", region_size)
+	terrain.set("vertex_spacing", voxel_scale_x)
+	terrain.set("data_directory", terrain_data_directory)
+
+	var terrain_material = terrain.get("material")
+	if terrain_material != null:
+		# 0 corresponds to Terrain3DMaterial.WorldBackground.NONE.
+		if terrain_material.has_method("set_world_background"):
+			terrain_material.call("set_world_background", 0)
+		else:
+			terrain_material.set("world_background", 0)
+
+	var terrain_data = terrain.get("data")
+	if terrain_data == null:
+		push_error("[HEGoNode3D]: Terrain3D data object is not available.")
+		return
+
+	var terrain_assets = terrain.get("assets")
+	if control_generation_enabled:
+		if terrain_assets == null:
+			if ClassDB.class_exists("Terrain3DAssets"):
+				terrain_assets = ClassDB.instantiate("Terrain3DAssets")
+				terrain.set("assets", terrain_assets)
+		if terrain_assets == null:
+			push_warning("[HEGoNode3D]: Terrain3D assets object is unavailable, skipping Terrain3D control maps.")
+			control_generation_enabled = false
+		else:
+			var weight_fetch_failed = false
+			for texture_layer in validated_texture_layers:
+				var texture_asset = ClassDB.instantiate("Terrain3DTextureAsset")
+				if texture_asset == null:
+					push_warning("[HEGoNode3D]: Failed to instantiate Terrain3DTextureAsset, skipping Terrain3D control maps.")
+					control_generation_enabled = false
+					break
+
+				texture_asset.call("set_albedo_texture", texture_layer["albedo_texture"])
+				if texture_asset.has_method("set_normal_texture"):
+					texture_asset.call("set_normal_texture", texture_layer["normal_texture"])
+				else:
+					_t3d_set_optional_property(texture_asset, "normal_texture", texture_layer["normal_texture"])
+
+				for optional_property in texture_layer["optional_properties"].keys():
+					_t3d_set_optional_property(texture_asset, optional_property, texture_layer["optional_properties"][optional_property])
+
+				terrain_assets.call("set_texture", int(texture_layer["slot"]), texture_asset)
+
+				var weight_image = hego_asset_node.fetch_heightfield_layer_image(int(texture_layer["part_id"]))
+				if weight_image == null:
+					push_warning("[HEGoNode3D]: Failed to fetch weight image for layer %s, skipping Terrain3D control maps." % texture_layer["layer_name"])
+					weight_fetch_failed = true
+					break
+				texture_layer["weight_image"] = weight_image
+
+			if terrain_assets.has_signal("textures_changed"):
+				terrain_assets.emit_signal("textures_changed")
+
+			if weight_fetch_failed:
+				control_generation_enabled = false
+				validated_texture_layers.clear()
+
+	var hole_image = null
+	if control_generation_enabled and not hole_layer.is_empty() and hole_layer.has("part_id"):
+		hole_image = hego_asset_node.fetch_heightfield_layer_image(int(hole_layer["part_id"]))
+		if hole_image == null:
+			push_warning("[HEGoNode3D]: Failed to fetch hegot3d_hole layer, continuing without hole control bits.")
+
+	# Clear all regions to avoid stale content when reusing an existing data directory.
+	var active_regions = terrain_data.call("get_regions_active")
+	for region in active_regions:
+		terrain_data.call("remove_region", region, false)
+	terrain_data.call("update_maps", 3, true, false)
+
+	var part_id = int(height_layer.get("part_id", -1))
+	if part_id < 0:
+		push_error("[HEGoNode3D]: Height layer has invalid part_id.")
+		return
+
+	var height_image = hego_asset_node.fetch_heightfield_layer_image(part_id)
+	if height_image == null:
+		push_error("[HEGoNode3D]: Failed to fetch height image for Terrain3D output.")
+		return
+
+	var region_map_image = null
+	if not region_map_layer.is_empty() and region_map_layer.has("part_id"):
+		region_map_image = hego_asset_node.fetch_heightfield_layer_image(int(region_map_layer["part_id"]))
+
+	var color_layer_r = _t3d_get_layer_by_name(layers, "hegot3d_color_map_r")
+	var color_layer_g = _t3d_get_layer_by_name(layers, "hegot3d_color_map_g")
+	var color_layer_b = _t3d_get_layer_by_name(layers, "hegot3d_color_map_b")
+	var color_layer_roughness = _t3d_get_layer_by_name(layers, "hegot3d_color_map_roughness")
+	var has_any_color_layer = not color_layer_r.is_empty() or not color_layer_g.is_empty() or not color_layer_b.is_empty() or not color_layer_roughness.is_empty()
+
+	var color_image_r = null
+	var color_image_g = null
+	var color_image_b = null
+	var color_image_roughness = null
+	if has_any_color_layer:
+		if not color_layer_r.is_empty() and color_layer_r.has("part_id"):
+			color_image_r = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_r["part_id"]))
+		if not color_layer_g.is_empty() and color_layer_g.has("part_id"):
+			color_image_g = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_g["part_id"]))
+		if not color_layer_b.is_empty() and color_layer_b.has("part_id"):
+			color_image_b = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_b["part_id"]))
+		if not color_layer_roughness.is_empty() and color_layer_roughness.has("part_id"):
+			color_image_roughness = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_roughness["part_id"]))
+
+	var voxel_count_x = int(height_layer.get("voxel_count_x", height_image.get_width()))
+	var voxel_count_y = int(height_layer.get("voxel_count_y", height_image.get_height()))
+	var transform_position = height_layer.get("transform_position", Vector3.ZERO)
+
+	var corner_x = transform_position.x - (voxel_scale_x * 0.5)
+	var corner_z = transform_position.z - (voxel_scale_x * 0.5)
+	var region_world_size = float(region_size) * voxel_scale_x
+	if region_world_size <= 0.0:
+		push_error("[HEGoNode3D]: Invalid region world size for Terrain3D output.")
+		return
+
+	var snapped_x = snapped(corner_x, region_world_size)
+	var snapped_z = snapped(corner_z, region_world_size)
+	if abs(snapped_x - corner_x) > 0.0001 or abs(snapped_z - corner_z) > 0.0001:
+		push_warning("[HEGoNode3D]: Heightfield offset snapped to Terrain3D region grid.")
+
+	var image_world_end_x = corner_x + (float(voxel_count_x) * voxel_scale_x)
+	var image_world_end_z = corner_z + (float(voxel_count_y) * voxel_scale_x)
+	var rx_start = int(floor((corner_x - snapped_x) / region_world_size))
+	var rx_end = int(ceil((image_world_end_x - snapped_x) / region_world_size)) - 1
+	var rz_start = int(floor((corner_z - snapped_z) / region_world_size))
+	var rz_end = int(ceil((image_world_end_z - snapped_z) / region_world_size)) - 1
+
+	var wrote_any_region = false
+	for rz in range(rz_start, rz_end + 1):
+		for rx in range(rx_start, rx_end + 1):
+			var world_region_x = snapped_x + (float(rx) * region_world_size)
+			var world_region_z = snapped_z + (float(rz) * region_world_size)
+
+			var pixel_start_x = int(round((world_region_x - corner_x) / voxel_scale_x))
+			var pixel_start_z = int(round((world_region_z - corner_z) / voxel_scale_x))
+			var pixel_end_x = pixel_start_x + region_size
+			var pixel_end_z = pixel_start_z + region_size
+
+			if pixel_end_x <= 0 or pixel_end_z <= 0 or pixel_start_x >= voxel_count_x or pixel_start_z >= voxel_count_y:
+				continue
+
+			if region_map_image != null:
+				var map_sample_x = clamp(pixel_start_x + (region_size / 2), 0, voxel_count_x - 1)
+				var map_sample_z = clamp(pixel_start_z + (region_size / 2), 0, voxel_count_y - 1)
+				if region_map_image.get_pixel(map_sample_x, map_sample_z).r < 0.5:
+					continue
+
+			var clip_x0 = maxi(pixel_start_x, 0)
+			var clip_z0 = maxi(pixel_start_z, 0)
+			var clip_x1 = mini(pixel_end_x, voxel_count_x)
+			var clip_z1 = mini(pixel_end_z, voxel_count_y)
+			if clip_x1 <= clip_x0 or clip_z1 <= clip_z0:
+				continue
+
+			var src_rect = Rect2i(clip_x0, clip_z0, clip_x1 - clip_x0, clip_z1 - clip_z0)
+			var clipped_region = height_image.get_region(src_rect)
+			var region_image = Image.create(region_size, region_size, false, Image.FORMAT_RF)
+			region_image.fill(Color(0.0, 0.0, 0.0, 1.0))
+			var dest_x = clip_x0 - pixel_start_x
+			var dest_z = clip_z0 - pixel_start_z
+			region_image.blit_rect(clipped_region, Rect2i(0, 0, clipped_region.get_width(), clipped_region.get_height()), Vector2i(dest_x, dest_z))
+
+			var imported_images: Array[Image] = []
+			imported_images.resize(3)
+			imported_images[0] = region_image
+
+			if control_generation_enabled:
+				var region_control_image = Image.create(region_size, region_size, false, Image.FORMAT_RF)
+				var default_control_bits = _t3d_build_control_bits_for_pixel(validated_texture_layers, terrain3d_util, -1, -1, lowest_valid_texture_slot, hole_image)
+				region_control_image.fill(Color(float(terrain3d_util.call("as_float", default_control_bits)), 0.0, 0.0, 1.0))
+				for local_z in range(clipped_region.get_height()):
+					var src_z = clip_z0 + local_z
+					var dst_z = dest_z + local_z
+					for local_x in range(clipped_region.get_width()):
+						var src_x = clip_x0 + local_x
+						var dst_x = dest_x + local_x
+						var control_bits = _t3d_build_control_bits_for_pixel(validated_texture_layers, terrain3d_util, src_x, src_z, lowest_valid_texture_slot, hole_image)
+						region_control_image.set_pixel(dst_x, dst_z, Color(float(terrain3d_util.call("as_float", control_bits)), 0.0, 0.0, 1.0))
+
+				imported_images[1] = region_control_image
+
+			if has_any_color_layer:
+				var region_color_image = Image.create(region_size, region_size, false, Image.FORMAT_RGBA8)
+				region_color_image.fill(Color(1.0, 1.0, 1.0, 0.5))
+				for local_z in range(clipped_region.get_height()):
+					var src_z = clip_z0 + local_z
+					var dst_z = dest_z + local_z
+					for local_x in range(clipped_region.get_width()):
+						var src_x = clip_x0 + local_x
+						var dst_x = dest_x + local_x
+
+						var channel_r = 1.0
+						if color_image_r != null and src_x < color_image_r.get_width() and src_z < color_image_r.get_height():
+							channel_r = clampf(color_image_r.get_pixel(src_x, src_z).r, 0.0, 1.0)
+
+						var channel_g = 1.0
+						if color_image_g != null and src_x < color_image_g.get_width() and src_z < color_image_g.get_height():
+							channel_g = clampf(color_image_g.get_pixel(src_x, src_z).r, 0.0, 1.0)
+
+						var channel_b = 1.0
+						if color_image_b != null and src_x < color_image_b.get_width() and src_z < color_image_b.get_height():
+							channel_b = clampf(color_image_b.get_pixel(src_x, src_z).r, 0.0, 1.0)
+
+						var channel_roughness = 0.5
+						if color_image_roughness != null and src_x < color_image_roughness.get_width() and src_z < color_image_roughness.get_height():
+							channel_roughness = clampf(color_image_roughness.get_pixel(src_x, src_z).r, 0.0, 1.0)
+
+						region_color_image.set_pixel(dst_x, dst_z, Color(channel_r, channel_g, channel_b, channel_roughness))
+
+				imported_images[2] = region_color_image
+
+			terrain_data.call("import_images", imported_images, Vector3(world_region_x, 0.0, world_region_z), 0.0, 1.0)
+			wrote_any_region = true
+
+	if not wrote_any_region:
+		push_warning("[HEGoNode3D]: Terrain3D output produced no regions.")
+
+	terrain_data.call("calc_height_range", true)
+	terrain_data.call("save_directory", terrain_data_directory)
 
 
 # Helper function to apply custom properties from a nested dictionary
@@ -847,3 +1194,267 @@ func _clear_hda_data():
 		outputs_node.queue_free()
 	
 	print("[HEGoNode3D]: Cleared old HDA data and reset node ID")
+
+
+func _t3d_get_layer_by_name(layers: Array, layer_name: String) -> Dictionary:
+	for layer in layers:
+		if layer is Dictionary and layer.get("layer_name", "") == layer_name:
+			return layer
+	return {}
+
+
+func _t3d_get_attr_value(layer: Dictionary, attr_name: String):
+	if not layer.has("attrs") or not layer["attrs"] is Array:
+		return null
+	for attr_pair in layer["attrs"]:
+		if attr_pair is Dictionary and attr_pair.get("name", "") == attr_name:
+			return attr_pair.get("value", null)
+	return null
+
+
+func _t3d_is_valid_region_size(value) -> bool:
+	if value == null:
+		return false
+	if not value is int and not value is float:
+		return false
+	var size = int(value)
+	if size < 64 or size > 2048:
+		return false
+	return size > 0 and (size & (size - 1)) == 0
+
+
+func _t3d_approx_equal_vec3(a: Vector3, b: Vector3, tolerance: float) -> bool:
+	return abs(a.x - b.x) <= tolerance and abs(a.y - b.y) <= tolerance and abs(a.z - b.z) <= tolerance
+
+
+func _t3d_collect_texture_layers(layers: Array) -> Array:
+	var texture_layers: Array = []
+	for layer in layers:
+		if not layer is Dictionary:
+			continue
+		var layer_name = str(layer.get("layer_name", ""))
+		if not layer_name.begins_with("hegot3d_texture_layer_"):
+			continue
+		var slot = _t3d_parse_texture_layer_index(layer_name)
+		if slot < 0 or slot > 31:
+			push_warning("[HEGoNode3D]: Ignoring invalid Terrain3D texture layer name %s." % layer_name)
+			continue
+		texture_layers.append({
+			"slot": slot,
+			"layer": layer,
+			"layer_name": layer_name,
+			"part_id": int(layer.get("part_id", -1))
+		})
+	texture_layers.sort_custom(func(a, b): return int(a["slot"]) < int(b["slot"]))
+	return texture_layers
+
+
+func _t3d_parse_texture_layer_index(layer_name: String) -> int:
+	var suffix = layer_name.trim_prefix("hegot3d_texture_layer_")
+	if suffix.is_empty() or not suffix.is_valid_int():
+		return -1
+	return int(suffix)
+
+
+func _t3d_validate_texture_layers(texture_layers: Array) -> Dictionary:
+	var validated_layers: Array = []
+	var albedo_reference = {}
+	var normal_reference = {}
+	var optional_attr_map = {
+		"hegot3d_ao_strength": "ao_strength",
+		"hegot3d_detiling_rotation": "detiling_rotation",
+		"hegot3d_detiling_shift": "detiling_shift",
+		"hegot3d_id": "id",
+		"hegot3d_name": "name",
+		"hegot3d_normal_depth": "normal_depth",
+		"hegot3d_roughness": "roughness",
+		"hegot3d_uv_scale": "uv_scale"
+	}
+
+	for texture_layer in texture_layers:
+		var layer = texture_layer["layer"]
+		var slot = int(texture_layer["slot"])
+		var layer_name = str(texture_layer["layer_name"])
+		var part_id = int(texture_layer["part_id"])
+		if part_id < 0:
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: Terrain3D texture layer %s has invalid part_id, skipping Terrain3D control maps." % layer_name
+			}
+
+		var albedo_path = _t3d_get_attr_string(layer, "hegot3d_albedo_texture")
+		if albedo_path.is_empty():
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: Terrain3D texture layer %s is missing hegot3d_albedo_texture, skipping Terrain3D control maps." % layer_name
+			}
+
+		var normal_path = _t3d_get_attr_string(layer, "hegot3d_normal_texture")
+		if normal_path.is_empty():
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: Terrain3D texture layer %s is missing hegot3d_normal_texture, skipping Terrain3D control maps." % layer_name
+			}
+
+		var albedo_texture = _t3d_load_texture_resource(albedo_path)
+		if albedo_texture == null:
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: Failed to load Terrain3D albedo texture %s for layer %s, skipping Terrain3D control maps." % [albedo_path, layer_name]
+			}
+
+		var normal_texture = _t3d_load_texture_resource(normal_path)
+		if normal_texture == null:
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: Failed to load Terrain3D normal texture %s for layer %s, skipping Terrain3D control maps." % [normal_path, layer_name]
+			}
+
+		var albedo_image = _t3d_get_texture_image(albedo_texture)
+		if albedo_image == null:
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: Failed to inspect Terrain3D albedo texture %s for layer %s, skipping Terrain3D control maps." % [albedo_path, layer_name]
+			}
+
+		var normal_image = _t3d_get_texture_image(normal_texture)
+		if normal_image == null:
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: Failed to inspect Terrain3D normal texture %s for layer %s, skipping Terrain3D control maps." % [normal_path, layer_name]
+			}
+
+		var albedo_info = _t3d_get_image_signature(albedo_image)
+		if albedo_reference.is_empty():
+			albedo_reference = albedo_info
+		elif not _t3d_image_signature_matches(albedo_reference, albedo_info):
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: All Terrain3D albedo textures must share the same resolution and format, skipping Terrain3D control maps."
+			}
+
+		var normal_info = _t3d_get_image_signature(normal_image)
+		if normal_reference.is_empty():
+			normal_reference = normal_info
+		elif not _t3d_image_signature_matches(normal_reference, normal_info):
+			return {
+				"ok": false,
+				"warning": "[HEGoNode3D]: All Terrain3D normal textures must share the same resolution and format, skipping Terrain3D control maps."
+			}
+
+		var optional_properties = {}
+		for attr_name in optional_attr_map.keys():
+			var attr_value = _t3d_get_attr_value(layer, attr_name)
+			if attr_value != null:
+				optional_properties[optional_attr_map[attr_name]] = attr_value
+
+		validated_layers.append({
+			"slot": slot,
+			"layer_name": layer_name,
+			"part_id": part_id,
+			"albedo_texture": albedo_texture,
+			"normal_texture": normal_texture,
+			"optional_properties": optional_properties,
+			"weight_image": null
+		})
+
+	validated_layers.sort_custom(func(a, b): return int(a["slot"]) < int(b["slot"]))
+	return {
+		"ok": true,
+		"layers": validated_layers,
+		"lowest_slot": int(validated_layers[0]["slot"]) if not validated_layers.is_empty() else -1
+	}
+
+
+func _t3d_get_attr_string(layer: Dictionary, attr_name: String) -> String:
+	var value = _t3d_get_attr_value(layer, attr_name)
+	if value == null:
+		return ""
+	if value is String:
+		return value.strip_edges()
+	return str(value).strip_edges()
+
+
+func _t3d_load_texture_resource(resource_path: String) -> Texture2D:
+	if resource_path.is_empty():
+		return null
+	if not ResourceLoader.exists(resource_path):
+		return null
+	var resource = load(resource_path)
+	if resource is Texture2D:
+		return resource
+	return null
+
+
+func _t3d_get_texture_image(texture: Texture2D) -> Image:
+	if texture == null or not texture.has_method("get_image"):
+		return null
+	return texture.get_image()
+
+
+func _t3d_get_image_signature(image: Image) -> Dictionary:
+	return {
+		"width": image.get_width(),
+		"height": image.get_height(),
+		"format": image.get_format()
+	}
+
+
+func _t3d_image_signature_matches(a: Dictionary, b: Dictionary) -> bool:
+	return int(a.get("width", -1)) == int(b.get("width", -2)) and int(a.get("height", -1)) == int(b.get("height", -2)) and int(a.get("format", -1)) == int(b.get("format", -2))
+
+
+func _t3d_set_optional_property(obj: Object, property_name: String, value) -> void:
+	for property_info in obj.get_property_list():
+		if str(property_info.get("name", "")) == property_name:
+			obj.set(property_name, value)
+			return
+
+
+func _t3d_build_control_bits_for_pixel(texture_layers: Array, terrain3d_util: Object, pixel_x: int, pixel_z: int, lowest_valid_texture_slot: int, hole_image: Image):
+	var base_slot = lowest_valid_texture_slot
+	var overlay_slot = lowest_valid_texture_slot
+	var best_weight = 0.0
+	var second_weight = 0.0
+
+	for texture_layer in texture_layers:
+		var weight_image = texture_layer.get("weight_image", null)
+		if weight_image == null:
+			continue
+		if pixel_x < 0 or pixel_z < 0 or pixel_x >= weight_image.get_width() or pixel_z >= weight_image.get_height():
+			continue
+		var layer_weight = clampf(weight_image.get_pixel(pixel_x, pixel_z).r, 0.0, 1.0)
+		if layer_weight > best_weight:
+			second_weight = best_weight
+			overlay_slot = base_slot
+			best_weight = layer_weight
+			base_slot = int(texture_layer["slot"])
+		elif layer_weight > second_weight:
+			second_weight = layer_weight
+			overlay_slot = int(texture_layer["slot"])
+
+	if best_weight <= 0.0:
+		base_slot = lowest_valid_texture_slot
+		overlay_slot = lowest_valid_texture_slot
+		second_weight = 0.0
+	elif second_weight <= 0.0:
+		overlay_slot = base_slot
+
+	var blend_value = clampi(int(round(second_weight * 255.0)), 0, 255)
+	var is_hole = false
+	if hole_image != null and pixel_x >= 0 and pixel_z >= 0 and pixel_x < hole_image.get_width() and pixel_z < hole_image.get_height():
+		is_hole = hole_image.get_pixel(pixel_x, pixel_z).r >= 0.5
+
+	return _t3d_encode_control_bits(terrain3d_util, base_slot, overlay_slot, blend_value, is_hole)
+
+
+func _t3d_encode_control_bits(terrain3d_util: Object, base_slot: int, overlay_slot: int, blend_value: int, is_hole: bool) -> int:
+	var bits = int(terrain3d_util.call("enc_base", base_slot))
+	bits |= int(terrain3d_util.call("enc_overlay", overlay_slot))
+	bits |= int(terrain3d_util.call("enc_blend", blend_value))
+	bits |= int(terrain3d_util.call("enc_uv_rotation", 0))
+	bits |= int(terrain3d_util.call("enc_uv_scale", 0))
+	bits |= int(terrain3d_util.call("enc_auto", false))
+	bits |= int(terrain3d_util.call("enc_nav", false))
+	bits |= int(terrain3d_util.call("enc_hole", is_hole))
+	return bits
