@@ -544,6 +544,8 @@ func handle_terrain3d_output():
 				terrain_assets.call("set_texture", int(texture_layer["slot"]), texture_asset)
 
 				var weight_image = hego_asset_node.fetch_heightfield_layer_image(int(texture_layer["part_id"]))
+				if weight_image != null:
+					weight_image = _t3d_fix_heightfield_image_transform(weight_image)
 				if weight_image == null:
 					push_warning("[HEGoNode3D]: Failed to fetch weight image for layer %s, skipping Terrain3D control maps." % texture_layer["layer_name"])
 					weight_fetch_failed = true
@@ -560,6 +562,8 @@ func handle_terrain3d_output():
 	var hole_image = null
 	if control_generation_enabled and not hole_layer.is_empty() and hole_layer.has("part_id"):
 		hole_image = hego_asset_node.fetch_heightfield_layer_image(int(hole_layer["part_id"]))
+		if hole_image != null:
+			hole_image = _t3d_fix_heightfield_image_transform(hole_image)
 		if hole_image == null:
 			push_warning("[HEGoNode3D]: Failed to fetch hegot3d_hole layer, continuing without hole control bits.")
 
@@ -575,6 +579,8 @@ func handle_terrain3d_output():
 		return
 
 	var height_image = hego_asset_node.fetch_heightfield_layer_image(part_id)
+	if height_image != null:
+		height_image = _t3d_fix_heightfield_image_transform(height_image)
 	if height_image == null:
 		push_error("[HEGoNode3D]: Failed to fetch height image for Terrain3D output.")
 		return
@@ -582,6 +588,8 @@ func handle_terrain3d_output():
 	var region_map_image = null
 	if not region_map_layer.is_empty() and region_map_layer.has("part_id"):
 		region_map_image = hego_asset_node.fetch_heightfield_layer_image(int(region_map_layer["part_id"]))
+		if region_map_image != null:
+			region_map_image = _t3d_fix_heightfield_image_transform(region_map_image)
 
 	var color_layer_r = _t3d_get_layer_by_name(layers, "hegot3d_color_map_r")
 	var color_layer_g = _t3d_get_layer_by_name(layers, "hegot3d_color_map_g")
@@ -596,12 +604,20 @@ func handle_terrain3d_output():
 	if has_any_color_layer:
 		if not color_layer_r.is_empty() and color_layer_r.has("part_id"):
 			color_image_r = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_r["part_id"]))
+			if color_image_r != null:
+				color_image_r = _t3d_fix_heightfield_image_transform(color_image_r)
 		if not color_layer_g.is_empty() and color_layer_g.has("part_id"):
 			color_image_g = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_g["part_id"]))
+			if color_image_g != null:
+				color_image_g = _t3d_fix_heightfield_image_transform(color_image_g)
 		if not color_layer_b.is_empty() and color_layer_b.has("part_id"):
 			color_image_b = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_b["part_id"]))
+			if color_image_b != null:
+				color_image_b = _t3d_fix_heightfield_image_transform(color_image_b)
 		if not color_layer_roughness.is_empty() and color_layer_roughness.has("part_id"):
 			color_image_roughness = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_roughness["part_id"]))
+			if color_image_roughness != null:
+				color_image_roughness = _t3d_fix_heightfield_image_transform(color_image_roughness)
 
 	var voxel_count_x = int(height_layer.get("voxel_count_x", height_image.get_width()))
 	var voxel_count_y = int(height_layer.get("voxel_count_y", height_image.get_height()))
@@ -1618,6 +1634,29 @@ func _t3d_encode_control_bits(terrain3d_util: Object, base_slot: int, overlay_sl
 	bits |= int(terrain3d_util.call("enc_nav", false))
 	bits |= int(terrain3d_util.call("enc_hole", is_hole))
 	return bits
+
+
+func _t3d_fix_heightfield_image_transform(image: Image) -> Image:
+	if image == null:
+		return null
+	
+	var orig_width = image.get_width()
+	var orig_height = image.get_height()
+	var orig_format = image.get_format()
+	
+	var corrected = Image.create(orig_height, orig_width, false, orig_format)
+	
+	for orig_y in range(orig_height):
+		for orig_x in range(orig_width):
+			var pixel = image.get_pixel(orig_x, orig_y)
+			var new_x = orig_height - 1 - orig_y
+			var new_y = orig_x
+			corrected.set_pixel(new_x, new_y, pixel)
+
+	# Terrain import still ends up mirrored along world X after rotation, so unflip it.
+	corrected.flip_x()
+	
+	return corrected
 
 
 func _t3d_find_node_from_path(node_path_text: String) -> Node:
