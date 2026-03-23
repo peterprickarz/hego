@@ -813,6 +813,10 @@ func handle_terrain3d_instancer_output():
 					push_warning("[HEGoNode3D]: Could not allocate Terrain3D mesh slot for %s." % scene_path)
 					continue
 
+			var mesh_asset = assets.call("get_mesh_asset", mesh_slot)
+			if mesh_asset != null:
+				_t3d_apply_mesh_asset_instancer_settings(mesh_asset, point_dict)
+
 			if instancer.has_method("clear_by_mesh"):
 				instancer.call("clear_by_mesh", mesh_slot)
 
@@ -1762,6 +1766,32 @@ func _t3d_assign_generated_mesh_slot(assets, scene_path: String) -> int:
 
 	assets.call("set_mesh_asset", mesh_count, mesh_asset)
 	return mesh_count
+
+
+func _t3d_apply_mesh_asset_instancer_settings(mesh_asset, point_dict: Dictionary) -> void:
+	var attr_map = {
+		"hegot3d_lod0_range": "lod0_range",
+		"hegot3d_lod1_range": "lod1_range",
+		"hegot3d_lod2_range": "lod2_range",
+		"hegot3d_lod3_range": "lod3_range",
+		"hegot3d_lod4_range": "lod4_range",
+		"hegot3d_lod5_range": "lod5_range",
+		"hegot3d_lod6_range": "lod6_range",
+		"hegot3d_lod7_range": "lod7_range",
+		"hegot3d_lod8_range": "lod8_range",
+		"hegot3d_lod9_range": "lod9_range",
+		"hegot3d_shadow_impostor": "shadow_impostor",
+		"hegot3d_last_lod": "last_lod",
+		"hegot3d_last_shadow_lod": "last_shadow_lod",
+		"hegot3d_fade_margin": "fade_margin",
+	}
+	for hego_attr in attr_map.keys():
+		if not point_dict.has(hego_attr):
+			continue
+		var arr = point_dict[hego_attr]
+		if not arr is Array or arr.is_empty() or arr[0] == null:
+			continue
+		_t3d_set_optional_property(mesh_asset, attr_map[hego_attr], arr[0])
 
 
 func _t3d_get_mesh_asset_scene_path(mesh_asset) -> String:

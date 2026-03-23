@@ -1,22 +1,33 @@
-[gd_scene load_steps=25 format=4 uid="uid://buxe638771yg6"]
+[gd_scene load_steps=47 format=4 uid="uid://buxe638771yg6"]
 
 [ext_resource type="Script" uid="uid://blnvgo8r28r5p" path="res://addons/hego/HEGoNode3D.gd" id="1_gac77"]
 [ext_resource type="Texture2D" uid="uid://bsjyh442dx1vj" path="res://textures/terrain3d/grass_04_1k_packed_albedo_height.png" id="2_kgjcq"]
 [ext_resource type="PackedScene" uid="uid://b6hmf06pw32c3" path="res://scenes/Terrain3DInstancerScenes/Trees/OakLarge01.tscn" id="2_qfa3p"]
+[ext_resource type="PackedScene" uid="uid://2gbtchiqvw05" path="res://scenes/Terrain3DInstancerScenes/Grass/GrassPatchMed01.tscn" id="2_y50al"]
+[ext_resource type="PackedScene" uid="uid://b6sk0s5hgk5em" path="res://scenes/Terrain3DInstancerScenes/Bushes/BushMed01.tscn" id="3_4hmpx"]
 [ext_resource type="PackedScene" uid="uid://pqss8uv1ekg0" path="res://scenes/Terrain3DInstancerScenes/Trees/OakMed01.tscn" id="3_8haj8"]
 [ext_resource type="Texture2D" uid="uid://dpkf2jkr4yybb" path="res://textures/terrain3d/grass_04_1k_packed_normal_roughness.png" id="3_ycyjt"]
 [ext_resource type="Texture2D" uid="uid://dtbotr5pgsbi" path="res://textures/terrain3d/cliff_rocks_07_1k_packed_albedo_height.png" id="4_qfa3p"]
+[ext_resource type="PackedScene" uid="uid://cao7e2jpmm8to" path="res://scenes/Terrain3DInstancerScenes/Bushes/BushLarge01.tscn" id="4_tc5au"]
 [ext_resource type="Texture2D" uid="uid://pn2gcwx2ru8g" path="res://textures/terrain3d/cliff_rocks_07_1k_packed_normal_roughness.png" id="5_8haj8"]
+[ext_resource type="PackedScene" uid="uid://cv3wx2d60ssrx" path="res://scenes/Terrain3DInstancerScenes/Trees/OakFieldLarge01.tscn" id="5_ks0qn"]
 [ext_resource type="Texture2D" uid="uid://dci4451sx6h10" path="res://textures/terrain3d/ground_with_rocks_01_1k_packed_albedo_height.png" id="6_1cmpo"]
+[ext_resource type="PackedScene" uid="uid://cekk3phvu28oh" path="res://scenes/Terrain3DInstancerScenes/Trees/OakFieldMed01.tscn" id="6_e2k06"]
 [ext_resource type="Texture2D" uid="uid://cdvxkrbb77ivv" path="res://textures/terrain3d/ground_with_rocks_01_1k_packed_normal_roughness.png" id="7_koh5d"]
 [ext_resource type="Texture2D" uid="uid://bxnpuq66y0nnt" path="res://textures/terrain3d/snow_01_1k_packed_albedo_height.png" id="8_6m35y"]
+[ext_resource type="PackedScene" uid="uid://b7lvmwrwv7m45" path="res://scenes/Terrain3DInstancerScenes/Trees/OakTiny02.tscn" id="9_dojt8"]
 [ext_resource type="Texture2D" uid="uid://dcx73lgac7a4q" path="res://textures/terrain3d/snow_01_1k_packed_normal_roughness.png" id="9_v08p1"]
+[ext_resource type="PackedScene" uid="uid://dc8burw60fumi" path="res://scenes/Terrain3DInstancerScenes/Trees/OakSmall02.tscn" id="10_bx55d"]
+[ext_resource type="PackedScene" uid="uid://b33cyl0gm37nu" path="res://scenes/Terrain3DInstancerScenes/Trees/OakSapling03.tscn" id="11_a7k5g"]
+[ext_resource type="PackedScene" uid="uid://bceq8hna3coah" path="res://scenes/Terrain3DInstancerScenes/Rocks/RockLarge01.tscn" id="12_ks0qn"]
+[ext_resource type="PackedScene" uid="uid://d4hisb2ek81fe" path="res://scenes/Terrain3DInstancerScenes/Rocks/RockLarge02.tscn" id="13_e2k06"]
+[ext_resource type="PackedScene" uid="uid://dv2nb0cr805h8" path="res://scenes/Terrain3DInstancerScenes/Rocks/RockMed01.tscn" id="14_dojt8"]
 
-[sub_resource type="Gradient" id="Gradient_1cmpo"]
+[sub_resource type="Gradient" id="Gradient_ks0qn"]
 offsets = PackedFloat32Array(0.2, 1)
 colors = PackedColorArray(1, 1, 1, 1, 0, 0, 0, 1)
 
-[sub_resource type="FastNoiseLite" id="FastNoiseLite_koh5d"]
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_e2k06"]
 noise_type = 2
 frequency = 0.03
 cellular_jitter = 3.0
@@ -28,12 +39,12 @@ domain_warp_fractal_type = 2
 domain_warp_fractal_lacunarity = 1.5
 domain_warp_fractal_gain = 1.0
 
-[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_6m35y"]
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_dojt8"]
 seamless = true
-color_ramp = SubResource("Gradient_1cmpo")
-noise = SubResource("FastNoiseLite_koh5d")
+color_ramp = SubResource("Gradient_ks0qn")
+noise = SubResource("FastNoiseLite_e2k06")
 
-[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_v08p1"]
+[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_bx55d"]
 _shader_parameters = {
 &"bias_distance": 512.0,
 &"blend_sharpness": 0.5,
@@ -49,12 +60,12 @@ _shader_parameters = {
 &"noise1_offset": Vector2(0.5, 0.5),
 &"noise1_scale": 0.04,
 &"noise2_scale": 0.076,
-&"noise_texture": SubResource("NoiseTexture2D_6m35y"),
+&"noise_texture": SubResource("NoiseTexture2D_dojt8"),
 &"projection_threshold": 0.8
 }
 world_background = 0
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tv678"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a7k5g"]
 transparency = 4
 cull_mode = 2
 vertex_color_use_as_albedo = true
@@ -64,39 +75,158 @@ distance_fade_mode = 1
 distance_fade_min_distance = 128.0
 distance_fade_max_distance = 96.0
 
-[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_yq8lh"]
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_r6qwp"]
 generated_type = 1
 height_offset = 0.5
-material_override = SubResource("StandardMaterial3D_tv678")
+material_override = SubResource("StandardMaterial3D_a7k5g")
 last_lod = 0
 last_shadow_lod = 0
 lod0_range = 128.0
 
-[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_y50al"]
-name = "hegot3d_OakLarge01"
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_dse53"]
+name = "hegot3d_GrassPatchMed01"
 id = 1
+scene_file = ExtResource("2_y50al")
+density = 3.73402
+last_lod = 2
+last_shadow_lod = 2
+lod0_range = 16.0
+lod1_range = 32.0
+lod2_range = 256.0
+lod3_range = 512.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_86fe4"]
+name = "hegot3d_BushMed01"
+id = 2
+scene_file = ExtResource("3_4hmpx")
+density = 1.77859
+last_lod = 2
+last_shadow_lod = 2
+lod0_range = 64.0
+lod1_range = 128.0
+lod2_range = 512.0
+lod3_range = 512.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_8xpau"]
+name = "hegot3d_BushLarge01"
+id = 3
+scene_file = ExtResource("4_tc5au")
+density = 0.829161
+last_lod = 2
+last_shadow_lod = 2
+lod0_range = 64.0
+lod1_range = 128.0
+lod2_range = 512.0
+lod3_range = 512.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_t0lyl"]
+name = "hegot3d_OakFieldLarge01"
+id = 4
+scene_file = ExtResource("5_ks0qn")
+density = 0.01
+last_lod = 3
+last_shadow_lod = 3
+lod1_range = 256.0
+lod2_range = 512.0
+lod3_range = 1024.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_x4o3c"]
+name = "hegot3d_OakFieldMed01"
+id = 5
+scene_file = ExtResource("6_e2k06")
+density = 0.01
+last_lod = 3
+last_shadow_lod = 3
+lod1_range = 256.0
+lod2_range = 512.0
+lod3_range = 1024.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_h22b8"]
+name = "hegot3d_OakLarge01"
+id = 6
 scene_file = ExtResource("2_qfa3p")
 density = 0.0459092
 last_lod = 3
 last_shadow_lod = 3
-lod0_range = 128.0
 lod1_range = 256.0
 lod2_range = 512.0
 lod3_range = 1024.0
 
-[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_4hmpx"]
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_yjwnm"]
 name = "hegot3d_OakMed01"
-id = 2
+id = 7
 scene_file = ExtResource("3_8haj8")
 density = 0.0951494
 last_lod = 3
 last_shadow_lod = 3
-lod0_range = 128.0
 lod1_range = 256.0
 lod2_range = 512.0
 lod3_range = 1024.0
 
-[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_tc5au"]
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_cb64j"]
+name = "hegot3d_OakSmall02"
+id = 8
+scene_file = ExtResource("10_bx55d")
+density = 0.306353
+last_lod = 3
+last_shadow_lod = 3
+lod1_range = 256.0
+lod2_range = 512.0
+lod3_range = 1024.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_u0ibb"]
+name = "hegot3d_OakTiny02"
+id = 9
+scene_file = ExtResource("9_dojt8")
+density = 0.403762
+last_lod = 3
+last_shadow_lod = 3
+lod1_range = 256.0
+lod2_range = 512.0
+lod3_range = 1024.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_1hec0"]
+name = "hegot3d_OakSapling03"
+id = 10
+scene_file = ExtResource("11_a7k5g")
+density = 2.55679
+last_lod = 2
+last_shadow_lod = 2
+lod1_range = 256.0
+lod2_range = 512.0
+lod3_range = 1024.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_8podt"]
+name = "hegot3d_RockLarge01"
+id = 11
+scene_file = ExtResource("12_ks0qn")
+density = 0.641783
+last_lod = 3
+last_shadow_lod = 3
+lod2_range = 128.0
+lod3_range = 1024.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_2ynw8"]
+name = "hegot3d_RockLarge02"
+id = 12
+scene_file = ExtResource("13_e2k06")
+density = 1.31686
+last_lod = 3
+last_shadow_lod = 3
+lod2_range = 128.0
+lod3_range = 1024.0
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_rv1my"]
+name = "hegot3d_RockMed01"
+id = 13
+scene_file = ExtResource("14_dojt8")
+density = 8.91745
+last_lod = 3
+last_shadow_lod = 3
+lod2_range = 128.0
+lod3_range = 1024.0
+
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_udgqr"]
 name = "grass"
 albedo_texture = ExtResource("2_kgjcq")
 normal_texture = ExtResource("3_ycyjt")
@@ -106,7 +236,7 @@ uv_scale = 1.0
 detiling_rotation = 1.0
 detiling_shift = 1.0
 
-[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_ks0qn"]
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_caws6"]
 name = "cliff"
 id = 1
 albedo_texture = ExtResource("4_qfa3p")
@@ -117,7 +247,7 @@ uv_scale = 1.0
 detiling_rotation = 1.0
 detiling_shift = 1.0
 
-[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_e2k06"]
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_qyfkd"]
 name = "gravel"
 id = 2
 albedo_texture = ExtResource("6_1cmpo")
@@ -128,7 +258,7 @@ uv_scale = 1.0
 detiling_rotation = 1.0
 detiling_shift = 1.0
 
-[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_dojt8"]
+[sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_8wfj8"]
 name = "snow"
 id = 3
 albedo_texture = ExtResource("8_6m35y")
@@ -139,9 +269,9 @@ uv_scale = 1.0
 detiling_rotation = 1.0
 detiling_shift = 1.0
 
-[sub_resource type="Terrain3DAssets" id="Terrain3DAssets_bx55d"]
-mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_yq8lh"), SubResource("Terrain3DMeshAsset_y50al"), SubResource("Terrain3DMeshAsset_4hmpx")])
-texture_list = Array[Terrain3DTextureAsset]([SubResource("Terrain3DTextureAsset_tc5au"), SubResource("Terrain3DTextureAsset_ks0qn"), SubResource("Terrain3DTextureAsset_e2k06"), SubResource("Terrain3DTextureAsset_dojt8")])
+[sub_resource type="Terrain3DAssets" id="Terrain3DAssets_0iwe4"]
+mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_r6qwp"), SubResource("Terrain3DMeshAsset_dse53"), SubResource("Terrain3DMeshAsset_86fe4"), SubResource("Terrain3DMeshAsset_8xpau"), SubResource("Terrain3DMeshAsset_t0lyl"), SubResource("Terrain3DMeshAsset_x4o3c"), SubResource("Terrain3DMeshAsset_h22b8"), SubResource("Terrain3DMeshAsset_yjwnm"), SubResource("Terrain3DMeshAsset_cb64j"), SubResource("Terrain3DMeshAsset_u0ibb"), SubResource("Terrain3DMeshAsset_1hec0"), SubResource("Terrain3DMeshAsset_8podt"), SubResource("Terrain3DMeshAsset_2ynw8"), SubResource("Terrain3DMeshAsset_rv1my")])
+texture_list = Array[Terrain3DTextureAsset]([SubResource("Terrain3DTextureAsset_udgqr"), SubResource("Terrain3DTextureAsset_caws6"), SubResource("Terrain3DTextureAsset_qyfkd"), SubResource("Terrain3DTextureAsset_8wfj8")])
 
 [node name="Node3D" type="Node3D"]
 
@@ -153,7 +283,7 @@ metadata/_custom_type_script = "uid://blnvgo8r28r5p"
 
 [node name="Terrain3D" type="Terrain3D" parent="HEGoNode3D"]
 data_directory = "res://hegot3d_data/"
-material = SubResource("Terrain3DMaterial_v08p1")
-assets = SubResource("Terrain3DAssets_bx55d")
+material = SubResource("Terrain3DMaterial_bx55d")
+assets = SubResource("Terrain3DAssets_0iwe4")
 top_level = true
 metadata/_edit_lock_ = true
