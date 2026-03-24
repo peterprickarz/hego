@@ -16,8 +16,9 @@ namespace Util
 {
 namespace Geo
 {
-godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const godot::PackedStringArray &read_prim_attribs);
-godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, int part_id);
+godot::Array get_heightfield_layers(
+		HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const godot::PackedStringArray &read_prim_attribs, bool auto_cook = true);
+godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, int part_id, bool auto_cook = true);
 } // namespace Geo
 } // namespace Util
 } // namespace HEGo

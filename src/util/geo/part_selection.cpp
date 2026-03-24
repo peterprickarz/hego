@@ -8,14 +8,17 @@ namespace Util
 {
 namespace Geo
 {
-bool get_display_geo_info(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, HAPI_GeoInfo &geo_info)
+bool get_display_geo_info(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, HAPI_GeoInfo &geo_info, bool auto_cook)
 {
-	if (HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()) != HAPI_RESULT_SUCCESS)
+	if (auto_cook)
 	{
-		HEGo::Util::Log::error("Failed to cook node before geometry fetch.");
-		return false;
+		if (HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()) != HAPI_RESULT_SUCCESS)
+		{
+			HEGo::Util::Log::error("Failed to cook node before geometry fetch.");
+			return false;
+		}
+		session_mgr->wait_for_cook(node_id);
 	}
-	session_mgr->wait_for_cook(node_id);
 
 	if (HoudiniApi::GetDisplayGeoInfo(session_mgr->get_session(), node_id, &geo_info) != HAPI_RESULT_SUCCESS)
 	{

@@ -33,7 +33,7 @@ godot::Array convert_face_counts_to_array(const std::vector<int> &face_counts)
 
 	return prims;
 }
-godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config)
+godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config, bool auto_cook)
 {
 	HEGo::Util::Log::line();
 	HEGo::Util::Log::message("Fetching Surface Dictionary");
@@ -56,7 +56,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::PackedStringArray split_attribs = fetch_surfaces_config->get("split_attribs");
 
 	HAPI_GeoInfo mesh_geo_info;
-	if (!get_display_geo_info(session_mgr, node_id, mesh_geo_info))
+	if (!get_display_geo_info(session_mgr, node_id, mesh_geo_info, auto_cook))
 	{
 		return godot::Dictionary();
 	}

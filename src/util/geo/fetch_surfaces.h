@@ -11,7 +11,8 @@ namespace Util
 {
 namespace Geo
 {
-godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config);
+godot::Dictionary fetch_surfaces(
+		HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config, bool auto_cook = true);
 
 void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::Array &id_arr, godot::Array &vertex_point_indices);
 void modify_base_entries(godot::Dictionary &nested_dict, godot::Array &vertex_point_indices, godot::Dictionary point_attrs, godot::Array filtered_prims);

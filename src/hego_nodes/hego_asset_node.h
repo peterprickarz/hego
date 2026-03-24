@@ -32,10 +32,11 @@ public:
 	godot::Dictionary get_parms_dict();
 	godot::PackedStringArray get_input_names();
 	godot::Array fetch_output();
-	godot::Dictionary fetch_points(godot::Ref<godot::Resource> fetch_point_config);
-	godot::Dictionary fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config);
-	godot::Array get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray());
-	godot::Ref<godot::Image> fetch_heightfield_layer_image(int part_id);
+	void cook();
+	godot::Dictionary fetch_points(godot::Ref<godot::Resource> fetch_point_config, bool auto_cook = true);
+	godot::Dictionary fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config, bool auto_cook = true);
+	godot::Array get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray(), bool auto_cook = true);
+	godot::Ref<godot::Image> fetch_heightfield_layer_image(int part_id, bool auto_cook = true);
 
 	void set_op_name(godot::String name);
 	godot::String get_op_name() const;

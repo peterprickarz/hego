@@ -17,8 +17,43 @@ var hego_asset_node: HEGoAssetNode
 # Create var to store references to the input and merge nodes in the session
 var hego_input_nodes: Dictionary
 
+var input_names: PackedStringArray
+
+
+func _elapsed_msec(start_usec: int) -> float:
+	return float(Time.get_ticks_usec() - start_usec) / 1000.0
+
+
+func _build_cook_timing_summary(timings: Dictionary, total_msec: float) -> String:
+	var lines = PackedStringArray()
+	lines.append("[HEGoNode3D]: Cook timing summary")
+	lines.append("[HEGoNode3D]:   Instantiation phase: %.3f ms" % timings.get("instantiation", 0.0))
+	lines.append("[HEGoNode3D]:   Input setup: %.3f ms" % timings.get("input_setup", 0.0))
+	lines.append("[HEGoNode3D]:   Parm stash: %.3f ms" % timings.get("parm_stash", 0.0))
+	lines.append("[HEGoNode3D]:   Cook: %.3f ms" % timings.get("cook", 0.0))
+	lines.append("[HEGoNode3D]:   Mesh output: %.3f ms" % timings.get("mesh_output", 0.0))
+	lines.append("[HEGoNode3D]:   Multimesh output: %.3f ms" % timings.get("multimesh_output", 0.0))
+	lines.append("[HEGoNode3D]:   Object spawn output: %.3f ms" % timings.get("object_spawn_output", 0.0))
+	lines.append("[HEGoNode3D]:   Terrain3D output: %.3f ms" % timings.get("terrain3d_output", 0.0))
+	lines.append("[HEGoNode3D]:   Terrain3D instancer output: %.3f ms" % timings.get("terrain3d_instancer_output", 0.0))
+	lines.append("[HEGoNode3D]:   Total cook(): %.3f ms" % total_msec)
+	return "\n".join(lines)
+
 
 func cook():
+	var timings = {
+		"instantiation": 0.0,
+		"input_setup": 0.0,
+		"parm_stash": 0.0,
+		"cook": 0.0,
+		"mesh_output": 0.0,
+		"multimesh_output": 0.0,
+		"object_spawn_output": 0.0,
+		"terrain3d_output": 0.0,
+		"terrain3d_instancer_output": 0.0,
+	}
+	var cook_start_usec = Time.get_ticks_usec()
+	var phase_start_usec = cook_start_usec
 	# Ensure valid AssetNode object
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	# Assign HDA
@@ -39,11 +74,14 @@ func cook():
 	var outputs_node = get_node_or_null("Outputs")
 	if outputs_node:
 		outputs_node.free()
+		timings["instantiation"] = _elapsed_msec(phase_start_usec)
 		
 	# SET INPUTS
 	# Retrieve a string array containing the names of inputs
-	var input_names = hego_asset_node.get_input_names()
+	if id == -1:
+		input_names = hego_asset_node.get_input_names()
 	# Loop over inputs
+		phase_start_usec = Time.get_ticks_usec()
 	for i in range(input_names.size()):
 		# Retrieve godot node refs for input from input stash
 		var inputs = Array()
@@ -72,7 +110,7 @@ func cook():
 			input_dict["inputs"] = input_array
 			hego_input_nodes[i] = input_dict
 		# If the input exists on Houdini side, update it if anything changed
-		if hego_input_nodes.has(i):
+		elif hego_input_nodes.has(i):
 			var input_dict = hego_input_nodes[i]
 			var merge_node = input_dict["merge"]
 			merge_node.instantiate()
@@ -102,21 +140,40 @@ func cook():
 			merge_node.connect_inputs(input_array)
 			# Connect merge to asset node
 			hego_asset_node.connect_input(merge_node, i)
+	timings["input_setup"] = _elapsed_msec(phase_start_usec)
+	phase_start_usec = Time.get_ticks_usec()
 	parm_stash = hego_asset_node.get_preset()
+	timings["parm_stash"] = _elapsed_msec(phase_start_usec)
+	# Cook once before all fetch operations
+	phase_start_usec = Time.get_ticks_usec()
+	hego_asset_node.cook()
+	timings["cook"] = _elapsed_msec(phase_start_usec)
 	# FETCH OUTPUTS
 	
+	phase_start_usec = Time.get_ticks_usec()
 	handle_mesh_output()
+	timings["mesh_output"] = _elapsed_msec(phase_start_usec)
+	phase_start_usec = Time.get_ticks_usec()
 	handle_multimesh_output()
+	timings["multimesh_output"] = _elapsed_msec(phase_start_usec)
+	phase_start_usec = Time.get_ticks_usec()
 	handle_object_spawn_output()
+	timings["object_spawn_output"] = _elapsed_msec(phase_start_usec)
+	phase_start_usec = Time.get_ticks_usec()
 	handle_terrain3d_output()
+	timings["terrain3d_output"] = _elapsed_msec(phase_start_usec)
+	phase_start_usec = Time.get_ticks_usec()
 	handle_terrain3d_instancer_output()
+	timings["terrain3d_instancer_output"] = _elapsed_msec(phase_start_usec)
+
+	print(_build_cook_timing_summary(timings, _elapsed_msec(cook_start_usec)))
 
 
 func handle_mesh_output():
 	# use config to fetch output mesh
 	var fetch_surfaces_default_config = load("res://addons/hego/surface_filters/fetch_surfaces_default.tres")
 	# retrieve dictionary output, containing the mesh in godots surface_array format
-	var dict = hego_asset_node.fetch_surfaces(fetch_surfaces_default_config)
+	var dict = hego_asset_node.fetch_surfaces(fetch_surfaces_default_config, false)
 	for hego_mesh_instance_key in dict.keys():
 		var arr_mesh = ArrayMesh.new()
 		var surface_id = 0
@@ -234,11 +291,10 @@ func handle_mesh_output():
 func handle_object_spawn_output():
 	print("[HEGoNode3D]: Handling Object Spawn Output")
 	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_object_spawning.tres")
-	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config)
+	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config, false)
 	
 	# Validate output dictionary
 	if not output_dictionary or not output_dictionary.has("P") or not output_dictionary.P is Array:
-		push_error("[HEGoNode3D]: Invalid output dictionary or missing P attribute")
 		return
 	
 	var point_count = output_dictionary.P.size()
@@ -395,10 +451,9 @@ func handle_terrain3d_output():
 		"hegot3d_roughness",
 		"hegot3d_uv_scale"
 	])
-	var layers = hego_asset_node.get_heightfield_layers(requested_attrs)
+	var layers = hego_asset_node.get_heightfield_layers(requested_attrs, false)
 	var height_layer = _t3d_get_layer_by_name(layers, "height")
 	if height_layer.is_empty():
-		push_error("[HEGoNode3D]: No height layer found for Terrain3D output.")
 		return
 
 	var spawn_terrain_attr = _t3d_get_attr_value(height_layer, "hegot3d_spawn_terrain")
@@ -543,7 +598,7 @@ func handle_terrain3d_output():
 
 				terrain_assets.call("set_texture", int(texture_layer["slot"]), texture_asset)
 
-				var weight_image = hego_asset_node.fetch_heightfield_layer_image(int(texture_layer["part_id"]))
+				var weight_image = hego_asset_node.fetch_heightfield_layer_image(int(texture_layer["part_id"]), false)
 				if weight_image != null:
 					weight_image = _t3d_fix_heightfield_image_transform(weight_image)
 				if weight_image == null:
@@ -561,7 +616,7 @@ func handle_terrain3d_output():
 
 	var hole_image = null
 	if control_generation_enabled and not hole_layer.is_empty() and hole_layer.has("part_id"):
-		hole_image = hego_asset_node.fetch_heightfield_layer_image(int(hole_layer["part_id"]))
+		hole_image = hego_asset_node.fetch_heightfield_layer_image(int(hole_layer["part_id"]), false)
 		if hole_image != null:
 			hole_image = _t3d_fix_heightfield_image_transform(hole_image)
 		if hole_image == null:
@@ -578,7 +633,7 @@ func handle_terrain3d_output():
 		push_error("[HEGoNode3D]: Height layer has invalid part_id.")
 		return
 
-	var height_image = hego_asset_node.fetch_heightfield_layer_image(part_id)
+	var height_image = hego_asset_node.fetch_heightfield_layer_image(part_id, false)
 	if height_image != null:
 		height_image = _t3d_fix_heightfield_image_transform(height_image)
 	if height_image == null:
@@ -587,7 +642,7 @@ func handle_terrain3d_output():
 
 	var region_map_image = null
 	if not region_map_layer.is_empty() and region_map_layer.has("part_id"):
-		region_map_image = hego_asset_node.fetch_heightfield_layer_image(int(region_map_layer["part_id"]))
+		region_map_image = hego_asset_node.fetch_heightfield_layer_image(int(region_map_layer["part_id"]), false)
 		if region_map_image != null:
 			region_map_image = _t3d_fix_heightfield_image_transform(region_map_image)
 
@@ -603,19 +658,19 @@ func handle_terrain3d_output():
 	var color_image_roughness = null
 	if has_any_color_layer:
 		if not color_layer_r.is_empty() and color_layer_r.has("part_id"):
-			color_image_r = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_r["part_id"]))
+			color_image_r = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_r["part_id"]), false)
 			if color_image_r != null:
 				color_image_r = _t3d_fix_heightfield_image_transform(color_image_r)
 		if not color_layer_g.is_empty() and color_layer_g.has("part_id"):
-			color_image_g = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_g["part_id"]))
+			color_image_g = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_g["part_id"]), false)
 			if color_image_g != null:
 				color_image_g = _t3d_fix_heightfield_image_transform(color_image_g)
 		if not color_layer_b.is_empty() and color_layer_b.has("part_id"):
-			color_image_b = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_b["part_id"]))
+			color_image_b = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_b["part_id"]), false)
 			if color_image_b != null:
 				color_image_b = _t3d_fix_heightfield_image_transform(color_image_b)
 		if not color_layer_roughness.is_empty() and color_layer_roughness.has("part_id"):
-			color_image_roughness = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_roughness["part_id"]))
+			color_image_roughness = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_roughness["part_id"]), false)
 			if color_image_roughness != null:
 				color_image_roughness = _t3d_fix_heightfield_image_transform(color_image_roughness)
 
@@ -745,7 +800,7 @@ func handle_terrain3d_instancer_output():
 		push_warning("[HEGoNode3D]: Terrain3D instancer fetch config could not be loaded.")
 		return
 
-	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config)
+	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config, false)
 	if not output_dictionary is Dictionary or output_dictionary.is_empty():
 		return
 
@@ -967,7 +1022,7 @@ func is_compatible_type(value, expected_type: int, expected_class: String) -> bo
 func handle_multimesh_output():
 	print("[HEGoNode3D]: Handling Multimesh Output")
 	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_multimesh_instancing.tres")
-	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config)
+	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config, false)
 	#print(output_dictionary)
 	for key in output_dictionary.keys():
 		var hego_multimesh = "MultiMesh"
@@ -1260,8 +1315,6 @@ func hego_set_input_stash(input_array: Array):
 	# input_array is an array of inputs, as each Houdini input can combine
 	# multiple inputs, each input is an array itself, storing node names and ids
 	# Create new array to store actual node refs
-	print("stash inputs")
-	print(input_array)
 	var result = Array()
 	for input in input_array:
 		var ref_array = Array()

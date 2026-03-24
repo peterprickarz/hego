@@ -47,12 +47,16 @@ noise = SubResource("FastNoiseLite_e2k06")
 [sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_bx55d"]
 _shader_parameters = {
 &"bias_distance": 512.0,
-&"blend_sharpness": 0.5,
+&"blend_sharpness": 0.07,
 &"depth_blur": 0.0,
+&"dual_scale_far": 57.418,
+&"dual_scale_near": 53.642,
+&"dual_scale_reduction": 0.049,
+&"dual_scale_texture": 1,
 &"enable_macro_variation": true,
 &"enable_projection": true,
 &"flat_terrain_normals": false,
-&"macro_variation1": Color(1, 1, 1, 1),
+&"macro_variation1": Color(0.923676, 0.869321, 0.898212, 1),
 &"macro_variation2": Color(1, 1, 1, 1),
 &"macro_variation_slope": 0.333,
 &"mipmap_bias": 1.0,
@@ -61,9 +65,11 @@ _shader_parameters = {
 &"noise1_scale": 0.04,
 &"noise2_scale": 0.076,
 &"noise_texture": SubResource("NoiseTexture2D_dojt8"),
-&"projection_threshold": 0.8
+&"projection_threshold": 0.72,
+&"tri_scale_reduction": 0.3
 }
 world_background = 0
+dual_scaling = true
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a7k5g"]
 transparency = 4
@@ -244,8 +250,6 @@ normal_texture = ExtResource("5_8haj8")
 normal_depth = 1.0
 ao_strength = 1.0
 uv_scale = 1.0
-detiling_rotation = 1.0
-detiling_shift = 1.0
 
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_qyfkd"]
 name = "gravel"

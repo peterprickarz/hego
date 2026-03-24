@@ -55,7 +55,7 @@ godot::Array read_prim_attr_pairs(
 }
 } // namespace
 
-godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const godot::PackedStringArray &read_prim_attribs)
+godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const godot::PackedStringArray &read_prim_attribs, bool auto_cook)
 {
 	godot::Array layers;
 
@@ -67,7 +67,7 @@ godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId
 	}
 
 	HAPI_GeoInfo geo_info;
-	if (!get_display_geo_info(session_mgr, node_id, geo_info))
+	if (!get_display_geo_info(session_mgr, node_id, geo_info, auto_cook))
 	{
 		return layers;
 	}
@@ -120,7 +120,7 @@ godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId
 	return layers;
 }
 
-godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, int part_id)
+godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, int part_id, bool auto_cook)
 {
 	godot::Ref<godot::Image> image;
 
@@ -132,7 +132,7 @@ godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *sessi
 	}
 
 	HAPI_GeoInfo geo_info;
-	if (!get_display_geo_info(session_mgr, node_id, geo_info))
+	if (!get_display_geo_info(session_mgr, node_id, geo_info, auto_cook))
 	{
 		return image;
 	}
