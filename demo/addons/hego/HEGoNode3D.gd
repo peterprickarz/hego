@@ -1272,9 +1272,21 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 		hego_input_node.instantiate()
 		hego_input_node.set_geo_from_mesh(input.bake_static_mesh(), attrs)
 		hego_input_node.set_transform(input.global_transform)
+	elif _is_terrain3d_available() and input.is_class("Terrain3D"):
+		if not hego_input_node is HEGoHeightfieldInputNode:
+			hego_input_node = HEGoHeightfieldInputNode.new()
+		hego_input_node.instantiate()
+		var layers = _terrain3d_read_layers(input, input_node_path)
+		if not layers.is_empty():
+			var voxel_size = _terrain3d_get_vertex_spacing(input)
+			hego_input_node.set_layers(layers, voxel_size, 1.0)
 	else:
-		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D or CSGShape3D")
+		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D, CSGShape3D, or Terrain3D")
 	return hego_input_node
+
+
+func _is_terrain3d_available() -> bool:
+	return ClassDB.class_exists("Terrain3D")
 
 
 func create_hego_input_node(input_node_path, settings):
@@ -1318,8 +1330,15 @@ func create_hego_input_node(input_node_path, settings):
 		input_node.instantiate()
 		input_node.set_geo_from_mesh(input.bake_static_mesh(), attrs)
 		input_node.set_transform(input.global_transform)
+	elif _is_terrain3d_available() and input.is_class("Terrain3D"):
+		input_node = HEGoHeightfieldInputNode.new()
+		input_node.instantiate()
+		var layers = _terrain3d_read_layers(input, input_node_path)
+		if not layers.is_empty():
+			var voxel_size = _terrain3d_get_vertex_spacing(input)
+			input_node.set_layers(layers, voxel_size, 1.0)
 	else:
-		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D or CSGShape3D")
+		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D, CSGShape3D, or Terrain3D")
 	return input_node
 
 
@@ -1442,6 +1461,298 @@ func _clear_hda_data():
 	
 	print("[HEGoNode3D]: Cleared old HDA data and reset node ID")
 
+
+
+
+# =============================================================================
+# Terrain3D Input Processing Functions
+# =============================================================================
+
+func _terrain3d_read_layers(terrain3d_node: Node, input_node_path: String = "") -> Dictionary:
+	"""
+	Reads Terrain3D heightfield and control data, stitches regions together,
+	and returns a dictionary for HEGoHeightfieldInputNode.set_layers()
+	"""
+	if not _is_terrain3d_available():
+		return {}
+	
+	var terrain_data = terrain3d_node.get("data")
+	if terrain_data == null:
+		push_error("[HEGoNode3D]: Failed to get Terrain3D data")
+		return {}
+	
+	var region_locations = terrain_data.get_region_locations()
+	if region_locations.size() == 0:
+		push_warning("[HEGoNode3D]: Terrain3D has no regions")
+		return {}
+
+	var height_maps = terrain_data.call("get_maps", 0)
+	if not height_maps is Array or height_maps.is_empty():
+		push_error("[HEGoNode3D]: Failed to fetch Terrain3D height maps.")
+		return {}
+	var control_maps = terrain_data.call("get_maps", 1)
+	if control_maps == null:
+		control_maps = []
+	if not ClassDB.class_exists("Terrain3DUtil"):
+		push_error("[HEGoNode3D]: Terrain3DUtil is unavailable.")
+		return {}
+	var terrain3d_util = ClassDB.instantiate("Terrain3DUtil")
+	if terrain3d_util == null:
+		push_error("[HEGoNode3D]: Failed to instantiate Terrain3DUtil.")
+		return {}
+	
+	var region_pixel_size = _terrain3d_get_region_pixel_size(height_maps)
+	if region_pixel_size <= 1:
+		push_error("[HEGoNode3D]: Invalid Terrain3D region image size.")
+		return {}
+	# Adjacent regions share one border sample, so stride is size-1 in pixel space.
+	var region_pixel_stride = region_pixel_size - 1
+	var region_count = mini(region_locations.size(), height_maps.size())
+	if region_count != region_locations.size() or region_count != height_maps.size():
+		push_warning("[HEGoNode3D]: Terrain3D region metadata and height maps count differ. Truncating to shared count.")
+	
+	# Calculate stitched dimensions
+	var min_x = INF
+	var max_x = -INF
+	var min_z = INF
+	var max_z = -INF
+	
+	for region_index in range(region_count):
+		var region_loc = region_locations[region_index]
+		min_x = min(min_x, region_loc.x)
+		max_x = max(max_x, region_loc.x)
+		min_z = min(min_z, region_loc.y)
+		max_z = max(max_z, region_loc.y)
+	
+	var grid_width = int(max_x - min_x + 1)
+	var grid_height = int(max_z - min_z + 1)
+	var total_width = grid_width * region_pixel_stride + 1
+	var total_height = grid_height * region_pixel_stride + 1
+	
+	# Create region mask and hole mask
+	var region_mask = Image.create(total_width, total_height, false, Image.FORMAT_RF)
+	region_mask.fill(Color(0, 0, 0, 1))
+	
+	var hole_mask = Image.create(total_width, total_height, false, Image.FORMAT_RF)
+	hole_mask.fill(Color(1, 1, 1, 1))
+	
+	# Stitch height data and collect texture layers
+	var stitched_height = Image.create(total_width, total_height, false, Image.FORMAT_RF)
+	var texture_weights: Dictionary = {}  # texture_id -> Dictionary of (x,y) -> weight
+	var used_texture_ids = []
+	
+	for region_index in range(region_count):
+		_terrain3d_stitch_region(
+			region_locations[region_index], height_maps[region_index],
+			control_maps[region_index] if region_index < control_maps.size() else null,
+			terrain3d_util,
+			min_x, min_z, region_pixel_size, region_pixel_stride,
+			stitched_height, region_mask, hole_mask, texture_weights, used_texture_ids
+		)
+	
+	# Apply axis correction to height
+	stitched_height = _t3d_fix_heightfield_image_transform(stitched_height)
+	region_mask = _t3d_fix_heightfield_image_transform(region_mask)
+	hole_mask = _t3d_fix_heightfield_image_transform(hole_mask)
+	
+	# Build result layers dictionary
+	var terrain_node_path = input_node_path
+	var result = {}
+	result["height"] = {
+		"image": stitched_height,
+		"attrs": {"_hego_node_path": terrain_node_path}
+	}
+	result["hegot3d_region_map"] = {
+		"image": region_mask,
+		"attrs": {"_hego_node_path": terrain_node_path}
+	}
+	result["hegot3d_hole"] = {
+		"image": hole_mask,
+		"attrs": {"_hego_node_path": terrain_node_path}
+	}
+	
+	# Build texture layer images directly from Terrain3D control map weights.
+	for texture_id in used_texture_ids:
+		var texture_image = _terrain3d_build_texture_layer(
+			texture_weights, texture_id, total_width, total_height
+		)
+		texture_image = _t3d_fix_heightfield_image_transform(texture_image)
+		result["hegot3d_texture_layer_%d" % texture_id] = {
+			"image": texture_image,
+			"attrs": {
+				"_hego_node_path": terrain_node_path,
+				"_hego_texture_name": _terrain3d_get_texture_name(terrain3d_node, texture_id)
+			}
+		}
+	
+	return result
+
+
+func _terrain3d_get_vertex_spacing(terrain3d_node: Node) -> float:
+	if terrain3d_node == null:
+		return 1.0
+	var spacing = 1.0
+	if terrain3d_node.has_method("get_vertex_spacing"):
+		spacing = float(terrain3d_node.call("get_vertex_spacing"))
+	else:
+		spacing = float(terrain3d_node.get("vertex_spacing"))
+	if spacing <= 0.0:
+		return 1.0
+	return spacing
+
+
+func _terrain3d_get_region_pixel_size(height_maps: Array) -> int:
+	for height_image in height_maps:
+		if height_image is Image:
+			return height_image.get_width()
+	return 0
+
+
+func _terrain3d_stitch_region(
+	region_loc: Vector2i,
+	height_image: Image,
+	control_image: Image,
+	terrain3d_util: Object,
+	min_x: float,
+	min_z: float,
+	region_pixel_size: int,
+	region_pixel_stride: int,
+	stitched_height: Image,
+	region_mask: Image,
+	hole_mask: Image,
+	texture_weights: Dictionary,
+	used_texture_ids: Array
+) -> void:
+	"""
+	Reads height, control, and hole data for a single region and stitches it
+	into the main heightfield and mask images.
+	"""
+	# Calculate offset in stitched image
+	var offset_x = int((region_loc.x - min_x) * region_pixel_stride)
+	var offset_z = int((region_loc.y - min_z) * region_pixel_stride)
+	if height_image == null:
+		return
+	
+	# Stitch height and region mask
+	for y in range(region_pixel_size):
+		for x in range(region_pixel_size):
+			var stitch_x = offset_x + x
+			var stitch_y = offset_z + y
+			
+			if stitch_x >= 0 and stitch_x < stitched_height.get_width() and stitch_y >= 0 and stitch_y < stitched_height.get_height():
+				# Copy height
+				var height_pixel = height_image.get_pixel(x, y)
+				stitched_height.set_pixel(stitch_x, stitch_y, height_pixel)
+				
+				# Mark region as existing
+				region_mask.set_pixel(stitch_x, stitch_y, Color(1, 1, 1, 1))
+				
+				# Process control data
+				if control_image != null:
+					var control_pixel = control_image.get_pixel(x, y)
+					var control_bits = int(terrain3d_util.call("as_uint", control_pixel.r))
+					
+					var base_id = int(terrain3d_util.call("get_base", control_bits))
+					var overlay_id = int(terrain3d_util.call("get_overlay", control_bits))
+					var blend_value = float(terrain3d_util.call("get_blend", control_bits)) / 255.0
+					var hole_bit = bool(terrain3d_util.call("is_hole", control_bits))
+					
+					# Ensure texture IDs are tracked
+					if base_id >= 0 and base_id not in used_texture_ids:
+						used_texture_ids.append(base_id)
+						texture_weights[base_id] = {}
+					if overlay_id >= 0 and overlay_id not in used_texture_ids:
+						used_texture_ids.append(overlay_id)
+						texture_weights[overlay_id] = {}
+					
+					# Base uses 1-blend, overlay uses blend.
+					var base_weight = 1.0 - blend_value
+					var overlay_weight = blend_value
+					
+					var pixel_key = Vector2i(stitch_x, stitch_y)
+					if base_id >= 0 and overlay_id >= 0 and base_id == overlay_id:
+						texture_weights[base_id][pixel_key] = 1.0
+					else:
+						if base_id >= 0:
+							texture_weights[base_id][pixel_key] = base_weight
+						if overlay_id >= 0:
+							texture_weights[overlay_id][pixel_key] = overlay_weight
+					
+					# Update hole mask (1 = solid, 0 = hole)
+					if hole_bit:
+						hole_mask.set_pixel(stitch_x, stitch_y, Color(0, 0, 0, 1))
+					else:
+						hole_mask.set_pixel(stitch_x, stitch_y, Color(1, 1, 1, 1))
+
+
+func _terrain3d_build_texture_layer(
+	texture_weights: Dictionary,
+	texture_id: int,
+	width: int,
+	height: int
+) -> Image:
+	"""
+	Builds a texture layer image directly from Terrain3D control map weights.
+	"""
+	var result = Image.create(width, height, false, Image.FORMAT_RF)
+	result.fill(Color(0, 0, 0, 1))
+
+	if texture_id in texture_weights:
+		for pixel_key in texture_weights[texture_id].keys():
+			var weight = texture_weights[texture_id][pixel_key]
+			result.set_pixel(pixel_key.x, pixel_key.y, Color(weight, weight, weight, 1))
+	
+	return result
+func _terrain3d_get_texture_name(terrain3d_node: Node, texture_id: int) -> String:
+	var assets = _t3d_get_terrain_assets(terrain3d_node)
+	if assets == null or not assets.has_method("get_texture"):
+		return ""
+	var texture_asset = assets.call("get_texture", texture_id)
+	if texture_asset == null:
+		return ""
+	if texture_asset.has_method("get_name"):
+		return str(texture_asset.call("get_name"))
+	return str(texture_asset.get("name"))
+
+
+func _terrain3d_float_to_u32(value: float) -> int:
+	var bytes = PackedByteArray()
+	bytes.resize(4)
+	bytes.encode_float(0, value)
+	return int(bytes.decode_u32(0))
+
+
+func _terrain3d_decode_bits(control_bits: int, field: String) -> int:
+	"""
+	Decodes Terrain3D control map bits.
+	base: bits 31-27, overlay: bits 26-22, blend: bits 21-14,
+	uv_angle: bits 13-10, uv_scale: bits 9-7, hole: bit 2,
+	navigation: bit 1, auto: bit 0.
+	"""
+	match field:
+		"base":
+			return (control_bits >> 27) & 0x1F
+		"overlay":
+			return (control_bits >> 22) & 0x1F
+		"blend":
+			return (control_bits >> 14) & 0xFF
+		"uv_angle":
+			return (control_bits >> 10) & 0xF
+		"uv_scale":
+			return (control_bits >> 7) & 0x7
+		"hole":
+			return (control_bits >> 2) & 0x1
+		"navigation":
+			return (control_bits >> 1) & 0x1
+		"auto":
+			return control_bits & 0x1
+		_:
+			return 0
+
+
+# =============================================================================
+# Terrain3D Output Helper Functions (existing)
+# =============================================================================
 
 func _t3d_get_layer_by_name(layers: Array, layer_name: String) -> Dictionary:
 	for layer in layers:
