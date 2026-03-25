@@ -6,6 +6,7 @@
 #include "util/hego_util.h"
 #include "util/log/log.h"
 
+#include <chrono>
 #include <godot_cpp/classes/array_mesh.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 
@@ -81,6 +82,11 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 
 	// get read, split and filter attrs
 	godot::Dictionary read_attribs_dict;
+	godot::Dictionary filter_attribs_dict;
+	godot::Dictionary split_attribs_dict;
+	godot::Dictionary prim_attr_cache;
+	godot::Dictionary seen_prim_attrs;
+	godot::Array unique_prim_attrs;
 
 	godot::Dictionary point_attrs;
 	point_attrs["P"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "P");
@@ -113,33 +119,55 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	{
 		HEGo::Util::Log::message("Getting tangents disabled");
 	}
+	for (int i = 0; i < read_attribs.size(); i++)
+	{
+		godot::String attr_name = read_attribs[i];
+		if (!seen_prim_attrs.has(attr_name))
+		{
+			seen_prim_attrs[attr_name] = true;
+			unique_prim_attrs.append(attr_name);
+		}
+	}
+	for (int i = 0; i < filter_attribs.size(); i++)
+	{
+		godot::String attr_name = filter_attribs[i];
+		if (!seen_prim_attrs.has(attr_name))
+		{
+			seen_prim_attrs[attr_name] = true;
+			unique_prim_attrs.append(attr_name);
+		}
+	}
+	for (int i = 0; i < split_attribs.size(); i++)
+	{
+		godot::String attr_name = split_attribs[i];
+		if (!seen_prim_attrs.has(attr_name))
+		{
+			seen_prim_attrs[attr_name] = true;
+			unique_prim_attrs.append(attr_name);
+		}
+	}
+
+	for (int i = 0; i < unique_prim_attrs.size(); i++)
+	{
+		godot::String attr_name = unique_prim_attrs[i];
+		prim_attr_cache[attr_name] =
+				HEGo::Util::Attribs::fetch_by_name(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_PRIM, attr_name.utf8().get_data());
+	}
 
 	for (int i = 0; i < read_attribs.size(); i++)
 	{
 		godot::String attr_name = read_attribs[i];
-		HAPI_AttributeInfo attrib_info;
-		HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeInfo(
-				session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, attr_name.utf8(), HAPI_ATTROWNER_PRIM, &attrib_info));
-		godot::Array values =
-				HEGo::Util::Attribs::fetch_by_name(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_PRIM, attr_name.utf8().get_data());
-
-		read_attribs_dict[attr_name] = values;
+		read_attribs_dict[attr_name] = prim_attr_cache[attr_name];
 	}
-	godot::Dictionary filter_attribs_dict;
 	for (int i = 0; i < filter_attribs.size(); i++)
 	{
 		godot::String attr_name = filter_attribs[i];
-		godot::Array values =
-				HEGo::Util::Attribs::fetch_by_name(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_PRIM, attr_name.utf8().get_data());
-		filter_attribs_dict[attr_name] = values;
+		filter_attribs_dict[attr_name] = prim_attr_cache[attr_name];
 	}
-	godot::Dictionary split_attribs_dict;
 	for (int i = 0; i < split_attribs.size(); i++)
 	{
 		godot::String attr_name = split_attribs[i];
-		godot::Array values =
-				HEGo::Util::Attribs::fetch_by_name(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_PRIM, attr_name.utf8().get_data());
-		split_attribs_dict[attr_name] = values;
+		split_attribs_dict[attr_name] = prim_attr_cache[attr_name];
 	}
 
 	// filter prims
@@ -173,6 +201,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	}
 
 	godot::Dictionary split_prim_dictionary = HEGo::Util::Geo::build_nested_dictionary(split_attribs, split_attribs_dict, int_ids, read_attribs_dict, 0);
+
 	godot::Array vt_pt_indices;
 	for (int i = 0; i < vertex_point_indices.size(); i++)
 	{
@@ -184,7 +213,8 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	return split_prim_dictionary;
 }
 
-void modify_base_entries(godot::Dictionary &nested_dict, godot::Array &vertex_point_indices, godot::Dictionary point_attrs, godot::Array filtered_prims)
+void modify_base_entries(
+		godot::Dictionary &nested_dict, godot::Array &vertex_point_indices, const godot::Dictionary &point_attrs, const godot::Array &filtered_prims)
 {
 	// Check if we are at the base level by looking for the "ids" key
 	if (nested_dict.has("ids"))
@@ -197,21 +227,22 @@ void modify_base_entries(godot::Dictionary &nested_dict, godot::Array &vertex_po
 			id_arr.append(filtered_prims[int_ids[i]]);
 		}
 
-		filter_and_update_dictionary(point_attrs, id_arr, vertex_point_indices);
+		godot::Dictionary filtered_point_attrs = point_attrs;
+		filter_and_update_dictionary(filtered_point_attrs, id_arr, vertex_point_indices);
 		godot::Array surface_array;
 		surface_array.resize(godot::Mesh::ARRAY_MAX);
-		surface_array[godot::Mesh::ARRAY_VERTEX] = godot::PackedVector3Array(point_attrs["P"]);
-		if (point_attrs.has("N"))
+		surface_array[godot::Mesh::ARRAY_VERTEX] = godot::PackedVector3Array(filtered_point_attrs["P"]);
+		if (filtered_point_attrs.has("N"))
 		{
-			godot::Array normal_attr = point_attrs["N"];
+			godot::Array normal_attr = filtered_point_attrs["N"];
 			if (normal_attr.size() > 0)
 			{
 				surface_array[godot::Mesh::ARRAY_NORMAL] = godot::PackedVector3Array(normal_attr);
 			}
 		}
-		if (point_attrs.has("Cd"))
+		if (filtered_point_attrs.has("Cd"))
 		{
-			godot::Array color_attr = point_attrs["Cd"];
+			godot::Array color_attr = filtered_point_attrs["Cd"];
 			if (color_attr.size() > 0)
 			{
 				godot::PackedColorArray packed_colors;
@@ -226,17 +257,17 @@ void modify_base_entries(godot::Dictionary &nested_dict, godot::Array &vertex_po
 				surface_array[godot::Mesh::ARRAY_COLOR] = packed_colors;
 			}
 		}
-		if (point_attrs.has("uv"))
+		if (filtered_point_attrs.has("uv"))
 		{
-			godot::Array uv_attr = point_attrs["uv"];
+			godot::Array uv_attr = filtered_point_attrs["uv"];
 			if (uv_attr.size() > 0)
 			{
 				surface_array[godot::Mesh::ARRAY_TEX_UV] = godot::PackedVector3Array(uv_attr);
 			}
 		}
-		if (point_attrs.has("uv2"))
+		if (filtered_point_attrs.has("uv2"))
 		{
-			godot::Array uv2_attr = point_attrs["uv2"];
+			godot::Array uv2_attr = filtered_point_attrs["uv2"];
 
 			if (uv2_attr.size() > 0)
 			{
@@ -244,11 +275,11 @@ void modify_base_entries(godot::Dictionary &nested_dict, godot::Array &vertex_po
 			}
 		}
 		// Tangent calculation
-		if (point_attrs.has("tangentu") && point_attrs.has("tangentv") && point_attrs.has("N"))
+		if (filtered_point_attrs.has("tangentu") && filtered_point_attrs.has("tangentv") && filtered_point_attrs.has("N"))
 		{
-			godot::Array tangentu_attr = point_attrs["tangentu"];
-			godot::Array tangentv_attr = point_attrs["tangentv"];
-			godot::Array normal_attr = point_attrs["N"];
+			godot::Array tangentu_attr = filtered_point_attrs["tangentu"];
+			godot::Array tangentv_attr = filtered_point_attrs["tangentv"];
+			godot::Array normal_attr = filtered_point_attrs["N"];
 
 			if (tangentu_attr.size() > 0 && tangentv_attr.size() > 0 && normal_attr.size() > 0)
 			{

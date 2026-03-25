@@ -170,14 +170,28 @@ func cook():
 
 
 func handle_mesh_output():
+	var mesh_output_start_usec = Time.get_ticks_usec()
+	var fetch_surfaces_msec = 0.0
+	var gds_processing_msec = 0.0
+	var mesh_instance_count = 0
+	var surface_count = 0
+	var resource_save_count = 0
+	var collision_generation_count = 0
+
 	# use config to fetch output mesh
 	var fetch_surfaces_default_config = load("res://addons/hego/surface_filters/fetch_surfaces_default.tres")
 	# retrieve dictionary output, containing the mesh in godots surface_array format
+	var fetch_start_usec = Time.get_ticks_usec()
 	var dict = hego_asset_node.fetch_surfaces(fetch_surfaces_default_config, false)
+	fetch_surfaces_msec = _elapsed_msec(fetch_start_usec)
+
+	var processing_start_usec = Time.get_ticks_usec()
 	for hego_mesh_instance_key in dict.keys():
+		mesh_instance_count += 1
 		var arr_mesh = ArrayMesh.new()
 		var surface_id = 0
 		for hego_material_key in dict[hego_mesh_instance_key]:
+			surface_count += 1
 			var material_ref = hego_material_key
 			var surface_array = dict[hego_mesh_instance_key][hego_material_key]["surface_array"]
 			var hego_lod_array = dict[hego_mesh_instance_key][hego_material_key]["hego_lod"]
@@ -206,6 +220,7 @@ func handle_mesh_output():
 			hego_storage_mode = 0
 		
 		if hego_storage_mode > 0:
+			resource_save_count += 1
 			var result := ResourceSaver.save(arr_mesh, hego_resource_save_path)
 			if result == OK:
 				print("[HEGoNode3D]: Successfully saved mesh to ", hego_resource_save_path)
@@ -251,6 +266,7 @@ func handle_mesh_output():
 			if hego_col_type == null:
 				hego_col_type = 0
 			if hego_col_type == 1:
+				collision_generation_count += 1
 				var decomp_settings = MeshConvexDecompositionSettings.new()
 				var hego_col_decomp_settings: Dictionary = dict[hego_mesh_instance_key][hego_mat_keys[0]]["hego_col_decomp_settings"][0]
 				if hego_col_decomp_settings != null:
@@ -283,9 +299,25 @@ func handle_mesh_output():
 						decomp_settings.symmetry_planes_clipping_bias = hego_col_decomp_settings["symmetry_planes_clipping_bias"]
 				mesh_instance.create_multiple_convex_collisions(decomp_settings)
 			elif hego_col_type == 2:
+				collision_generation_count += 1
 				mesh_instance.create_convex_collision()
 			elif hego_col_type == 3:
+				collision_generation_count += 1
 				mesh_instance.create_trimesh_collision()
+
+	gds_processing_msec = _elapsed_msec(processing_start_usec)
+	print(
+		"[HEGoNode3D]: Mesh output breakdown: fetch_surfaces=%.3f ms, gdscript_processing=%.3f ms, total=%.3f ms, mesh_instances=%d, surfaces=%d, saves=%d, collision_generations=%d"
+		% [
+			fetch_surfaces_msec,
+			gds_processing_msec,
+			_elapsed_msec(mesh_output_start_usec),
+			mesh_instance_count,
+			surface_count,
+			resource_save_count,
+			collision_generation_count,
+		]
+	)
 
 
 func handle_object_spawn_output():

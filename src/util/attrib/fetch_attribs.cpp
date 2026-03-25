@@ -349,97 +349,168 @@ godot::Variant fetch_by_name(
 	{
 		if (owner == HAPI_ATTROWNER_PRIM)
 		{
-			int nprims = mesh_part_info.faceCount;
-			godot::Array result;
-			result.resize(nprims);
-
-			for (int i = 0; i < nprims; i++)
-			{
-				result[i] = godot::Variant();
-			}
-			values = result;
+			values.resize(mesh_part_info.faceCount);
 		}
 		else if (owner == HAPI_ATTROWNER_POINT)
 		{
-			int npts = mesh_part_info.pointCount;
-			godot::Array result;
-			result.resize(npts);
-
-			for (int i = 0; i < npts; i++)
-			{
-				result[i] = godot::Variant();
-			}
-			values = result;
+			values.resize(mesh_part_info.pointCount);
 		}
 		else if (owner == HAPI_ATTROWNER_VERTEX)
 		{
-			int nvertices = mesh_part_info.vertexCount;
-			godot::Array result;
-			result.resize(nvertices);
-
-			for (int i = 0; i < nvertices; i++)
-			{
-				result[i] = godot::Variant();
-			}
-			values = result;
+			values.resize(mesh_part_info.vertexCount);
 		}
 		else if (owner == HAPI_ATTROWNER_DETAIL)
 		{
-			godot::Array result;
-			result.resize(1);
-			result[0] = godot::Variant();
-			values = result;
+			values.resize(1);
 		}
+
+		return values;
 	}
-	else
+
+	if (attrib_info.storage == HAPI_STORAGETYPE_INT)
 	{
-		if (attrib_info.storage == HAPI_STORAGETYPE_INT)
+		if (attrib_info.tupleSize == 1)
 		{
-			if (attrib_info.tupleSize == 1)
+			std::vector<int> temp_data(attrib_info.count);
+			HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeIntData(
+					session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, -1, temp_data.data(), 0, attrib_info.count));
+			values.resize(attrib_info.count);
+			for (int i = 0; i < attrib_info.count; ++i)
 			{
-				values = fetch_int(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
-			}
-			else if (attrib_info.tupleSize == 2)
-			{
-				values = fetch_vector2i(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
-			}
-			else if (attrib_info.tupleSize == 3)
-			{
-				values = fetch_vector3i(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
-			}
-			else if (attrib_info.tupleSize == 4)
-			{
-				values = fetch_vector4i(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
+				values[i] = temp_data[i];
 			}
 		}
-		else if (attrib_info.storage == HAPI_STORAGETYPE_FLOAT)
+		else if (attrib_info.tupleSize == 2)
 		{
-			if (attrib_info.tupleSize == 1)
+			std::vector<int> temp_data(attrib_info.count * 2);
+			HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeIntData(
+					session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, -1, temp_data.data(), 0, attrib_info.count));
+			values.resize(attrib_info.count);
+			for (int i = 0; i < attrib_info.count; ++i)
 			{
-				values = fetch_float(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
-			}
-			else if (attrib_info.tupleSize == 2)
-			{
-				values = fetch_vector2(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
-			}
-			else if (attrib_info.tupleSize == 3)
-			{
-				values = fetch_vector3(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
-			}
-			else if (attrib_info.tupleSize == 4)
-			{
-				values = fetch_vector4(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
+				values[i] = godot::Vector2i(temp_data[i * 2], temp_data[i * 2 + 1]);
 			}
 		}
-		else if (attrib_info.storage == HAPI_STORAGETYPE_STRING)
+		else if (attrib_info.tupleSize == 3)
 		{
-			values = fetch_string(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
+			std::vector<int> temp_data(attrib_info.count * 3);
+			HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeIntData(
+					session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, -1, temp_data.data(), 0, attrib_info.count));
+			values.resize(attrib_info.count);
+			for (int i = 0; i < attrib_info.count; ++i)
+			{
+				values[i] = godot::Vector3i(temp_data[i * 3], temp_data[i * 3 + 1], temp_data[i * 3 + 2]);
+			}
 		}
-		else if (attrib_info.storage == HAPI_STORAGETYPE_DICTIONARY)
+		else if (attrib_info.tupleSize == 4)
 		{
-			values = fetch_dict(session, mesh_geo_info, mesh_part_info, owner, attrib_name);
+			std::vector<int> temp_data(attrib_info.count * 4);
+			HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeIntData(
+					session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, -1, temp_data.data(), 0, attrib_info.count));
+			values.resize(attrib_info.count);
+			for (int i = 0; i < attrib_info.count; ++i)
+			{
+				values[i] = godot::Vector4i(temp_data[i * 4], temp_data[i * 4 + 1], temp_data[i * 4 + 2], temp_data[i * 4 + 3]);
+			}
 		}
 	}
+	else if (attrib_info.storage == HAPI_STORAGETYPE_FLOAT)
+	{
+		if (attrib_info.tupleSize == 1)
+		{
+			std::vector<float> temp_data(attrib_info.count);
+			HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeFloatData(
+					session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, -1, temp_data.data(), 0, attrib_info.count));
+			values.resize(attrib_info.count);
+			for (int i = 0; i < attrib_info.count; ++i)
+			{
+				values[i] = temp_data[i];
+			}
+		}
+		else if (attrib_info.tupleSize == 2)
+		{
+			std::vector<float> temp_data(attrib_info.count * 2);
+			HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeFloatData(
+					session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, -1, temp_data.data(), 0, attrib_info.count));
+			values.resize(attrib_info.count);
+			for (int i = 0; i < attrib_info.count; ++i)
+			{
+				values[i] = godot::Vector2(temp_data[i * 2], temp_data[i * 2 + 1]);
+			}
+		}
+		else if (attrib_info.tupleSize == 3)
+		{
+			std::vector<float> temp_data(attrib_info.count * 3);
+			HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeFloatData(
+					session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, -1, temp_data.data(), 0, attrib_info.count));
+			values.resize(attrib_info.count);
+			for (int i = 0; i < attrib_info.count; ++i)
+			{
+				values[i] = godot::Vector3(temp_data[i * 3], temp_data[i * 3 + 1], temp_data[i * 3 + 2]);
+			}
+		}
+		else if (attrib_info.tupleSize == 4)
+		{
+			std::vector<float> temp_data(attrib_info.count * 4);
+			HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeFloatData(
+					session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, -1, temp_data.data(), 0, attrib_info.count));
+			values.resize(attrib_info.count);
+			for (int i = 0; i < attrib_info.count; ++i)
+			{
+				values[i] = godot::Vector4(temp_data[i * 4], temp_data[i * 4 + 1], temp_data[i * 4 + 2], temp_data[i * 4 + 3]);
+			}
+		}
+	}
+	else if (attrib_info.storage == HAPI_STORAGETYPE_STRING)
+	{
+		std::vector<int> string_handles(attrib_info.count);
+		HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeStringData(
+				session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, string_handles.data(), 0, attrib_info.count));
+
+		// Use batch API: one call to get total size, one call to fetch all strings
+		int string_buffer_size = 0;
+		HOUDINI_CHECK_ERROR(HoudiniApi::GetStringBatchSize(session, string_handles.data(), attrib_info.count, &string_buffer_size));
+
+		std::vector<char> string_buffer(string_buffer_size);
+		HOUDINI_CHECK_ERROR(HoudiniApi::GetStringBatch(session, string_buffer.data(), string_buffer_size));
+
+		// Parse null-separated strings from the buffer
+		values.resize(attrib_info.count);
+		const char *current = string_buffer.data();
+		for (int i = 0; i < attrib_info.count; ++i)
+		{
+			values[i] = godot::String(current);
+			current += strlen(current) + 1; // Move to next null-terminated string
+		}
+	}
+	else if (attrib_info.storage == HAPI_STORAGETYPE_DICTIONARY)
+	{
+		std::vector<HAPI_StringHandle> temp_data(attrib_info.count * attrib_info.tupleSize);
+		HOUDINI_CHECK_ERROR(HoudiniApi::GetAttributeDictionaryData(
+				session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, temp_data.data(), 0, attrib_info.count));
+
+		values.resize(attrib_info.count * attrib_info.tupleSize);
+		for (int i = 0; i < attrib_info.count * attrib_info.tupleSize; ++i)
+		{
+			std::string json_string = HEGoUtil::get_string(session, temp_data[i]);
+			if (json_string.empty())
+			{
+				values[i] = godot::Variant();
+				continue;
+			}
+
+			godot::Variant parsed = godot::JSON::parse_string(json_string.c_str());
+			if (parsed.get_type() == godot::Variant::DICTIONARY)
+			{
+				values[i] = parsed;
+			}
+			else
+			{
+				values[i] = godot::Variant();
+			}
+		}
+	}
+
 	return values;
 }
 } // namespace Attribs

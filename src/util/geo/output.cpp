@@ -55,23 +55,29 @@ godot::Dictionary build_nested_dictionary(const godot::Array &split_attribs, con
 	}
 
 	godot::Array values = split_attribs_dict[split_attribs[level]];
-	godot::Array unique_values = get_unique_values(values);
+	godot::Array ordered_values;
+	godot::Dictionary grouped_indices;
 
-	for (int i = 0; i < unique_values.size(); i++)
+	for (int j = 0; j < filtered_indices.size(); j++)
 	{
-		godot::Variant value = unique_values[i];
+		godot::Variant idx = filtered_indices[j];
+		godot::Variant value = values[idx];
 
-		// Filter the indices for the current value
-		godot::Array next_filtered_indices;
-		for (int j = 0; j < filtered_indices.size(); j++)
+		if (!grouped_indices.has(value))
 		{
-			godot::Variant idx = filtered_indices[j];
-
-			if (values[idx] == value)
-			{
-				next_filtered_indices.append(idx);
-			}
+			grouped_indices[value] = godot::Array();
+			ordered_values.append(value);
 		}
+
+		godot::Array next_filtered_indices = grouped_indices[value];
+		next_filtered_indices.append(idx);
+		grouped_indices[value] = next_filtered_indices;
+	}
+
+	for (int i = 0; i < ordered_values.size(); i++)
+	{
+		godot::Variant value = ordered_values[i];
+		godot::Array next_filtered_indices = grouped_indices[value];
 
 		// Recurse into the next level
 		nested_dict[value] = build_nested_dictionary(split_attribs, split_attribs_dict, next_filtered_indices, read_attribs_dict, level + 1);
