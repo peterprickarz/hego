@@ -111,24 +111,27 @@ void *HEGoPlatform::load_lib_hapil()
 bool HEGoPlatform::free_lib_hapil(void *libHAPIL)
 {
 #if defined(_WIN32)
-    if (!libHAPIL) return false;
-    BOOL result = FreeLibrary(static_cast<HMODULE>(libHAPIL));
-    SetDllDirectoryA(nullptr); // Reset (optional, but harmless)
-    return result != FALSE;
+	if (!libHAPIL)
+		return false;
+	BOOL result = FreeLibrary(static_cast<HMODULE>(libHAPIL));
+	SetDllDirectoryA(nullptr); // Reset (optional, but harmless)
+	return result != FALSE;
 #else
-    // On Linux / POSIX
-    if (!libHAPIL) {
-        return false;
-    }
+	// On Linux / POSIX
+	if (!libHAPIL)
+	{
+		return false;
+	}
 
-    int result = dlclose(libHAPIL);
+	int result = dlclose(libHAPIL);
 
-    if (result != 0) {
-        const char *err = dlerror();
-        return false;
-    }
+	if (result != 0)
+	{
+		const char *err = dlerror();
+		return false;
+	}
 
-    return true;
+	return true;
 #endif
 }
 

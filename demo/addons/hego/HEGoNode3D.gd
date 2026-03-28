@@ -2144,7 +2144,14 @@ func _t3d_assign_generated_mesh_slot(assets, scene_path: String) -> int:
 		push_warning("[HEGoNode3D]: Terrain3D mesh asset expects PackedScene at %s." % scene_path)
 		return -1
 
-	var mesh_asset = Terrain3DMeshAsset.new()
+	if not ClassDB.class_exists("Terrain3DMeshAsset"):
+		push_warning("[HEGoNode3D]: Terrain3DMeshAsset class is unavailable, skipping %s." % scene_path)
+		return -1
+
+	var mesh_asset = ClassDB.instantiate("Terrain3DMeshAsset")
+	if mesh_asset == null:
+		push_warning("[HEGoNode3D]: Failed to instantiate Terrain3DMeshAsset for %s." % scene_path)
+		return -1
 	mesh_asset.call("set_scene_file", scene_res)
 	if mesh_asset.has_method("set_name"):
 		var generated_name = "hegot3d_" + scene_path.get_file().get_basename()
@@ -2156,9 +2163,11 @@ func _t3d_assign_generated_mesh_slot(assets, scene_path: String) -> int:
 			assets.call("set_mesh_asset", slot, mesh_asset)
 			return slot
 
-	if ClassDB.class_exists("Terrain3DAssets") and mesh_count >= int(Terrain3DAssets.MAX_MESHES):
-		push_warning("[HEGoNode3D]: Terrain3D mesh asset limit reached, cannot assign %s." % scene_path)
-		return -1
+	if ClassDB.class_exists("Terrain3DAssets") and ClassDB.class_has_integer_constant("Terrain3DAssets", "MAX_MESHES"):
+		var max_meshes = int(ClassDB.class_get_integer_constant("Terrain3DAssets", "MAX_MESHES"))
+		if mesh_count >= max_meshes:
+			push_warning("[HEGoNode3D]: Terrain3D mesh asset limit reached, cannot assign %s." % scene_path)
+			return -1
 
 	assets.call("set_mesh_asset", mesh_count, mesh_asset)
 	return mesh_count
