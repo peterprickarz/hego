@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoInputNode" inherits="HEGoBaseInputNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Creates Houdini input geometry from Godot mesh sources.
+</brief_description>
+<description>
+Use this node to upload mesh topology and attributes from either a [Mesh] resource or a [MeshInstance3D].
+
+Instantiate first, then push geometry with one of the setter methods.
+
+This node is typically connected into [HEGoMergeNode] or directly into an HDA input.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="set_geo_from_mesh">
+<return type="void" />
+<param index="0" name="mesh" type="Mesh" />
+<param index="1" name="attributes" type="Array" default="[]" />
+<description>
+Uploads geometry from a [Mesh] into this Houdini input node.
+
+Use [code]attributes[/code] to pass optional custom attribute descriptors consumed by HEGo geometry input utilities.
+
+The mesh is converted into HAPI-compatible topology and point data. Existing input geometry for this node is replaced.
+</description>
+</method>
+<method name="set_geo_from_mesh_instance_3d">
+<return type="void" />
+<param index="0" name="mesh_instance_3d" type="MeshInstance3D" />
+<param index="1" name="attributes" type="Array" default="[]" />
+<description>
+Uploads geometry from a [MeshInstance3D] into this Houdini input node.
+
+Any transform or instance context used by HEGo input utilities is derived from the provided node.
+
+Use this overload when you want to read from a scene node directly instead of a standalone mesh resource.
+</description>
+</method>
+</methods>
+</class>

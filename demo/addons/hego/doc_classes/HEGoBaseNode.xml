@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoBaseNode" inherits="HEGoTrackableNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Virtual base class for all HEGo node wrappers.
+</brief_description>
+<description>
+Stores the underlying Houdini node id and provides shared lifecycle behavior for derived HEGo node classes.
+
+A node id of [code]-1[/code] means no valid Houdini node is currently associated with this instance.
+
+Most derived methods assume [method instantiate] has already produced a valid id.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="get_id" qualifiers="const">
+<return type="int" />
+<description>
+Returns the Houdini node id, or [code]-1[/code] when not instantiated.
+</description>
+</method>
+<method name="instantiate">
+<return type="void" />
+<description>
+Creates the underlying Houdini node.
+
+This base implementation does nothing. Concrete subclasses override it and usually register themselves with the session manager after successful creation.
+</description>
+</method>
+<method name="reset_node_id">
+<return type="void" />
+<description>
+Resets the stored node id to [code]-1[/code].
+</description>
+</method>
+</methods>
+</class>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoLogManager" inherits="Object" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Singleton log signal bridge for HEGo runtime messages.
+</brief_description>
+<description>
+HEGo logging helpers emit console output and forward messages through this object via [signal log_message].
+
+Use this class from UI code to display live HEGo logs without parsing console output.
+
+The singleton is created during module initialization and remains available while the extension is loaded.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="emit_log_message">
+<return type="void" />
+<param index="0" name="message" type="String" />
+<param index="1" name="level" type="String" />
+<description>
+Emits [signal log_message] with the given message and level.
+
+This is primarily used internally by HEGo log utility functions.
+</description>
+</method>
+<method name="get_singleton" qualifiers="static">
+<return type="HEGoLogManager" />
+<description>
+Returns the global [HEGoLogManager] instance.
+
+Returns [code]null[/code] only if the singleton has not been created or was destroyed.
+</description>
+</method>
+</methods>
+<signals>
+<signal name="log_message">
+<param index="0" name="message" type="String" />
+<param index="1" name="level" type="String" />
+<description>
+Emitted for each HEGo log entry.
+
+Common level strings are [code]MESSAGE[/code], [code]WARNING[/code], [code]ERROR[/code], and [code]LINE[/code].
+
+The [code]message[/code] payload does not include the console prefix string used by internal print helpers.
+</description>
+</signal>
+</signals>
+</class>

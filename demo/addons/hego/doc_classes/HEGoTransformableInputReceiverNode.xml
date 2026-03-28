@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoTransformableInputReceiverNode" inherits="HEGoTransformableNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Input receiver base that also supports transform updates.
+</brief_description>
+<description>
+Combines transform control from [HEGoTransformableNode] with input connection helpers.
+
+Useful for operator wrappers that both receive geometry inputs and need transform updates.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="connect_input">
+<return type="void" />
+<param index="0" name="other_node" type="HEGoBaseNode" />
+<param index="1" name="input_index" type="int" />
+<description>
+Connects [code]other_node[/code] into the given input slot.
+
+The source and destination nodes are expected to have valid instantiated node ids before connecting.
+</description>
+</method>
+</methods>
+</class>

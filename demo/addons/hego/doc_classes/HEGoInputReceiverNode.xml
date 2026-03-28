@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoInputReceiverNode" inherits="HEGoBaseNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Base node type that can receive node inputs.
+</brief_description>
+<description>
+Provides a helper for connecting another HEGo node into a specific input index on the current node.
+
+Use this as the base for nodes that accept upstream Houdini connections.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="connect_input">
+<return type="void" />
+<param index="0" name="other_node" type="HEGoBaseNode" />
+<param index="1" name="input_index" type="int" />
+<description>
+Connects [code]other_node[/code] into this node's [code]input_index[/code].
+
+Both nodes should already be instantiated. If either node id is invalid, downstream HAPI calls can fail and log errors.
+</description>
+</method>
+</methods>
+</class>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoCurveInputNode" inherits="HEGoBaseInputNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Creates Houdini curve input geometry from a [Path3D].
+</brief_description>
+<description>
+This node creates a Houdini input curve node and uploads sampled points from a Godot [Path3D].
+
+Instantiate the node first, then call [method set_curve_from_path_3d] to update its curve geometry.
+
+Repeated calls replace the currently uploaded curve data.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="set_curve_from_path_3d">
+<return type="void" />
+<param index="0" name="path_3d" type="Path3D" />
+<param index="1" name="target_length" type="float" />
+<description>
+Converts the given [Path3D] into Houdini curve input data.
+
+[code]target_length[/code] controls segment sampling or resampling length for generated curve points.
+
+Smaller values generally produce denser sampling, while larger values produce fewer points.
+</description>
+</method>
+</methods>
+</class>

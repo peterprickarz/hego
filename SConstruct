@@ -133,6 +133,13 @@ cpp_sources = (
     Glob(f"{build_dir}/util/*.cpp")
 )
 
+# Include class reference docs in editor/debug builds so they are available from the extension binary.
+if env["target"] in ["editor", "template_debug"]:
+    doc_xml = Glob("demo/addons/hego/doc_classes/*.xml")
+    if doc_xml:
+        doc_data = env.GodotCPPDocData(f"{build_dir}/gen/doc_data.gen.cpp", source=doc_xml)
+        cpp_sources.append(doc_data)
+
 env.Append(CPPPATH=[src_dir])
 
 # ───────────────────────────────────────────────

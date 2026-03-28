@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoAPI" inherits="Object" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Singleton entry point for HEGo session management and HDA discovery.
+</brief_description>
+<description>
+This class owns the internal [code]HEGoSessionManager[/code], initializes the Houdini API platform layer, and exposes session controls to scripts.
+
+The singleton is created during module initialization and is intended to be reused for the whole runtime.
+
+It also stores [code]hego/houdini_installation_path[/code] in Godot project settings. That path is used when filtering built-in Houdini libraries from [method get_hda_libraries].
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="get_hda_libraries">
+<return type="Dictionary" />
+<description>
+Returns metadata for currently loaded non-built-in HDA libraries.
+
+The dictionary is keyed by library name when available (otherwise by library id as a string).
+Each value contains:
+- [code]id[/code]: HAPI asset library id.
+- [code]file_path[/code]: source library path.
+- [code]name[/code]: basename without extension.
+- [code]asset_count[/code]: number of available assets in the library.
+- [code]assets[/code]: [PackedStringArray] of operator names.
+
+Returns an empty dictionary if no session is active, if no libraries are loaded, or if querying HAPI fails.
+</description>
+</method>
+<method name="get_houdini_installation_path" qualifiers="const">
+<return type="String" />
+<description>
+Returns the configured Houdini installation path from project settings.
+</description>
+</method>
+<method name="get_singleton" qualifiers="static">
+<return type="HEGoAPI" />
+<description>
+Returns the global [HEGoAPI] singleton instance created during module initialization.
+</description>
+</method>
+<method name="is_session_active">
+<return type="bool" />
+<description>
+Returns [code]true[/code] when the Houdini Engine session is currently active.
+</description>
+</method>
+<method name="set_houdini_installation_path">
+<return type="void" />
+<param index="0" name="path" type="String" />
+<description>
+Updates the [code]hego/houdini_installation_path[/code] project setting.
+</description>
+</method>
+<method name="start_session">
+<return type="bool" />
+<param index="0" name="connection_type" type="int" />
+<param index="1" name="connection_data" type="String" />
+<description>
+Starts a Houdini Engine session and initializes HAPI.
+
+[code]connection_type[/code] maps to [code]HEGoSessionManager::SessionType[/code]:
+[codeblock]
+1 = InProcess
+2 = NewNamedPipe
+3 = NewTCPSocket
+4 = ExistingNamedPipe
+5 = ExistingTCPSocket
+6 = ExistingSharedMemory
+[/codeblock]
+
+[code]connection_data[/code] is transport-specific (for example named pipe string or socket endpoint data).
+
+Returns [code]true[/code] on successful session startup and initialization.
+</description>
+</method>
+<method name="stop_session">
+<return type="bool" />
+<description>
+Stops the active Houdini Engine session and releases session resources.
+
+Returns [code]true[/code] when shutdown succeeds.
+</description>
+</method>
+</methods>
+</class>

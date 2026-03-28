@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoAssetNode" inherits="HEGoTransformableInputReceiverNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Represents an instantiated Houdini Digital Asset (HDA) node.
+</brief_description>
+<description>
+Use this class to instantiate an HDA by operator name, set parameters, cook, and fetch output data.
+
+Call [method instantiate] after assigning [member op_name]. Most data-access methods require a valid instantiated node; when called before instantiation they log an error and return an empty value.
+
+[method fetch_points] expects a resource compatible with [code]HEGoFetchPointsConfig[/code]. [method fetch_surfaces] expects a resource compatible with [code]HEGoFetchSurfacesConfig[/code].
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="cook">
+<return type="void" />
+<description>
+Cooks the asset node and waits until cooking is finished.
+
+Use this when [code]auto_cook[/code] is disabled on fetch calls and you want explicit cook control.
+</description>
+</method>
+<method name="fetch_heightfield_layer_image">
+<return type="Image" />
+<param index="0" name="part_id" type="int" />
+<param index="1" name="auto_cook" type="bool" default="true" />
+<description>
+Fetches one heightfield layer as an [Image] from the specified part id.
+
+If [code]auto_cook[/code] is [code]true[/code], the node is cooked before reading.
+
+Returns an invalid image reference when the node is not instantiated or the requested part cannot be read.
+</description>
+</method>
+<method name="fetch_output">
+<return type="Array" />
+<description>
+Returns cooked output geometry data.
+
+Note: in the current C++ implementation this method returns an empty [Array] placeholder.
+</description>
+</method>
+<method name="fetch_points">
+<return type="Dictionary" />
+<param index="0" name="fetch_point_config" type="Resource" />
+<param index="1" name="auto_cook" type="bool" default="true" />
+<description>
+Fetches point data using a point-fetch configuration resource.
+
+Config fields are interpreted as follows:
+[code]only_loose_points[/code]: when [code]true[/code], points referenced by mesh vertices are excluded.
+[code]filter_attribs[/code] and [code]filter_attrib_values[/code]: paired by index; a point is kept only if all [code]point_attr == filter_value[/code] checks pass.
+[code]filter_attribs[/code] and [code]filter_attrib_values[/code] should have the same length.
+[code]read_attribs[/code]: extra point attributes to fetch at leaf level (in addition to [code]P[/code], which is always included).
+[code]split_attribs[/code]: point attributes used to build nested dictionary groups.
+
+The method reads from the display mesh part of the cooked node. If [code]auto_cook[/code] is [code]true[/code], the node is cooked first.
+
+Output structure:
+If [code]split_attribs[/code] is empty, the result is a flat dictionary with leaf keys.
+If [code]split_attribs[/code] is non-empty, each split attribute adds one nesting level keyed by that attribute's value.
+Leaf dictionaries contain:
+[code]ids[/code]: filtered point indices in the source point array.
+[code]P[/code]: [Array] of [Vector3] positions.
+Additional keys from [code]read_attribs[/code], each mapped to an [Array] aligned with [code]ids[/code].
+
+Returns an empty dictionary when no points pass filters, when no mesh part exists, or when geometry query or cook fails.
+</description>
+</method>
+<method name="fetch_surfaces">
+<return type="Dictionary" />
+<param index="0" name="fetch_surface_config" type="Resource" />
+<param index="1" name="auto_cook" type="bool" default="true" />
+<description>
+Fetches surface data using a surface-fetch configuration resource.
+
+Config fields are interpreted as follows:
+[code]normal[/code], [code]color[/code], [code]uv[/code], [code]uv2[/code], [code]tangents[/code]: toggles for point-derived channels included in generated Godot surface arrays.
+[code]read_attribs[/code], [code]filter_attribs[/code], [code]filter_attrib_values[/code], [code]split_attribs[/code]: primitive-attribute lists used for metadata readback, filtering, and grouping.
+[code]filter_attribs[/code] and [code]filter_attrib_values[/code] are paired by index.
+[code]filter_attribs[/code] and [code]filter_attrib_values[/code] should have the same length.
+
+The method reads the display mesh part. If [code]auto_cook[/code] is [code]true[/code], it cooks before reading.
+
+Output structure:
+If [code]split_attribs[/code] is empty, the root is a single leaf dictionary.
+If [code]split_attribs[/code] is non-empty, result is nested by split attribute values.
+Each leaf contains:
+[code]surface_array[/code]: a Godot [code]Mesh.ARRAY_MAX[/code]-sized array usable with [code]ArrayMesh.add_surface_from_arrays()[/code], including at minimum vertices and indices; optional channels are present depending on config and source attributes.
+[code]ids[/code]: filtered primitive ids local to the current filtered set.
+Any primitive attributes requested through [code]read_attribs[/code], each as an [Array] aligned with [code]ids[/code].
+
+Returns an empty dictionary when no mesh part exists, no faces are available, no elements pass filters, or when geometry query or cook fails.
+</description>
+</method>
+<method name="get_heightfield_layers">
+<return type="Array" />
+<param index="0" name="read_prim_attribs" type="PackedStringArray" default="PackedStringArray()" />
+<param index="1" name="auto_cook" type="bool" default="true" />
+<description>
+Returns available heightfield layers from the cooked asset.
+
+Use [code]read_prim_attribs[/code] to request primitive attributes that should be included in each returned layer entry.
+
+Each returned array entry is a dictionary-like payload from HEGo heightfield utilities and can include metadata and image data depending on utility behavior.
+</description>
+</method>
+<method name="get_input_names">
+<return type="PackedStringArray" />
+<description>
+Returns the input names defined on this HDA node.
+
+This is useful for mapping script-side inputs to operator input slots.
+</description>
+</method>
+<method name="get_parms_dict">
+<return type="Dictionary" />
+<description>
+Returns a dictionary describing the current parameter values.
+
+The dictionary is intended for inspection and tooling workflows and mirrors parameter state read from HAPI.
+</description>
+</method>
+<method name="get_preset">
+<return type="PackedByteArray" />
+<description>
+Serializes current parameter state as a Houdini preset blob.
+
+Use together with [method set_preset] to save and restore HDA parameter setups.
+</description>
+</method>
+<method name="insert_multiparm_instance">
+<return type="void" />
+<param index="0" name="parm_id" type="int" />
+<param index="1" name="index" type="int" />
+<description>
+Inserts one multiparm instance at [code]index[/code] for the parameter id.
+
+Use this to grow multiparm blocks before setting values on newly created entries.
+</description>
+</method>
+<method name="remove_multiparm_instance">
+<return type="void" />
+<param index="0" name="parm_id" type="int" />
+<param index="1" name="index" type="int" />
+<description>
+Removes one multiparm instance at [code]index[/code] for the parameter id.
+
+Indices follow Houdini multiparm ordering.
+</description>
+</method>
+<method name="set_parm">
+<return type="void" />
+<param index="0" name="parm_name" type="String" />
+<param index="1" name="value" type="Variant" />
+<description>
+Sets a parameter by name.
+
+The [Variant] value type is converted to the matching Houdini parameter storage type when possible.
+
+Call after [method instantiate]. Invalid node state is logged and ignored.
+</description>
+</method>
+<method name="set_preset">
+<return type="void" />
+<param index="0" name="preset" type="PackedByteArray" />
+<description>
+Applies a serialized Houdini parameter preset to this asset.
+
+The preset payload should come from [method get_preset] or a compatible Houdini preset source.
+</description>
+</method>
+</methods>
+<members>
+<member name="op_name" type="String" setter="set_op_name" getter="get_op_name" default="&quot;&quot;">
+Houdini operator name used by [method instantiate] to create the asset node.
+</member>
+</members>
+</class>
