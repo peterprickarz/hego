@@ -193,11 +193,11 @@ Vertex attributes are not supported directly. Promote common vertex attributes
    * - ``hego_mesh_instance``
      - String
      - Prim
-     - Output node path/name under HEGoNode3D/Outputs
+     - Output node path/name under HEGoNode3D/Outputs. One HDA can create multiple meshes, split by this path attribute
    * - ``hego_material``
      - String
      - Prim
-     - Material resource path assigned per prim group
+     - Material resource path assigned
    * - ``hego_storage_mode``
      - Int
      - Prim
@@ -206,6 +206,9 @@ Vertex attributes are not supported directly. Promote common vertex attributes
      - String
      - Prim
      - Mesh resource save path when ``hego_storage_mode`` > 0
+
+You can split one output into multiple meshes by assigning different
+``hego_mesh_instance`` paths across primitives.
 
 Instancing
 ~~~~~~~~~~
@@ -252,6 +255,9 @@ Use these attributes to create ``MultiMeshInstance3D`` output.
      - String
      - Point
      - Mesh resource path to instance
+
+You can split one output into multiple MultiMesh instancers by assigning different
+``hego_multimesh`` paths across points.
 
 Object Spawning
 ~~~~~~~~~~~~~~~
@@ -306,6 +312,28 @@ Use these attributes to spawn arbitrary Node3D objects or scenes.
      - Dictionary
      - Point
      - Nested property assignment dictionary using ``hego_val`` entries
+
+``hego_custom_properties`` can set almost any property on spawned objects. It must follow a
+specific dictionary format:
+
+- Each top-level key is a property name.
+- The value must be another dictionary containing at least ``hego_val``.
+- Additional nested keys can define sub-properties for complex value types.
+
+This allows creating objects and configuring them in one pass. Example:
+
+.. code-block:: json
+
+   {
+     "shape": {
+       "hego_val": "CapsuleShape3D",
+       "height": {"hego_val": 0.72},
+       "radius": {"hego_val": 0.5}
+     }
+   }
+
+The example creates a ``CapsuleShape3D``, sets ``height`` and ``radius``, and assigns it to the
+target node's ``shape`` property.
 
 Terrain3D Terrain Output
 ~~~~~~~~~~~~~~~~~~~~~~~~
