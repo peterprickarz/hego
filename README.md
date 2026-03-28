@@ -9,7 +9,7 @@
 ## 🚀 Getting Started
 
 - 📦 **[Download Latest Release](https://github.com/peterprickarz/hego/releases/latest)** - Pre-built binaries for Windows
-- 📖 **[Wiki](https://github.com/peterprickarz/hego/wiki)** - Complete documentation and guides
+- 📖 **[Documentation](https://hego.readthedocs.io/en/latest/about/introduction.html)** - Documentation and guides
 - 💬 **[Discord](https://discord.gg/bAw7Pv8ETG)** - Chat with other users and contributors
 - 🎥 **[Introduction Video](https://youtu.be/cviGlmKmFQ8)** - Visual walkthrough(outdated)
 
