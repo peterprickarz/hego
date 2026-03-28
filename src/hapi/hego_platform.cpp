@@ -135,7 +135,8 @@ bool HEGoPlatform::free_lib_hapil(void *libHAPIL)
 void *HEGoPlatform::get_dll_export(void *library_handle, const char *export_name)
 {
 #if defined(_WIN32)
-	return GetProcAddress((HMODULE)library_handle, export_name);
+	FARPROC proc = GetProcAddress(static_cast<HMODULE>(library_handle), export_name);
+	return reinterpret_cast<void *>(proc);
 #else
 	return dlsym(library_handle, export_name);
 #endif

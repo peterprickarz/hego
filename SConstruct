@@ -74,8 +74,20 @@ if len(path_entries) > 10:
 houdini_include = os.path.join(HFS, "toolkit", "include")
 env.Append(CPPPATH=[houdini_include])
 
-if env["platform"] == "windows" or sys_name == "Windows":
-    env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
+if env["platform"] == "windows":
+    # Ensure Windows DLL names stay as hego.*.dll even when cross-compiling from Linux.
+    env["SHLIBPREFIX"] = ""
+    env["IMPLIBPREFIX"] = ""
+
+    if env.get("use_mingw", False):
+        # MinGW/GCC path (Linux cross-compile, or MinGW on Windows)
+        # Usually no extra flags needed here.
+        # Optional:
+        # env.Append(CCFLAGS=["-std=c++17"])
+        pass
+    else:
+        # MSVC path
+        env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
 elif env["platform"] == "linux":
     env["CC"] = "gcc-11"
