@@ -2,9 +2,11 @@
 
 #include "util/attrib/fetch_attribs.h"
 #include "util/geo/output.h"
+#include "util/geo/part_selection.h"
 #include "util/hego_util.h"
 #include "util/log/log.h"
 
+#include <algorithm>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 namespace HEGo
@@ -13,7 +15,7 @@ namespace Util
 {
 namespace Geo
 {
-godot::Dictionary HEGo::Util::Geo::fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_point_config)
+godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_point_config, bool auto_cook)
 {
 	bool only_loose_points = fetch_point_config->get("only_loose_points");
 	godot::PackedStringArray read_attribs = fetch_point_config->get("read_attribs");
@@ -21,30 +23,18 @@ godot::Dictionary HEGo::Util::Geo::fetch_points(HEGoSessionManager *session_mgr,
 	godot::Array filter_attrib_values = fetch_point_config->get("filter_attrib_values");
 	godot::PackedStringArray split_attribs = fetch_point_config->get("split_attribs");
 
-	HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()));
-	session_mgr->wait_for_cook();
 	HAPI_GeoInfo mesh_geo_info;
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetDisplayGeoInfo(session_mgr->get_session(), node_id, &mesh_geo_info));
-	HAPI_PartInfo mesh_part_info;
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetPartInfo(session_mgr->get_session(), mesh_geo_info.nodeId, 0, &mesh_part_info));
-	if (mesh_part_info.type != HAPI_PARTTYPE_MESH)
+	if (!get_display_geo_info(session_mgr, node_id, mesh_geo_info, auto_cook))
 	{
-		HEGo::Util::Log::error("Requested points(HAPI_PARTTYPE_MESH) but received something else instead!");
 		return godot::Dictionary();
 	}
-	// always fetch positions
-	godot::Array positions = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "P");
-
-	// get read, split and filter attrs
-	godot::Dictionary read_attribs_dict;
-	read_attribs_dict["P"] = positions;
-	for (int i = 0; i < read_attribs.size(); i++)
+	HAPI_PartInfo mesh_part_info;
+	if (!find_part_by_type(session_mgr->get_session(), mesh_geo_info, HAPI_PARTTYPE_MESH, mesh_part_info))
 	{
-		godot::String attr_name = read_attribs[i];
-		godot::Array values = HEGo::Util::Attribs::fetch_by_name(
-				session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, attr_name.utf8().get_data());
-		read_attribs_dict[attr_name] = values;
+		HEGo::Util::Log::error("Requested points(HAPI_PARTTYPE_MESH) but no mesh part was found.");
+		return godot::Dictionary();
 	}
+	// fetch filter attrs first so we can return early before loading other point attributes.
 	godot::Dictionary filter_attribs_dict;
 	for (int i = 0; i < filter_attribs.size(); i++)
 	{
@@ -53,24 +43,17 @@ godot::Dictionary HEGo::Util::Geo::fetch_points(HEGoSessionManager *session_mgr,
 				session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, attr_name.utf8().get_data());
 		filter_attribs_dict[attr_name] = values;
 	}
-	godot::Dictionary split_attribs_dict;
-	for (int i = 0; i < split_attribs.size(); i++)
-	{
-		godot::String attr_name = split_attribs[i];
-		godot::Array values = HEGo::Util::Attribs::fetch_by_name(
-				session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, attr_name.utf8().get_data());
-		split_attribs_dict[attr_name] = values;
-	}
 
 	// filter points
 	godot::Array filtered_indices;
 	std::vector<int> vertex_point_indices(mesh_part_info.vertexCount);
 	if (mesh_part_info.vertexCount > 0)
 	{
-		HOUDINI_CHECK_ERROR(HoudiniApi::GetVertexList(session_mgr->get_session(), node_id, 0, vertex_point_indices.data(), 0, mesh_part_info.vertexCount));
+		HOUDINI_CHECK_ERROR(HoudiniApi::GetVertexList(
+				session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, vertex_point_indices.data(), 0, mesh_part_info.vertexCount));
 	}
 
-	for (int i = 0; i < positions.size(); i++)
+	for (int i = 0; i < mesh_part_info.pointCount; i++)
 	{
 		if (only_loose_points && mesh_part_info.vertexCount > 0)
 		{
@@ -94,6 +77,30 @@ godot::Dictionary HEGo::Util::Geo::fetch_points(HEGoSessionManager *session_mgr,
 		{
 			filtered_indices.append(i);
 		}
+	}
+	if (filtered_indices.is_empty())
+	{
+		return godot::Dictionary();
+	}
+
+	// Fetch the remaining attributes only after we know we have points to return.
+	godot::Array positions = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "P");
+	godot::Dictionary read_attribs_dict;
+	read_attribs_dict["P"] = positions;
+	for (int i = 0; i < read_attribs.size(); i++)
+	{
+		godot::String attr_name = read_attribs[i];
+		godot::Array values = HEGo::Util::Attribs::fetch_by_name(
+				session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, attr_name.utf8().get_data());
+		read_attribs_dict[attr_name] = values;
+	}
+	godot::Dictionary split_attribs_dict;
+	for (int i = 0; i < split_attribs.size(); i++)
+	{
+		godot::String attr_name = split_attribs[i];
+		godot::Array values = HEGo::Util::Attribs::fetch_by_name(
+				session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, attr_name.utf8().get_data());
+		split_attribs_dict[attr_name] = values;
 	}
 	godot::Dictionary split_point_dictionary =
 			HEGo::Util::Geo::build_nested_dictionary(split_attribs, split_attribs_dict, filtered_indices, read_attribs_dict, 0);

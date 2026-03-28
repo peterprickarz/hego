@@ -2,6 +2,7 @@
 
 #include "hego_api.h"
 #include "hego_asset_node.h"
+#include "util/geo/fetch_heightfields.h"
 #include "util/geo/fetch_points.h"
 #include "util/geo/fetch_surfaces.h"
 #include "util/geo/input.h"
@@ -27,7 +28,7 @@ void HEGoAssetNode::instantiate()
 	else
 	{
 		node_id = HEGo::Util::Node::instantiate_hda_from_name(get_session_manager(), op_name, node_id);
-		
+
 		// Only register the node if instantiation was successful
 		if (node_id >= 0)
 		{
@@ -41,22 +42,24 @@ void HEGoAssetNode::instantiate()
 	}
 }
 
-void HEGoAssetNode::set_parm(godot::String parm_name, godot::Variant value) 
-{ 
-	if (get_id() < 0) {
+void HEGoAssetNode::set_parm(godot::String parm_name, godot::Variant value)
+{
+	if (get_id() < 0)
+	{
 		HEGo::Util::Log::error("Cannot set parameter - HDA not instantiated or license issue");
 		return;
 	}
-	HEGo::Util::Parm::set_parm(get_session_manager(), node_id, parm_name, &value); 
+	HEGo::Util::Parm::set_parm(get_session_manager(), node_id, parm_name, &value);
 }
 
-void HEGoAssetNode::set_preset(godot::PackedByteArray preset) 
-{ 
-	if (get_id() < 0) {
+void HEGoAssetNode::set_preset(godot::PackedByteArray preset)
+{
+	if (get_id() < 0)
+	{
 		HEGo::Util::Log::error("Cannot set preset - HDA not instantiated or license issue");
 		return;
 	}
-	HEGo::Util::Parm::set_preset(get_session_manager(), node_id, preset); 
+	HEGo::Util::Parm::set_preset(get_session_manager(), node_id, preset);
 }
 
 void HEGoAssetNode::insert_multiparm_instance(int parm_id, int index)
@@ -69,31 +72,34 @@ void HEGoAssetNode::remove_multiparm_instance(int parm_id, int index)
 	HEGo::Util::Parm::remove_multiparm_instance(get_session_manager(), node_id, parm_id, index);
 }
 
-godot::PackedByteArray HEGoAssetNode::get_preset() 
-{ 
-	if (get_id() < 0) {
+godot::PackedByteArray HEGoAssetNode::get_preset()
+{
+	if (get_id() < 0)
+	{
 		HEGo::Util::Log::error("Cannot get preset - HDA not instantiated or license issue");
 		return godot::PackedByteArray();
 	}
-	return HEGo::Util::Parm::get_preset(get_session_manager(), node_id); 
+	return HEGo::Util::Parm::get_preset(get_session_manager(), node_id);
 }
 
-godot::Dictionary HEGoAssetNode::get_parms_dict() 
-{ 
-	if (get_id() < 0) {
+godot::Dictionary HEGoAssetNode::get_parms_dict()
+{
+	if (get_id() < 0)
+	{
 		HEGo::Util::Log::error("Cannot get parameters - HDA not instantiated or license issue");
 		return godot::Dictionary();
 	}
-	return HEGo::Util::Parm::get_parm_dict(get_session_manager(), node_id); 
+	return HEGo::Util::Parm::get_parm_dict(get_session_manager(), node_id);
 }
 
-godot::PackedStringArray HEGoAssetNode::get_input_names() 
-{ 
-	if (get_id() < 0) {
+godot::PackedStringArray HEGoAssetNode::get_input_names()
+{
+	if (get_id() < 0)
+	{
 		HEGo::Util::Log::error("Cannot get input names - HDA not instantiated or license issue");
 		return godot::PackedStringArray();
 	}
-	return HEGo::Util::Geo::get_input_names(get_session_manager(), node_id); 
+	return HEGo::Util::Geo::get_input_names(get_session_manager(), node_id);
 }
 
 godot::Array HEGoAssetNode::fetch_output()
@@ -103,16 +109,32 @@ godot::Array HEGoAssetNode::fetch_output()
 	//		get_session_manager()->get_session(), node_id, get_session_manager()->get_cook_options());
 }
 
-godot::Dictionary HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fetch_point_config)
+void HEGoAssetNode::cook()
 {
-	if (get_id() < 0) {
+	if (get_id() < 0)
+	{
+		HEGo::Util::Log::error("Cannot cook node - HDA not instantiated or license issue");
+		return;
+	}
+	if (HoudiniApi::CookNode(get_session_manager()->get_session(), node_id, get_session_manager()->get_cook_options()) != HAPI_RESULT_SUCCESS)
+	{
+		HEGo::Util::Log::error("Failed to cook node.");
+		return;
+	}
+	get_session_manager()->wait_for_cook(node_id);
+}
+
+godot::Dictionary HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fetch_point_config, bool auto_cook)
+{
+	if (get_id() < 0)
+	{
 		HEGo::Util::Log::error("Cannot fetch points - HDA not instantiated or license issue");
 		return godot::Dictionary();
 	}
-	
+
 	if (fetch_point_config.is_valid() && fetch_point_config->is_class("Resource"))
 	{
-		return HEGo::Util::Geo::fetch_points(get_session_manager(), node_id, fetch_point_config);
+		return HEGo::Util::Geo::fetch_points(get_session_manager(), node_id, fetch_point_config, auto_cook);
 	}
 	else
 	{
@@ -120,16 +142,17 @@ godot::Dictionary HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fetch_
 		return godot::Dictionary();
 	}
 }
-godot::Dictionary HEGoAssetNode::fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config)
+godot::Dictionary HEGoAssetNode::fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config, bool auto_cook)
 {
-	if (get_id() < 0) {
+	if (get_id() < 0)
+	{
 		HEGo::Util::Log::error("Cannot fetch surfaces - HDA not instantiated or license issue");
 		return godot::Dictionary();
 	}
-	
+
 	if (fetch_surface_config.is_valid() && fetch_surface_config->is_class("Resource"))
 	{
-		return HEGo::Util::Geo::fetch_surfaces(get_session_manager(), node_id, fetch_surface_config);
+		return HEGo::Util::Geo::fetch_surfaces(get_session_manager(), node_id, fetch_surface_config, auto_cook);
 	}
 	else
 	{
@@ -137,6 +160,29 @@ godot::Dictionary HEGoAssetNode::fetch_surfaces(godot::Ref<godot::Resource> fetc
 		return godot::Dictionary();
 	}
 }
+
+godot::Array HEGoAssetNode::get_heightfield_layers(godot::PackedStringArray read_prim_attribs, bool auto_cook)
+{
+	if (get_id() < 0)
+	{
+		HEGo::Util::Log::error("Cannot get heightfield layers - HDA not instantiated or license issue");
+		return godot::Array();
+	}
+
+	return HEGo::Util::Geo::get_heightfield_layers(get_session_manager(), node_id, read_prim_attribs, auto_cook);
+}
+
+godot::Ref<godot::Image> HEGoAssetNode::fetch_heightfield_layer_image(int part_id, bool auto_cook)
+{
+	if (get_id() < 0)
+	{
+		HEGo::Util::Log::error("Cannot fetch heightfield layer - HDA not instantiated or license issue");
+		return godot::Ref<godot::Image>();
+	}
+
+	return HEGo::Util::Geo::fetch_heightfield_layer_image(get_session_manager(), node_id, part_id, auto_cook);
+}
+
 void HEGoAssetNode::set_op_name(godot::String name) { op_name = name; }
 
 godot::String HEGoAssetNode::get_op_name() const { return op_name; }
@@ -154,8 +200,13 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_output"), &HEGoAssetNode::fetch_output);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_op_name", "name"), &HEGoAssetNode::set_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_op_name"), &HEGoAssetNode::get_op_name);
-	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config"), &HEGoAssetNode::fetch_points);
-	godot::ClassDB::bind_method(godot::D_METHOD("fetch_surfaces", "fetch_surface_config"), &HEGoAssetNode::fetch_surfaces);
+	godot::ClassDB::bind_method(godot::D_METHOD("cook"), &HEGoAssetNode::cook);
+	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config", "auto_cook"), &HEGoAssetNode::fetch_points, DEFVAL(true));
+	godot::ClassDB::bind_method(godot::D_METHOD("fetch_surfaces", "fetch_surface_config", "auto_cook"), &HEGoAssetNode::fetch_surfaces, DEFVAL(true));
+	godot::ClassDB::bind_method(godot::D_METHOD("get_heightfield_layers", "read_prim_attribs", "auto_cook"), &HEGoAssetNode::get_heightfield_layers,
+			DEFVAL(godot::PackedStringArray()), DEFVAL(true));
+	godot::ClassDB::bind_method(
+			godot::D_METHOD("fetch_heightfield_layer_image", "part_id", "auto_cook"), &HEGoAssetNode::fetch_heightfield_layer_image, DEFVAL(true));
 	godot::ClassDB::bind_method(godot::D_METHOD("reset_node_id"), &HEGoAssetNode::reset_node_id);
 	// godot::ClassDB::add_property("HEGoAssetNode", godot::PropertyInfo(godot::Variant::STRING, "op_name"),
 	// "set_op_name", "get_op_name");

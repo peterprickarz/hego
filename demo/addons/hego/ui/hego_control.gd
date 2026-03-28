@@ -43,6 +43,7 @@ func _on_start_session_button_pressed():
 	var connection_type_id = connection_type.selected
 	var connection_data_text = connection_data.text
 	
+	logs.text = ""
 	logs.text += "Starting session...\n"
 	logs.text += "Connection type: " + connection_type.get_item_text(connection_type_id) + "\n"
 	logs.text += "Connection data: " + connection_data_text + "\n"
@@ -89,10 +90,11 @@ func _setup_log_capture():
 
 ## Handle incoming log messages from HEGo LogManager
 func _on_log_received(message: String, level: String):
-	logs.text += message + "\n"
+	#logs.text += message + "\n"
 	# Update session status whenever we receive a log message
-	call_deferred("_update_session_status")
-	call_deferred("_scroll_to_bottom")
+	#call_deferred("_update_session_status")
+	#call_deferred("_scroll_to_bottom")
+	pass
 
 
 ## Auto-scroll log display to bottom

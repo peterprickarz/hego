@@ -32,7 +32,7 @@ HAPI_NodeId instantiate_hda_from_name(HEGoSessionManager *session_mgr, const god
 {
 	HEGo::Util::Log::line();
 
-	std::string asset_name = name.utf8();
+	std::string asset_name = std::string(name.utf8().get_data(), name.utf8().size());
 
 	node_id = instantiate_hda(session_mgr, &asset_name, node_id);
 
@@ -51,7 +51,7 @@ HAPI_NodeId instantiate_hda_from_path(HEGoSessionManager *session_mgr, const god
 	HEGo::Util::Log::line();
 	HEGo::Util::Log::message("Loading asset");
 
-	std::string otl_path = path.utf8();
+	std::string otl_path = std::string(path.utf8().get_data(), path.utf8().size());
 	HAPI_AssetLibraryId asset_id = -1;
 	std::string asset_name;
 

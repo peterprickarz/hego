@@ -11,8 +11,7 @@ namespace Util
 {
 namespace Geo
 {
-godot::Dictionary fetch_points(
-		HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_point_config);
+godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_point_config, bool auto_cook = true);
 } // namespace Geo
 } // namespace Util
 } // namespace HEGo

@@ -3,8 +3,10 @@
 
 #include "hego_nodes/hego_base_node.h"
 
+#include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
@@ -30,8 +32,11 @@ public:
 	godot::Dictionary get_parms_dict();
 	godot::PackedStringArray get_input_names();
 	godot::Array fetch_output();
-	godot::Dictionary fetch_points(godot::Ref<godot::Resource> fetch_point_config);
-	godot::Dictionary fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config);
+	void cook();
+	godot::Dictionary fetch_points(godot::Ref<godot::Resource> fetch_point_config, bool auto_cook = true);
+	godot::Dictionary fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config, bool auto_cook = true);
+	godot::Array get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray(), bool auto_cook = true);
+	godot::Ref<godot::Image> fetch_heightfield_layer_image(int part_id, bool auto_cook = true);
 
 	void set_op_name(godot::String name);
 	godot::String get_op_name() const;

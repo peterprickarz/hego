@@ -70,7 +70,6 @@ func _on_slider_value_changed(value: float):
 	
 	spin_box.value = value
 	param["values"] = [int(value)]
-	value_changed.emit(param.get("name", ""), int(value))
 
 func _on_spin_box_value_changed(value: float):
 	if initializing:

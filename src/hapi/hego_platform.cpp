@@ -111,18 +111,35 @@ void *HEGoPlatform::load_lib_hapil()
 bool HEGoPlatform::free_lib_hapil(void *libHAPIL)
 {
 #if defined(_WIN32)
-	BOOL result = FreeLibrary((HMODULE)libHAPIL);
-	SetDllDirectoryA(nullptr); // Reset the DLL directory to default
-	return result != 0;
+	if (!libHAPIL)
+		return false;
+	BOOL result = FreeLibrary(static_cast<HMODULE>(libHAPIL));
+	SetDllDirectoryA(nullptr); // Reset (optional, but harmless)
+	return result != FALSE;
 #else
-	return dlclose(libHAPIL) == 0;
+	// On Linux / POSIX
+	if (!libHAPIL)
+	{
+		return false;
+	}
+
+	int result = dlclose(libHAPIL);
+
+	if (result != 0)
+	{
+		const char *err = dlerror();
+		return false;
+	}
+
+	return true;
 #endif
 }
 
 void *HEGoPlatform::get_dll_export(void *library_handle, const char *export_name)
 {
 #if defined(_WIN32)
-	return GetProcAddress((HMODULE)library_handle, export_name);
+	FARPROC proc = GetProcAddress(static_cast<HMODULE>(library_handle), export_name);
+	return reinterpret_cast<void *>(proc);
 #else
 	return dlsym(library_handle, export_name);
 #endif

@@ -55,6 +55,20 @@ var new_preset_name_line_edit: LineEdit
 @onready var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
 @onready var root_control = $"../.."
 
+
+func _elapsed_msec(start_usec: int) -> float:
+	return float(Time.get_ticks_usec() - start_usec) / 1000.0
+
+
+func _print_bottom_panel_timing(trigger: String, session_start_msec: float, recook_msec: float, ui_rebuild_msec: float, total_msec: float):
+	var lines = PackedStringArray()
+	lines.append("[HEGoBottomPanel]: Timing summary (%s)" % trigger)
+	lines.append("[HEGoBottomPanel]:   Session start: %.3f ms" % session_start_msec)
+	lines.append("[HEGoBottomPanel]:   Recook call: %.3f ms" % recook_msec)
+	lines.append("[HEGoBottomPanel]:   UI rebuild: %.3f ms" % ui_rebuild_msec)
+	lines.append("[HEGoBottomPanel]:   Total bottom-panel flow: %.3f ms" % total_msec)
+	print("\n".join(lines))
+
 func _ready():
 	new_preset_name_diag = preload("res://addons/hego/ui/new_preset_name_diag.tscn").instantiate()
 	new_preset_name_line_edit = new_preset_name_diag.get_node("%LineEdit")
@@ -256,12 +270,28 @@ func _on_input_changed():
 	
 
 func _on_recook_button_pressed():
+	var total_start_usec = Time.get_ticks_usec()
+	var session_start_msec = 0.0
+	var recook_msec = 0.0
+	var ui_rebuild_msec = 0.0
+
 	if auto_start_session_toggle.button_pressed:
-		HEGoAPI.get_singleton().start_session(2, 'hapi')
+		var phase_start_usec = Time.get_ticks_usec()
+		if not HEGoAPI.get_singleton().is_session_active():
+			HEGoAPI.get_singleton().start_session(2, 'hapi')
+		session_start_msec = _elapsed_msec(phase_start_usec)
+
+	var recook_start_usec = Time.get_ticks_usec()
 	recook()
+	recook_msec = _elapsed_msec(recook_start_usec)
+
 	var preset_index = preset_dropdown.get_selected_id()
+	var ui_start_usec = Time.get_ticks_usec()
 	update_ui()
 	preset_dropdown.select(preset_index)
+	ui_rebuild_msec = _elapsed_msec(ui_start_usec)
+
+	_print_bottom_panel_timing("recook_button", session_start_msec, recook_msec, ui_rebuild_msec, _elapsed_msec(total_start_usec))
 		
 		
 func recook():

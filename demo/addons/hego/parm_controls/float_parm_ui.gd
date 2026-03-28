@@ -72,7 +72,6 @@ func _on_slider_value_changed(value: float):
 		return
 	spin_box.value = value
 	param["values"] = [value]
-	value_changed.emit(param.get("name", ""), value)
 
 func _on_spin_box_value_changed(value: float):
 	if not slider:
@@ -80,7 +79,6 @@ func _on_spin_box_value_changed(value: float):
 		return
 	if initializing:
 		return
-	print(value)
 	slider.value = value
 	param["values"] = [value]
 	value_changed.emit(param.get("name", ""), value)

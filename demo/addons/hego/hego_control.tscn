@@ -28,9 +28,9 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
-[node name="SessionSyncStatusLabel" parent="TabContainer/Session/Vbox" index="3"]
-theme_override_colors/default_color = Color(0, 1, 0, 1)
-text = "SessionSync is connected"
+[node name="ConnectionType" parent="TabContainer/Session/Vbox/ConnectionHBox" index="2"]
+popup/item_0/text = "Shared Memory"
+popup/item_2/text = "TCP  Port"
 
 [node name="Logs" parent="TabContainer/Session/Vbox" index="6"]
 text = "Log capture connected.
@@ -45,8 +45,20 @@ Loaded and initialized libHAPIL.
 HAPI failed:   (src\\hego_session_manager.cpp:49)
 Started Session.
 Initialized HAPI
+Cleaning up and closing session...
+Closed Session, finalized hapi and freed libHAPIL.
+Loaded and initialized libHAPIL.
+9090
+Cleaning up and closing session...
+Closed Session, finalized hapi and freed libHAPIL.
+Loaded and initialized libHAPIL.
+9090
+Cleaning up and closing session...
+Closed Session, finalized hapi and freed libHAPIL.
+Loaded and initialized libHAPIL.
+9090
 "
-scroll_vertical = 13.0
+scroll_vertical = 25.0
 
 [node name="HDA" parent="TabContainer" instance=ExtResource("3_fsb3y")]
 unique_name_in_owner = true

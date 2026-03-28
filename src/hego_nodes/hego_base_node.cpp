@@ -77,7 +77,6 @@ void HEGoTransformableInputReceiverNode::connect_input(const HEGoBaseNode *other
 
 void HEGoTransformableInputReceiverNode::_bind_methods()
 {
-	// godot::ClassDB::bind_method(godot::D_METHOD("set_transform", "xform"), &HEGoTransformableInputReceiverNode::set_transform);
 	godot::ClassDB::bind_method(godot::D_METHOD("connect_input", "other_node", "input_index"), &HEGoTransformableInputReceiverNode::connect_input);
 }
 
@@ -90,5 +89,13 @@ void HEGoTransformableNamedNode::set_node_name(godot::String name) { node_name =
 godot::String HEGoTransformableNamedNode::get_node_name() const { return node_name; }
 
 void HEGoTransformableNamedNode::_bind_methods() {}
+
+HEGoBaseInputNode::HEGoBaseInputNode() {}
+
+HEGoBaseInputNode::~HEGoBaseInputNode() {}
+
+void HEGoBaseInputNode::set_prim_attr(godot::String name, godot::Variant value) {}
+
+void HEGoBaseInputNode::_bind_methods() { godot::ClassDB::bind_method(godot::D_METHOD("set_prim_attr", "name", "value"), &HEGoBaseInputNode::set_prim_attr); }
 
 } // namespace HEGo

@@ -24,16 +24,20 @@ void HEGoInputNode::instantiate()
 	get_session_manager()->register_node(this);
 }
 
-void HEGoInputNode::set_geo_from_mesh_instance_3d(godot::MeshInstance3D *mesh_instance)
+void HEGoInputNode::set_geo_from_mesh_instance_3d(godot::MeshInstance3D *mesh_instance, const godot::Array &attributes)
 {
-	HEGo::Util::Geo::create_input_from_mesh_instance_3d(get_session_manager(), mesh_instance, node_id);
+	HEGo::Util::Geo::create_input_from_mesh_instance_3d(get_session_manager(), mesh_instance, node_id, attributes);
 }
 
-void HEGoInputNode::set_geo_from_mesh(godot::Mesh *mesh) { HEGo::Util::Geo::create_input_from_mesh(get_session_manager(), mesh, node_id); }
+void HEGoInputNode::set_geo_from_mesh(godot::Mesh *mesh, const godot::Array &attributes)
+{
+	HEGo::Util::Geo::create_input_from_mesh(get_session_manager(), mesh, node_id, attributes);
+}
 void HEGoInputNode::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("set_geo_from_mesh_instance_3d", "mesh_instance_3d"), &HEGoInputNode::set_geo_from_mesh_instance_3d);
-	godot::ClassDB::bind_method(godot::D_METHOD("set_geo_from_mesh", "mesh"), &HEGoInputNode::set_geo_from_mesh);
+	godot::ClassDB::bind_method(godot::D_METHOD("set_geo_from_mesh_instance_3d", "mesh_instance_3d", "attributes"),
+			&HEGoInputNode::set_geo_from_mesh_instance_3d, DEFVAL(godot::Array()));
+	godot::ClassDB::bind_method(godot::D_METHOD("set_geo_from_mesh", "mesh", "attributes"), &HEGoInputNode::set_geo_from_mesh, DEFVAL(godot::Array()));
 }
 
 } // namespace HEGo

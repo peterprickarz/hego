@@ -11,7 +11,7 @@
 - 📦 **[Download Latest Release](https://github.com/peterprickarz/hego/releases/latest)** - Pre-built binaries for Windows
 - 📖 **[Wiki](https://github.com/peterprickarz/hego/wiki)** - Complete documentation and guides
 - 💬 **[Discord](https://discord.gg/bAw7Pv8ETG)** - Chat with other users and contributors
-- 🎥 **[Introduction Video](https://youtu.be/cviGlmKmFQ8)** - Visual walkthrough
+- 🎥 **[Introduction Video](https://youtu.be/cviGlmKmFQ8)** - Visual walkthrough(outdated)
 
 
 ### Quick Install
@@ -33,15 +33,16 @@ git submodule update --init --recursive
 ## Features
 
 - **Scriptable API**: Built with GDScript integration in mind for maximum flexibility
-- **Multiple Node Types**: Support for geometry input, curve input, and HDA asset nodes
+- **Multiple Node Types**: Support for geometry input, curve input, heightfield input and HDA asset nodes
 - **Session Management**: Multiple session types (in-process, TCP, named pipes, shared memory)
 - **Bidirectional Data Flow**: Convert between Godot and Houdini geometry formats
 - **Parameter Management**: Automatic type conversion between Godot Variant and HAPI types
 - **Mesh Generation**: Generate Godot meshes, instances, and scene nodes from Houdini
+- **[Terrain3D](https://tokisan.com/terrain3d/) Bridge**: Generate Terrain3D terrains, use Terrain3D instancing, Terrain3D heightfield inputs
 
 ## Requirements
 
-- **Houdini 20.5.654** - No license needed for building, active license required for runtime
+- **Houdini 21.0.631** - No license needed for building, active commercial(FX,Core or Houdini Engine) license required for runtime
 - **Godot 4.4+** - Stable or newer versions supported  
 
 ## Developer Setup

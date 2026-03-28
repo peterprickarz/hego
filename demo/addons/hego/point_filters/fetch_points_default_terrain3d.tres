@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="HEGoFetchPointsConfig" load_steps=2 format=3 uid="uid://rk6vcipluovh"]
+
+[ext_resource type="Script" uid="uid://c4ty4hgb3cgww" path="res://addons/hego/fetch_points_config.gd" id="1_vhr66"]
+
+[resource]
+script = ExtResource("1_vhr66")
+only_loose_points = true
+read_attribs = PackedStringArray("N", "Cd", "up", "pscale", "scale", "hegot3d_lod0_range", "hegot3d_lod1_range", "hegot3d_lod2_range", "hegot3d_lod3_range", "hegot3d_lod4_range", "hegot3d_lod5_range", "hegot3d_lod6_range", "hegot3d_lod7_range", "hegot3d_lod8_range", "hegot3d_lod9_range", "hegot3d_shadow_impostor", "hegot3d_last_lod", "hegot3d_last_shadow_lod", "hegot3d_fade_margin")
+filter_attribs = PackedStringArray("hegot3d_use_terrain3d_instancer")
+filter_attrib_values = [1]
+split_attribs = PackedStringArray("hegot3d_terrain3d_node_path", "hegot3d_scene_resource_path")

@@ -7,6 +7,7 @@
 
 #include "hego_nodes/hego_asset_node.h"
 #include "hego_nodes/hego_curve_input_node.h"
+#include "hego_nodes/hego_heightfield_input_node.h"
 #include "hego_nodes/hego_input_node.h"
 #include "hego_nodes/hego_merge_node.h"
 #include "hego_nodes/hego_trackable_node.h"
@@ -27,15 +28,16 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);
-	
+
 	ClassDB::register_class<HEGo::Util::Log::HEGoLogManager>();
 	memnew(HEGo::Util::Log::HEGoLogManager);
-	
+
 	GDREGISTER_ABSTRACT_CLASS(HEGo::HEGoTrackableNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoBaseNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoInputReceiverNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableNamedNode);
+	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoBaseInputNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoTransformableInputReceiverNode);
 
 	// ClassDB::register_abstract_class<HEGo::HEGoBaseNode>();
@@ -45,6 +47,7 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 	ClassDB::register_class<HEGo::HEGoMergeNode>();
 	ClassDB::register_class<HEGo::HEGoInputNode>();
 	ClassDB::register_class<HEGo::HEGoCurveInputNode>();
+	ClassDB::register_class<HEGo::HEGoHeightfieldInputNode>();
 }
 
 void uninitialize_hego_module(ModuleInitializationLevel p_level)
