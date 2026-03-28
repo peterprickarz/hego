@@ -13,6 +13,16 @@ This node is typically connected into [HEGoMergeNode] or directly into an HDA in
 <tutorials>
 </tutorials>
 <methods>
+<method name="instantiate">
+<return type="void" />
+<description>
+Creates a Houdini input node and stores its id in this wrapper.
+
+If a valid node id already exists, the implementation attempts to reuse or replace that node according to HEGo input-node utility behavior.
+
+After creation, this wrapper is registered with the active session manager.
+</description>
+</method>
 <method name="set_geo_from_mesh">
 <return type="void" />
 <param index="0" name="mesh" type="Mesh" />

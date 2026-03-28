@@ -1,5 +1,10 @@
 build
 /log/
+.venv
 demo/.godot
 *.TMP
 .sconsign.dblite
+docs/_build/
+docs/.tmp_rst/
+docs/.tools/
+docs/tools/godot-master/

@@ -11,6 +11,14 @@ This is the standard way to combine several [HEGoInputNode] and/or generator out
 <tutorials>
 </tutorials>
 <methods>
+<method name="instantiate">
+<return type="void" />
+<description>
+Creates a Houdini Merge SOP node and stores its id in this wrapper.
+
+This method always instantiates a merge operator for the current wrapper and then registers the wrapper with the active session manager.
+</description>
+</method>
 <method name="connect_inputs">
 <return type="void" />
 <param index="0" name="inputs" type="Array" />

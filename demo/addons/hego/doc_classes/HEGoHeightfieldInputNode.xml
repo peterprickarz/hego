@@ -15,6 +15,18 @@ Calling [method set_layers] rebuilds the internal heightfield input node network
 <tutorials>
 </tutorials>
 <methods>
+<method name="instantiate">
+<return type="void" />
+<description>
+Creates a Houdini HeightField input network for this wrapper.
+
+If the node is already instantiated, the call returns immediately.
+
+The method requires an active Houdini session. On success, it stores the main node id plus internal height, mask, and merge node ids, then registers this wrapper with the session manager.
+
+On failure, all stored ids are reset to invalid values and an error is logged.
+</description>
+</method>
 <method name="set_layers">
 <return type="void" />
 <param index="0" name="layers" type="Dictionary" />

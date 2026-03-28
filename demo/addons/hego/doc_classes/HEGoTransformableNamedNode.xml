@@ -8,7 +8,7 @@ This class is used as an internal base for named input node types.
 
 The name field is used by C++ implementations during Houdini node creation but is not currently exposed as a bound Godot property or method on this type.
 
-Concrete subclasses may still consume this internal field during [method instantiate], so naming can be part of internal node creation even when not script-exposed here.
+Concrete subclasses may still consume this internal field during [method HEGoBaseNode.instantiate], so naming can be part of internal node creation even when not script-exposed here.
 </description>
 <tutorials>
 </tutorials>

@@ -6,13 +6,23 @@ Represents an instantiated Houdini Digital Asset (HDA) node.
 <description>
 Use this class to instantiate an HDA by operator name, set parameters, cook, and fetch output data.
 
-Call [method instantiate] after assigning [member op_name]. Most data-access methods require a valid instantiated node; when called before instantiation they log an error and return an empty value.
+Call [method HEGoBaseNode.instantiate] after assigning [member op_name]. Most data-access methods require a valid instantiated node; when called before instantiation they log an error and return an empty value.
 
 [method fetch_points] expects a resource compatible with [code]HEGoFetchPointsConfig[/code]. [method fetch_surfaces] expects a resource compatible with [code]HEGoFetchSurfacesConfig[/code].
 </description>
 <tutorials>
 </tutorials>
 <methods>
+<method name="instantiate">
+<return type="void" />
+<description>
+Instantiates the HDA node from [member op_name].
+
+If [member op_name] is empty, the call logs an error and does not create a node.
+
+On success, the created node id is stored and this wrapper is registered in the session manager. On failure, the node remains invalid and an error is logged.
+</description>
+</method>
 <method name="cook">
 <return type="void" />
 <description>
@@ -159,7 +169,7 @@ Sets a parameter by name.
 
 The [Variant] value type is converted to the matching Houdini parameter storage type when possible.
 
-Call after [method instantiate]. Invalid node state is logged and ignored.
+Call after [method HEGoBaseNode.instantiate]. Invalid node state is logged and ignored.
 </description>
 </method>
 <method name="set_preset">
@@ -174,7 +184,7 @@ The preset payload should come from [method get_preset] or a compatible Houdini 
 </methods>
 <members>
 <member name="op_name" type="String" setter="set_op_name" getter="get_op_name" default="&quot;&quot;">
-Houdini operator name used by [method instantiate] to create the asset node.
+Houdini operator name used by [method HEGoBaseNode.instantiate] to create the asset node.
 </member>
 </members>
 </class>
