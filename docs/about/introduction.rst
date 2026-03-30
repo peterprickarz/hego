@@ -8,7 +8,6 @@ Community
 ---------
 
 - `Discord <https://discord.gg/bAw7Pv8ETG>`_ — chat with users and contributors
-- `Introduction Video <https://youtu.be/cviGlmKmFQ8>`_ — visual walkthrough (somewhat outdated)
 - `GitHub Releases <https://github.com/peterprickarz/hego/releases/latest>`_ — latest pre-built binaries
 
 Features
@@ -32,3 +31,8 @@ The easiest way to bring an HDA into Godot is :doc:`HEGoNode3D </node_reference/
 If you want to work with the underlying API directly, the entire ``HEGoNode3D`` workflow and
 editor bottom panel are built in GDScript on top of the core API. See the individual
 :doc:`API class pages </classes/class_hegoapi>` for details.
+
+Overview Video
+--------------
+
+.. youtube:: CSmCCTkfPCU

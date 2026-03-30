@@ -7,6 +7,7 @@ copyright = "2026, HEGo Contributors"
 
 extensions = [
     "sphinx_rtd_theme",
+    "sphinxcontrib.youtube",
 ]
 
 templates_path = ["_templates"]
@@ -25,9 +26,6 @@ html_theme_options = {
     "titles_only": True,
 }
 html_static_path = ["_static"]
-html_sidebars = {
-    "**": ["globaltoc.html", "searchbox.html"],
-}
 
 master_doc = "index"
 language = "en"
