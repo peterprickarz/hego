@@ -228,6 +228,13 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 	return result;
 }
 
+int HEGoAPI::poll_cook_state()
+{
+	int status = HAPI_STATE_MAX;
+	HoudiniApi::GetStatus(session_mgr.get_session(), HAPI_STATUS_COOK_STATE, &status);
+	return status;
+}
+
 void HEGoAPI::_bind_methods()
 {
 	godot::ClassDB::bind_method(godot::D_METHOD("start_session", "connection_type", "connection_data"), &HEGoAPI::start_session);
@@ -236,6 +243,7 @@ void HEGoAPI::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_houdini_installation_path", "path"), &HEGoAPI::set_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_houdini_installation_path"), &HEGoAPI::get_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_hda_libraries"), &HEGoAPI::get_hda_libraries);
+	godot::ClassDB::bind_method(godot::D_METHOD("poll_cook_state"), &HEGoAPI::poll_cook_state);
 
 	godot::ClassDB::bind_static_method("HEGoAPI", godot::D_METHOD("get_singleton"), &HEGoAPI::get_singleton);
 }

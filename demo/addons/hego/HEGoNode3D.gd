@@ -70,11 +70,7 @@ func cook():
 	# If the asset node was not instantiated beforehand, retrieve parm stash
 	if id == -1 and parm_stash.size() > 0:
 		hego_asset_node.set_preset(parm_stash)
-		
-	var outputs_node = get_node_or_null("Outputs")
-	if outputs_node:
-		outputs_node.free()
-		timings["instantiation"] = _elapsed_msec(phase_start_usec)
+	timings["instantiation"] = _elapsed_msec(phase_start_usec)
 		
 	# SET INPUTS
 	# Retrieve a string array containing the names of inputs
@@ -144,10 +140,24 @@ func cook():
 	phase_start_usec = Time.get_ticks_usec()
 	parm_stash = hego_asset_node.get_preset()
 	timings["parm_stash"] = _elapsed_msec(phase_start_usec)
-	# Cook once before all fetch operations
+	# Cook once before all fetch operations (async — UI stays responsive)
 	phase_start_usec = Time.get_ticks_usec()
-	hego_asset_node.cook()
+	hego_asset_node.cook_async()
+	# Poll once per frame until HAPI finishes cooking (state <= 3 = ready)
+	while HEGoAPI.get_singleton().poll_cook_state() > 3:
+		await get_tree().process_frame
 	timings["cook"] = _elapsed_msec(phase_start_usec)
+	var cook_state = HEGoAPI.get_singleton().poll_cook_state()
+	if cook_state != 0:  # HAPI_STATE_READY = 0
+		push_error("[HEGoNode3D]: Cook failed (state=%d)" % cook_state)
+		print(_build_cook_timing_summary(timings, _elapsed_msec(cook_start_usec)))
+		return
+
+	# Remove old output now that the cook is done (keeps previous output visible during cook)
+	var outputs_node = get_node_or_null("Outputs")
+	if outputs_node:
+		outputs_node.free()
+
 	# FETCH OUTPUTS
 	
 	phase_start_usec = Time.get_ticks_usec()

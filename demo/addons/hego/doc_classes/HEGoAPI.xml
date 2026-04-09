@@ -84,5 +84,31 @@ Stops the active Houdini Engine session and releases session resources.
 Returns [code]true[/code] when shutdown succeeds.
 </description>
 </method>
+<method name="poll_cook_state">
+<return type="int" />
+<description>
+Returns the current HAPI cook status as an integer.
+
+Used together with [method HEGoAssetNode.cook_async] to poll for cook completion each frame. The returned value maps to [code]HAPI_State[/code]:
+[codeblock]
+0 = HAPI_STATE_READY          (cook finished successfully)
+1 = HAPI_STATE_READY_WITH_FATAL_ERRORS
+2 = HAPI_STATE_READY_WITH_COOK_ERRORS
+3 = HAPI_STATE_MAX_READY_STATE
+4 = HAPI_STATE_STARTING_COOK
+5 = HAPI_STATE_COOKING
+6 = HAPI_STATE_STARTING_LOAD
+7 = HAPI_STATE_LOADING
+8 = HAPI_STATE_MAX
+[/codeblock]
+
+Values greater than 3 indicate that HAPI is still busy. Typical polling pattern in GDScript:
+[codeblock]
+hego_asset_node.cook_async()
+while HEGoAPI.get_singleton().poll_cook_state() > 3:
+    await get_tree().process_frame
+[/codeblock]
+</description>
+</method>
 </methods>
 </class>

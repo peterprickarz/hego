@@ -124,6 +124,24 @@ void HEGoAssetNode::cook()
 	get_session_manager()->wait_for_cook(node_id);
 }
 
+int HEGoAssetNode::cook_async()
+{
+	if (get_id() < 0)
+	{
+		HEGo::Util::Log::error("Cannot cook_async - HDA not instantiated or license issue");
+		return -1;
+	}
+
+	HAPI_Result result = HoudiniApi::CookNode(get_session_manager()->get_session(), node_id, get_session_manager()->get_cook_options());
+	if (result != HAPI_RESULT_SUCCESS)
+	{
+		HEGo::Util::Log::error("Failed to start async cook.");
+		return -1;
+	}
+
+	return 0;
+}
+
 godot::Dictionary HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fetch_point_config, bool auto_cook)
 {
 	if (get_id() < 0)
@@ -201,6 +219,7 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_op_name", "name"), &HEGoAssetNode::set_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_op_name"), &HEGoAssetNode::get_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("cook"), &HEGoAssetNode::cook);
+	godot::ClassDB::bind_method(godot::D_METHOD("cook_async"), &HEGoAssetNode::cook_async);
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config", "auto_cook"), &HEGoAssetNode::fetch_points, DEFVAL(true));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_surfaces", "fetch_surface_config", "auto_cook"), &HEGoAssetNode::fetch_surfaces, DEFVAL(true));
 	godot::ClassDB::bind_method(godot::D_METHOD("get_heightfield_layers", "read_prim_attribs", "auto_cook"), &HEGoAssetNode::get_heightfield_layers,

@@ -33,6 +33,7 @@ public:
 	
 	// Get dictionary of all loaded HDA libraries with their assets
 	godot::Dictionary get_hda_libraries();
+	int poll_cook_state();
 
 	static HEGoAPI *get_singleton();
 
