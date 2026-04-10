@@ -164,7 +164,7 @@ Because the HAPI session is initialized with ``use_cooking_thread=true``, this c
 
 Poll :ref:`HEGoAPI.poll_cook_state()<class_HEGoAPI_method_poll_cook_state>` once per frame to detect completion:
 
-.. code-block:: gdscript
+::
 
     hego_asset_node.cook_async()
     while HEGoAPI.get_singleton().poll_cook_state() > 3:

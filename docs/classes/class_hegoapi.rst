@@ -46,13 +46,13 @@ Methods
    +-------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | ``bool``                      | :ref:`is_session_active<class_HEGoAPI_method_is_session_active>`\ (\ )                                                  |
    +-------------------------------+-------------------------------------------------------------------------------------------------------------------------+
-   | ``int``                       | :ref:`poll_cook_state<class_HEGoAPI_method_poll_cook_state>`\ (\ )                                                      |
-   +-------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | |void|                        | :ref:`set_houdini_installation_path<class_HEGoAPI_method_set_houdini_installation_path>`\ (\ path\: ``String``\ )       |
    +-------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | ``bool``                      | :ref:`start_session<class_HEGoAPI_method_start_session>`\ (\ connection_type\: ``int``, connection_data\: ``String``\ ) |
    +-------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | ``bool``                      | :ref:`stop_session<class_HEGoAPI_method_stop_session>`\ (\ )                                                            |
+   +-------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``int``                       | :ref:`poll_cook_state<class_HEGoAPI_method_poll_cook_state>`\ (\ )                                                      |
    +-------------------------------+-------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
@@ -132,44 +132,6 @@ Returns ``true`` when the Houdini Engine session is currently active.
 
 ----
 
-.. _class_HEGoAPI_method_poll_cook_state:
-
-.. rst-class:: classref-method
-
-``int`` **poll_cook_state**\ (\ ) :ref:`🔗<class_HEGoAPI_method_poll_cook_state>`
-
-Returns the current HAPI cook status as an integer.
-
-
-
-Used together with :ref:`HEGoAssetNode.cook_async()<class_HEGoAssetNode_method_cook_async>` to poll for cook completion each frame. The returned value maps to ``HAPI_State``:
-
-::
-
-    0 = HAPI_STATE_READY          (cook finished successfully)
-    1 = HAPI_STATE_READY_WITH_FATAL_ERRORS
-    2 = HAPI_STATE_READY_WITH_COOK_ERRORS
-    3 = HAPI_STATE_MAX_READY_STATE
-    4 = HAPI_STATE_STARTING_COOK
-    5 = HAPI_STATE_COOKING
-    6 = HAPI_STATE_STARTING_LOAD
-    7 = HAPI_STATE_LOADING
-    8 = HAPI_STATE_MAX
-
-
-
-Values greater than 3 indicate that HAPI is still busy. Typical polling pattern in GDScript:
-
-.. code-block:: gdscript
-
-    hego_asset_node.cook_async()
-    while HEGoAPI.get_singleton().poll_cook_state() > 3:
-        await get_tree().process_frame
-
-.. rst-class:: classref-item-separator
-
-----
-
 .. _class_HEGoAPI_method_set_houdini_installation_path:
 
 .. rst-class:: classref-method
@@ -226,6 +188,44 @@ Stops the active Houdini Engine session and releases session resources.
 
 
 Returns ``true`` when shutdown succeeds.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAPI_method_poll_cook_state:
+
+.. rst-class:: classref-method
+
+``int`` **poll_cook_state**\ (\ ) :ref:`🔗<class_HEGoAPI_method_poll_cook_state>`
+
+Returns the current HAPI cook status as an integer.
+
+
+
+Used together with :ref:`HEGoAssetNode.cook_async()<class_HEGoAssetNode_method_cook_async>` to poll for cook completion each frame. The returned value maps to ``HAPI_State``:
+
+::
+
+    0 = HAPI_STATE_READY          (cook finished successfully)
+    1 = HAPI_STATE_READY_WITH_FATAL_ERRORS
+    2 = HAPI_STATE_READY_WITH_COOK_ERRORS
+    3 = HAPI_STATE_MAX_READY_STATE
+    4 = HAPI_STATE_STARTING_COOK
+    5 = HAPI_STATE_COOKING
+    6 = HAPI_STATE_STARTING_LOAD
+    7 = HAPI_STATE_LOADING
+    8 = HAPI_STATE_MAX
+
+
+
+Values greater than 3 indicate that HAPI is still busy. Typical polling pattern in GDScript:
+
+::
+
+    hego_asset_node.cook_async()
+    while HEGoAPI.get_singleton().poll_cook_state() > 3:
+        await get_tree().process_frame
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

@@ -47,3 +47,14 @@ that best fits your use case: geometry, instancing, object spawning, or Terrain3
    :maxdepth: 2
 
    outputs/index
+
+Parameters
+----------
+
+The following sections describe how HDA parameter UI is generated in the HEGo bottom panel,
+which parameter families are supported, and known limitations.
+
+.. toctree::
+   :maxdepth: 2
+
+   parameters/index
