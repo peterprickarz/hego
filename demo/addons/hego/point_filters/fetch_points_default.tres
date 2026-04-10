@@ -4,7 +4,6 @@
 
 [resource]
 script = ExtResource("1_5r07v")
-only_loose_points = true
 read_attribs = PackedStringArray("N", "Cd", "up", "pscale")
 filter_attribs = PackedStringArray()
 filter_attrib_values = []
