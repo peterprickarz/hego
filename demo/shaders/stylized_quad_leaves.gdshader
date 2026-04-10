@@ -37,6 +37,10 @@ vec3 rotate_around_axis(vec3 v, vec3 axis, float angle) {
 }
 
 void vertex() {
+    // Imported UVs are now converted to Godot convention. This shader's billboard math
+    // expects the original Houdini-style vertical orientation.
+    vec2 hda_uv = vec2(UV.x, 1.0 - UV.y);
+
     // Store the original normal in world space for lighting and Fresnel
     world_original_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 
@@ -55,7 +59,7 @@ void vertex() {
     float scale_factor = mix(MinScale, MaxScale, random(floor(world_pos * 100.0) / 100.0));
 
     // Compute billboard offset using UVs and apply scale randomization
-    vec2 uv_offset = (UV - 0.5) * MeshScale * scale_factor;
+    vec2 uv_offset = (hda_uv - 0.5) * MeshScale * scale_factor;
     vec3 offset = right * uv_offset.x + up * uv_offset.y;
 
     // Wind animation (sway)
@@ -79,12 +83,15 @@ void vertex() {
 }
 
 void fragment() {
+	// Keep alpha orientation consistent with the billboard UV usage above.
+	vec2 hda_uv = vec2(UV.x, 1.0 - UV.y);
+
     // Color gradient from BottomColor to TopColor
     float gradient_factor = clamp(color_gradient, 0.0, 1.0);
     vec3 albedo = mix(BottomColor.rgb, TopColor.rgb, gradient_factor);
 
     // Sample alpha texture
-    float alpha = texture(Alpha, UV).r;
+    float alpha = texture(Alpha, hda_uv).r;
 
     // Fresnel effect using the original normal
     vec3 view_dir = normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz);
