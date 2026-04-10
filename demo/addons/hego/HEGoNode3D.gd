@@ -36,6 +36,7 @@ func _build_cook_timing_summary(timings: Dictionary, total_msec: float) -> Strin
 	lines.append("[HEGoNode3D]:   Object spawn output: %.3f ms" % timings.get("object_spawn_output", 0.0))
 	lines.append("[HEGoNode3D]:   Terrain3D output: %.3f ms" % timings.get("terrain3d_output", 0.0))
 	lines.append("[HEGoNode3D]:   Terrain3D instancer output: %.3f ms" % timings.get("terrain3d_instancer_output", 0.0))
+	lines.append("[HEGoNode3D]:   Path3D output: %.3f ms" % timings.get("path3d_output", 0.0))
 	lines.append("[HEGoNode3D]:   Total cook(): %.3f ms" % total_msec)
 	return "\n".join(lines)
 
@@ -51,6 +52,7 @@ func cook():
 		"object_spawn_output": 0.0,
 		"terrain3d_output": 0.0,
 		"terrain3d_instancer_output": 0.0,
+		"curve_output": 0.0,
 	}
 	var cook_start_usec = Time.get_ticks_usec()
 	var phase_start_usec = cook_start_usec
@@ -165,6 +167,9 @@ func cook():
 	phase_start_usec = Time.get_ticks_usec()
 	handle_terrain3d_instancer_output()
 	timings["terrain3d_instancer_output"] = _elapsed_msec(phase_start_usec)
+	phase_start_usec = Time.get_ticks_usec()
+	handle_path3d_output()
+	timings["path3d_output"] = _elapsed_msec(phase_start_usec)
 
 	print(_build_cook_timing_summary(timings, _elapsed_msec(cook_start_usec)))
 
@@ -966,7 +971,23 @@ func handle_terrain3d_instancer_output():
 
 		if instancer.has_method("update_mmis"):
 			instancer.call("update_mmis", false)
-
+			
+func handle_path3d_output():
+	var current_node = self
+	var curves = hego_asset_node.fetch_curves()
+	
+	for curve in curves:
+		var curve_out = Curve3D.new()
+		var points = curve.positions
+		
+		for p in points:
+			curve_out.add_point(p)
+			
+		var path_node = Path3D.new()
+		path_node.curve = curve_out
+		current_node.add_child(path_node)
+		if Engine.is_editor_hint():
+			path_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
 
 # Helper function to apply custom properties from a nested dictionary
 func apply_custom_properties(obj: Object, properties: Dictionary):
