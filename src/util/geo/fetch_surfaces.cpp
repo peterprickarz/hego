@@ -34,6 +34,38 @@ godot::Array convert_face_counts_to_array(const std::vector<int> &face_counts)
 
 	return prims;
 }
+
+godot::Array flip_uv_v_axis(const godot::Array &uv_values)
+{
+	// Houdini UV origin is bottom-left; Godot UV origin is top-left.
+	// Flip V so textures map correctly in Godot.
+	godot::Array flipped;
+	flipped.resize(uv_values.size());
+
+	for (int i = 0; i < uv_values.size(); ++i)
+	{
+		godot::Vector3 uv = uv_values[i];
+		uv.y = 1.0f - uv.y;
+		flipped[i] = uv;
+	}
+
+	return flipped;
+}
+
+godot::Array invert_vector3_array(const godot::Array &values)
+{
+	godot::Array inverted;
+	inverted.resize(values.size());
+
+	for (int i = 0; i < values.size(); ++i)
+	{
+		godot::Vector3 v = values[i];
+		inverted[i] = -v;
+	}
+
+	return inverted;
+}
+
 godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config, bool auto_cook)
 {
 	HEGo::Util::Log::line();
@@ -101,19 +133,21 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	}
 	if (uv)
 	{
-		point_attrs["uv"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv");
+		point_attrs["uv"] =
+				flip_uv_v_axis(HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv"));
 	}
 	if (uv2)
 	{
-		point_attrs["uv2"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv2");
+		point_attrs["uv2"] =
+				flip_uv_v_axis(HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv2"));
 	}
 	if (tangents)
 	{
 		HEGo::Util::Log::message("getting tangent attrs");
 		point_attrs["tangentu"] =
 				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentu");
-		point_attrs["tangentv"] =
-				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentv");
+		point_attrs["tangentv"] = invert_vector3_array(
+				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentv"));
 	}
 	else
 	{
