@@ -1,7 +1,6 @@
 extends Resource
 class_name HEGoFetchPointsConfig
 
-@export var only_loose_points : bool
 @export var read_attribs : PackedStringArray
 @export var filter_attribs : PackedStringArray
 @export var filter_attrib_values : Array[Variant]:
@@ -28,13 +27,11 @@ class_name HEGoFetchPointsConfig
 
 
 func _init(
-	p_only_loose_points = false, 
 	p_read_attribs = PackedStringArray(), 
 	p_filter_attribs = PackedStringArray(), 
 	p_filter_attrib_values = Array(),
 	p_split_attribs = PackedStringArray()
 	):
-		only_loose_points = p_only_loose_points
 		read_attribs = p_read_attribs
 		filter_attribs = p_filter_attribs
 		filter_attrib_values = p_filter_attrib_values

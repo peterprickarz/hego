@@ -70,11 +70,7 @@ func cook():
 	# If the asset node was not instantiated beforehand, retrieve parm stash
 	if id == -1 and parm_stash.size() > 0:
 		hego_asset_node.set_preset(parm_stash)
-		
-	var outputs_node = get_node_or_null("Outputs")
-	if outputs_node:
-		outputs_node.free()
-		timings["instantiation"] = _elapsed_msec(phase_start_usec)
+	timings["instantiation"] = _elapsed_msec(phase_start_usec)
 		
 	# SET INPUTS
 	# Retrieve a string array containing the names of inputs
@@ -144,10 +140,24 @@ func cook():
 	phase_start_usec = Time.get_ticks_usec()
 	parm_stash = hego_asset_node.get_preset()
 	timings["parm_stash"] = _elapsed_msec(phase_start_usec)
-	# Cook once before all fetch operations
+	# Cook once before all fetch operations (async — UI stays responsive)
 	phase_start_usec = Time.get_ticks_usec()
-	hego_asset_node.cook()
+	hego_asset_node.cook_async()
+	# Poll once per frame until HAPI finishes cooking (state <= 3 = ready)
+	while HEGoAPI.get_singleton().poll_cook_state() > 3:
+		await get_tree().process_frame
 	timings["cook"] = _elapsed_msec(phase_start_usec)
+	var cook_state = HEGoAPI.get_singleton().poll_cook_state()
+	if cook_state != 0:  # HAPI_STATE_READY = 0
+		push_error("[HEGoNode3D]: Cook failed (state=%d)" % cook_state)
+		print(_build_cook_timing_summary(timings, _elapsed_msec(cook_start_usec)))
+		return
+
+	# Remove old output now that the cook is done (keeps previous output visible during cook)
+	var outputs_node = get_node_or_null("Outputs")
+	if outputs_node:
+		outputs_node.free()
+
 	# FETCH OUTPUTS
 	
 	phase_start_usec = Time.get_ticks_usec()
@@ -167,6 +177,86 @@ func cook():
 	timings["terrain3d_instancer_output"] = _elapsed_msec(phase_start_usec)
 
 	print(_build_cook_timing_summary(timings, _elapsed_msec(cook_start_usec)))
+
+
+func _copy_array_mesh_contents(target_mesh: ArrayMesh, source_mesh: ArrayMesh) -> void:
+	target_mesh.clear_surfaces()
+	for surface_idx in range(source_mesh.get_surface_count()):
+		var primitive_type := source_mesh.surface_get_primitive_type(surface_idx)
+		var arrays := source_mesh.surface_get_arrays(surface_idx)
+		var blend_shape_arrays := []
+		if source_mesh.has_method("surface_get_blend_shape_arrays"):
+			blend_shape_arrays = source_mesh.surface_get_blend_shape_arrays(surface_idx)
+		var lods := {}
+		if source_mesh.has_method("surface_get_lods"):
+			lods = source_mesh.surface_get_lods(surface_idx)
+		target_mesh.add_surface_from_arrays(primitive_type, arrays, blend_shape_arrays, lods)
+		var surface_material := source_mesh.surface_get_material(surface_idx)
+		if surface_material != null:
+			target_mesh.surface_set_material(surface_idx, surface_material)
+
+
+func _save_mesh_resource(mesh: ArrayMesh, save_path: String) -> Dictionary:
+	if save_path.is_empty():
+		return {
+			"ok": false,
+			"error": ERR_INVALID_PARAMETER,
+			"fallback_to_instance": true,
+			"message": "Empty resource save path.",
+		}
+
+	# Ensure save directory exists before writing.
+	var save_dir := save_path.get_base_dir()
+	if not save_dir.is_empty() and not DirAccess.dir_exists_absolute(save_dir):
+		var mkdir_result := DirAccess.make_dir_recursive_absolute(save_dir)
+		if mkdir_result != OK:
+			return {
+				"ok": false,
+				"error": mkdir_result,
+				"fallback_to_instance": true,
+				"message": "Could not create resource directory: %s" % save_dir,
+			}
+
+	if ResourceLoader.exists(save_path):
+		var existing_resource := ResourceLoader.load(save_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+		if existing_resource == null:
+			return {
+				"ok": false,
+				"error": ERR_FILE_CANT_OPEN,
+				"fallback_to_instance": true,
+				"message": "Existing resource could not be loaded: %s" % save_path,
+			}
+
+		if not existing_resource is ArrayMesh:
+			return {
+				"ok": false,
+				"error": ERR_FILE_CANT_WRITE,
+				"fallback_to_instance": true,
+				"message": "Existing resource at %s is %s, expected ArrayMesh. Save aborted." % [save_path, existing_resource.get_class()],
+			}
+
+		_copy_array_mesh_contents(existing_resource, mesh)
+		var overwrite_result := ResourceSaver.save(existing_resource, save_path)
+		return {
+			"ok": overwrite_result == OK,
+			"error": overwrite_result,
+			"fallback_to_instance": overwrite_result != OK,
+			"message": "Failed to overwrite existing ArrayMesh at %s." % save_path,
+		}
+
+	var create_result := ResourceSaver.save(mesh, save_path)
+	return {
+		"ok": create_result == OK,
+		"error": create_result,
+		"fallback_to_instance": create_result != OK,
+		"message": "Failed to create mesh resource at %s." % save_path,
+	}
+
+
+func _load_mesh_resource_fresh(save_path: String) -> Mesh:
+	if save_path.is_empty() or not ResourceLoader.exists(save_path):
+		return null
+	return ResourceLoader.load(save_path, "Mesh", ResourceLoader.CACHE_MODE_REPLACE) as Mesh
 
 
 func handle_mesh_output():
@@ -221,11 +311,14 @@ func handle_mesh_output():
 		
 		if hego_storage_mode > 0:
 			resource_save_count += 1
-			var result := ResourceSaver.save(arr_mesh, hego_resource_save_path)
-			if result == OK:
+			var save_result := _save_mesh_resource(arr_mesh, hego_resource_save_path)
+			if save_result["ok"]:
 				print("[HEGoNode3D]: Successfully saved mesh to ", hego_resource_save_path)
 			else:
-				print("[HEGoNode3D]: Failed to save. Error code: %d", %result)
+				push_warning("[HEGoNode3D]: %s (error %d)" % [save_result["message"], save_result["error"]])
+				if save_result["fallback_to_instance"]:
+					push_warning("[HEGoNode3D]: Spawning as mesh instance instead.")
+					hego_storage_mode = 0
 			
 		if hego_storage_mode == 0 or hego_storage_mode == 2:
 			var node_name_path = "hego_output_mesh_inst"
@@ -261,7 +354,8 @@ func handle_mesh_output():
 			if hego_storage_mode == 0:
 				mesh_instance.mesh = arr_mesh
 			else:
-				mesh_instance.mesh = load(hego_resource_save_path)
+				var saved_mesh := _load_mesh_resource_fresh(hego_resource_save_path)
+				mesh_instance.mesh = saved_mesh if saved_mesh != null else arr_mesh
 			var hego_col_type = dict[hego_mesh_instance_key][hego_mat_keys[0]]["hego_col_type"][0]
 			if hego_col_type == null:
 				hego_col_type = 0

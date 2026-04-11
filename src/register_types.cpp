@@ -44,6 +44,7 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 	// ClassDB::register_class<HEGo::HEGoInputReceiverNode>(true);
 	// ClassDB::register_class<HEGo::HEGoTransformableNode>(true);
 	ClassDB::register_class<HEGo::HEGoAssetNode>();
+
 	ClassDB::register_class<HEGo::HEGoMergeNode>();
 	ClassDB::register_class<HEGo::HEGoInputNode>();
 	ClassDB::register_class<HEGo::HEGoCurveInputNode>();

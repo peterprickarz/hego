@@ -31,6 +31,21 @@ Cooks the asset node and waits until cooking is finished.
 Use this when [code]auto_cook[/code] is disabled on fetch calls and you want explicit cook control.
 </description>
 </method>
+<method name="cook_async">
+<return type="int" />
+<description>
+Starts cooking the asset node without blocking.
+
+Because the HAPI session is initialized with [code]use_cooking_thread=true[/code], this call returns immediately (returns [code]0[/code] on success, [code]-1[/code] on error). Houdini performs the actual cook in its own internal thread.
+
+Poll [method HEGoAPI.poll_cook_state] once per frame to detect completion:
+[codeblock]
+hego_asset_node.cook_async()
+while HEGoAPI.get_singleton().poll_cook_state() > 3:
+    await get_tree().process_frame
+[/codeblock]
+</description>
+</method>
 <method name="fetch_heightfield_layer_image">
 <return type="Image" />
 <param index="0" name="part_id" type="int" />

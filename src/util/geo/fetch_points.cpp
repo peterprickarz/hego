@@ -6,7 +6,6 @@
 #include "util/hego_util.h"
 #include "util/log/log.h"
 
-#include <algorithm>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 namespace HEGo
@@ -17,7 +16,6 @@ namespace Geo
 {
 godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_point_config, bool auto_cook)
 {
-	bool only_loose_points = fetch_point_config->get("only_loose_points");
 	godot::PackedStringArray read_attribs = fetch_point_config->get("read_attribs");
 	godot::PackedStringArray filter_attribs = fetch_point_config->get("filter_attribs");
 	godot::Array filter_attrib_values = fetch_point_config->get("filter_attrib_values");
@@ -28,12 +26,51 @@ godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node
 	{
 		return godot::Dictionary();
 	}
-	HAPI_PartInfo mesh_part_info;
-	if (!find_part_by_type(session_mgr->get_session(), mesh_geo_info, HAPI_PARTTYPE_MESH, mesh_part_info))
+	HEGo::Util::Log::message("fetch_points: display geo part count = " + godot::String::num_int64(static_cast<int64_t>(mesh_geo_info.partCount)));
+	for (int part_index = 0; part_index < mesh_geo_info.partCount; ++part_index)
+	{
+		HAPI_PartInfo candidate;
+		if (HoudiniApi::GetPartInfo(session_mgr->get_session(), mesh_geo_info.nodeId, part_index, &candidate) != HAPI_RESULT_SUCCESS)
+		{
+			HEGo::Util::Log::warning("fetch_points: failed to read part info at index " + godot::String::num_int64(static_cast<int64_t>(part_index)));
+			continue;
+		}
+
+		HEGo::Util::Log::message("fetch_points: part[" + godot::String::num_int64(static_cast<int64_t>(part_index)) + "]" + " type=" +
+				godot::String::num_int64(static_cast<int64_t>(candidate.type)) + " id=" + godot::String::num_int64(static_cast<int64_t>(candidate.id)) +
+				" points=" + godot::String::num_int64(static_cast<int64_t>(candidate.pointCount)) +
+				" vertices=" + godot::String::num_int64(static_cast<int64_t>(candidate.vertexCount)) +
+				" faces=" + godot::String::num_int64(static_cast<int64_t>(candidate.faceCount)));
+	}
+	std::vector<HAPI_PartInfo> mesh_parts = get_parts_by_type(session_mgr->get_session(), mesh_geo_info, HAPI_PARTTYPE_MESH);
+	if (mesh_parts.empty())
 	{
 		HEGo::Util::Log::error("Requested points(HAPI_PARTTYPE_MESH) but no mesh part was found.");
 		return godot::Dictionary();
 	}
+
+	HAPI_PartInfo mesh_part_info;
+	bool found_loose_points_part = false;
+	for (const HAPI_PartInfo &part : mesh_parts)
+	{
+		if (part.vertexCount == 0)
+		{
+			mesh_part_info = part;
+			found_loose_points_part = true;
+			break;
+		}
+	}
+
+	if (!found_loose_points_part)
+	{
+		HEGo::Util::Log::message("fetch_points: no loose-point mesh part found (all mesh parts have vertices).");
+		return godot::Dictionary();
+	}
+
+	HEGo::Util::Log::message("fetch_points: selected mesh part id=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.id)) +
+			" points=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.pointCount)) +
+			" vertices=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.vertexCount)) +
+			" faces=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.faceCount)));
 	// fetch filter attrs first so we can return early before loading other point attributes.
 	godot::Dictionary filter_attribs_dict;
 	for (int i = 0; i < filter_attribs.size(); i++)
@@ -46,22 +83,8 @@ godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node
 
 	// filter points
 	godot::Array filtered_indices;
-	std::vector<int> vertex_point_indices(mesh_part_info.vertexCount);
-	if (mesh_part_info.vertexCount > 0)
-	{
-		HOUDINI_CHECK_ERROR(HoudiniApi::GetVertexList(
-				session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, vertex_point_indices.data(), 0, mesh_part_info.vertexCount));
-	}
-
 	for (int i = 0; i < mesh_part_info.pointCount; i++)
 	{
-		if (only_loose_points && mesh_part_info.vertexCount > 0)
-		{
-			if (std::find(vertex_point_indices.begin(), vertex_point_indices.end(), i) != vertex_point_indices.end())
-			{
-				continue;
-			}
-		}
 		bool all_filters_pass = true;
 		for (int j = 0; j < filter_attribs.size(); j++)
 		{

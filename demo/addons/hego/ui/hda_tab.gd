@@ -251,7 +251,7 @@ func _on_selection_changed(node):
 func _on_value_changed(name, value):
 	hego_asset_node.set_parm(name, value)
 	if auto_recook_toggle.button_pressed:
-		recook()
+		await recook()
 	
 
 func _on_input_changed():
@@ -266,7 +266,7 @@ func _on_input_changed():
 	if hego_tool_node.has_method("hego_set_input_stash"):
 		hego_tool_node.hego_set_input_stash(inputs)
 	if auto_recook_toggle.button_pressed:
-		recook()
+		await recook()
 	
 
 func _on_recook_button_pressed():
@@ -282,7 +282,7 @@ func _on_recook_button_pressed():
 		session_start_msec = _elapsed_msec(phase_start_usec)
 
 	var recook_start_usec = Time.get_ticks_usec()
-	recook()
+	await recook()
 	recook_msec = _elapsed_msec(recook_start_usec)
 
 	var preset_index = preset_dropdown.get_selected_id()
@@ -296,7 +296,7 @@ func _on_recook_button_pressed():
 		
 func recook():
 	if hego_tool_node.has_method("cook"):
-		hego_tool_node.cook()
+		await hego_tool_node.cook()
 	if hego_tool_node.has_method("hego_set_parm_stash"):
 		if not hego_asset_node:
 			hego_asset_node = hego_tool_node.hego_get_asset_node()
@@ -506,4 +506,4 @@ func _on_asset_picked(asset_name: String):
 		
 		# Optionally auto-recook if enabled
 		if auto_recook_toggle.button_pressed:
-			recook()
+			await recook()

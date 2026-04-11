@@ -54,6 +54,8 @@ Methods
    +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | |void|                | :ref:`cook<class_HEGoAssetNode_method_cook>`\ (\ )                                                                                                                                   |
    +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``int``               | :ref:`cook_async<class_HEGoAssetNode_method_cook_async>`\ (\ )                                                                                                                       |
+   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Image``             | :ref:`fetch_heightfield_layer_image<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`\ (\ part_id\: ``int``, auto_cook\: ``bool`` = true\ )                                 |
    +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Array``             | :ref:`fetch_output<class_HEGoAssetNode_method_fetch_output>`\ (\ )                                                                                                                   |
@@ -141,6 +143,32 @@ Cooks the asset node and waits until cooking is finished.
 
 
 Use this when ``auto_cook`` is disabled on fetch calls and you want explicit cook control.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetNode_method_cook_async:
+
+.. rst-class:: classref-method
+
+``int`` **cook_async**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_cook_async>`
+
+Starts cooking the asset node without blocking.
+
+
+
+Because the HAPI session is initialized with ``use_cooking_thread=true``, this call returns immediately (returns ``0`` on success, ``-1`` on error). Houdini performs the actual cook in its own internal thread.
+
+
+
+Poll :ref:`HEGoAPI.poll_cook_state()<class_HEGoAPI_method_poll_cook_state>` once per frame to detect completion:
+
+::
+
+    hego_asset_node.cook_async()
+    while HEGoAPI.get_singleton().poll_cook_state() > 3:
+        await get_tree().process_frame
 
 .. rst-class:: classref-item-separator
 

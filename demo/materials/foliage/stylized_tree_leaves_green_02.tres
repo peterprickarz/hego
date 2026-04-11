@@ -1,6 +1,6 @@
 [gd_resource type="ShaderMaterial" load_steps=3 format=3 uid="uid://bm7bgpq5i0s8b"]
 
-[ext_resource type="Shader" path="res://shaders/stylized_quad_leaves.gdshader" id="1_2gi5f"]
+[ext_resource type="Shader" uid="uid://dnqxq8bfd5d5d" path="res://shaders/stylized_quad_leaves.gdshader" id="1_2gi5f"]
 [ext_resource type="Texture2D" uid="uid://tn6jckxsqi86" path="res://textures/Leaves001-04.png" id="2_mucod"]
 
 [resource]
@@ -9,6 +9,7 @@ shader = ExtResource("1_2gi5f")
 shader_parameter/TopColor = Color(0.497813, 0.64, 0.3648, 1)
 shader_parameter/BottomColor = Color(0.390722, 0.667208, 0.452812, 1)
 shader_parameter/ColorRamp = 0.239
+shader_parameter/Alpha = ExtResource("2_mucod")
 shader_parameter/FresnelTopColor = Color(1, 1, 1, 1)
 shader_parameter/FresnelBottomColor = Color(0.365051, 0.562972, 1, 1)
 shader_parameter/FresnelStrength = 0.195
@@ -23,4 +24,3 @@ shader_parameter/WindSpeed = 1.184
 shader_parameter/WindStrength = 0.163
 shader_parameter/WindHeightScale = 0.079
 shader_parameter/WindRotationStrength = 0.877
-shader_parameter/Alpha = ExtResource("2_mucod")
