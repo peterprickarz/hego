@@ -23,7 +23,6 @@ private:
 	static HEGoAPI *singleton;
 	HEGoSessionManager session_mgr;
 	HEGoTaskScheduler scheduler;
-	void *libHAPIL;
 
 public:
 	bool start_session(int connection_type = 2, const godot::String &connection_data = "hapi");

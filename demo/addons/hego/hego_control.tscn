@@ -33,31 +33,7 @@ popup/item_0/text = "Shared Memory"
 popup/item_2/text = "TCP  Port"
 
 [node name="Logs" parent="TabContainer/Session/Vbox" index="6"]
-text = "Log capture connected.
-Cleaning up and closing session...
-Closed Session, finalized hapi and freed libHAPIL.
-Loaded and initialized libHAPIL.
-Started Session.
-Initialized HAPI
-Cleaning up and closing session...
-Closed Session, finalized hapi and freed libHAPIL.
-Loaded and initialized libHAPIL.
-HAPI failed:   (src\\hego_session_manager.cpp:49)
-Started Session.
-Initialized HAPI
-Cleaning up and closing session...
-Closed Session, finalized hapi and freed libHAPIL.
-Loaded and initialized libHAPIL.
-9090
-Cleaning up and closing session...
-Closed Session, finalized hapi and freed libHAPIL.
-Loaded and initialized libHAPIL.
-9090
-Cleaning up and closing session...
-Closed Session, finalized hapi and freed libHAPIL.
-Loaded and initialized libHAPIL.
-9090
-"
+text = ""
 
 [node name="HDA" parent="TabContainer" instance=ExtResource("3_fsb3y")]
 unique_name_in_owner = true

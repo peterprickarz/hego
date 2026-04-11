@@ -32,7 +32,9 @@ HEGoAPI::HEGoAPI() : session_mgr()
 
 HEGoAPI::~HEGoAPI()
 {
-	// Ensure session is stopped before destroying
+	// Stop scheduler first — worker thread must exit before session cleanup
+	scheduler.stop();
+
 	if (session_mgr.is_session_active())
 	{
 		HEGo::Util::Log::message(godot::String("HEGoAPI destructor: Stopping active session"));
@@ -49,8 +51,6 @@ HEGoAPI *HEGoAPI::get_singleton() { return singleton; }
 
 bool HEGoAPI::start_session(int connection_type, const godot::String &connection_data)
 {
-	HEGoPlatform::initialize_hapi();
-
 	HEGo::Util::Log::message(connection_data);
 
 	// Convert Godot connection type to SessionManager enum

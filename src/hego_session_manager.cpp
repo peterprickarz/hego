@@ -7,10 +7,13 @@
 #include <algorithm>
 #include <vector>
 
-HEGoSessionManager::HEGoSessionManager() : my_session{}, myCookOptions{} {}
+HEGoSessionManager::HEGoSessionManager() : libHAPIL(nullptr), my_session{}, myCookOptions{} {}
 
 bool HEGoSessionManager::start_session(SessionType session_type, const std::string &connection_data)
 {
+	// Load the HAPI library
+	libHAPIL = HEGoPlatform::initialize_hapi();
+
 	// Parse connection data based on session type
 	std::string named_pipe = connection_data;
 	int tcp_port = DEFAULT_TCP_PORT;
