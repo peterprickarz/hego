@@ -13,6 +13,7 @@
 #include "util/parm/get_parms.h"
 #include "util/parm/presets.h"
 #include "util/parm/set_parms.h"
+#include "util/hego_enums.h"
 
 namespace HEGo
 {
@@ -224,6 +225,10 @@ void HEGoAssetNode::_bind_methods()
 	// godot::ClassDB::add_property("HEGoAssetNode", godot::PropertyInfo(godot::Variant::STRING, "op_name"),
 	// "set_op_name", "get_op_name");
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "op_name"), "set_op_name", "get_op_name");
+
+	godot::ClassDB::bind_integer_constant(get_class_static(), "", "CURVE_TYPE_BEZIER", HEGo::Util::CURVE_TYPE_BEZIER);
+	godot::ClassDB::bind_integer_constant(get_class_static(), "", "CURVE_TYPE_NURBS", HEGo::Util::CURVE_TYPE_NURBS);
+	godot::ClassDB::bind_integer_constant(get_class_static(), "", "CURVE_TYPE_LINEAR", HEGo::Util::CURVE_TYPE_LINEAR);
 }
 
 } // namespace HEGo

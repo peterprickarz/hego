@@ -974,9 +974,23 @@ func handle_terrain3d_instancer_output():
 			
 func handle_path3d_output():
 	var current_node = self
+
+	var curves_node = current_node.get_node_or_null("Curves")
+	if curves_node:
+		curves_node.free()
+
+	curves_node = Node3D.new()
+	curves_node.name = "Curves"
+	current_node.add_child(curves_node)
+	if Engine.is_editor_hint():
+		curves_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+
+	current_node = curves_node
+
 	var curves = hego_asset_node.fetch_curves()
 	
 	for curve in curves:
+		var curve_base_name = "Curve3D_" + curve_type_to_string(curve.type)
 		var curve_out = Curve3D.new()
 		var points = curve.positions
 		
@@ -984,10 +998,26 @@ func handle_path3d_output():
 			curve_out.add_point(p)
 			
 		var path_node = Path3D.new()
+
+		var suffix = 0
+		while current_node.has_node(curve_base_name + "_" + str(suffix)):
+			suffix += 1
+		path_node.name = curve_base_name + "_" + str(suffix)
 		path_node.curve = curve_out
 		current_node.add_child(path_node)
 		if Engine.is_editor_hint():
 			path_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+
+func curve_type_to_string(curve_type: int) -> String:
+	match curve_type:
+		HEGoAssetNode.CURVE_TYPE_BEZIER:
+			return "Bezier"
+		HEGoAssetNode.CURVE_TYPE_NURBS:
+			return "NURBS"
+		HEGoAssetNode.CURVE_TYPE_LINEAR:
+			return "Linear"
+		_:
+			return "Unknown"
 
 # Helper function to apply custom properties from a nested dictionary
 func apply_custom_properties(obj: Object, properties: Dictionary):
