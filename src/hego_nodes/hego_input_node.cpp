@@ -22,6 +22,13 @@ HEGoInputNode::HEGoInputNode() {}
 
 HEGoInputNode::~HEGoInputNode() {}
 
+void HEGoInputNode::reset_node_id()
+{
+	HEGoBaseInputNode::reset_node_id();
+	last_geo_hash = 0;
+	has_cached_mesh_instance_transform = false;
+}
+
 uint64_t HEGoInputNode::compute_mesh_hash(const godot::Ref<godot::Mesh> &mesh, const godot::Array &attributes)
 {
 	using namespace HEGo::Util::Hash;

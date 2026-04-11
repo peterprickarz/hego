@@ -18,6 +18,12 @@ HEGoCurveInputNode::HEGoCurveInputNode() {}
 
 HEGoCurveInputNode::~HEGoCurveInputNode() {}
 
+void HEGoCurveInputNode::reset_node_id()
+{
+	HEGoBaseInputNode::reset_node_id();
+	last_curve_hash = 0;
+}
+
 godot::Ref<HEGoTask> HEGoCurveInputNode::instantiate()
 {
 	HAPI_NodeId nid = node_id;

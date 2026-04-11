@@ -28,6 +28,7 @@ public:
 	HEGoInputNode();
 	~HEGoInputNode();
 
+	void reset_node_id() override;
 	godot::Ref<HEGoTask> instantiate() override;
 	godot::Ref<HEGoTask> set_geo_from_mesh_instance_3d(godot::MeshInstance3D *mesh_instance, const godot::Array &attributes = godot::Array(), bool force = false);
 	godot::Ref<HEGoTask> set_geo_from_mesh(godot::Ref<godot::Mesh> mesh, const godot::Array &attributes = godot::Array(), bool force = false);

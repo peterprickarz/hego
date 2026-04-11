@@ -32,6 +32,7 @@ public:
 	HEGoHeightfieldInputNode();
 	~HEGoHeightfieldInputNode();
 
+	void reset_node_id() override;
 	godot::Ref<HEGoTask> instantiate() override;
 	godot::Ref<HEGoTask> set_layers(godot::Dictionary layers, float voxel_size = 1.0f, float height_scale = 1.0f, bool force = false);
 

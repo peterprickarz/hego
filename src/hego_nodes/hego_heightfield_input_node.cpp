@@ -267,6 +267,15 @@ HEGoHeightfieldInputNode::HEGoHeightfieldInputNode() : height_node_id(-1), mask_
 
 HEGoHeightfieldInputNode::~HEGoHeightfieldInputNode() {}
 
+void HEGoHeightfieldInputNode::reset_node_id()
+{
+	HEGoBaseInputNode::reset_node_id();
+	height_node_id = -1;
+	mask_node_id = -1;
+	merge_node_id = -1;
+	last_layers_hash = 0;
+}
+
 void HEGoHeightfieldInputNode::instantiate_internal(HEGoSessionManager *session_mgr)
 {
 	if (node_id >= 0)

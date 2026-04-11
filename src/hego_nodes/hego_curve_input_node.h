@@ -23,6 +23,7 @@ public:
 	HEGoCurveInputNode();
 	~HEGoCurveInputNode();
 
+	void reset_node_id() override;
 	godot::Ref<HEGoTask> instantiate() override;
 	godot::Ref<HEGoTask> set_curve_from_path_3d(godot::Path3D *path3d, float target_length, bool force = false);
 
