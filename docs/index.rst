@@ -20,9 +20,11 @@ Welcome to the HEGo documentation site.
    :maxdepth: 2
    :caption: API Reference
 
+   api/task_pattern
    classes/class_hegoapi
    classes/class_hegoassetnode
    classes/class_hegocurveinputnode
    classes/class_hegoheightfieldinputnode
    classes/class_hegoinputnode
    classes/class_hegomergenode
+   classes/class_hegotask

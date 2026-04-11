@@ -10,3 +10,4 @@ HEGo Class Reference
    class_hegoheightfieldinputnode
    class_hegoinputnode
    class_hegomergenode
+   class_hegotask

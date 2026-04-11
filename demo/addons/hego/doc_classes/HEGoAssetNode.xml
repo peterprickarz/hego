@@ -6,83 +6,51 @@ Represents an instantiated Houdini Digital Asset (HDA) node.
 <description>
 Use this class to instantiate an HDA by operator name, set parameters, cook, and fetch output data.
 
-Call [method HEGoBaseNode.instantiate] after assigning [member op_name]. Most data-access methods require a valid instantiated node; when called before instantiation they log an error and return an empty value.
+Call [method HEGoBaseNode.instantiate] after assigning [member op_name]. Most data-access methods require a valid instantiated node; when called before instantiation they log an error and return a failed task.
+
+All methods that interact with Houdini Engine return an [HEGoTask]. Await the task to get the result:
+[codeblock]
+var task = asset_node.cook()
+var result = await _await_task(task)
+[/codeblock]
 
 [method fetch_points] expects a resource compatible with [code]HEGoFetchPointsConfig[/code]. [method fetch_surfaces] expects a resource compatible with [code]HEGoFetchSurfacesConfig[/code].
 </description>
 <tutorials>
 </tutorials>
 <methods>
-<method name="instantiate">
-<return type="void" />
-<description>
-Instantiates the HDA node from [member op_name].
-
-If [member op_name] is empty, the call logs an error and does not create a node.
-
-On success, the created node id is stored and this wrapper is registered in the session manager. On failure, the node remains invalid and an error is logged.
-</description>
-</method>
 <method name="cook">
-<return type="void" />
+<return type="HEGoTask" />
 <description>
-Cooks the asset node and waits until cooking is finished.
+Submits a cook task for this asset node.
 
-Use this when [code]auto_cook[/code] is disabled on fetch calls and you want explicit cook control.
-</description>
-</method>
-<method name="cook_async">
-<return type="int" />
-<description>
-Starts cooking the asset node without blocking.
-
-Because the HAPI session is initialized with [code]use_cooking_thread=true[/code], this call returns immediately (returns [code]0[/code] on success, [code]-1[/code] on error). Houdini performs the actual cook in its own internal thread.
-
-Poll [method HEGoAPI.poll_cook_state] once per frame to detect completion:
-[codeblock]
-hego_asset_node.cook_async()
-while HEGoAPI.get_singleton().poll_cook_state() > 3:
-    await get_tree().process_frame
-[/codeblock]
+Returns an [HEGoTask] that completes when cooking is finished. The task result is [code]null[/code].
 </description>
 </method>
 <method name="fetch_heightfield_layer_image">
-<return type="Image" />
+<return type="HEGoTask" />
 <param index="0" name="part_id" type="int" />
-<param index="1" name="auto_cook" type="bool" default="true" />
 <description>
-Fetches one heightfield layer as an [Image] from the specified part id.
+Submits a task to fetch one heightfield layer as an [Image] from the specified part id.
 
-If [code]auto_cook[/code] is [code]true[/code], the node is cooked before reading.
-
-Returns an invalid image reference when the node is not instantiated or the requested part cannot be read.
-</description>
-</method>
-<method name="fetch_output">
-<return type="Array" />
-<description>
-Returns cooked output geometry data.
-
-Note: in the current C++ implementation this method returns an empty [Array] placeholder.
+The task result is an [Image], or an invalid image reference when the node is not instantiated or the requested part cannot be read.
 </description>
 </method>
 <method name="fetch_points">
-<return type="Dictionary" />
+<return type="HEGoTask" />
 <param index="0" name="fetch_point_config" type="Resource" />
-<param index="1" name="auto_cook" type="bool" default="true" />
 <description>
-Fetches point data using a point-fetch configuration resource.
+Submits a task to fetch point data using a point-fetch configuration resource.
 
 Config fields are interpreted as follows:
-[code]only_loose_points[/code]: when [code]true[/code], points referenced by mesh vertices are excluded.
 [code]filter_attribs[/code] and [code]filter_attrib_values[/code]: paired by index; a point is kept only if all [code]point_attr == filter_value[/code] checks pass.
 [code]filter_attribs[/code] and [code]filter_attrib_values[/code] should have the same length.
 [code]read_attribs[/code]: extra point attributes to fetch at leaf level (in addition to [code]P[/code], which is always included).
 [code]split_attribs[/code]: point attributes used to build nested dictionary groups.
 
-The method reads from the display mesh part of the cooked node. If [code]auto_cook[/code] is [code]true[/code], the node is cooked first.
+The method reads from the display mesh part of the cooked node.
 
-Output structure:
+The task result is a [Dictionary] with the following structure:
 If [code]split_attribs[/code] is empty, the result is a flat dictionary with leaf keys.
 If [code]split_attribs[/code] is non-empty, each split attribute adds one nesting level keyed by that attribute's value.
 Leaf dictionaries contain:
@@ -90,15 +58,14 @@ Leaf dictionaries contain:
 [code]P[/code]: [Array] of [Vector3] positions.
 Additional keys from [code]read_attribs[/code], each mapped to an [Array] aligned with [code]ids[/code].
 
-Returns an empty dictionary when no points pass filters, when no mesh part exists, or when geometry query or cook fails.
+Returns an empty dictionary when no points pass filters, when no mesh part exists, or when geometry query fails.
 </description>
 </method>
 <method name="fetch_surfaces">
-<return type="Dictionary" />
+<return type="HEGoTask" />
 <param index="0" name="fetch_surface_config" type="Resource" />
-<param index="1" name="auto_cook" type="bool" default="true" />
 <description>
-Fetches surface data using a surface-fetch configuration resource.
+Submits a task to fetch surface data using a surface-fetch configuration resource.
 
 Config fields are interpreted as follows:
 [code]normal[/code], [code]color[/code], [code]uv[/code], [code]uv2[/code], [code]tangents[/code]: toggles for point-derived channels included in generated Godot surface arrays.
@@ -106,9 +73,9 @@ Config fields are interpreted as follows:
 [code]filter_attribs[/code] and [code]filter_attrib_values[/code] are paired by index.
 [code]filter_attribs[/code] and [code]filter_attrib_values[/code] should have the same length.
 
-The method reads the display mesh part. If [code]auto_cook[/code] is [code]true[/code], it cooks before reading.
+The method reads the display mesh part.
 
-Output structure:
+The task result is a [Dictionary] with the following structure:
 If [code]split_attribs[/code] is empty, the root is a single leaf dictionary.
 If [code]split_attribs[/code] is non-empty, result is nested by split attribute values.
 Each leaf contains:
@@ -116,82 +83,100 @@ Each leaf contains:
 [code]ids[/code]: filtered primitive ids local to the current filtered set.
 Any primitive attributes requested through [code]read_attribs[/code], each as an [Array] aligned with [code]ids[/code].
 
-Returns an empty dictionary when no mesh part exists, no faces are available, no elements pass filters, or when geometry query or cook fails.
+Returns an empty dictionary when no mesh part exists, no faces are available, no elements pass filters, or when geometry query fails.
 </description>
 </method>
 <method name="get_heightfield_layers">
-<return type="Array" />
+<return type="HEGoTask" />
 <param index="0" name="read_prim_attribs" type="PackedStringArray" default="PackedStringArray()" />
-<param index="1" name="auto_cook" type="bool" default="true" />
 <description>
-Returns available heightfield layers from the cooked asset.
+Submits a task to return available heightfield layers from the cooked asset.
 
 Use [code]read_prim_attribs[/code] to request primitive attributes that should be included in each returned layer entry.
 
-Each returned array entry is a dictionary-like payload from HEGo heightfield utilities and can include metadata and image data depending on utility behavior.
+The task result is an [Array] where each entry is a [Dictionary] containing layer metadata such as part id, layer name, voxel dimensions, scale, and transform information.
 </description>
 </method>
 <method name="get_input_names">
-<return type="PackedStringArray" />
+<return type="HEGoTask" />
 <description>
-Returns the input names defined on this HDA node.
+Submits a task to return the input names defined on this HDA node.
 
-This is useful for mapping script-side inputs to operator input slots.
+The task result is a [PackedStringArray] of input names. This is useful for mapping script-side inputs to operator input slots.
 </description>
 </method>
 <method name="get_parms_dict">
-<return type="Dictionary" />
+<return type="HEGoTask" />
 <description>
-Returns a dictionary describing the current parameter values.
+Submits a task to return a dictionary describing the current parameter values.
 
-The dictionary is intended for inspection and tooling workflows and mirrors parameter state read from HAPI.
+The task result is a [Dictionary] intended for inspection and tooling workflows, mirroring parameter state read from HAPI.
 </description>
 </method>
 <method name="get_preset">
-<return type="PackedByteArray" />
+<return type="HEGoTask" />
 <description>
-Serializes current parameter state as a Houdini preset blob.
+Submits a task to serialize current parameter state as a Houdini preset blob.
 
-Use together with [method set_preset] to save and restore HDA parameter setups.
+The task result is a [PackedByteArray]. Use together with [method set_preset] to save and restore HDA parameter setups.
 </description>
 </method>
 <method name="insert_multiparm_instance">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="parm_id" type="int" />
 <param index="1" name="index" type="int" />
 <description>
-Inserts one multiparm instance at [code]index[/code] for the parameter id.
+Submits a task to insert one multiparm instance at [code]index[/code] for the parameter id.
 
 Use this to grow multiparm blocks before setting values on newly created entries.
 </description>
 </method>
+<method name="instantiate">
+<return type="HEGoTask" />
+<description>
+Submits a task to instantiate the HDA node from [member op_name].
+
+If [member op_name] is empty, the task fails with an error.
+
+On success, the created node id is stored and this wrapper is registered in the session manager.
+</description>
+</method>
 <method name="remove_multiparm_instance">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="parm_id" type="int" />
 <param index="1" name="index" type="int" />
 <description>
-Removes one multiparm instance at [code]index[/code] for the parameter id.
+Submits a task to remove one multiparm instance at [code]index[/code] for the parameter id.
 
 Indices follow Houdini multiparm ordering.
 </description>
 </method>
 <method name="set_parm">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="parm_name" type="String" />
 <param index="1" name="value" type="Variant" />
 <description>
-Sets a parameter by name.
+Submits a task to set a parameter by name.
 
 The [Variant] value type is converted to the matching Houdini parameter storage type when possible.
 
-Call after [method HEGoBaseNode.instantiate]. Invalid node state is logged and ignored.
+Call after [method HEGoBaseNode.instantiate]. Invalid node state causes the task to fail.
+</description>
+</method>
+<method name="set_parms_batch">
+<return type="HEGoTask" />
+<param index="0" name="parms" type="Dictionary" />
+<description>
+Submits a single task to set multiple parameters at once.
+
+[code]parms[/code] is a [Dictionary] mapping parameter names ([String]) to values ([Variant]). All parameters are set in one HAPI round-trip, which is more efficient than calling [method set_parm] repeatedly.
 </description>
 </method>
 <method name="set_preset">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="preset" type="PackedByteArray" />
 <description>
-Applies a serialized Houdini parameter preset to this asset.
+Submits a task to apply a serialized Houdini parameter preset to this asset.
 
 The preset payload should come from [method get_preset] or a compatible Houdini preset source.
 </description>

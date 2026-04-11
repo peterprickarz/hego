@@ -37,13 +37,13 @@ Methods
 .. table::
    :widths: auto
 
-   +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`instantiate<class_HEGoInputNode_method_instantiate>`\ (\ )                                                                                                         |
-   +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`set_geo_from_mesh<class_HEGoInputNode_method_set_geo_from_mesh>`\ (\ mesh\: ``Mesh``, attributes\: ``Array`` = []\ )                                               |
-   +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`set_geo_from_mesh_instance_3d<class_HEGoInputNode_method_set_geo_from_mesh_instance_3d>`\ (\ mesh_instance_3d\: ``MeshInstance3D``, attributes\: ``Array`` = []\ ) |
-   +--------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`instantiate<class_HEGoInputNode_method_instantiate>`\ (\ )                                                                                                         |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_geo_from_mesh<class_HEGoInputNode_method_set_geo_from_mesh>`\ (\ mesh\: ``Mesh``, attributes\: ``Array`` = []\ )                                               |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_geo_from_mesh_instance_3d<class_HEGoInputNode_method_set_geo_from_mesh_instance_3d>`\ (\ mesh_instance_3d\: ``MeshInstance3D``, attributes\: ``Array`` = []\ ) |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -58,15 +58,11 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-|void| **instantiate**\ (\ ) :ref:`🔗<class_HEGoInputNode_method_instantiate>`
+:ref:`HEGoTask<class_HEGoTask>` **instantiate**\ (\ ) :ref:`🔗<class_HEGoInputNode_method_instantiate>`
 
-Creates a Houdini input node and stores its id in this wrapper.
-
-
+Submits a task to create a Houdini input node and store its id in this wrapper.
 
 If a valid node id already exists, the implementation attempts to reuse or replace that node according to HEGo input-node utility behavior.
-
-
 
 After creation, this wrapper is registered with the active session manager.
 
@@ -78,15 +74,11 @@ After creation, this wrapper is registered with the active session manager.
 
 .. rst-class:: classref-method
 
-|void| **set_geo_from_mesh**\ (\ mesh\: ``Mesh``, attributes\: ``Array`` = []\ ) :ref:`🔗<class_HEGoInputNode_method_set_geo_from_mesh>`
+:ref:`HEGoTask<class_HEGoTask>` **set_geo_from_mesh**\ (\ mesh\: ``Mesh``, attributes\: ``Array`` = []\ ) :ref:`🔗<class_HEGoInputNode_method_set_geo_from_mesh>`
 
-Uploads geometry from a ``Mesh`` into this Houdini input node.
-
-
+Submits a task to upload geometry from a ``Mesh`` into this Houdini input node.
 
 Use ``attributes`` to pass optional custom attribute descriptors consumed by HEGo geometry input utilities.
-
-
 
 The mesh is converted into HAPI-compatible topology and point data. Existing input geometry for this node is replaced.
 
@@ -98,15 +90,11 @@ The mesh is converted into HAPI-compatible topology and point data. Existing inp
 
 .. rst-class:: classref-method
 
-|void| **set_geo_from_mesh_instance_3d**\ (\ mesh_instance_3d\: ``MeshInstance3D``, attributes\: ``Array`` = []\ ) :ref:`🔗<class_HEGoInputNode_method_set_geo_from_mesh_instance_3d>`
+:ref:`HEGoTask<class_HEGoTask>` **set_geo_from_mesh_instance_3d**\ (\ mesh_instance_3d\: ``MeshInstance3D``, attributes\: ``Array`` = []\ ) :ref:`🔗<class_HEGoInputNode_method_set_geo_from_mesh_instance_3d>`
 
-Uploads geometry from a ``MeshInstance3D`` into this Houdini input node.
-
-
+Submits a task to upload geometry from a ``MeshInstance3D`` into this Houdini input node.
 
 Any transform or instance context used by HEGo input utilities is derived from the provided node.
-
-
 
 Use this overload when you want to read from a scene node directly instead of a standalone mesh resource.
 

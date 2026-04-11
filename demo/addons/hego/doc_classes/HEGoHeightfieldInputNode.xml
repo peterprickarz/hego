@@ -16,9 +16,9 @@ Calling [method set_layers] rebuilds the internal heightfield input node network
 </tutorials>
 <methods>
 <method name="instantiate">
-<return type="void" />
+<return type="HEGoTask" />
 <description>
-Creates a Houdini HeightField input network for this wrapper.
+Submits a task to create a Houdini HeightField input network for this wrapper.
 
 If the node is already instantiated, the call returns immediately.
 
@@ -28,35 +28,35 @@ On failure, all stored ids are reset to invalid values and an error is logged.
 </description>
 </method>
 <method name="set_layers">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="layers" type="Dictionary" />
 <param index="1" name="voxel_size" type="float" default="1.0" />
 <param index="2" name="height_scale" type="float" default="1.0" />
 <description>
-Uploads all supplied layers into a newly created HeightField input node.
+Submits a task to upload all supplied layers into a newly created HeightField input node.
 
 [code]voxel_size[/code] must be greater than [code]0[/code] and controls XY world scale. [code]height_scale[/code] must be greater than [code]0[/code] and is applied only to the [code]height[/code] layer values.
 
 Expected [code]layers[/code] structure:
 [codeblock]
 {
-	"height": {
-		"image": Image,             # optional but usually provided
-		"attrs": {                  # optional primitive attributes
-			"name": Variant
-		}
-	},
-	"mask": {
-		"image": Image,
-		"attrs": {}
-	},
-	"water": {
-		"image": Image,
-		"attrs": {
-			"hego_material": "Mud",
-			"hego_lod": 1
-		}
-	}
+    "height": {
+        "image": Image,             # optional but usually provided
+        "attrs": {                  # optional primitive attributes
+            "name": Variant
+        }
+    },
+    "mask": {
+        "image": Image,
+        "attrs": {}
+    },
+    "water": {
+        "image": Image,
+        "attrs": {
+            "hego_material": "Mud",
+            "hego_lod": 1
+        }
+    }
 }
 [/codeblock]
 
@@ -68,7 +68,7 @@ How entries are interpreted:
 
 Resolution and defaults:
 - The first valid [code]image[/code] found across all layers sets the heightfield resolution.
-- If no valid image exists in any layer, the call logs an error and returns without writing layers.
+- If no valid image exists in any layer, the task fails with an error.
 - If [code]height[/code] and/or [code]mask[/code] are missing, they are created as zero-filled layers.
 - Extra layers beyond [code]height[/code] and [code]mask[/code] are created as additional heightfield volume nodes.
 

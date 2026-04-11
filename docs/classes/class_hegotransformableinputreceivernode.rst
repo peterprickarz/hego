@@ -37,9 +37,9 @@ Methods
 .. table::
    :widths: auto
 
-   +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`connect_input<class_HEGoTransformableInputReceiverNode_method_connect_input>`\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``\ ) |
-   +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`connect_input<class_HEGoTransformableInputReceiverNode_method_connect_input>`\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``\ ) |
+   +-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -54,11 +54,9 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-|void| **connect_input**\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``\ ) :ref:`🔗<class_HEGoTransformableInputReceiverNode_method_connect_input>`
+:ref:`HEGoTask<class_HEGoTask>` **connect_input**\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``\ ) :ref:`🔗<class_HEGoTransformableInputReceiverNode_method_connect_input>`
 
-Connects ``other_node`` into the given input slot.
-
-
+Submits a task to connect ``other_node`` into the given input slot.
 
 The source and destination nodes are expected to have valid instantiated node ids before connecting.
 

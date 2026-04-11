@@ -12,18 +12,18 @@ This is the standard way to combine several [HEGoInputNode] and/or generator out
 </tutorials>
 <methods>
 <method name="instantiate">
-<return type="void" />
+<return type="HEGoTask" />
 <description>
-Creates a Houdini Merge SOP node and stores its id in this wrapper.
+Submits a task to create a Houdini Merge SOP node and store its id in this wrapper.
 
 This method always instantiates a merge operator for the current wrapper and then registers the wrapper with the active session manager.
 </description>
 </method>
 <method name="connect_inputs">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="inputs" type="Array" />
 <description>
-Connects all nodes in [code]inputs[/code] to this merge node in array order.
+Submits a task to connect all nodes in [code]inputs[/code] to this merge node in array order.
 
 Each array item should be an [HEGoBaseNode]. Invalid entries are ignored.
 

@@ -14,11 +14,11 @@ Repeated calls replace the currently uploaded curve data.
 </tutorials>
 <methods>
 <method name="set_curve_from_path_3d">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="path_3d" type="Path3D" />
 <param index="1" name="target_length" type="float" />
 <description>
-Converts the given [Path3D] into Houdini curve input data.
+Submits a task to convert the given [Path3D] into Houdini curve input data.
 
 [code]target_length[/code] controls segment sampling or resampling length for generated curve points.
 

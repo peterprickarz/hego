@@ -41,13 +41,13 @@ Methods
 .. table::
    :widths: auto
 
-   +---------+---------------------------------------------------------------------+
-   | ``int`` | :ref:`get_id<class_HEGoBaseNode_method_get_id>`\ (\ ) |const|       |
-   +---------+---------------------------------------------------------------------+
-   | |void|  | :ref:`instantiate<class_HEGoBaseNode_method_instantiate>`\ (\ )     |
-   +---------+---------------------------------------------------------------------+
-   | |void|  | :ref:`reset_node_id<class_HEGoBaseNode_method_reset_node_id>`\ (\ ) |
-   +---------+---------------------------------------------------------------------+
+   +---------------------------------+---------------------------------------------------------------------+
+   | ``int``                         | :ref:`get_id<class_HEGoBaseNode_method_get_id>`\ (\ ) |const|       |
+   +---------------------------------+---------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoBaseNode_method_instantiate>`\ (\ )     |
+   +---------------------------------+---------------------------------------------------------------------+
+   | |void|                          | :ref:`reset_node_id<class_HEGoBaseNode_method_reset_node_id>`\ (\ ) |
+   +---------------------------------+---------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -74,13 +74,13 @@ Returns the Houdini node id, or ``-1`` when not instantiated.
 
 .. rst-class:: classref-method
 
-|void| **instantiate**\ (\ ) :ref:`🔗<class_HEGoBaseNode_method_instantiate>`
+:ref:`HEGoTask<class_HEGoTask>` **instantiate**\ (\ ) :ref:`🔗<class_HEGoBaseNode_method_instantiate>`
 
-Creates the underlying Houdini node.
-
-
+Submits a task to create the underlying Houdini node.
 
 This base implementation does nothing. Concrete subclasses override it and usually register themselves with the session manager after successful creation.
+
+Returns an :ref:`HEGoTask<class_HEGoTask>` that completes when the node has been created.
 
 .. rst-class:: classref-item-separator
 

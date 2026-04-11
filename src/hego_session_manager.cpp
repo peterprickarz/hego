@@ -82,7 +82,7 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	{
 		if (session_type != SessionType::InProcess)
 		{
-			std::string connectionError = HEGoUtil::get_connection_error();
+			std::string connectionError = HEGo::Util::Hapi::get_connection_error();
 			if (!connectionError.empty())
 				HEGo::Util::Log::error("Houdini Engine Session failed to connect - " + godot::String(connectionError.c_str()));
 		}
@@ -279,7 +279,7 @@ bool HEGoSessionManager::wait_for_cook(HAPI_NodeId node_id)
 
 	if (status != HAPI_STATE_READY || result != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::warning("Cook failure: " + godot::String(HEGoUtil::get_last_cook_error(get_session()).c_str()));
+		HEGo::Util::Log::warning("Cook failure: " + godot::String(HEGo::Util::Hapi::get_last_cook_error(get_session()).c_str()));
 		return false;
 	}
 	HEGo::Util::Log::line();

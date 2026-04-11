@@ -52,8 +52,8 @@ godot::PackedStringArray get_input_names(HEGoSessionManager *session_mgr, HAPI_N
 			continue; // Skip on failure
 		}
 
-		// Get input name using HEGoUtil::get_string
-		std::string input_name = HEGoUtil::get_string(session, name_handle);
+		// Get input name string from handle
+		std::string input_name = HEGo::Util::Hapi::get_string(session, name_handle);
 
 		result.append(godot::String(input_name.c_str()));
 	}

@@ -37,9 +37,9 @@ Methods
 .. table::
    :widths: auto
 
-   +--------+----------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`set_curve_from_path_3d<class_HEGoCurveInputNode_method_set_curve_from_path_3d>`\ (\ path_3d\: ``Path3D``, target_length\: ``float``\ ) |
-   +--------+----------------------------------------------------------------------------------------------------------------------------------------------+
+   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_curve_from_path_3d<class_HEGoCurveInputNode_method_set_curve_from_path_3d>`\ (\ path_3d\: ``Path3D``, target_length\: ``float``\ ) |
+   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -54,15 +54,11 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-|void| **set_curve_from_path_3d**\ (\ path_3d\: ``Path3D``, target_length\: ``float``\ ) :ref:`🔗<class_HEGoCurveInputNode_method_set_curve_from_path_3d>`
+:ref:`HEGoTask<class_HEGoTask>` **set_curve_from_path_3d**\ (\ path_3d\: ``Path3D``, target_length\: ``float``\ ) :ref:`🔗<class_HEGoCurveInputNode_method_set_curve_from_path_3d>`
 
-Converts the given ``Path3D`` into Houdini curve input data.
-
-
+Submits a task to convert the given ``Path3D`` into Houdini curve input data.
 
 \ ``target_length`` controls segment sampling or resampling length for generated curve points.
-
-
 
 Smaller values generally produce denser sampling, while larger values produce fewer points.
 

@@ -14,10 +14,10 @@ This is commonly used for object-level HDAs where world placement should match a
 </tutorials>
 <methods>
 <method name="set_transform">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="xform" type="Transform3D" />
 <description>
-Sets the world transform of the wrapped Houdini node from a Godot [Transform3D].
+Submits a task to set the world transform of the wrapped Houdini node from a Godot [Transform3D].
 
 Call after instantiation. Reapply when your source node moves and you need Houdini output to stay in sync.
 </description>

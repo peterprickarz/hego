@@ -1,12 +1,29 @@
 #ifndef HEGO_UTIL_H
 #define HEGO_UTIL_H
 
-#pragma once
-
 #include "hapi/houdini_api.h"
 #include "util/log/log.h"
 
 #include <string>
+
+namespace HEGo
+{
+namespace Util
+{
+namespace Hapi
+{
+
+std::string get_last_error(HAPI_Session *session = nullptr);
+std::string get_last_cook_error(HAPI_Session *session = nullptr);
+std::string get_last_cook_status(HAPI_Session *session);
+std::string get_connection_error();
+std::string get_string(const HAPI_Session *session, HAPI_StringHandle string_handle);
+bool save_to_hip(const HAPI_Session *session, const std::string &filename);
+HAPI_NodeId get_parent_node_id(const HAPI_Session *session, const HAPI_NodeId &node_id);
+
+} // namespace Hapi
+} // namespace Util
+} // namespace HEGo
 
 // Error checking - this macro will check the status and return specified parameter in case of failure.
 #define HOUDINI_CHECK_ERROR_RETURN(HAPI_PARAM_CALL, HAPI_PARAM_RETURN)                                                                                         \
@@ -16,7 +33,7 @@
 		if (ResultVariable != HAPI_RESULT_SUCCESS)                                                                                                             \
 		{                                                                                                                                                      \
 			HEGo::Util::Log::error(                                                                                                                            \
-					godot::String("HAPI failed: ") + HEGoUtil::get_last_error().c_str() + "  (" + __FILE__ + ":" + std::to_string(__LINE__).c_str() + ")");    \
+					godot::String("HAPI failed: ") + HEGo::Util::Hapi::get_last_error().c_str() + "  (" + __FILE__ + ":" + std::to_string(__LINE__).c_str() + ")"); \
 			return HAPI_PARAM_RETURN;                                                                                                                          \
 		}                                                                                                                                                      \
 	} while (0)
@@ -29,7 +46,7 @@
 		if (ResultVariable != HAPI_RESULT_SUCCESS)                                                                                                             \
 		{                                                                                                                                                      \
 			HEGo::Util::Log::error(                                                                                                                            \
-					godot::String("HAPI failed: ") + HEGoUtil::get_last_error().c_str() + "  (" + __FILE__ + ":" + std::to_string(__LINE__).c_str() + ")");    \
+					godot::String("HAPI failed: ") + HEGo::Util::Hapi::get_last_error().c_str() + "  (" + __FILE__ + ":" + std::to_string(__LINE__).c_str() + ")"); \
 		}                                                                                                                                                      \
 	} while (0)
 
@@ -40,34 +57,8 @@
 		*HAPI_PARAM_RESULT = HAPI_PARAM_CALL;                                                                                                                  \
 		if (*HAPI_PARAM_RESULT != HAPI_RESULT_SUCCESS)                                                                                                         \
 		{                                                                                                                                                      \
-			std::cout << "HAPI failed: " << HEGoUtil::get_last_error() << "  (" << __FILE__ << ":" << __LINE__ << ")" << std::endl;                            \
+			std::cout << "HAPI failed: " << HEGo::Util::Hapi::get_last_error() << "  (" << __FILE__ << ":" << __LINE__ << ")" << std::endl;                    \
 		}                                                                                                                                                      \
 	} while (0)
 
-struct HEGoUtil
-{
-public:
-	// Helper method to retrieve the last error message
-	static std::string get_last_error(HAPI_Session *session = nullptr);
-
-	// Helper method to retrieve the last cook error message
-	static std::string get_last_cook_error(HAPI_Session *session = nullptr);
-
-	static std::string get_last_cook_status(HAPI_Session *session);
-
-	// Helper method to retrieve the last connection error message
-	static std::string get_connection_error();
-
-	// Helper method to retrieve a string from a HAPI_StringHandle
-	static std::string get_string(const HAPI_Session *session, HAPI_StringHandle string_handle);
-
-	// Helper for handling exceptions on a failed result
-	static void ensureSuccess(HAPI_Result result);
-
-	// Save the session to a .hip file in the application directory
-	static bool save_to_hip(const HAPI_Session *session, const std::string &filename);
-
-	static HAPI_NodeId get_parent_node_id(const HAPI_Session *session, const HAPI_NodeId &node_id);
-};
-
-#endif // HEGO_H
+#endif // HEGO_UTIL_H

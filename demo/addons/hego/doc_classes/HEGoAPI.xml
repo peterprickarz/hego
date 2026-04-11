@@ -1,18 +1,40 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <class name="HEGoAPI" inherits="Object" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 <brief_description>
-Singleton entry point for HEGo session management and HDA discovery.
+Singleton entry point for HEGo session management, task scheduling, and HDA discovery.
 </brief_description>
 <description>
-This class owns the internal [code]HEGoSessionManager[/code], initializes the Houdini API platform layer, and exposes session controls to scripts.
+This class owns the internal [code]HEGoSessionManager[/code] and task scheduler, initializes the Houdini API platform layer, and exposes session and task controls to scripts.
 
 The singleton is created during module initialization and is intended to be reused for the whole runtime.
+
+All HEGo node methods that call Houdini Engine submit work through the task scheduler and return [HEGoTask] objects. Use the scheduler query methods on this class to inspect queued, running, and completed tasks.
 
 It also stores [code]hego/houdini_installation_path[/code] in Godot project settings. That path is used when filtering built-in Houdini libraries from [method get_hda_libraries].
 </description>
 <tutorials>
 </tutorials>
 <methods>
+<method name="clear_completed_task_history">
+<return type="void" />
+<description>
+Clears the completed task history ring buffer.
+</description>
+</method>
+<method name="get_completed_task_history">
+<return type="Array" />
+<description>
+Returns an [Array] of [HEGoTask] objects that have finished executing (either [constant HEGoTask.COMPLETED] or [constant HEGoTask.FAILED]).
+
+The history is stored in a ring buffer capped at 64 entries. Newest entries are at the front of the array.
+</description>
+</method>
+<method name="get_current_task">
+<return type="HEGoTask" />
+<description>
+Returns the [HEGoTask] currently being executed on the background worker thread, or [code]null[/code] if the scheduler is idle.
+</description>
+</method>
 <method name="get_hda_libraries">
 <return type="Dictionary" />
 <description>
@@ -35,10 +57,26 @@ Returns an empty dictionary if no session is active, if no libraries are loaded,
 Returns the configured Houdini installation path from project settings.
 </description>
 </method>
+<method name="get_pending_tasks">
+<return type="Array" />
+<description>
+Returns an [Array] of [HEGoTask] objects waiting in the scheduler queue (status [constant HEGoTask.PENDING]).
+
+Does not include the currently running task. See [method get_current_task] for that.
+</description>
+</method>
 <method name="get_singleton" qualifiers="static">
 <return type="HEGoAPI" />
 <description>
 Returns the global [HEGoAPI] singleton instance created during module initialization.
+</description>
+</method>
+<method name="get_task_pending_count">
+<return type="int" />
+<description>
+Returns the number of tasks waiting in the scheduler queue.
+
+This count does not include the currently running task.
 </description>
 </method>
 <method name="is_session_active">
@@ -79,35 +117,22 @@ Returns [code]true[/code] on successful session startup and initialization.
 <method name="stop_session">
 <return type="bool" />
 <description>
-Stops the active Houdini Engine session and releases session resources.
+Stops the task scheduler and then closes the active Houdini Engine session, releasing all session resources.
+
+Any pending tasks in the queue are discarded. The currently running task, if any, is allowed to finish before the session is closed.
 
 Returns [code]true[/code] when shutdown succeeds.
 </description>
 </method>
-<method name="poll_cook_state">
-<return type="int" />
+<method name="submit_task">
+<return type="HEGoTask" />
+<param index="0" name="task" type="HEGoTask" />
 <description>
-Returns the current HAPI cook status as an integer.
+Submits an [HEGoTask] to the scheduler queue for execution on the background worker thread.
 
-Used together with [method HEGoAssetNode.cook_async] to poll for cook completion each frame. The returned value maps to [code]HAPI_State[/code]:
-[codeblock]
-0 = HAPI_STATE_READY          (cook finished successfully)
-1 = HAPI_STATE_READY_WITH_FATAL_ERRORS
-2 = HAPI_STATE_READY_WITH_COOK_ERRORS
-3 = HAPI_STATE_MAX_READY_STATE
-4 = HAPI_STATE_STARTING_COOK
-5 = HAPI_STATE_COOKING
-6 = HAPI_STATE_STARTING_LOAD
-7 = HAPI_STATE_LOADING
-8 = HAPI_STATE_MAX
-[/codeblock]
+This is called internally by HEGo node methods. Direct use is rarely needed unless you are building custom task pipelines.
 
-Values greater than 3 indicate that HAPI is still busy. Typical polling pattern in GDScript:
-[codeblock]
-hego_asset_node.cook_async()
-while HEGoAPI.get_singleton().poll_cook_state() > 3:
-    await get_tree().process_frame
-[/codeblock]
+Returns the same [HEGoTask] that was passed in, for convenience.
 </description>
 </method>
 </methods>

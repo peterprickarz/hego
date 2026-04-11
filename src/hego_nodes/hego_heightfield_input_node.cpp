@@ -234,7 +234,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 		return false;
 	}
 
-	std::string volume_name = HEGoUtil::get_string(session, volume_info.nameSH);
+	std::string volume_name = HEGo::Util::Hapi::get_string(session, volume_info.nameSH);
 	if (volume_name.empty())
 	{
 		volume_name = layer_name;

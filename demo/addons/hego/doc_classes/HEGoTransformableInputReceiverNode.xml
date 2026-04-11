@@ -12,11 +12,11 @@ Useful for operator wrappers that both receive geometry inputs and need transfor
 </tutorials>
 <methods>
 <method name="connect_input">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="other_node" type="HEGoBaseNode" />
 <param index="1" name="input_index" type="int" />
 <description>
-Connects [code]other_node[/code] into the given input slot.
+Submits a task to connect [code]other_node[/code] into the given input slot.
 
 The source and destination nodes are expected to have valid instantiated node ids before connecting.
 </description>

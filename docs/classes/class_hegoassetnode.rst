@@ -21,11 +21,14 @@ Description
 
 Use this class to instantiate an HDA by operator name, set parameters, cook, and fetch output data.
 
+Call :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNode_method_instantiate>` after assigning :ref:`op_name<class_HEGoAssetNode_property_op_name>`. Most data-access methods require a valid instantiated node; when called before instantiation they log an error and return a failed task.
 
+All methods that interact with Houdini Engine return an :ref:`HEGoTask<class_HEGoTask>`. Await the task to get the result:
 
-Call :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNode_method_instantiate>` after assigning :ref:`op_name<class_HEGoAssetNode_property_op_name>`. Most data-access methods require a valid instantiated node; when called before instantiation they log an error and return an empty value.
+::
 
-
+    var task = asset_node.cook()
+    var result = await _await_task(task)
 
 \ :ref:`fetch_points()<class_HEGoAssetNode_method_fetch_points>` expects a resource compatible with ``HEGoFetchPointsConfig``. :ref:`fetch_surfaces()<class_HEGoAssetNode_method_fetch_surfaces>` expects a resource compatible with ``HEGoFetchSurfacesConfig``.
 
@@ -49,37 +52,35 @@ Methods
 .. table::
    :widths: auto
 
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|                | :ref:`instantiate<class_HEGoAssetNode_method_instantiate>`\ (\ )                                                                                                                     |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|                | :ref:`cook<class_HEGoAssetNode_method_cook>`\ (\ )                                                                                                                                   |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``int``               | :ref:`cook_async<class_HEGoAssetNode_method_cook_async>`\ (\ )                                                                                                                       |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Image``             | :ref:`fetch_heightfield_layer_image<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`\ (\ part_id\: ``int``, auto_cook\: ``bool`` = true\ )                                 |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Array``             | :ref:`fetch_output<class_HEGoAssetNode_method_fetch_output>`\ (\ )                                                                                                                   |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary``        | :ref:`fetch_points<class_HEGoAssetNode_method_fetch_points>`\ (\ fetch_point_config\: ``Resource``, auto_cook\: ``bool`` = true\ )                                                   |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary``        | :ref:`fetch_surfaces<class_HEGoAssetNode_method_fetch_surfaces>`\ (\ fetch_surface_config\: ``Resource``, auto_cook\: ``bool`` = true\ )                                             |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Array``             | :ref:`get_heightfield_layers<class_HEGoAssetNode_method_get_heightfield_layers>`\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray(), auto_cook\: ``bool`` = true\ ) |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``PackedStringArray`` | :ref:`get_input_names<class_HEGoAssetNode_method_get_input_names>`\ (\ )                                                                                                             |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary``        | :ref:`get_parms_dict<class_HEGoAssetNode_method_get_parms_dict>`\ (\ )                                                                                                               |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``PackedByteArray``   | :ref:`get_preset<class_HEGoAssetNode_method_get_preset>`\ (\ )                                                                                                                       |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|                | :ref:`insert_multiparm_instance<class_HEGoAssetNode_method_insert_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                                                     |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|                | :ref:`remove_multiparm_instance<class_HEGoAssetNode_method_remove_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                                                     |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|                | :ref:`set_parm<class_HEGoAssetNode_method_set_parm>`\ (\ parm_name\: ``String``, value\: ``Variant``\ )                                                                              |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|                | :ref:`set_preset<class_HEGoAssetNode_method_set_preset>`\ (\ preset\: ``PackedByteArray``\ )                                                                                         |
-   +-----------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`cook<class_HEGoAssetNode_method_cook>`\ (\ )                                                                                                  |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`fetch_heightfield_layer_image<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`\ (\ part_id\: ``int``\ )                             |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`fetch_points<class_HEGoAssetNode_method_fetch_points>`\ (\ fetch_point_config\: ``Resource``\ )                                               |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`fetch_surfaces<class_HEGoAssetNode_method_fetch_surfaces>`\ (\ fetch_surface_config\: ``Resource``\ )                                         |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`get_heightfield_layers<class_HEGoAssetNode_method_get_heightfield_layers>`\ (\ read_prim_attribs\: ``PackedStringArray`` = []\ )              |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`get_input_names<class_HEGoAssetNode_method_get_input_names>`\ (\ )                                                                            |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`get_parms_dict<class_HEGoAssetNode_method_get_parms_dict>`\ (\ )                                                                              |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`get_preset<class_HEGoAssetNode_method_get_preset>`\ (\ )                                                                                      |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`insert_multiparm_instance<class_HEGoAssetNode_method_insert_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                    |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`instantiate<class_HEGoAssetNode_method_instantiate>`\ (\ )                                                                                    |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`remove_multiparm_instance<class_HEGoAssetNode_method_remove_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                    |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_parm<class_HEGoAssetNode_method_set_parm>`\ (\ parm_name\: ``String``, value\: ``Variant``\ )                                             |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_parms_batch<class_HEGoAssetNode_method_set_parms_batch>`\ (\ parms\: ``Dictionary``\ )                                                    |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_preset<class_HEGoAssetNode_method_set_preset>`\ (\ preset\: ``PackedByteArray``\ )                                                        |
+   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -112,63 +113,15 @@ Houdini operator name used by :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNod
 Method Descriptions
 -------------------
 
-.. _class_HEGoAssetNode_method_instantiate:
-
-.. rst-class:: classref-method
-
-|void| **instantiate**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_instantiate>`
-
-Instantiates the HDA node from :ref:`op_name<class_HEGoAssetNode_property_op_name>`.
-
-
-
-If :ref:`op_name<class_HEGoAssetNode_property_op_name>` is empty, the call logs an error and does not create a node.
-
-
-
-On success, the created node id is stored and this wrapper is registered in the session manager. On failure, the node remains invalid and an error is logged.
-
-.. rst-class:: classref-item-separator
-
-----
-
 .. _class_HEGoAssetNode_method_cook:
 
 .. rst-class:: classref-method
 
-|void| **cook**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_cook>`
+:ref:`HEGoTask<class_HEGoTask>` **cook**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_cook>`
 
-Cooks the asset node and waits until cooking is finished.
+Submits a cook task for this asset node.
 
-
-
-Use this when ``auto_cook`` is disabled on fetch calls and you want explicit cook control.
-
-.. rst-class:: classref-item-separator
-
-----
-
-.. _class_HEGoAssetNode_method_cook_async:
-
-.. rst-class:: classref-method
-
-``int`` **cook_async**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_cook_async>`
-
-Starts cooking the asset node without blocking.
-
-
-
-Because the HAPI session is initialized with ``use_cooking_thread=true``, this call returns immediately (returns ``0`` on success, ``-1`` on error). Houdini performs the actual cook in its own internal thread.
-
-
-
-Poll :ref:`HEGoAPI.poll_cook_state()<class_HEGoAPI_method_poll_cook_state>` once per frame to detect completion:
-
-::
-
-    hego_asset_node.cook_async()
-    while HEGoAPI.get_singleton().poll_cook_state() > 3:
-        await get_tree().process_frame
+Returns an :ref:`HEGoTask<class_HEGoTask>` that completes when cooking is finished. The task result is ``null``.
 
 .. rst-class:: classref-item-separator
 
@@ -178,33 +131,11 @@ Poll :ref:`HEGoAPI.poll_cook_state()<class_HEGoAPI_method_poll_cook_state>` once
 
 .. rst-class:: classref-method
 
-``Image`` **fetch_heightfield_layer_image**\ (\ part_id\: ``int``, auto_cook\: ``bool`` = true\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`
+:ref:`HEGoTask<class_HEGoTask>` **fetch_heightfield_layer_image**\ (\ part_id\: ``int``\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`
 
-Fetches one heightfield layer as an ``Image`` from the specified part id.
+Submits a task to fetch one heightfield layer as an ``Image`` from the specified part id.
 
-
-
-If ``auto_cook`` is ``true``, the node is cooked before reading.
-
-
-
-Returns an invalid image reference when the node is not instantiated or the requested part cannot be read.
-
-.. rst-class:: classref-item-separator
-
-----
-
-.. _class_HEGoAssetNode_method_fetch_output:
-
-.. rst-class:: classref-method
-
-``Array`` **fetch_output**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_output>`
-
-Returns cooked output geometry data.
-
-
-
-Note: in the current C++ implementation this method returns an empty ``Array`` placeholder.
+The task result is an ``Image``, or an invalid image reference when the node is not instantiated or the requested part cannot be read.
 
 .. rst-class:: classref-item-separator
 
@@ -214,15 +145,11 @@ Note: in the current C++ implementation this method returns an empty ``Array`` p
 
 .. rst-class:: classref-method
 
-``Dictionary`` **fetch_points**\ (\ fetch_point_config\: ``Resource``, auto_cook\: ``bool`` = true\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_points>`
+:ref:`HEGoTask<class_HEGoTask>` **fetch_points**\ (\ fetch_point_config\: ``Resource``\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_points>`
 
-Fetches point data using a point-fetch configuration resource.
-
-
+Submits a task to fetch point data using a point-fetch configuration resource.
 
 Config fields are interpreted as follows:
-
-\ ``only_loose_points``: when ``true``, points referenced by mesh vertices are excluded.
 
 \ ``filter_attribs`` and ``filter_attrib_values``: paired by index; a point is kept only if all ``point_attr == filter_value`` checks pass.
 
@@ -232,13 +159,9 @@ Config fields are interpreted as follows:
 
 \ ``split_attribs``: point attributes used to build nested dictionary groups.
 
+The method reads from the display mesh part of the cooked node.
 
-
-The method reads from the display mesh part of the cooked node. If ``auto_cook`` is ``true``, the node is cooked first.
-
-
-
-Output structure:
+The task result is a ``Dictionary`` with the following structure:
 
 If ``split_attribs`` is empty, the result is a flat dictionary with leaf keys.
 
@@ -252,9 +175,7 @@ Leaf dictionaries contain:
 
 Additional keys from ``read_attribs``, each mapped to an ``Array`` aligned with ``ids``.
 
-
-
-Returns an empty dictionary when no points pass filters, when no mesh part exists, or when geometry query or cook fails.
+Returns an empty dictionary when no points pass filters, when no mesh part exists, or when geometry query fails.
 
 .. rst-class:: classref-item-separator
 
@@ -264,11 +185,9 @@ Returns an empty dictionary when no points pass filters, when no mesh part exist
 
 .. rst-class:: classref-method
 
-``Dictionary`` **fetch_surfaces**\ (\ fetch_surface_config\: ``Resource``, auto_cook\: ``bool`` = true\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_surfaces>`
+:ref:`HEGoTask<class_HEGoTask>` **fetch_surfaces**\ (\ fetch_surface_config\: ``Resource``\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_surfaces>`
 
-Fetches surface data using a surface-fetch configuration resource.
-
-
+Submits a task to fetch surface data using a surface-fetch configuration resource.
 
 Config fields are interpreted as follows:
 
@@ -280,13 +199,9 @@ Config fields are interpreted as follows:
 
 \ ``filter_attribs`` and ``filter_attrib_values`` should have the same length.
 
+The method reads the display mesh part.
 
-
-The method reads the display mesh part. If ``auto_cook`` is ``true``, it cooks before reading.
-
-
-
-Output structure:
+The task result is a ``Dictionary`` with the following structure:
 
 If ``split_attribs`` is empty, the root is a single leaf dictionary.
 
@@ -300,9 +215,7 @@ Each leaf contains:
 
 Any primitive attributes requested through ``read_attribs``, each as an ``Array`` aligned with ``ids``.
 
-
-
-Returns an empty dictionary when no mesh part exists, no faces are available, no elements pass filters, or when geometry query or cook fails.
+Returns an empty dictionary when no mesh part exists, no faces are available, no elements pass filters, or when geometry query fails.
 
 .. rst-class:: classref-item-separator
 
@@ -312,17 +225,13 @@ Returns an empty dictionary when no mesh part exists, no faces are available, no
 
 .. rst-class:: classref-method
 
-``Array`` **get_heightfield_layers**\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray(), auto_cook\: ``bool`` = true\ ) :ref:`🔗<class_HEGoAssetNode_method_get_heightfield_layers>`
+:ref:`HEGoTask<class_HEGoTask>` **get_heightfield_layers**\ (\ read_prim_attribs\: ``PackedStringArray`` = []\ ) :ref:`🔗<class_HEGoAssetNode_method_get_heightfield_layers>`
 
-Returns available heightfield layers from the cooked asset.
-
-
+Submits a task to return available heightfield layers from the cooked asset.
 
 Use ``read_prim_attribs`` to request primitive attributes that should be included in each returned layer entry.
 
-
-
-Each returned array entry is a dictionary-like payload from HEGo heightfield utilities and can include metadata and image data depending on utility behavior.
+The task result is an ``Array`` where each entry is a ``Dictionary`` containing layer metadata such as part id, layer name, voxel dimensions, scale, and transform information.
 
 .. rst-class:: classref-item-separator
 
@@ -332,13 +241,11 @@ Each returned array entry is a dictionary-like payload from HEGo heightfield uti
 
 .. rst-class:: classref-method
 
-``PackedStringArray`` **get_input_names**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_input_names>`
+:ref:`HEGoTask<class_HEGoTask>` **get_input_names**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_input_names>`
 
-Returns the input names defined on this HDA node.
+Submits a task to return the input names defined on this HDA node.
 
-
-
-This is useful for mapping script-side inputs to operator input slots.
+The task result is a ``PackedStringArray`` of input names. This is useful for mapping script-side inputs to operator input slots.
 
 .. rst-class:: classref-item-separator
 
@@ -348,13 +255,11 @@ This is useful for mapping script-side inputs to operator input slots.
 
 .. rst-class:: classref-method
 
-``Dictionary`` **get_parms_dict**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_parms_dict>`
+:ref:`HEGoTask<class_HEGoTask>` **get_parms_dict**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_parms_dict>`
 
-Returns a dictionary describing the current parameter values.
+Submits a task to return a dictionary describing the current parameter values.
 
-
-
-The dictionary is intended for inspection and tooling workflows and mirrors parameter state read from HAPI.
+The task result is a ``Dictionary`` intended for inspection and tooling workflows, mirroring parameter state read from HAPI.
 
 .. rst-class:: classref-item-separator
 
@@ -364,13 +269,11 @@ The dictionary is intended for inspection and tooling workflows and mirrors para
 
 .. rst-class:: classref-method
 
-``PackedByteArray`` **get_preset**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_preset>`
+:ref:`HEGoTask<class_HEGoTask>` **get_preset**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_preset>`
 
-Serializes current parameter state as a Houdini preset blob.
+Submits a task to serialize current parameter state as a Houdini preset blob.
 
-
-
-Use together with :ref:`set_preset()<class_HEGoAssetNode_method_set_preset>` to save and restore HDA parameter setups.
+The task result is a ``PackedByteArray``. Use together with :ref:`set_preset()<class_HEGoAssetNode_method_set_preset>` to save and restore HDA parameter setups.
 
 .. rst-class:: classref-item-separator
 
@@ -380,13 +283,27 @@ Use together with :ref:`set_preset()<class_HEGoAssetNode_method_set_preset>` to 
 
 .. rst-class:: classref-method
 
-|void| **insert_multiparm_instance**\ (\ parm_id\: ``int``, index\: ``int``\ ) :ref:`🔗<class_HEGoAssetNode_method_insert_multiparm_instance>`
+:ref:`HEGoTask<class_HEGoTask>` **insert_multiparm_instance**\ (\ parm_id\: ``int``, index\: ``int``\ ) :ref:`🔗<class_HEGoAssetNode_method_insert_multiparm_instance>`
 
-Inserts one multiparm instance at ``index`` for the parameter id.
-
-
+Submits a task to insert one multiparm instance at ``index`` for the parameter id.
 
 Use this to grow multiparm blocks before setting values on newly created entries.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetNode_method_instantiate:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **instantiate**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_instantiate>`
+
+Submits a task to instantiate the HDA node from :ref:`op_name<class_HEGoAssetNode_property_op_name>`.
+
+If :ref:`op_name<class_HEGoAssetNode_property_op_name>` is empty, the task fails with an error.
+
+On success, the created node id is stored and this wrapper is registered in the session manager.
 
 .. rst-class:: classref-item-separator
 
@@ -396,11 +313,9 @@ Use this to grow multiparm blocks before setting values on newly created entries
 
 .. rst-class:: classref-method
 
-|void| **remove_multiparm_instance**\ (\ parm_id\: ``int``, index\: ``int``\ ) :ref:`🔗<class_HEGoAssetNode_method_remove_multiparm_instance>`
+:ref:`HEGoTask<class_HEGoTask>` **remove_multiparm_instance**\ (\ parm_id\: ``int``, index\: ``int``\ ) :ref:`🔗<class_HEGoAssetNode_method_remove_multiparm_instance>`
 
-Removes one multiparm instance at ``index`` for the parameter id.
-
-
+Submits a task to remove one multiparm instance at ``index`` for the parameter id.
 
 Indices follow Houdini multiparm ordering.
 
@@ -412,17 +327,27 @@ Indices follow Houdini multiparm ordering.
 
 .. rst-class:: classref-method
 
-|void| **set_parm**\ (\ parm_name\: ``String``, value\: ``Variant``\ ) :ref:`🔗<class_HEGoAssetNode_method_set_parm>`
+:ref:`HEGoTask<class_HEGoTask>` **set_parm**\ (\ parm_name\: ``String``, value\: ``Variant``\ ) :ref:`🔗<class_HEGoAssetNode_method_set_parm>`
 
-Sets a parameter by name.
-
-
+Submits a task to set a parameter by name.
 
 The ``Variant`` value type is converted to the matching Houdini parameter storage type when possible.
 
+Call after :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNode_method_instantiate>`. Invalid node state causes the task to fail.
 
+.. rst-class:: classref-item-separator
 
-Call after :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNode_method_instantiate>`. Invalid node state is logged and ignored.
+----
+
+.. _class_HEGoAssetNode_method_set_parms_batch:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **set_parms_batch**\ (\ parms\: ``Dictionary``\ ) :ref:`🔗<class_HEGoAssetNode_method_set_parms_batch>`
+
+Submits a single task to set multiple parameters at once.
+
+\ ``parms`` is a ``Dictionary`` mapping parameter names (``String``) to values (``Variant``). All parameters are set in one HAPI round-trip, which is more efficient than calling :ref:`set_parm()<class_HEGoAssetNode_method_set_parm>` repeatedly.
 
 .. rst-class:: classref-item-separator
 
@@ -432,11 +357,9 @@ Call after :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNode_method_instantiat
 
 .. rst-class:: classref-method
 
-|void| **set_preset**\ (\ preset\: ``PackedByteArray``\ ) :ref:`🔗<class_HEGoAssetNode_method_set_preset>`
+:ref:`HEGoTask<class_HEGoTask>` **set_preset**\ (\ preset\: ``PackedByteArray``\ ) :ref:`🔗<class_HEGoAssetNode_method_set_preset>`
 
-Applies a serialized Houdini parameter preset to this asset.
-
-
+Submits a task to apply a serialized Houdini parameter preset to this asset.
 
 The preset payload should come from :ref:`get_preset()<class_HEGoAssetNode_method_get_preset>` or a compatible Houdini preset source.
 

@@ -84,7 +84,7 @@ godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId
 			continue;
 		}
 
-		const godot::String layer_name = HEGoUtil::get_string(session_mgr->get_session(), volume_info.nameSH).c_str();
+		const godot::String layer_name = HEGo::Util::Hapi::get_string(session_mgr->get_session(), volume_info.nameSH).c_str();
 		const float voxel_scale_x = volume_info.transform.scale[0] * 2.0f;
 		const float voxel_scale_y = volume_info.transform.scale[1] * 2.0f;
 

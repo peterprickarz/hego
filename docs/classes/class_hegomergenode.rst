@@ -33,11 +33,11 @@ Methods
 .. table::
    :widths: auto
 
-   +--------+--------------------------------------------------------------------------------------------+
-   | |void| | :ref:`instantiate<class_HEGoMergeNode_method_instantiate>`\ (\ )                           |
-   +--------+--------------------------------------------------------------------------------------------+
-   | |void| | :ref:`connect_inputs<class_HEGoMergeNode_method_connect_inputs>`\ (\ inputs\: ``Array``\ ) |
-   +--------+--------------------------------------------------------------------------------------------+
+   +-------------------------------------------+--------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`instantiate<class_HEGoMergeNode_method_instantiate>`\ (\ )                           |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`connect_inputs<class_HEGoMergeNode_method_connect_inputs>`\ (\ inputs\: ``Array``\ ) |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -52,11 +52,9 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-|void| **instantiate**\ (\ ) :ref:`🔗<class_HEGoMergeNode_method_instantiate>`
+:ref:`HEGoTask<class_HEGoTask>` **instantiate**\ (\ ) :ref:`🔗<class_HEGoMergeNode_method_instantiate>`
 
-Creates a Houdini Merge SOP node and stores its id in this wrapper.
-
-
+Submits a task to create a Houdini Merge SOP node and store its id in this wrapper.
 
 This method always instantiates a merge operator for the current wrapper and then registers the wrapper with the active session manager.
 
@@ -68,15 +66,11 @@ This method always instantiates a merge operator for the current wrapper and the
 
 .. rst-class:: classref-method
 
-|void| **connect_inputs**\ (\ inputs\: ``Array``\ ) :ref:`🔗<class_HEGoMergeNode_method_connect_inputs>`
+:ref:`HEGoTask<class_HEGoTask>` **connect_inputs**\ (\ inputs\: ``Array``\ ) :ref:`🔗<class_HEGoMergeNode_method_connect_inputs>`
 
-Connects all nodes in ``inputs`` to this merge node in array order.
-
-
+Submits a task to connect all nodes in ``inputs`` to this merge node in array order.
 
 Each array item should be an :ref:`HEGoBaseNode<class_HEGoBaseNode>`. Invalid entries are ignored.
-
-
 
 Array order maps directly to merge input index order.
 

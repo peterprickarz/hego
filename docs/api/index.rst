@@ -8,4 +8,5 @@ The pages below are generated from XML class docs in demo/addons/hego/doc_classe
 .. toctree::
    :maxdepth: 2
 
+   task_pattern
    ../classes/index

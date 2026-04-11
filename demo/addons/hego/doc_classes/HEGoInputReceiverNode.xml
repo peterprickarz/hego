@@ -12,11 +12,11 @@ Use this as the base for nodes that accept upstream Houdini connections.
 </tutorials>
 <methods>
 <method name="connect_input">
-<return type="void" />
+<return type="HEGoTask" />
 <param index="0" name="other_node" type="HEGoBaseNode" />
 <param index="1" name="input_index" type="int" />
 <description>
-Connects [code]other_node[/code] into this node's [code]input_index[/code].
+Submits a task to connect [code]other_node[/code] into this node's [code]input_index[/code].
 
 Both nodes should already be instantiated. If either node id is invalid, downstream HAPI calls can fail and log errors.
 </description>
