@@ -11,15 +11,24 @@ var action_cook = func(): cook() # button to trigger cook function
 
 var hego_asset_node: HEGoAssetNode
 
+func _await_task(task: HEGoTask) -> Variant:
+	while task.get_status() < HEGoTask.COMPLETED:
+		await get_tree().process_frame
+	if task.get_status() == HEGoTask.FAILED:
+		push_error("Task failed: " + task.get_error_message())
+		return null
+	return task.get_result()
+
+
 func cook():
 	# Ensure valid AssetNode object
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	hego_asset_node.op_name = ASSET_NAME
-	hego_asset_node.instantiate()
-	hego_asset_node.set_transform(global_transform)
+	await _await_task(hego_asset_node.instantiate())
+	await _await_task(hego_asset_node.set_transform(global_transform))
 	# Fetch and set cook result of AssetNode
 	var res = load("res://hego/surface_configs/fetch_surfaces_split_by_lod.tres")
-	var dict = hego_asset_node.fetch_surfaces(res)
+	var dict = await _await_task(hego_asset_node.fetch_surfaces(res))
 	
 	# create array mesh var and a corresponding array set to null everywhere
 	var arr_mesh = ArrayMesh.new()

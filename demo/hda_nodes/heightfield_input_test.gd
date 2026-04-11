@@ -20,6 +20,15 @@ var action_setup_output: Callable = func(): setup_output_hda()
 @export_tool_button("Print Heightfield Layers", "Search")
 var action_print_layers: Callable = func(): print_heightfield_layers()
 
+func _await_task(task: HEGoTask) -> Variant:
+	while task.get_status() < HEGoTask.COMPLETED:
+		await get_tree().process_frame
+	if task.get_status() == HEGoTask.FAILED:
+		push_error("Task failed: " + task.get_error_message())
+		return null
+	return task.get_result()
+
+
 func send_heightfield():
 	var height_tex   = load("res://textures/stone/natural/Rock006_1K-JPG_Color_kuwahara.jpg")
 	var mask_tex     = load("res://textures/stone/natural/Rock006_1K-JPG_NormalGL_kuwahara.jpg")
@@ -47,7 +56,7 @@ func send_heightfield():
 	if not hego_heightfield_node:
 		hego_heightfield_node = HEGoHeightfieldInputNode.new()
 
-	hego_heightfield_node.set_layers(layers, 1, 100)
+	await _await_task(hego_heightfield_node.set_layers(layers, 1, 100))
 
 func setup_output_hda():
 	if not hego_heightfield_node or hego_heightfield_node.get_id() < 0:
@@ -58,8 +67,8 @@ func setup_output_hda():
 		hego_asset_node = HEGoAssetNode.new()
 
 	hego_asset_node.op_name = OUTPUT_ASSET_NAME
-	hego_asset_node.instantiate()
-	hego_asset_node.connect_input(hego_heightfield_node, 0)
+	await _await_task(hego_asset_node.instantiate())
+	await _await_task(hego_asset_node.connect_input(hego_heightfield_node, 0))
 	print("HeightfieldInputTest: connected output asset to heightfield input")
 
 func print_heightfield_layers():
@@ -72,7 +81,7 @@ func print_heightfield_layers():
 		push_error("HeightfieldInputTest: failed creating save directory %s (err=%d)" % [HF_TEST_SAVE_DIR, dir_err])
 		return
 
-	var layers := hego_asset_node.get_heightfield_layers(["test"])
+	var layers = await _await_task(hego_asset_node.get_heightfield_layers(PackedStringArray(["test"])))
 	print("HeightfieldInputTest: get_heightfield_layers() -> ", layers)
 
 	for layer_data in layers:
@@ -84,7 +93,7 @@ func print_heightfield_layers():
 		var test_attr = _get_named_attr_value(layer_data.get("attrs", []), "test")
 		print("HeightfieldInputTest: layer part_id=%d name=%s test_attr=%s" % [part_id, layer_name, str(test_attr)])
 
-		var image := hego_asset_node.fetch_heightfield_layer_image(part_id)
+		var image = await _await_task(hego_asset_node.fetch_heightfield_layer_image(part_id))
 		if not image:
 			push_error("HeightfieldInputTest: failed fetching image for part_id=%d" % part_id)
 			continue
@@ -135,7 +144,7 @@ func send_heightfield_alt():
 	if not hego_heightfield_node:
 		hego_heightfield_node = HEGoHeightfieldInputNode.new()
 
-	hego_heightfield_node.set_layers(layers)
+	await _await_task(hego_heightfield_node.set_layers(layers))
 
 func _get_named_attr_value(attrs: Array, attr_name: String) -> Variant:
 	for attr in attrs:

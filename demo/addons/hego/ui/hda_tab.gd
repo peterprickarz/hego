@@ -56,6 +56,15 @@ var new_preset_name_line_edit: LineEdit
 @onready var root_control = $"../.."
 
 
+func _await_task(task: HEGoTask) -> Variant:
+	while task.get_status() < HEGoTask.COMPLETED:
+		await get_tree().process_frame
+	if task.get_status() == HEGoTask.FAILED:
+		push_error("[HEGoBottomPanel]: Task failed: " + task.get_error_message())
+		return null
+	return task.get_result()
+
+
 func _elapsed_msec(start_usec: int) -> float:
 	return float(Time.get_ticks_usec() - start_usec) / 1000.0
 
@@ -119,13 +128,13 @@ func update_ui():
 			child.queue_free()
 	hego_asset_node = hego_tool_node.hego_get_asset_node()
 	if hego_asset_node != null:
-		var parm_dict = hego_asset_node.get_parms_dict()
-		
+		var parm_dict = await _await_task(hego_asset_node.get_parms_dict())
+
 		if parm_dict and parm_dict.keys().size() != 0:
 			for key in parm_dict.keys():
 				add_parm_ui(parm_dict[key], parm_vbox)
-				
-		var input_names = hego_asset_node.get_input_names()
+
+		var input_names = await _await_task(hego_asset_node.get_input_names())
 		
 		input_nodes = Array()
 		for i in range(input_names.size()):
@@ -221,18 +230,18 @@ func _handle_multiparm_parm(parm_dict: Dictionary, parent: Control):
 			
 			
 func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary):
-	hego_asset_node.set_parm(parm_dict["name"], value)
-	update_ui()
+	await _await_task(hego_asset_node.set_parm(parm_dict["name"], value))
+	await update_ui()
 	
 
 func _on_insert_multiparm_instance(id: int, index: int):
-	hego_asset_node.insert_multiparm_instance(id, index)
-	update_ui()
+	await _await_task(hego_asset_node.insert_multiparm_instance(id, index))
+	await update_ui()
 	
 
 func _on_remove_multiparm_instance(id: int, index: int):
-	hego_asset_node.remove_multiparm_instance(id, index)
-	update_ui()
+	await _await_task(hego_asset_node.remove_multiparm_instance(id, index))
+	await update_ui()
 
 
 func _on_selection_changed(node):
@@ -245,11 +254,11 @@ func _on_selection_changed(node):
 	allow_cook = node is HEGoNode3D
 	_set_buttons_disabled(false)
 	hego_tool_node = node
-	update_ui()
+	await update_ui()
 	
 
 func _on_value_changed(name, value):
-	hego_asset_node.set_parm(name, value)
+	await _await_task(hego_asset_node.set_parm(name, value))
 	if auto_recook_toggle.button_pressed:
 		await recook()
 	
@@ -287,7 +296,7 @@ func _on_recook_button_pressed():
 
 	var preset_index = preset_dropdown.get_selected_id()
 	var ui_start_usec = Time.get_ticks_usec()
-	update_ui()
+	await update_ui()
 	preset_dropdown.select(preset_index)
 	ui_rebuild_msec = _elapsed_msec(ui_start_usec)
 
@@ -300,13 +309,15 @@ func recook():
 	if hego_tool_node.has_method("hego_set_parm_stash"):
 		if not hego_asset_node:
 			hego_asset_node = hego_tool_node.hego_get_asset_node()
-		hego_tool_node.hego_set_parm_stash(hego_asset_node.get_preset())
+		var preset = await _await_task(hego_asset_node.get_preset())
+		if preset != null:
+			hego_tool_node.hego_set_parm_stash(preset)
 		
 
 func create_preset_file(preset_name: String) -> void:
 	print("[HEGo]: Creating preset")
 	if hego_asset_node and hego_tool_node.has_method("hego_get_asset_name"):
-		var preset = hego_asset_node.get_preset()
+		var preset = await _await_task(hego_asset_node.get_preset())
 		if preset:
 			var res_path = get_preset_res_path()
 			
@@ -344,7 +355,7 @@ func create_preset_file(preset_name: String) -> void:
 			if error == OK:
 				print("[HEGo]: Preset saved successfully")
 				# Update UI to refresh dropdown
-				update_ui()
+				await update_ui()
 				# Select the newly created preset in the dropdown
 				_select_preset_in_dropdown(preset_name)
 			else:
@@ -418,9 +429,9 @@ func _on_load_preset_button_pressed():
 		return
 	
 	# Load and apply the preset
-	hego_asset_node.set_preset(presets_res.presets[preset_name])
+	await _await_task(hego_asset_node.set_preset(presets_res.presets[preset_name]))
 	print("[HEGo]: Loaded preset: ", preset_name)
-	update_ui()
+	await update_ui()
 	
 	# Reselect the loaded preset in the dropdown
 	_select_preset_in_dropdown(preset_name)
@@ -441,7 +452,7 @@ func _on_save_preset_button_pressed():
 	var preset_name = preset_dropdown.get_item_text(selected_index)
 	var res_path = get_preset_res_path()
 	
-	var preset = hego_asset_node.get_preset()
+	var preset = await _await_task(hego_asset_node.get_preset())
 	if not preset:
 		push_error("[HEGo]: Failed to retrieve parms from Houdini - Perhaps the node is not instantiated correctly?")
 		return
@@ -467,7 +478,7 @@ func _on_save_preset_button_pressed():
 		return
 	
 	print("[HEGo]: Preset '", preset_name, "' saved successfully")
-	update_ui()
+	await update_ui()
 	
 	# Reselect the saved preset in the dropdown
 	_select_preset_in_dropdown(preset_name)

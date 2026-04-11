@@ -1,6 +1,7 @@
 #include "register_types.h"
 
 #include "hego_api.h"
+#include "hego_task.h"
 #include "util/log/log.h"
 
 #include "hego_nodes/hego_base_node.h"
@@ -25,6 +26,8 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 	{
 		return;
 	}
+
+	ClassDB::register_class<HEGo::HEGoTask>();
 
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);

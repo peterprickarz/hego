@@ -59,10 +59,19 @@ bool HEGoAPI::start_session(int connection_type, const godot::String &connection
 	// Convert Godot string to std::string
 	std::string connection_data_str = std::string(connection_data.utf8().get_data());
 
-	return session_mgr.start_session(session_type, connection_data_str);
+	bool success = session_mgr.start_session(session_type, connection_data_str);
+	if (success)
+	{
+		scheduler.start(&session_mgr);
+	}
+	return success;
 }
 
-bool HEGoAPI::stop_session() { return session_mgr.stop_session(); }
+bool HEGoAPI::stop_session()
+{
+	scheduler.stop();
+	return session_mgr.stop_session();
+}
 
 bool HEGoAPI::is_session_active() { return session_mgr.is_session_active(); }
 
@@ -228,12 +237,17 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 	return result;
 }
 
-int HEGoAPI::poll_cook_state()
-{
-	int status = HAPI_STATE_MAX;
-	HoudiniApi::GetStatus(session_mgr.get_session(), HAPI_STATUS_COOK_STATE, &status);
-	return status;
-}
+godot::Ref<HEGoTask> HEGoAPI::submit_task(godot::Ref<HEGoTask> task) { return scheduler.submit(task); }
+
+int HEGoAPI::get_task_pending_count() { return scheduler.get_pending_count(); }
+
+godot::Ref<HEGoTask> HEGoAPI::get_current_task() { return scheduler.get_current_task(); }
+
+godot::Array HEGoAPI::get_pending_tasks() { return scheduler.get_pending_tasks(); }
+
+godot::Array HEGoAPI::get_completed_task_history() { return scheduler.get_completed_history(); }
+
+void HEGoAPI::clear_completed_task_history() { scheduler.clear_completed_history(); }
 
 void HEGoAPI::_bind_methods()
 {
@@ -243,7 +257,14 @@ void HEGoAPI::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_houdini_installation_path", "path"), &HEGoAPI::set_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_houdini_installation_path"), &HEGoAPI::get_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_hda_libraries"), &HEGoAPI::get_hda_libraries);
-	godot::ClassDB::bind_method(godot::D_METHOD("poll_cook_state"), &HEGoAPI::poll_cook_state);
+
+	// Task scheduler
+	godot::ClassDB::bind_method(godot::D_METHOD("submit_task", "task"), &HEGoAPI::submit_task);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_task_pending_count"), &HEGoAPI::get_task_pending_count);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_current_task"), &HEGoAPI::get_current_task);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_pending_tasks"), &HEGoAPI::get_pending_tasks);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_completed_task_history"), &HEGoAPI::get_completed_task_history);
+	godot::ClassDB::bind_method(godot::D_METHOD("clear_completed_task_history"), &HEGoAPI::clear_completed_task_history);
 
 	godot::ClassDB::bind_static_method("HEGoAPI", godot::D_METHOD("get_singleton"), &HEGoAPI::get_singleton);
 }

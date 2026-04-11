@@ -5,7 +5,9 @@
 
 #include "hego_nodes/hego_trackable_node.h"
 #include "hego_session_manager.h"
+#include "hego_task.h"
 
+#include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
@@ -29,7 +31,7 @@ public:
 
 	void reset_node_id() override;
 
-	virtual void instantiate();
+	virtual godot::Ref<HEGoTask> instantiate();
 
 	static void _bind_methods();
 };
@@ -42,7 +44,7 @@ public:
 	HEGoInputReceiverNode();
 	~HEGoInputReceiverNode();
 
-	void connect_input(const HEGoBaseNode *other_node, int input_index);
+	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index);
 
 	static void _bind_methods();
 };
@@ -55,7 +57,7 @@ public:
 	HEGoTransformableNode();
 	~HEGoTransformableNode();
 
-	void set_transform(godot::Transform3D xform);
+	godot::Ref<HEGoTask> set_transform(godot::Transform3D xform);
 
 	static void _bind_methods();
 };
@@ -98,7 +100,7 @@ public:
 	HEGoTransformableInputReceiverNode();
 	~HEGoTransformableInputReceiverNode();
 
-	void connect_input(const HEGoBaseNode *other_node, int input_index);
+	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index);
 
 	static void _bind_methods();
 };

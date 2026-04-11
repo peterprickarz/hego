@@ -2,6 +2,7 @@
 #define HEGO_MERGE_NODE_H
 
 #include "hego_nodes/hego_base_node.h"
+#include "hego_task.h"
 
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
@@ -16,8 +17,8 @@ public:
 	HEGoMergeNode();
 	~HEGoMergeNode();
 
-	void instantiate() override;
-	void connect_inputs(godot::Array inputs);
+	godot::Ref<HEGoTask> instantiate() override;
+	godot::Ref<HEGoTask> connect_inputs(godot::Array inputs);
 
 	static void _bind_methods();
 };

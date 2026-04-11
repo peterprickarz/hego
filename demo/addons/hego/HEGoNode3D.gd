@@ -40,6 +40,15 @@ func _build_cook_timing_summary(timings: Dictionary, total_msec: float) -> Strin
 	return "\n".join(lines)
 
 
+func _await_task(task: HEGoTask) -> Variant:
+	while task.get_status() < HEGoTask.COMPLETED:
+		await get_tree().process_frame
+	if task.get_status() == HEGoTask.FAILED:
+		push_error("[HEGoNode3D]: Task failed: " + task.get_error_message())
+		return null
+	return task.get_result()
+
+
 func cook():
 	var timings = {
 		"instantiation": 0.0,
@@ -64,18 +73,18 @@ func cook():
 	# Check the id, which is -1 before instantiation
 	var id = hego_asset_node.get_id()
 	# Instantiate - Note, this function auto checks if it already is instantiated!
-	hego_asset_node.instantiate()
+	await _await_task(hego_asset_node.instantiate())
 	# Set transform
-	hego_asset_node.set_transform(global_transform)
+	await _await_task(hego_asset_node.set_transform(global_transform))
 	# If the asset node was not instantiated beforehand, retrieve parm stash
 	if id == -1 and parm_stash.size() > 0:
-		hego_asset_node.set_preset(parm_stash)
+		await _await_task(hego_asset_node.set_preset(parm_stash))
 	timings["instantiation"] = _elapsed_msec(phase_start_usec)
 		
 	# SET INPUTS
 	# Retrieve a string array containing the names of inputs
 	if id == -1:
-		input_names = hego_asset_node.get_input_names()
+		input_names = await _await_task(hego_asset_node.get_input_names())
 	# Loop over inputs
 		phase_start_usec = Time.get_ticks_usec()
 	for i in range(input_names.size()):
@@ -92,14 +101,14 @@ func cook():
 			# We always need a merge node and the array of input nodes to connect to it
 			var input_array = Array()
 			var merge_node = HEGoMergeNode.new()
-			merge_node.instantiate()
+			await _await_task(merge_node.instantiate())
 			# fill input_array
 			for input in inputs:
-				var input_node = create_hego_input_node(input, settings)
+				var input_node = await create_hego_input_node(input, settings)
 				input_array.append(input_node)
 			# Connect inputs to merge and merge to asset node
-			merge_node.connect_inputs(input_array)
-			hego_asset_node.connect_input(merge_node, i)
+			await _await_task(merge_node.connect_inputs(input_array))
+			await _await_task(hego_asset_node.connect_input(merge_node, i))
 			# Create the dictionary to keep track
 			var input_dict = Dictionary()
 			input_dict["merge"] = merge_node
@@ -109,47 +118,43 @@ func cook():
 		elif hego_input_nodes.has(i):
 			var input_dict = hego_input_nodes[i]
 			var merge_node = input_dict["merge"]
-			merge_node.instantiate()
+			await _await_task(merge_node.instantiate())
 			var input_array = input_dict["inputs"]
 			# If there's less inputs on godo side than Houdini side, drop the extra inputs
 			if inputs.size() < input_array.size():
 				input_array.resize(inputs.size())
 				# Update correct inputs
 				for j in range(input_array.size()):
-					input_array[j] = update_hego_input_node(input_array[j], inputs[j], settings)
+					input_array[j] = await update_hego_input_node(input_array[j], inputs[j], settings)
 			# If there's more inputs on godot side than houdini side
 			elif inputs.size() > input_array.size():
 				# loop over inputs on godot side
 				for j in range(inputs.size()):
 					# if input exists, update it
 					if j <= input_array.size() - 1:
-						input_array[j] = update_hego_input_node(input_array[j], inputs[j], settings)
+						input_array[j] = await update_hego_input_node(input_array[j], inputs[j], settings)
 					# if not, create it
 					elif j > input_array.size() - 1:
-						var input_node = create_hego_input_node(inputs[j], settings)
+						var input_node = await create_hego_input_node(inputs[j], settings)
 						input_array.append(input_node)
 			# If counts match, just update all inputs
 			elif inputs.size() == input_array.size():
 				for j in range(inputs.size()):
-					input_array[j] = update_hego_input_node(input_array[j], inputs[j], settings)
+					input_array[j] = await update_hego_input_node(input_array[j], inputs[j], settings)
 			# Reconnect inputs to merge
-			merge_node.connect_inputs(input_array)
+			await _await_task(merge_node.connect_inputs(input_array))
 			# Connect merge to asset node
-			hego_asset_node.connect_input(merge_node, i)
+			await _await_task(hego_asset_node.connect_input(merge_node, i))
 	timings["input_setup"] = _elapsed_msec(phase_start_usec)
 	phase_start_usec = Time.get_ticks_usec()
-	parm_stash = hego_asset_node.get_preset()
+	parm_stash = await _await_task(hego_asset_node.get_preset())
 	timings["parm_stash"] = _elapsed_msec(phase_start_usec)
-	# Cook once before all fetch operations (async — UI stays responsive)
+	# Cook
 	phase_start_usec = Time.get_ticks_usec()
-	hego_asset_node.cook_async()
-	# Poll once per frame until HAPI finishes cooking (state <= 3 = ready)
-	while HEGoAPI.get_singleton().poll_cook_state() > 3:
-		await get_tree().process_frame
+	var cook_result = await _await_task(hego_asset_node.cook())
 	timings["cook"] = _elapsed_msec(phase_start_usec)
-	var cook_state = HEGoAPI.get_singleton().poll_cook_state()
-	if cook_state != 0:  # HAPI_STATE_READY = 0
-		push_error("[HEGoNode3D]: Cook failed (state=%d)" % cook_state)
+	if cook_result == null:
+		push_error("[HEGoNode3D]: Cook failed")
 		print(_build_cook_timing_summary(timings, _elapsed_msec(cook_start_usec)))
 		return
 
@@ -159,21 +164,21 @@ func cook():
 		outputs_node.free()
 
 	# FETCH OUTPUTS
-	
+
 	phase_start_usec = Time.get_ticks_usec()
-	handle_mesh_output()
+	await handle_mesh_output()
 	timings["mesh_output"] = _elapsed_msec(phase_start_usec)
 	phase_start_usec = Time.get_ticks_usec()
-	handle_multimesh_output()
+	await handle_multimesh_output()
 	timings["multimesh_output"] = _elapsed_msec(phase_start_usec)
 	phase_start_usec = Time.get_ticks_usec()
-	handle_object_spawn_output()
+	await handle_object_spawn_output()
 	timings["object_spawn_output"] = _elapsed_msec(phase_start_usec)
 	phase_start_usec = Time.get_ticks_usec()
-	handle_terrain3d_output()
+	await handle_terrain3d_output()
 	timings["terrain3d_output"] = _elapsed_msec(phase_start_usec)
 	phase_start_usec = Time.get_ticks_usec()
-	handle_terrain3d_instancer_output()
+	await handle_terrain3d_instancer_output()
 	timings["terrain3d_instancer_output"] = _elapsed_msec(phase_start_usec)
 
 	print(_build_cook_timing_summary(timings, _elapsed_msec(cook_start_usec)))
@@ -272,7 +277,7 @@ func handle_mesh_output():
 	var fetch_surfaces_default_config = load("res://addons/hego/surface_filters/fetch_surfaces_default.tres")
 	# retrieve dictionary output, containing the mesh in godots surface_array format
 	var fetch_start_usec = Time.get_ticks_usec()
-	var dict = hego_asset_node.fetch_surfaces(fetch_surfaces_default_config, false)
+	var dict = await _await_task(hego_asset_node.fetch_surfaces(fetch_surfaces_default_config))
 	fetch_surfaces_msec = _elapsed_msec(fetch_start_usec)
 
 	var processing_start_usec = Time.get_ticks_usec()
@@ -417,8 +422,8 @@ func handle_mesh_output():
 func handle_object_spawn_output():
 	print("[HEGoNode3D]: Handling Object Spawn Output")
 	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_object_spawning.tres")
-	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config, false)
-	
+	var output_dictionary = await _await_task(hego_asset_node.fetch_points(fetch_points_config))
+
 	# Validate output dictionary
 	if not output_dictionary or not output_dictionary.has("P") or not output_dictionary.P is Array:
 		return
@@ -577,7 +582,7 @@ func handle_terrain3d_output():
 		"hegot3d_roughness",
 		"hegot3d_uv_scale"
 	])
-	var layers = hego_asset_node.get_heightfield_layers(requested_attrs, false)
+	var layers = await _await_task(hego_asset_node.get_heightfield_layers(requested_attrs))
 	var height_layer = _t3d_get_layer_by_name(layers, "height")
 	if height_layer.is_empty():
 		return
@@ -724,7 +729,7 @@ func handle_terrain3d_output():
 
 				terrain_assets.call("set_texture", int(texture_layer["slot"]), texture_asset)
 
-				var weight_image = hego_asset_node.fetch_heightfield_layer_image(int(texture_layer["part_id"]), false)
+				var weight_image = await _await_task(hego_asset_node.fetch_heightfield_layer_image(int(texture_layer["part_id"])))
 				if weight_image != null:
 					weight_image = _t3d_fix_heightfield_image_transform(weight_image)
 				if weight_image == null:
@@ -742,7 +747,7 @@ func handle_terrain3d_output():
 
 	var hole_image = null
 	if control_generation_enabled and not hole_layer.is_empty() and hole_layer.has("part_id"):
-		hole_image = hego_asset_node.fetch_heightfield_layer_image(int(hole_layer["part_id"]), false)
+		hole_image = await _await_task(hego_asset_node.fetch_heightfield_layer_image(int(hole_layer["part_id"])))
 		if hole_image != null:
 			hole_image = _t3d_fix_heightfield_image_transform(hole_image)
 		if hole_image == null:
@@ -759,7 +764,7 @@ func handle_terrain3d_output():
 		push_error("[HEGoNode3D]: Height layer has invalid part_id.")
 		return
 
-	var height_image = hego_asset_node.fetch_heightfield_layer_image(part_id, false)
+	var height_image = await _await_task(hego_asset_node.fetch_heightfield_layer_image(part_id))
 	if height_image != null:
 		height_image = _t3d_fix_heightfield_image_transform(height_image)
 	if height_image == null:
@@ -768,7 +773,7 @@ func handle_terrain3d_output():
 
 	var region_map_image = null
 	if not region_map_layer.is_empty() and region_map_layer.has("part_id"):
-		region_map_image = hego_asset_node.fetch_heightfield_layer_image(int(region_map_layer["part_id"]), false)
+		region_map_image = await _await_task(hego_asset_node.fetch_heightfield_layer_image(int(region_map_layer["part_id"])))
 		if region_map_image != null:
 			region_map_image = _t3d_fix_heightfield_image_transform(region_map_image)
 
@@ -784,19 +789,19 @@ func handle_terrain3d_output():
 	var color_image_roughness = null
 	if has_any_color_layer:
 		if not color_layer_r.is_empty() and color_layer_r.has("part_id"):
-			color_image_r = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_r["part_id"]), false)
+			color_image_r = await _await_task(hego_asset_node.fetch_heightfield_layer_image(int(color_layer_r["part_id"])))
 			if color_image_r != null:
 				color_image_r = _t3d_fix_heightfield_image_transform(color_image_r)
 		if not color_layer_g.is_empty() and color_layer_g.has("part_id"):
-			color_image_g = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_g["part_id"]), false)
+			color_image_g = await _await_task(hego_asset_node.fetch_heightfield_layer_image(int(color_layer_g["part_id"])))
 			if color_image_g != null:
 				color_image_g = _t3d_fix_heightfield_image_transform(color_image_g)
 		if not color_layer_b.is_empty() and color_layer_b.has("part_id"):
-			color_image_b = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_b["part_id"]), false)
+			color_image_b = await _await_task(hego_asset_node.fetch_heightfield_layer_image(int(color_layer_b["part_id"])))
 			if color_image_b != null:
 				color_image_b = _t3d_fix_heightfield_image_transform(color_image_b)
 		if not color_layer_roughness.is_empty() and color_layer_roughness.has("part_id"):
-			color_image_roughness = hego_asset_node.fetch_heightfield_layer_image(int(color_layer_roughness["part_id"]), false)
+			color_image_roughness = await _await_task(hego_asset_node.fetch_heightfield_layer_image(int(color_layer_roughness["part_id"])))
 			if color_image_roughness != null:
 				color_image_roughness = _t3d_fix_heightfield_image_transform(color_image_roughness)
 
@@ -926,7 +931,7 @@ func handle_terrain3d_instancer_output():
 		push_warning("[HEGoNode3D]: Terrain3D instancer fetch config could not be loaded.")
 		return
 
-	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config, false)
+	var output_dictionary = await _await_task(hego_asset_node.fetch_points(fetch_points_config))
 	if not output_dictionary is Dictionary or output_dictionary.is_empty():
 		return
 
@@ -1148,7 +1153,7 @@ func is_compatible_type(value, expected_type: int, expected_class: String) -> bo
 func handle_multimesh_output():
 	print("[HEGoNode3D]: Handling Multimesh Output")
 	var fetch_points_config = load("res://addons/hego/point_filters/fetch_points_default_multimesh_instancing.tres")
-	var output_dictionary = hego_asset_node.fetch_points(fetch_points_config, false)
+	var output_dictionary = await _await_task(hego_asset_node.fetch_points(fetch_points_config))
 	#print(output_dictionary)
 	for key in output_dictionary.keys():
 		var hego_multimesh = "MultiMesh"
@@ -1335,8 +1340,8 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 	if input is Path3D:
 		if not hego_input_node is HEGoCurveInputNode:
 			hego_input_node = HEGoCurveInputNode.new()
-		hego_input_node.instantiate()
-		hego_input_node.set_curve_from_path_3d(input, 1)
+		await _await_task(hego_input_node.instantiate())
+		await _await_task(hego_input_node.set_curve_from_path_3d(input, 1))
 	elif input is MeshInstance3D:
 		if not hego_input_node is HEGoInputNode:
 			hego_input_node = HEGoInputNode.new()
@@ -1357,23 +1362,23 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 			else:
 				attr_dict["value"] = "empty"
 			attrs.append(attr_dict)
-		hego_input_node.instantiate()
-		hego_input_node.set_geo_from_mesh(input.mesh, attrs)
-		hego_input_node.set_transform(input.global_transform)
+		await _await_task(hego_input_node.instantiate())
+		await _await_task(hego_input_node.set_geo_from_mesh(input.mesh, attrs))
+		await _await_task(hego_input_node.set_transform(input.global_transform))
 	elif input is CSGShape3D:
 		if not hego_input_node is HEGoInputNode:
 			hego_input_node = HEGoInputNode.new()
-		hego_input_node.instantiate()
-		hego_input_node.set_geo_from_mesh(input.bake_static_mesh(), attrs)
-		hego_input_node.set_transform(input.global_transform)
+		await _await_task(hego_input_node.instantiate())
+		await _await_task(hego_input_node.set_geo_from_mesh(input.bake_static_mesh(), attrs))
+		await _await_task(hego_input_node.set_transform(input.global_transform))
 	elif _is_terrain3d_available() and input.is_class("Terrain3D"):
 		if not hego_input_node is HEGoHeightfieldInputNode:
 			hego_input_node = HEGoHeightfieldInputNode.new()
-		hego_input_node.instantiate()
+		await _await_task(hego_input_node.instantiate())
 		var layers = _terrain3d_read_layers(input, input_node_path)
 		if not layers.is_empty():
 			var voxel_size = _terrain3d_get_vertex_spacing(input)
-			hego_input_node.set_layers(layers, voxel_size, 1.0)
+			await _await_task(hego_input_node.set_layers(layers, voxel_size, 1.0))
 	else:
 		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D, CSGShape3D, or Terrain3D")
 	return hego_input_node
@@ -1395,8 +1400,8 @@ func create_hego_input_node(input_node_path, settings):
 	var input_node
 	if input is Path3D:
 		input_node = HEGoCurveInputNode.new()
-		input_node.instantiate()
-		input_node.set_curve_from_path_3d(input, 1)
+		await _await_task(input_node.instantiate())
+		await _await_task(input_node.set_curve_from_path_3d(input, 1))
 	elif input is MeshInstance3D:
 		attrs.append({
 			name = "_hego_resource_path",
@@ -1416,21 +1421,21 @@ func create_hego_input_node(input_node_path, settings):
 				attr_dict["value"] = "empty"
 			attrs.append(attr_dict)
 		input_node = HEGoInputNode.new()
-		input_node.instantiate()
-		input_node.set_geo_from_mesh(input.mesh, attrs)
-		input_node.set_transform(input.global_transform)
+		await _await_task(input_node.instantiate())
+		await _await_task(input_node.set_geo_from_mesh(input.mesh, attrs))
+		await _await_task(input_node.set_transform(input.global_transform))
 	elif input is CSGShape3D:
 		input_node = HEGoInputNode.new()
-		input_node.instantiate()
-		input_node.set_geo_from_mesh(input.bake_static_mesh(), attrs)
-		input_node.set_transform(input.global_transform)
+		await _await_task(input_node.instantiate())
+		await _await_task(input_node.set_geo_from_mesh(input.bake_static_mesh(), attrs))
+		await _await_task(input_node.set_transform(input.global_transform))
 	elif _is_terrain3d_available() and input.is_class("Terrain3D"):
 		input_node = HEGoHeightfieldInputNode.new()
-		input_node.instantiate()
+		await _await_task(input_node.instantiate())
 		var layers = _terrain3d_read_layers(input, input_node_path)
 		if not layers.is_empty():
 			var voxel_size = _terrain3d_get_vertex_spacing(input)
-			input_node.set_layers(layers, voxel_size, 1.0)
+			await _await_task(input_node.set_layers(layers, voxel_size, 1.0))
 	else:
 		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D, CSGShape3D, or Terrain3D")
 	return input_node

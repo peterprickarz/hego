@@ -1,7 +1,9 @@
 #include "hego_nodes/hego_heightfield_input_node.h"
 
+#include "hego_api.h"
 #include "util/hego_util.h"
 #include "util/log/log.h"
+#include "util/task/task_helpers.h"
 
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -14,8 +16,12 @@
 #include <string>
 #include <vector>
 
+using HEGo::Util::Task::make_failed;
+using HEGo::Util::Task::submit;
+
 namespace HEGo
 {
+
 namespace
 {
 static const bool kHeightfieldDebugLogs = false;
@@ -109,10 +115,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 					HEGo::Util::Log::warning("Failed to add prim attr '" + attr_name + "'");
 					break;
 				}
-				if (HoudiniApi::SetAttributeIntData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &int_value, 0, 1) != HAPI_RESULT_SUCCESS)
-				{
-					HEGo::Util::Log::warning("Failed to set prim attr '" + attr_name + "'");
-				}
+				HoudiniApi::SetAttributeIntData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &int_value, 0, 1);
 				break;
 			}
 
@@ -126,11 +129,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 					HEGo::Util::Log::warning("Failed to add prim attr '" + attr_name + "'");
 					break;
 				}
-				if (HoudiniApi::SetAttributeFloatData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &float_value, 0, 1) !=
-						HAPI_RESULT_SUCCESS)
-				{
-					HEGo::Util::Log::warning("Failed to set prim attr '" + attr_name + "'");
-				}
+				HoudiniApi::SetAttributeFloatData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &float_value, 0, 1);
 				break;
 			}
 
@@ -145,11 +144,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 					HEGo::Util::Log::warning("Failed to add prim attr '" + attr_name + "'");
 					break;
 				}
-				if (HoudiniApi::SetAttributeStringData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &string_ptr, 0, 1) !=
-						HAPI_RESULT_SUCCESS)
-				{
-					HEGo::Util::Log::warning("Failed to set prim attr '" + attr_name + "'");
-				}
+				HoudiniApi::SetAttributeStringData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &string_ptr, 0, 1);
 				break;
 			}
 
@@ -158,16 +153,13 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 				attr_info.storage = HAPI_STORAGETYPE_FLOAT;
 				attr_info.tupleSize = 3;
 				const godot::Vector3 vec = value;
-				const float vec_data[3] = { vec.x, vec.y, vec.z };
+				const float vec_data[3] = {vec.x, vec.y, vec.z};
 				if (HoudiniApi::AddAttribute(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info) != HAPI_RESULT_SUCCESS)
 				{
 					HEGo::Util::Log::warning("Failed to add prim attr '" + attr_name + "'");
 					break;
 				}
-				if (HoudiniApi::SetAttributeFloatData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, vec_data, 0, 1) != HAPI_RESULT_SUCCESS)
-				{
-					HEGo::Util::Log::warning("Failed to set prim attr '" + attr_name + "'");
-				}
+				HoudiniApi::SetAttributeFloatData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, vec_data, 0, 1);
 				break;
 			}
 
@@ -213,9 +205,6 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 		return false;
 	}
 
-	debug_log("commit_layer_to_node: volume lengths x=" + godot::String::num_int64(volume_info.xLength) +
-			" y=" + godot::String::num_int64(volume_info.yLength) + " z=" + godot::String::num_int64(volume_info.zLength));
-
 	volume_info.tileSize = 1;
 	volume_info.type = HAPI_VOLUMETYPE_HOUDINI;
 	volume_info.transform = volume_transform;
@@ -249,17 +238,13 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 	if (volume_name.empty())
 	{
 		volume_name = layer_name;
-		HEGo::Util::Log::warning("Volume name handle was empty, falling back to requested layer name: " + godot::String(layer_name.c_str()));
 	}
-	debug_log("commit_layer_to_node: resolved volume_name='" + godot::String(volume_name.c_str()) + "'");
 
 	if (HoudiniApi::SetHeightFieldData(session, target_node, 0, volume_name.c_str(), values.data(), 0, total_size) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error(
-				"Failed setting heightfield data for layer: " + godot::String(layer_name.c_str()) + " (volume: " + godot::String(volume_name.c_str()) + ")");
+		HEGo::Util::Log::error("Failed setting heightfield data for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
-	debug_log("commit_layer_to_node: wrote voxel data count=" + godot::String::num_int64(total_size));
 
 	if (!attrs.is_empty())
 	{
@@ -272,8 +257,6 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 		return false;
 	}
 
-	debug_log("commit_layer_to_node: commit ok for layer='" + godot::String(layer_name.c_str()) + "'");
-
 	return true;
 }
 } // namespace
@@ -282,14 +265,13 @@ HEGoHeightfieldInputNode::HEGoHeightfieldInputNode() : height_node_id(-1), mask_
 
 HEGoHeightfieldInputNode::~HEGoHeightfieldInputNode() {}
 
-void HEGoHeightfieldInputNode::instantiate()
+void HEGoHeightfieldInputNode::instantiate_internal(HEGoSessionManager *session_mgr)
 {
 	if (node_id >= 0)
 	{
 		return;
 	}
 
-	HEGoSessionManager *session_mgr = get_session_manager();
 	if (session_mgr == nullptr || session_mgr->get_session() == nullptr)
 	{
 		HEGo::Util::Log::error("No active Houdini session for heightfield node instantiation");
@@ -310,227 +292,206 @@ void HEGoHeightfieldInputNode::instantiate()
 		return;
 	}
 
-	get_session_manager()->register_node(this);
+	session_mgr->register_node(this);
 	debug_log("instantiate: created HF node_id=" + godot::String::num_int64(node_id) + " height_node_id=" + godot::String::num_int64(height_node_id) +
 			" mask_node_id=" + godot::String::num_int64(mask_node_id) + " merge_node_id=" + godot::String::num_int64(merge_node_id));
 }
 
-void HEGoHeightfieldInputNode::set_layers(godot::Dictionary layers, float voxel_size_value, float height_scale_value)
+godot::Ref<HEGoTask> HEGoHeightfieldInputNode::instantiate()
 {
-	debug_log("set_layers: begin with layer count=" + godot::String::num_int64(layers.size()) + " voxel_size=" + godot::String::num(voxel_size_value) +
-			" height_scale=" + godot::String::num(height_scale_value));
+	HEGoHeightfieldInputNode *self = this;
 
+	return submit("Instantiate heightfield", node_id, [self](HEGoSessionManager *mgr) -> godot::Variant {
+		self->instantiate_internal(mgr);
+		return self->node_id;
+	});
+}
+
+godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary layers, float voxel_size_value, float height_scale_value)
+{
 	if (voxel_size_value <= 0.0f)
 	{
-		HEGo::Util::Log::error("set_layers requires voxel_size > 0");
-		return;
+		return make_failed("voxel_size must be > 0", "Set heightfield layers");
 	}
 	if (height_scale_value <= 0.0f)
 	{
-		HEGo::Util::Log::error("set_layers requires height_scale > 0");
-		return;
-	}
-	voxel_size = voxel_size_value;
-
-	if (layers.is_empty())
-	{
-		HEGo::Util::Log::warning("set_layers called with empty dictionary, creating zero height/mask layers");
+		return make_failed("height_scale must be > 0", "Set heightfield layers");
 	}
 
-	godot::Ref<godot::Image> reference_image;
-	const godot::Array layer_keys = layers.keys();
-	for (int i = 0; i < layer_keys.size(); ++i)
-	{
-		const godot::String layer_name = layer_keys[i];
-		const godot::Variant layer_variant = layers[layer_name];
-		if (layer_variant.get_type() != godot::Variant::DICTIONARY)
-		{
-			continue;
-		}
+	HEGoHeightfieldInputNode *self = this;
 
-		const godot::Dictionary layer_dict = layer_variant;
-		if (!layer_dict.has("image"))
-		{
-			continue;
-		}
+	return submit("Set heightfield layers", node_id,
+			[self, layers, voxel_size_value, height_scale_value](HEGoSessionManager *mgr) -> godot::Variant {
+				self->voxel_size = voxel_size_value;
 
-		const godot::Variant image_variant = layer_dict["image"];
-		if (image_variant.get_type() != godot::Variant::OBJECT)
-		{
-			continue;
-		}
+				// Find reference image for dimensions
+				godot::Ref<godot::Image> reference_image;
+				const godot::Array layer_keys = layers.keys();
+				for (int i = 0; i < layer_keys.size(); ++i)
+				{
+					const godot::Variant layer_variant = layers[layer_keys[i]];
+					if (layer_variant.get_type() != godot::Variant::DICTIONARY)
+						continue;
+					const godot::Dictionary layer_dict = layer_variant;
+					if (!layer_dict.has("image"))
+						continue;
+					const godot::Variant image_variant = layer_dict["image"];
+					if (image_variant.get_type() != godot::Variant::OBJECT)
+						continue;
+					godot::Ref<godot::Image> image_ref = image_variant;
+					if (image_ref.is_valid())
+					{
+						reference_image = image_ref;
+						break;
+					}
+				}
 
-		godot::Ref<godot::Image> image_ref = image_variant;
-		if (image_ref.is_valid())
-		{
-			reference_image = image_ref;
-			break;
-		}
-	}
+				if (reference_image.is_valid())
+				{
+					self->x_size = reference_image->get_width();
+					self->y_size = reference_image->get_height();
+				}
+				else
+				{
+					HEGo::Util::Log::error("No valid images found in layer dictionary");
+					return -1;
+				}
 
-	if (reference_image.is_valid())
-	{
-		x_size = reference_image->get_width();
-		y_size = reference_image->get_height();
-		debug_log("set_layers: reference image size=" + godot::String::num_int64(x_size) + "x" + godot::String::num_int64(y_size));
-	}
-	else
-	{
-		HEGo::Util::Log::error("No valid images found in layer dictionary; aborting heightfield layer setup");
-		return;
-	}
+				if (self->x_size <= 0 || self->y_size <= 0)
+				{
+					self->x_size = 256;
+					self->y_size = 256;
+				}
 
-	if (x_size <= 0 || y_size <= 0)
-	{
-		x_size = 256;
-		y_size = 256;
-	}
+				// Delete old node if exists
+				if (self->node_id >= 0 && mgr->get_session() != nullptr)
+				{
+					HoudiniApi::DeleteNode(mgr->get_session(), self->node_id);
+				}
 
-	HEGoSessionManager *session_mgr = get_session_manager();
-	if (node_id >= 0 && session_mgr != nullptr && session_mgr->get_session() != nullptr)
-	{
-		debug_log("set_layers: deleting previous node_id=" + godot::String::num_int64(node_id));
-		HoudiniApi::DeleteNode(session_mgr->get_session(), node_id);
-	}
+				self->node_id = -1;
+				self->height_node_id = -1;
+				self->mask_node_id = -1;
+				self->merge_node_id = -1;
+				self->instantiate_internal(mgr);
 
-	node_id = -1;
-	height_node_id = -1;
-	mask_node_id = -1;
-	merge_node_id = -1;
-	instantiate();
+				if (self->node_id < 0 || self->height_node_id < 0 || self->mask_node_id < 0 || self->merge_node_id < 0)
+				{
+					HEGo::Util::Log::error("Failed to initialize heightfield internals");
+					return -1;
+				}
 
-	if (node_id < 0 || height_node_id < 0 || mask_node_id < 0 || merge_node_id < 0)
-	{
-		HEGo::Util::Log::error("Failed to initialize heightfield internals");
-		return;
-	}
+				// Parse layer data
+				std::map<std::string, std::vector<float>> layer_values;
+				std::map<std::string, godot::Dictionary> layer_attrs;
+				for (int i = 0; i < layer_keys.size(); ++i)
+				{
+					const godot::String layer_name_raw = layer_keys[i];
+					const godot::String layer_name = layer_name_raw.to_lower().strip_edges();
+					if (layer_name.is_empty())
+						continue;
 
-	std::map<std::string, std::vector<float>> layer_values;
-	std::map<std::string, godot::Dictionary> layer_attrs;
-	for (int i = 0; i < layer_keys.size(); ++i)
-	{
-		const godot::String layer_name_raw = layer_keys[i];
-		const godot::String layer_name = layer_name_raw.to_lower().strip_edges();
-		if (layer_name.is_empty())
-		{
-			continue;
-		}
+					const godot::Variant layer_variant = layers[layer_name_raw];
+					if (layer_variant.get_type() != godot::Variant::DICTIONARY)
+						continue;
 
-		const godot::Variant layer_variant = layers[layer_name_raw];
-		if (layer_variant.get_type() != godot::Variant::DICTIONARY)
-		{
-			HEGo::Util::Log::warning("Layer '" + layer_name_raw + "' is not a dictionary and will be skipped");
-			continue;
-		}
+					const godot::Dictionary layer_dict = layer_variant;
+					std::vector<float> values(self->x_size * self->y_size, 0.0f);
+					godot::Dictionary attrs;
 
-		const godot::Dictionary layer_dict = layer_variant;
-		std::vector<float> values(x_size * y_size, 0.0f);
-		godot::Dictionary attrs;
+					if (layer_dict.has("attrs") && godot::Variant(layer_dict["attrs"]).get_type() == godot::Variant::DICTIONARY)
+					{
+						attrs = layer_dict["attrs"];
+					}
 
-		if (layer_dict.has("attrs") && godot::Variant(layer_dict["attrs"]).get_type() == godot::Variant::DICTIONARY)
-		{
-			attrs = layer_dict["attrs"];
-		}
+					if (layer_dict.has("image") && godot::Variant(layer_dict["image"]).get_type() == godot::Variant::OBJECT)
+					{
+						godot::Ref<godot::Image> layer_image = layer_dict["image"];
+						if (layer_image.is_valid())
+						{
+							values = image_to_height_data(layer_image, self->x_size, self->y_size);
+						}
+					}
 
-		if (layer_dict.has("image") && godot::Variant(layer_dict["image"]).get_type() == godot::Variant::OBJECT)
-		{
-			godot::Ref<godot::Image> layer_image = layer_dict["image"];
-			if (layer_image.is_valid())
-			{
-				values = image_to_height_data(layer_image, x_size, y_size);
-			}
-		}
+					const godot::CharString layer_name_cs = layer_name.utf8();
+					const std::string layer_name_utf8 = std::string(layer_name_cs.get_data());
+					layer_values[layer_name_utf8] = values;
+					layer_attrs[layer_name_utf8] = attrs;
+				}
 
-		const godot::CharString layer_name_cs = layer_name.utf8();
-		const std::string layer_name_utf8 = std::string(layer_name_cs.get_data());
-		layer_values[layer_name_utf8] = values;
-		layer_attrs[layer_name_utf8] = attrs;
-		debug_log("set_layers: prepared layer='" + layer_name + "' values=" + godot::String::num_int64(values.size()) +
-				" attrs=" + godot::String::num_int64(attrs.size()));
-	}
+				// Ensure height and mask exist
+				if (layer_values.find("height") == layer_values.end())
+				{
+					layer_values["height"] = std::vector<float>(self->x_size * self->y_size, 0.0f);
+					layer_attrs["height"] = godot::Dictionary();
+				}
+				if (layer_values.find("mask") == layer_values.end())
+				{
+					layer_values["mask"] = std::vector<float>(self->x_size * self->y_size, 0.0f);
+					layer_attrs["mask"] = godot::Dictionary();
+				}
 
-	debug_log("set_layers: has height key=" + godot::String(layer_values.find("height") != layer_values.end() ? "true" : "false") +
-			" has mask key=" + godot::String(layer_values.find("mask") != layer_values.end() ? "true" : "false"));
+				const HAPI_Session *session = mgr->get_session();
 
-	if (layer_values.find("height") == layer_values.end())
-	{
-		layer_values["height"] = std::vector<float>(x_size * y_size, 0.0f);
-		layer_attrs["height"] = godot::Dictionary();
-		debug_log("set_layers: inserted default 'height' layer");
-	}
+				HAPI_Transform volume_transform = HoudiniApi::Transform_Create();
+				HoudiniApi::Transform_Init(&volume_transform);
+				volume_transform.scale[0] = (static_cast<float>(self->x_size) * voxel_size_value) * 0.5f;
+				volume_transform.scale[1] = (static_cast<float>(self->y_size) * voxel_size_value) * 0.5f;
+				volume_transform.scale[2] = voxel_size_value * 0.5f;
 
-	if (layer_values.find("mask") == layer_values.end())
-	{
-		layer_values["mask"] = std::vector<float>(x_size * y_size, 0.0f);
-		layer_attrs["mask"] = godot::Dictionary();
-		debug_log("set_layers: inserted default 'mask' layer");
-	}
+				// Commit height layer (with scale)
+				std::vector<float> scaled_height_values = layer_values["height"];
+				if (height_scale_value != 1.0f)
+				{
+					for (size_t i = 0; i < scaled_height_values.size(); ++i)
+					{
+						scaled_height_values[i] *= height_scale_value;
+					}
+				}
 
-	const HAPI_Session *session = session_mgr->get_session();
+				if (!commit_layer_to_node(session, volume_transform, "height", scaled_height_values, layer_attrs["height"], self->height_node_id))
+				{
+					return -1;
+				}
 
-	HAPI_Transform volume_transform = HoudiniApi::Transform_Create();
-	HoudiniApi::Transform_Init(&volume_transform);
-	volume_transform.scale[0] = (static_cast<float>(x_size) * voxel_size_value) * 0.5f;
-	volume_transform.scale[1] = (static_cast<float>(y_size) * voxel_size_value) * 0.5f;
-	volume_transform.scale[2] = voxel_size_value * 0.5f;
+				if (!commit_layer_to_node(session, volume_transform, "mask", layer_values["mask"], layer_attrs["mask"], self->mask_node_id))
+				{
+					return -1;
+				}
 
-	std::vector<float> scaled_height_values = layer_values["height"];
-	if (height_scale_value != 1.0f)
-	{
-		for (size_t i = 0; i < scaled_height_values.size(); ++i)
-		{
-			scaled_height_values[i] *= height_scale_value;
-		}
-	}
+				// Additional layers
+				int next_merge_input = 2;
+				for (std::map<std::string, std::vector<float>>::const_iterator it = layer_values.begin(); it != layer_values.end(); ++it)
+				{
+					if (it->first == "height" || it->first == "mask")
+						continue;
 
-	if (!commit_layer_to_node(session, volume_transform, "height", scaled_height_values, layer_attrs["height"], height_node_id))
-	{
-		return;
-	}
+					HAPI_NodeId extra_volume_id = -1;
+					if (HoudiniApi::CreateHeightfieldInputVolumeNode(
+								session, self->node_id, &extra_volume_id, it->first.c_str(), self->x_size, self->y_size, self->voxel_size) !=
+							HAPI_RESULT_SUCCESS)
+					{
+						HEGo::Util::Log::error("Failed creating additional heightfield layer: " + godot::String(it->first.c_str()));
+						continue;
+					}
 
-	if (!commit_layer_to_node(session, volume_transform, "mask", layer_values["mask"], layer_attrs["mask"], mask_node_id))
-	{
-		return;
-	}
+					if (!commit_layer_to_node(session, volume_transform, it->first, it->second, layer_attrs[it->first], extra_volume_id))
+					{
+						continue;
+					}
 
-	int next_merge_input = 2;
-	for (std::map<std::string, std::vector<float>>::const_iterator it = layer_values.begin(); it != layer_values.end(); ++it)
-	{
-		if (it->first == "height" || it->first == "mask")
-		{
-			continue;
-		}
+					if (HoudiniApi::ConnectNodeInput(session, self->merge_node_id, next_merge_input, extra_volume_id, 0) == HAPI_RESULT_SUCCESS)
+					{
+						++next_merge_input;
+					}
+				}
 
-		HAPI_NodeId extra_volume_id = -1;
-		if (HoudiniApi::CreateHeightfieldInputVolumeNode(session, node_id, &extra_volume_id, it->first.c_str(), x_size, y_size, voxel_size) !=
-				HAPI_RESULT_SUCCESS)
-		{
-			HEGo::Util::Log::error("Failed creating additional heightfield layer: " + godot::String(it->first.c_str()));
-			continue;
-		}
+				// Final cook
+				HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session, self->node_id, nullptr));
+				mgr->wait_for_ready();
 
-		debug_log("set_layers: created extra layer node for '" + godot::String(it->first.c_str()) + "' node_id=" + godot::String::num_int64(extra_volume_id));
-
-		if (!commit_layer_to_node(session, volume_transform, it->first, it->second, layer_attrs[it->first], extra_volume_id))
-		{
-			continue;
-		}
-
-		if (HoudiniApi::ConnectNodeInput(session, merge_node_id, next_merge_input, extra_volume_id, 0) == HAPI_RESULT_SUCCESS)
-		{
-			debug_log("set_layers: connected merge input=" + godot::String::num_int64(next_merge_input) +
-					" <- node_id=" + godot::String::num_int64(extra_volume_id));
-			++next_merge_input;
-		}
-		else
-		{
-			HEGo::Util::Log::warning("Failed connecting extra layer '" + godot::String(it->first.c_str()) + "' to merge");
-		}
-	}
-
-	HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session, node_id, nullptr));
-	session_mgr->wait_for_ready();
-	debug_log("set_layers: finished cook for node_id=" + godot::String::num_int64(node_id));
+				return 0;
+			});
 }
 
 void HEGoHeightfieldInputNode::_bind_methods()
