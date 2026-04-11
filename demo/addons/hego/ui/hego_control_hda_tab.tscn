@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3 uid="uid://dextswpkwodbg"]
+[gd_scene load_steps=7 format=3 uid="uid://dextswpkwodbg"]
 
 [ext_resource type="Script" uid="uid://c7b8dciokihp8" path="res://addons/hego/ui/hda_tab.gd" id="1_7tx7s"]
 
@@ -28,6 +28,13 @@ border_width_right = 2
 border_width_bottom = 2
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_330cn"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tq001"]
 bg_color = Color(0.6, 0.6, 0.6, 0)
 border_width_left = 2
 border_width_top = 2
@@ -217,12 +224,16 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="Inputs" type="Control" parent="HSplitContainer2/HSplitContainer3"]
+[node name="HSplitContainer4" type="HSplitContainer" parent="HSplitContainer2/HSplitContainer3"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Inputs" type="Control" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4"]
 clip_contents = true
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="PanelContainer" type="PanelContainer" parent="HSplitContainer2/HSplitContainer3/Inputs"]
+[node name="PanelContainer" type="PanelContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -231,23 +242,78 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_330cn")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/HSplitContainer3/Inputs/PanelContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs/PanelContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer"]
+[node name="Label" type="Label" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs/PanelContainer/VBoxContainer"]
 clip_contents = true
 layout_mode = 2
 text = "Inputs:"
 horizontal_alignment = 1
 
-[node name="HSeparator" type="HSeparator" parent="HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer"]
+[node name="HSeparator" type="HSeparator" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs/PanelContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="ScrollContainer" type="ScrollContainer" parent="HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer"]
+[node name="ScrollContainer" type="ScrollContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs/PanelContainer/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs/PanelContainer/VBoxContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="TaskQueue" type="Control" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4"]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PanelContainer" type="PanelContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_tq001")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer"]
+clip_contents = true
+layout_mode = 2
+text = "Tasks:"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="QueuedLabel" type="Label" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer"]
+layout_mode = 2
+text = "Queued:"
+
+[node name="QueuedScroll" type="ScrollContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer/QueuedScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="HSeparator2" type="HSeparator" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="FinishedLabel" type="Label" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer"]
+layout_mode = 2
+text = "Finished:"
+
+[node name="FinishedScroll" type="ScrollContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer/FinishedScroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3

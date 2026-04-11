@@ -52,8 +52,14 @@ var new_preset_name_line_edit: LineEdit
 @onready var new_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/NewPresetButton
 @onready var preset_dropdown: OptionButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer/PresetDropdownOptionButton
 @onready var parm_vbox = $HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer/VBoxContainer
-@onready var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
+@onready var input_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
+@onready var queued_tasks_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer/QueuedScroll/VBoxContainer
+@onready var finished_tasks_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer/FinishedScroll/VBoxContainer
 @onready var root_control = $"../.."
+
+var _last_pending_count: int = 0
+var _last_current_status: int = -1
+var _last_history_size: int = 0
 
 
 func _await_task(task: HEGoTask) -> Variant:
@@ -90,6 +96,12 @@ func _ready():
 	load_preset_button.pressed.connect(_on_load_preset_button_pressed)
 	save_preset_button.pressed.connect(_on_save_preset_button_pressed)
 	_set_buttons_disabled(true)
+
+	var task_queue_timer = Timer.new()
+	task_queue_timer.wait_time = 0.25
+	task_queue_timer.autostart = true
+	task_queue_timer.timeout.connect(_update_task_queue)
+	add_child(task_queue_timer)
 
 
 func _set_buttons_disabled(disabled: bool):
@@ -511,10 +523,72 @@ func _on_asset_picked(asset_name: String):
 		# Clear old HDA data before setting new asset
 		if hego_tool_node.has_method("_clear_hda_data"):
 			hego_tool_node._clear_hda_data()
-		
+
 		hego_tool_node.asset_name = asset_name
 		print("[HEGo]: Set asset_name to: ", asset_name)
-		
+
 		# Optionally auto-recook if enabled
 		if auto_recook_toggle.button_pressed:
 			await recook()
+
+
+func _update_task_queue():
+	var api = HEGoAPI.get_singleton()
+	if not api:
+		return
+
+	var pending_count = api.get_task_pending_count()
+	var current_task = api.get_current_task()
+	var current_status = current_task.get_status() if current_task else -1
+	var history = api.get_completed_task_history()
+	var history_size = history.size()
+
+	# Dirty check — skip rebuild if nothing changed
+	if pending_count == _last_pending_count and current_status == _last_current_status and history_size == _last_history_size:
+		return
+
+	_last_pending_count = pending_count
+	_last_current_status = current_status
+	_last_history_size = history_size
+
+	# Clear queued section
+	for child in queued_tasks_vbox.get_children():
+		child.queue_free()
+
+	# Clear finished section
+	for child in finished_tasks_vbox.get_children():
+		child.queue_free()
+
+	# Populate queued section: pending tasks in reverse order, then current at bottom
+	var pending = api.get_pending_tasks()
+	for i in range(pending.size() - 1, -1, -1):
+		queued_tasks_vbox.add_child(_create_task_label(pending[i], false))
+
+	if current_task:
+		queued_tasks_vbox.add_child(_create_task_label(current_task, true))
+
+	# Populate finished section: newest at top
+	for i in range(history_size - 1, -1, -1):
+		finished_tasks_vbox.add_child(_create_task_label(history[i], false))
+
+
+func _create_task_label(task: HEGoTask, is_running: bool) -> Label:
+	var label = Label.new()
+	var text = task.get_description()
+	var node_id = task.get_node_id()
+	if node_id >= 0:
+		text += "  (node: %d)" % node_id
+
+	var status = task.get_status()
+	if status == HEGoTask.FAILED:
+		var err = task.get_error_message()
+		if err != "":
+			text += " - " + err
+		label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	elif status == HEGoTask.COMPLETED:
+		label.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+	elif is_running:
+		label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
+
+	label.text = text
+	return label

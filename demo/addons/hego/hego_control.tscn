@@ -58,7 +58,6 @@ Closed Session, finalized hapi and freed libHAPIL.
 Loaded and initialized libHAPIL.
 9090
 "
-scroll_vertical = 25.0
 
 [node name="HDA" parent="TabContainer" instance=ExtResource("3_fsb3y")]
 unique_name_in_owner = true
