@@ -27,24 +27,30 @@ After creation, this wrapper is registered with the active session manager.
 <return type="HEGoTask" />
 <param index="0" name="mesh" type="Mesh" />
 <param index="1" name="attributes" type="Array" default="[]" />
+<param index="2" name="force" type="bool" default="false" />
 <description>
 Submits a task to upload geometry from a [Mesh] into this Houdini input node.
 
 Use [code]attributes[/code] to pass optional custom attribute descriptors consumed by HEGo geometry input utilities.
 
 The mesh is converted into HAPI-compatible topology and point data. Existing input geometry for this node is replaced.
+
+Geometry content is hashed internally. If the mesh data and attributes are identical to the previous call the upload is skipped and a no-op task is returned, unless [code]force[/code] is [code]true[/code].
 </description>
 </method>
 <method name="set_geo_from_mesh_instance_3d">
 <return type="HEGoTask" />
 <param index="0" name="mesh_instance_3d" type="MeshInstance3D" />
 <param index="1" name="attributes" type="Array" default="[]" />
+<param index="2" name="force" type="bool" default="false" />
 <description>
 Submits a task to upload geometry from a [MeshInstance3D] into this Houdini input node.
 
 Any transform or instance context used by HEGo input utilities is derived from the provided node.
 
 Use this overload when you want to read from a scene node directly instead of a standalone mesh resource.
+
+Geometry content and transform are hashed internally. If neither has changed since the previous call a no-op task is returned. If only the transform changed, only the transform is re-sent. Pass [code]force[/code] as [code]true[/code] to always perform the full upload.
 </description>
 </method>
 </methods>

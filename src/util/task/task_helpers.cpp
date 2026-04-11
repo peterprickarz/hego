@@ -27,4 +27,14 @@ godot::Ref<HEGo::HEGoTask> submit(const godot::String &desc, HAPI_NodeId nid,
 	return HEGoAPI::get_singleton()->submit_task(task);
 }
 
+godot::Ref<HEGo::HEGoTask> make_noop(const godot::String &desc, HAPI_NodeId nid)
+{
+	godot::Ref<HEGoTask> task;
+	task.instantiate();
+	task->description = desc;
+	task->node_id = nid;
+	task->status.store(HEGoTask::COMPLETED, std::memory_order_release);
+	return task;
+}
+
 } // namespace HEGo::Util::Task

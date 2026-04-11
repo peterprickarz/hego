@@ -15,10 +15,13 @@ Useful for operator wrappers that both receive geometry inputs and need transfor
 <return type="HEGoTask" />
 <param index="0" name="other_node" type="HEGoBaseNode" />
 <param index="1" name="input_index" type="int" />
+<param index="2" name="force" type="bool" default="false" />
 <description>
 Submits a task to connect [code]other_node[/code] into the given input slot.
 
 The source and destination nodes are expected to have valid instantiated node ids before connecting.
+
+The connection is cached internally. If the same source node is already connected at the same index the call returns a no-op task unless [code]force[/code] is [code]true[/code].
 </description>
 </method>
 </methods>

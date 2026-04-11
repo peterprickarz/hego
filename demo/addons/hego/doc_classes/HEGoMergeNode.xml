@@ -22,12 +22,15 @@ This method always instantiates a merge operator for the current wrapper and the
 <method name="connect_inputs">
 <return type="HEGoTask" />
 <param index="0" name="inputs" type="Array" />
+<param index="1" name="force" type="bool" default="false" />
 <description>
 Submits a task to connect all nodes in [code]inputs[/code] to this merge node in array order.
 
 Each array item should be an [HEGoBaseNode]. Invalid entries are ignored.
 
 Array order maps directly to merge input index order.
+
+The source list is cached internally. If the same set of source node ids is already connected the call returns a no-op task unless [code]force[/code] is [code]true[/code].
 </description>
 </method>
 </methods>

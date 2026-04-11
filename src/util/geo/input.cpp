@@ -103,7 +103,8 @@ HAPI_NodeId create_input_from_path_3d(HEGoSessionManager *session_mgr, godot::Pa
 
 	godot::Transform3D transform = path_3d->get_global_transform();
 
-	node_id = create_input_from_curve3d(session_mgr, curve3d, node_id, target_length);
+	godot::PackedVector3Array tessellated = curve3d->tessellate_even_length(10, target_length);
+	node_id = create_input_from_curve3d(session_mgr, tessellated, node_id);
 	session_mgr->wait_for_ready();
 
 	set_object_transform(session_mgr, node_id, transform);
@@ -153,27 +154,23 @@ void connect_merge_to_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_
 	connect_node_input(session_mgr, target_node_id, input_index, merge_node_id, 0);
 }
 
-HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, godot::Ref<godot::Curve3D> curve3d, HAPI_NodeId node_id, float target_length)
+HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, const godot::PackedVector3Array &positions, HAPI_NodeId node_id)
 {
-	const HAPI_CookOptions *cook_options = session_mgr->get_cook_options();
 	const HAPI_Session *session = session_mgr->get_session();
 
-	godot::PackedVector3Array tessellated_curve = curve3d->tessellate_even_length(10, target_length);
-
-	// Prepare a std::vector to hold the float values
+	// Flatten the Vector3 data into a float array
 	std::vector<float> positions_array;
-	positions_array.reserve(tessellated_curve.size() * 3); // Each Vector3 has 3 components
+	positions_array.reserve(positions.size() * 3);
 
-	// Flatten the Vector3 data into the float array
-	for (int i = 0; i < tessellated_curve.size(); ++i)
+	for (int i = 0; i < positions.size(); ++i)
 	{
-		godot::Vector3 point = tessellated_curve[i];
+		godot::Vector3 point = positions[i];
 		positions_array.push_back(point.x);
 		positions_array.push_back(point.y);
 		positions_array.push_back(point.z);
 	}
 
-	HOUDINI_CHECK_ERROR(HoudiniApi::SetInputCurvePositions(session, node_id, 0, positions_array.data(), 0, tessellated_curve.size() * 3));
+	HOUDINI_CHECK_ERROR(HoudiniApi::SetInputCurvePositions(session, node_id, 0, positions_array.data(), 0, positions.size() * 3));
 	return node_id;
 }
 

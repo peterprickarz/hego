@@ -4,6 +4,8 @@
 #include "hego_nodes/hego_base_node.h"
 #include "hego_task.h"
 
+#include <cstdint>
+
 #include <godot_cpp/variant/dictionary.hpp>
 
 namespace HEGo
@@ -19,16 +21,19 @@ private:
 	int x_size;
 	int y_size;
 	float voxel_size;
+	uint64_t last_layers_hash = 0;
 
 	// Internal instantiate for use within task lambdas (runs on worker thread)
 	void instantiate_internal(HEGoSessionManager *session_mgr);
+
+	static uint64_t compute_layers_hash(const godot::Dictionary &layers, float voxel_size, float height_scale);
 
 public:
 	HEGoHeightfieldInputNode();
 	~HEGoHeightfieldInputNode();
 
 	godot::Ref<HEGoTask> instantiate() override;
-	godot::Ref<HEGoTask> set_layers(godot::Dictionary layers, float voxel_size = 1.0f, float height_scale = 1.0f);
+	godot::Ref<HEGoTask> set_layers(godot::Dictionary layers, float voxel_size = 1.0f, float height_scale = 1.0f, bool force = false);
 
 	static void _bind_methods();
 };

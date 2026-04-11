@@ -32,6 +32,7 @@ On failure, all stored ids are reset to invalid values and an error is logged.
 <param index="0" name="layers" type="Dictionary" />
 <param index="1" name="voxel_size" type="float" default="1.0" />
 <param index="2" name="height_scale" type="float" default="1.0" />
+<param index="3" name="force" type="bool" default="false" />
 <description>
 Submits a task to upload all supplied layers into a newly created HeightField input node.
 
@@ -81,6 +82,8 @@ Failure behavior:
 - If [code]voxel_size[/code] or [code]height_scale[/code] is less than or equal to [code]0[/code], the call is rejected.
 - If no active Houdini session exists, layer upload cannot proceed.
 - Any HAPI node creation or write failure logs an error and aborts the current layer build.
+
+Layer content is hashed internally (including image pixel data). If the layers, voxel size, and height scale are all identical to the previous call a no-op task is returned, unless [code]force[/code] is [code]true[/code]. Pass [code]force[/code] when image data may have been modified in-place (for example Terrain3D sculpting).
 </description>
 </method>
 </methods>

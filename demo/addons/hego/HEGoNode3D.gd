@@ -1378,7 +1378,7 @@ func update_hego_input_node(hego_input_node, input_node_path, settings):
 		var layers = _terrain3d_read_layers(input, input_node_path)
 		if not layers.is_empty():
 			var voxel_size = _terrain3d_get_vertex_spacing(input)
-			await _await_task(hego_input_node.set_layers(layers, voxel_size, 1.0))
+			await _await_task(hego_input_node.set_layers(layers, voxel_size, 1.0, true))
 	else:
 		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D, CSGShape3D, or Terrain3D")
 	return hego_input_node
@@ -1435,7 +1435,7 @@ func create_hego_input_node(input_node_path, settings):
 		var layers = _terrain3d_read_layers(input, input_node_path)
 		if not layers.is_empty():
 			var voxel_size = _terrain3d_get_vertex_spacing(input)
-			await _await_task(input_node.set_layers(layers, voxel_size, 1.0))
+			await _await_task(input_node.set_layers(layers, voxel_size, 1.0, true))
 	else:
 		print("[HEGoNode3D]: Input is not Path3D, Meshinstance3D, CSGShape3D, or Terrain3D")
 	return input_node

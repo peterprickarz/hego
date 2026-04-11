@@ -7,6 +7,7 @@
 #include "util/node/create_nodes.h"
 #include "util/task/task_helpers.h"
 
+using HEGo::Util::Task::make_noop;
 using HEGo::Util::Task::submit;
 
 namespace HEGo
@@ -15,6 +16,12 @@ namespace HEGo
 HEGoMergeNode::HEGoMergeNode() {}
 
 HEGoMergeNode::~HEGoMergeNode() {}
+
+void HEGoMergeNode::reset_node_id()
+{
+	HEGoInputReceiverNode::reset_node_id();
+	cached_source_ids.clear();
+}
 
 godot::Ref<HEGoTask> HEGoMergeNode::instantiate()
 {
@@ -28,7 +35,7 @@ godot::Ref<HEGoTask> HEGoMergeNode::instantiate()
 	});
 }
 
-godot::Ref<HEGoTask> HEGoMergeNode::connect_inputs(godot::Array inputs)
+godot::Ref<HEGoTask> HEGoMergeNode::connect_inputs(godot::Array inputs, bool force)
 {
 	// Extract node IDs on main thread (accessing Godot objects)
 	godot::PackedInt32Array source_ids;
@@ -44,6 +51,13 @@ godot::Ref<HEGoTask> HEGoMergeNode::connect_inputs(godot::Array inputs)
 
 	HAPI_NodeId nid = node_id;
 
+	if (!force && source_ids == cached_source_ids)
+	{
+		return make_noop("Connect merge inputs (cached)", nid);
+	}
+
+	cached_source_ids = source_ids;
+
 	return submit("Connect merge inputs", nid, [nid, source_ids](HEGoSessionManager *mgr) -> godot::Variant {
 		HEGo::Util::Geo::connect_to_merge(mgr, nid, source_ids);
 		return 0;
@@ -52,7 +66,7 @@ godot::Ref<HEGoTask> HEGoMergeNode::connect_inputs(godot::Array inputs)
 
 void HEGoMergeNode::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("connect_inputs", "inputs"), &HEGoMergeNode::connect_inputs);
+	godot::ClassDB::bind_method(godot::D_METHOD("connect_inputs", "inputs", "force"), &HEGoMergeNode::connect_inputs, DEFVAL(false));
 }
 
 } // namespace HEGo

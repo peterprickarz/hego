@@ -41,11 +41,11 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                      |
-   +-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0\ ) |
-   +-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                                                |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -78,7 +78,7 @@ On failure, all stored ids are reset to invalid values and an error is logged.
 
 .. rst-class:: classref-method
 
-:ref:`HEGoTask<class_HEGoTask>` **set_layers**\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_set_layers>`
+:ref:`HEGoTask<class_HEGoTask>` **set_layers**\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_set_layers>`
 
 Submits a task to upload all supplied layers into a newly created HeightField input node.
 
@@ -155,6 +155,8 @@ Failure behavior:
 - If no active Houdini session exists, layer upload cannot proceed.
 
 - Any HAPI node creation or write failure logs an error and aborts the current layer build.
+
+Layer content and parameters are hashed internally. If nothing has changed since the previous call a no-op task is returned, unless ``force`` is ``true``.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

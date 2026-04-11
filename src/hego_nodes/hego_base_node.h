@@ -11,6 +11,7 @@
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 
 namespace HEGo
@@ -40,11 +41,15 @@ class HEGoInputReceiverNode : public HEGoBaseNode
 {
 	GDCLASS(HEGoInputReceiverNode, HEGoBaseNode)
 
+protected:
+	godot::HashMap<int, HAPI_NodeId> cached_connections;
+
 public:
 	HEGoInputReceiverNode();
 	~HEGoInputReceiverNode();
 
-	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index);
+	void reset_node_id() override;
+	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index, bool force = false);
 
 	static void _bind_methods();
 };
@@ -53,11 +58,16 @@ class HEGoTransformableNode : public HEGoBaseNode
 {
 	GDCLASS(HEGoTransformableNode, HEGoBaseNode)
 
+protected:
+	godot::Transform3D last_transform;
+	bool has_cached_transform = false;
+
 public:
 	HEGoTransformableNode();
 	~HEGoTransformableNode();
 
-	godot::Ref<HEGoTask> set_transform(godot::Transform3D xform);
+	void reset_node_id() override;
+	godot::Ref<HEGoTask> set_transform(godot::Transform3D xform, bool force = false);
 
 	static void _bind_methods();
 };
@@ -96,11 +106,15 @@ class HEGoTransformableInputReceiverNode : public HEGoTransformableNode
 {
 	GDCLASS(HEGoTransformableInputReceiverNode, HEGoTransformableNode)
 
+protected:
+	godot::HashMap<int, HAPI_NodeId> cached_connections;
+
 public:
 	HEGoTransformableInputReceiverNode();
 	~HEGoTransformableInputReceiverNode();
 
-	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index);
+	void reset_node_id() override;
+	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index, bool force = false);
 
 	static void _bind_methods();
 };

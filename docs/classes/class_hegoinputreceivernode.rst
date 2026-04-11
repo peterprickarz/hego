@@ -37,9 +37,9 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`connect_input<class_HEGoInputReceiverNode_method_connect_input>`\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``\ ) |
-   +-------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`connect_input<class_HEGoInputReceiverNode_method_connect_input>`\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``, force\: ``bool`` = false\ )  |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -54,11 +54,13 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-:ref:`HEGoTask<class_HEGoTask>` **connect_input**\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``\ ) :ref:`🔗<class_HEGoInputReceiverNode_method_connect_input>`
+:ref:`HEGoTask<class_HEGoTask>` **connect_input**\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``, force\: ``bool`` = false\ ) :ref:`🔗<class_HEGoInputReceiverNode_method_connect_input>`
 
 Submits a task to connect ``other_node`` into this node's ``input_index``.
 
 Both nodes should already be instantiated. If either node id is invalid, downstream HAPI calls can fail and log errors.
+
+The connection is cached internally. If the same source node is already connected at the same index the call returns a no-op task unless ``force`` is ``true``.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

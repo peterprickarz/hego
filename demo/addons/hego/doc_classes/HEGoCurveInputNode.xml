@@ -17,12 +17,15 @@ Repeated calls replace the currently uploaded curve data.
 <return type="HEGoTask" />
 <param index="0" name="path_3d" type="Path3D" />
 <param index="1" name="target_length" type="float" />
+<param index="2" name="force" type="bool" default="false" />
 <description>
 Submits a task to convert the given [Path3D] into Houdini curve input data.
 
 [code]target_length[/code] controls segment sampling or resampling length for generated curve points.
 
 Smaller values generally produce denser sampling, while larger values produce fewer points.
+
+Curve content and transform are hashed internally. If neither has changed since the previous call a no-op task is returned, unless [code]force[/code] is [code]true[/code].
 </description>
 </method>
 </methods>

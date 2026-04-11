@@ -1,6 +1,7 @@
 #include "hego_nodes/hego_heightfield_input_node.h"
 
 #include "hego_api.h"
+#include "util/hash/fnv.h"
 #include "util/hego_util.h"
 #include "util/log/log.h"
 #include "util/task/task_helpers.h"
@@ -17,6 +18,7 @@
 #include <vector>
 
 using HEGo::Util::Task::make_failed;
+using HEGo::Util::Task::make_noop;
 using HEGo::Util::Task::submit;
 
 namespace HEGo
@@ -307,7 +309,54 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::instantiate()
 	});
 }
 
-godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary layers, float voxel_size_value, float height_scale_value)
+uint64_t HEGoHeightfieldInputNode::compute_layers_hash(const godot::Dictionary &layers, float p_voxel_size, float p_height_scale)
+{
+	using namespace HEGo::Util::Hash;
+	uint64_t hash = FNV_OFFSET;
+
+	hash = hash_float(p_voxel_size, hash);
+	hash = hash_float(p_height_scale, hash);
+
+	godot::Array keys = layers.keys();
+	int key_count = keys.size();
+	hash = hash_combine(hash, static_cast<uint64_t>(key_count));
+
+	for (int i = 0; i < key_count; ++i)
+	{
+		godot::String layer_name = keys[i];
+		hash = hash_string(layer_name, hash);
+
+		godot::Variant layer_variant = layers[layer_name];
+		if (layer_variant.get_type() != godot::Variant::DICTIONARY)
+		{
+			continue;
+		}
+
+		godot::Dictionary layer_dict = layer_variant;
+
+		// Hash image pixel data
+		if (layer_dict.has("image") && godot::Variant(layer_dict["image"]).get_type() == godot::Variant::OBJECT)
+		{
+			godot::Ref<godot::Image> image = layer_dict["image"];
+			if (image.is_valid())
+			{
+				godot::PackedByteArray data = image->get_data();
+				hash = hash_packed_byte(data, hash);
+			}
+		}
+
+		// Hash layer attributes
+		if (layer_dict.has("attrs") && godot::Variant(layer_dict["attrs"]).get_type() == godot::Variant::DICTIONARY)
+		{
+			godot::Dictionary attrs = layer_dict["attrs"];
+			hash = hash_dictionary(attrs, hash);
+		}
+	}
+
+	return hash;
+}
+
+godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary layers, float voxel_size_value, float height_scale_value, bool force)
 {
 	if (voxel_size_value <= 0.0f)
 	{
@@ -317,6 +366,14 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary laye
 	{
 		return make_failed("height_scale must be > 0", "Set heightfield layers");
 	}
+
+	uint64_t layers_hash = compute_layers_hash(layers, voxel_size_value, height_scale_value);
+	if (!force && layers_hash == last_layers_hash)
+	{
+		return make_noop("Set heightfield layers (cached)", node_id);
+	}
+
+	last_layers_hash = layers_hash;
 
 	HEGoHeightfieldInputNode *self = this;
 
@@ -497,7 +554,7 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary laye
 void HEGoHeightfieldInputNode::_bind_methods()
 {
 	godot::ClassDB::bind_method(
-			godot::D_METHOD("set_layers", "layers", "voxel_size", "height_scale"), &HEGoHeightfieldInputNode::set_layers, DEFVAL(1.0f), DEFVAL(1.0f));
+			godot::D_METHOD("set_layers", "layers", "voxel_size", "height_scale", "force"), &HEGoHeightfieldInputNode::set_layers, DEFVAL(1.0f), DEFVAL(1.0f), DEFVAL(false));
 }
 
 } // namespace HEGo

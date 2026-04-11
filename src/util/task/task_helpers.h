@@ -20,6 +20,9 @@ godot::Ref<HEGo::HEGoTask> make_failed(const godot::String &msg, const godot::St
 godot::Ref<HEGo::HEGoTask> submit(const godot::String &desc, HAPI_NodeId nid,
 								   std::function<godot::Variant(HEGoSessionManager *)> fn);
 
+// Create a task that is already completed with a null result (used for cache-hit early returns).
+godot::Ref<HEGo::HEGoTask> make_noop(const godot::String &desc, HAPI_NodeId nid = -1);
+
 } // namespace HEGo::Util::Task
 
 #endif // HEGO_UTIL_TASK_HELPERS_H

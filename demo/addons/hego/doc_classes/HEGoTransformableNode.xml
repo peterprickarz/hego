@@ -16,10 +16,13 @@ This is commonly used for object-level HDAs where world placement should match a
 <method name="set_transform">
 <return type="HEGoTask" />
 <param index="0" name="xform" type="Transform3D" />
+<param index="1" name="force" type="bool" default="false" />
 <description>
 Submits a task to set the world transform of the wrapped Houdini node from a Godot [Transform3D].
 
 Call after instantiation. Reapply when your source node moves and you need Houdini output to stay in sync.
+
+The transform is cached internally. If the incoming transform is identical to the previously submitted one the call returns a no-op task unless [code]force[/code] is [code]true[/code].
 </description>
 </method>
 </methods>

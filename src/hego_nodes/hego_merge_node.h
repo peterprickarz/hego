@@ -13,12 +13,16 @@ class HEGoMergeNode : public HEGoInputReceiverNode
 {
 	GDCLASS(HEGoMergeNode, HEGoInputReceiverNode)
 
+private:
+	godot::PackedInt32Array cached_source_ids;
+
 public:
 	HEGoMergeNode();
 	~HEGoMergeNode();
 
+	void reset_node_id() override;
 	godot::Ref<HEGoTask> instantiate() override;
-	godot::Ref<HEGoTask> connect_inputs(godot::Array inputs);
+	godot::Ref<HEGoTask> connect_inputs(godot::Array inputs, bool force = false);
 
 	static void _bind_methods();
 };
