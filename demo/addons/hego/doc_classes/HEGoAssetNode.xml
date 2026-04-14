@@ -31,6 +31,27 @@ Cooks the asset node and waits until cooking is finished.
 Use this when [code]auto_cook[/code] is disabled on fetch calls and you want explicit cook control.
 </description>
 </method>
+<method name="fetch_curves">
+<return type="Array" />
+<param index="0" name="read_prim_attribs" type="PackedStringArray" default="PackedStringArray()" />
+<param index="1" name="read_point_attribs" type="PackedStringArray" default="PackedStringArray()" />
+<param index="2" name="auto_cook" type="bool" default="true" />
+<description>
+Fetches all curve parts from the cooked asset as an [Array] of [Dictionary] entries.
+
+Each curve entry contains:
+[code]type[/code]: curve type, one of [code]CURVE_TYPE_BEZIER[/code], [code]CURVE_TYPE_NURBS[/code], or [code]CURVE_TYPE_LINEAR[/code].
+[code]order[/code]: curve order.
+[code]positions[/code]: [PackedVector3Array] of control point positions for this curve.
+[code]knots[/code]: [PackedFloat32Array] of knot values, present only when the curve has knots.
+[code]prim_attribs[/code]: [Array] of {[code]name[/code], [code]value[/code]} dictionaries for each attribute listed in [code]read_prim_attribs[/code].
+[code]point_attribs[/code]: [Array] of {[code]name[/code], [code]value[/code]} dictionaries for each attribute listed in [code]read_point_attribs[/code].
+
+If [code]auto_cook[/code] is [code]true[/code], the node is cooked before reading.
+
+Returns an empty array when the node is not instantiated, the session is invalid, or geometry cannot be read.
+</description>
+</method>
 <method name="fetch_heightfield_layer_image">
 <return type="Image" />
 <param index="0" name="part_id" type="int" />

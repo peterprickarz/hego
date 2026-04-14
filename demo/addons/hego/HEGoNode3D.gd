@@ -973,55 +973,53 @@ func handle_terrain3d_instancer_output():
 			instancer.call("update_mmis", false)
 			
 func handle_path3d_output():
-	var curves = hego_asset_node.fetch_curves()
-	
-	for curve in curves:
-		var curve_base_name = "Curve3D_" + curve_type_to_string(curve.type)
+	var curves = hego_asset_node.fetch_curves(["hego_node_path"], [])
+
+	var outputs_node = get_node_or_null("Outputs")
+	if not outputs_node:
+		outputs_node = Node3D.new()
+		outputs_node.name = "Outputs"
+		add_child(outputs_node)
+		if Engine.is_editor_hint():
+			outputs_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+
+	for i in range(curves.size()):
+		var curve = curves[i]
 		var curve_out = Curve3D.new()
-		var points = curve.positions
-		
-		for p in points:
+		for p in curve.positions:
 			curve_out.add_point(p)
 
 		var node_path = get_attrib_value(curve, "prim_attribs", "hego_node_path")
-		node_path = node_path if node_path != null and node_path is String else "Curves"
-		var full_path = "Outputs/" + node_path
-		var path_parts = full_path.split("/", false)
+		if node_path == null or not node_path is String or node_path.is_empty():
+			node_path = "Curves/Curve3D_" + curve_type_to_string(curve.type) + "_" + str(i)
+		var path_parts = node_path.split("/", false)
 
-		var current_node = self
-
-		for i in range(path_parts.size()):
-			var part_name = path_parts[i]
-			if part_name.is_empty():
-				continue
-			var next_node = current_node.get_node_or_null(part_name)
+		var parent_node = outputs_node
+		for j in range(path_parts.size() - 1):
+			var part = path_parts[j]
+			var next_node = parent_node.get_node_or_null(part)
 			if not next_node:
 				next_node = Node3D.new()
-				next_node.name = part_name
-				current_node.add_child(next_node)
+				next_node.name = part
+				parent_node.add_child(next_node)
 				if Engine.is_editor_hint():
 					next_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
-			current_node = next_node
+			parent_node = next_node
 
-		var path_node = Path3D.new()
+		var final_name = path_parts[-1] if path_parts.size() > 0 else "Curve3D_" + str(i)
 
-		var suffix = 0
-		while current_node.has_node(curve_base_name + "_" + str(suffix)):
-			suffix += 1
-		path_node.name = curve_base_name + "_" + str(suffix)
+		var path_node = parent_node.get_node_or_null(final_name)
+		if path_node and not path_node is Path3D:
+			path_node.queue_free()
+			path_node = null
+		if not path_node:
+			path_node = Path3D.new()
+			path_node.name = final_name
+			parent_node.add_child(path_node)
+			if Engine.is_editor_hint():
+				path_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+
 		path_node.curve = curve_out
-
-		var curve_resource = HEGoCurveDataResource.new()
-		curve_resource.positions = curve.positions
-		curve_resource.order = curve.order
-		curve_resource.knots = curve.knots if "knots" in curve else []
-		curve_resource.primitive_attribs = curve.prim_attribs if "prim_attribs" in curve else []
-		curve_resource.point_attribs = curve.point_attribs if "point_attribs" in curve else []
-
-		path_node.set_meta("hego_curve_data", curve_resource)
-		current_node.add_child(path_node)
-		if Engine.is_editor_hint():
-			path_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
 
 func curve_type_to_string(curve_type: int) -> String:
 	match curve_type:

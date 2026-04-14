@@ -1,7 +1,6 @@
 #include "fetch_heightfields.h"
 
 #include "util/attrib/fetch_attribs.h"
-#include "util/attrib/attrib_utilities.h"
 #include "util/geo/part_selection.h"
 #include "util/hego_util.h"
 #include "util/log/log.h"
