@@ -11,7 +11,12 @@ namespace Util
 namespace Geo
 {
 godot::Array fetch_curves(
-    HEGoSessionManager *session_mgr, HAPI_NodeId node_id, bool auto_cook);
+    HEGoSessionManager *session_mgr, 
+    HAPI_NodeId node_id, 
+    const godot::PackedStringArray &read_prim_attribs,
+    const godot::PackedStringArray &read_point_attribs,
+    bool auto_cook
+);
 } // namespace Geo
 } // namespace Util
 } // namespace HEGo

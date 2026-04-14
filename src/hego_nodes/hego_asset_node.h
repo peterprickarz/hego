@@ -37,7 +37,7 @@ public:
 	godot::Dictionary fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config, bool auto_cook = true);
 	godot::Array get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray(), bool auto_cook = true);
 	godot::Ref<godot::Image> fetch_heightfield_layer_image(int part_id, bool auto_cook = true);
-	godot::Array fetch_curves(bool auto_cook = true);
+	godot::Array fetch_curves(godot::PackedStringArray read_prim_attribs, godot::PackedStringArray read_point_attribs, bool auto_cook = true);
 
 	void set_op_name(godot::String name);
 	godot::String get_op_name() const;

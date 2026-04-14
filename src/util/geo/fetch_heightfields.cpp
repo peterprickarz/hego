@@ -1,6 +1,7 @@
 #include "fetch_heightfields.h"
 
 #include "util/attrib/fetch_attribs.h"
+#include "util/attrib/attrib_utilities.h"
 #include "util/geo/part_selection.h"
 #include "util/hego_util.h"
 #include "util/log/log.h"
@@ -18,42 +19,6 @@ namespace Util
 {
 namespace Geo
 {
-namespace
-{
-godot::Array read_prim_attr_pairs(
-		const HAPI_Session *session, const HAPI_GeoInfo &geo_info, const HAPI_PartInfo &part_info, const godot::PackedStringArray &read_prim_attribs)
-{
-	godot::Array attrs;
-
-	for (int i = 0; i < read_prim_attribs.size(); ++i)
-	{
-		const godot::String attr_name = read_prim_attribs[i];
-		if (attr_name.is_empty())
-		{
-			continue;
-		}
-
-		godot::Dictionary pair;
-		pair["name"] = attr_name;
-
-		const godot::Variant attr_data = HEGo::Util::Attribs::fetch_by_name(session, geo_info, part_info, HAPI_ATTROWNER_PRIM, attr_name.utf8().get_data());
-
-		if (attr_data.get_type() == godot::Variant::ARRAY)
-		{
-			const godot::Array arr = attr_data;
-			pair["value"] = arr.is_empty() ? godot::Variant() : arr[0];
-		}
-		else
-		{
-			pair["value"] = godot::Variant();
-		}
-
-		attrs.append(pair);
-	}
-
-	return attrs;
-}
-} // namespace
 
 godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const godot::PackedStringArray &read_prim_attribs, bool auto_cook)
 {
@@ -106,7 +71,7 @@ godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId
 
 		layer["part_id"] = part_info.id;
 		layer["layer_name"] = layer_name;
-		layer["attrs"] = read_prim_attr_pairs(session_mgr->get_session(), geo_info, part_info, read_prim_attribs);
+		layer["attrs"] = HEGo::Util::Attribs::read_attrib_pairs(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_PRIM, read_prim_attribs);
 		layer["voxel_count_x"] = volume_info.xLength;
 		layer["voxel_count_y"] = volume_info.yLength;
 		layer["voxel_scale_x"] = voxel_scale_x;

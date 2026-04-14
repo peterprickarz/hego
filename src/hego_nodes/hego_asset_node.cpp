@@ -185,7 +185,7 @@ godot::Ref<godot::Image> HEGoAssetNode::fetch_heightfield_layer_image(int part_i
 	return HEGo::Util::Geo::fetch_heightfield_layer_image(get_session_manager(), node_id, part_id, auto_cook);
 }
 
-godot::Array HEGoAssetNode::fetch_curves(bool auto_cook)
+godot::Array HEGoAssetNode::fetch_curves(godot::PackedStringArray read_prim_attribs, godot::PackedStringArray read_point_attribs, bool auto_cook)
 {
 	if (get_id() < 0)
 	{
@@ -193,7 +193,7 @@ godot::Array HEGoAssetNode::fetch_curves(bool auto_cook)
 		return godot::Array();
 	}
 
-	return HEGo::Util::Geo::fetch_curves(get_session_manager(), node_id, auto_cook);
+	return HEGo::Util::Geo::fetch_curves(get_session_manager(), node_id, read_prim_attribs, read_point_attribs, auto_cook);
 }
 
 void HEGoAssetNode::set_op_name(godot::String name) { op_name = name; }

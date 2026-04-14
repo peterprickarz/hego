@@ -1,6 +1,7 @@
 #include "fetch_curves.h"
 
 #include "util/attrib/fetch_attribs.h"
+#include "util/attrib/attrib_utilities.h"
 #include "util/geo/part_selection.h"
 #include "util/log/log.h"
 
@@ -12,7 +13,7 @@ namespace Util
 {
 namespace Geo
 {
-godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, bool auto_cook)
+godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const godot::PackedStringArray &read_prim_attribs, const godot::PackedStringArray &read_point_attribs, bool auto_cook)
 {
     godot::Array curves;
 
@@ -84,6 +85,8 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
             curve_data["type"] = curve_info.curveType;
             curve_data["order"] = order;
             curve_data["positions"] = curve_positions;
+            curve_data["prim_attribs"] = HEGo::Util::Attribs::read_attrib_pairs(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_PRIM, read_prim_attribs);
+            curve_data["point_attribs"] = HEGo::Util::Attribs::read_attrib_pairs(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_POINT, read_point_attribs);
 
             if (curve_info.hasKnots)
             {

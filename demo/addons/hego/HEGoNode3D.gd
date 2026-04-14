@@ -973,20 +973,6 @@ func handle_terrain3d_instancer_output():
 			instancer.call("update_mmis", false)
 			
 func handle_path3d_output():
-	var current_node = self
-
-	var curves_node = current_node.get_node_or_null("Curves")
-	if curves_node:
-		curves_node.free()
-
-	curves_node = Node3D.new()
-	curves_node.name = "Curves"
-	current_node.add_child(curves_node)
-	if Engine.is_editor_hint():
-		curves_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
-
-	current_node = curves_node
-
 	var curves = hego_asset_node.fetch_curves()
 	
 	for curve in curves:
@@ -996,7 +982,27 @@ func handle_path3d_output():
 		
 		for p in points:
 			curve_out.add_point(p)
-			
+
+		var node_path = get_attrib_value(curve, "prim_attribs", "hego_node_path")
+		node_path = node_path if node_path != null and node_path is String else "Curves"
+		var full_path = "Outputs/" + node_path
+		var path_parts = full_path.split("/", false)
+
+		var current_node = self
+
+		for i in range(path_parts.size()):
+			var part_name = path_parts[i]
+			if part_name.is_empty():
+				continue
+			var next_node = current_node.get_node_or_null(part_name)
+			if not next_node:
+				next_node = Node3D.new()
+				next_node.name = part_name
+				current_node.add_child(next_node)
+				if Engine.is_editor_hint():
+					next_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+			current_node = next_node
+
 		var path_node = Path3D.new()
 
 		var suffix = 0
@@ -1004,6 +1010,15 @@ func handle_path3d_output():
 			suffix += 1
 		path_node.name = curve_base_name + "_" + str(suffix)
 		path_node.curve = curve_out
+
+		var curve_resource = HEGoCurveDataResource.new()
+		curve_resource.positions = curve.positions
+		curve_resource.order = curve.order
+		curve_resource.knots = curve.knots if "knots" in curve else []
+		curve_resource.primitive_attribs = curve.prim_attribs if "prim_attribs" in curve else []
+		curve_resource.point_attribs = curve.point_attribs if "point_attribs" in curve else []
+
+		path_node.set_meta("hego_curve_data", curve_resource)
 		current_node.add_child(path_node)
 		if Engine.is_editor_hint():
 			path_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
@@ -2274,3 +2289,16 @@ func _t3d_get_mesh_asset_name(mesh_asset) -> String:
 		return str(mesh_asset.call("get_name"))
 
 	return str(mesh_asset.get("name"))
+
+
+# =============================================================================
+# Misc Helper Functions
+# =============================================================================
+
+func get_attrib_value(dict: Dictionary, dict_key: String, attr_name: String):
+	if not dict.has(dict_key) or not dict[dict_key] is Array:
+		return null
+	for attr_pair in dict[dict_key]:
+		if attr_pair is Dictionary and attr_pair.get("name", "") == attr_name:
+			return attr_pair.get("value", null)
+	return null
