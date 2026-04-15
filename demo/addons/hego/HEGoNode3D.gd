@@ -36,6 +36,7 @@ func _build_cook_timing_summary(timings: Dictionary, total_msec: float) -> Strin
 	lines.append("[HEGoNode3D]:   Object spawn output: %.3f ms" % timings.get("object_spawn_output", 0.0))
 	lines.append("[HEGoNode3D]:   Terrain3D output: %.3f ms" % timings.get("terrain3d_output", 0.0))
 	lines.append("[HEGoNode3D]:   Terrain3D instancer output: %.3f ms" % timings.get("terrain3d_instancer_output", 0.0))
+	lines.append("[HEGoNode3D]:   Path3D output: %.3f ms" % timings.get("path3d_output", 0.0))
 	lines.append("[HEGoNode3D]:   Total cook(): %.3f ms" % total_msec)
 	return "\n".join(lines)
 
@@ -51,6 +52,7 @@ func cook():
 		"object_spawn_output": 0.0,
 		"terrain3d_output": 0.0,
 		"terrain3d_instancer_output": 0.0,
+		"curve_output": 0.0,
 	}
 	var cook_start_usec = Time.get_ticks_usec()
 	var phase_start_usec = cook_start_usec
@@ -175,6 +177,9 @@ func cook():
 	phase_start_usec = Time.get_ticks_usec()
 	handle_terrain3d_instancer_output()
 	timings["terrain3d_instancer_output"] = _elapsed_msec(phase_start_usec)
+	phase_start_usec = Time.get_ticks_usec()
+	handle_path3d_output()
+	timings["path3d_output"] = _elapsed_msec(phase_start_usec)
 
 	print(_build_cook_timing_summary(timings, _elapsed_msec(cook_start_usec)))
 
@@ -1060,7 +1065,66 @@ func handle_terrain3d_instancer_output():
 
 		if instancer.has_method("update_mmis"):
 			instancer.call("update_mmis", false)
+			
+func handle_path3d_output():
+	var curves = hego_asset_node.fetch_curves(["hego_node_path"], [])
 
+	var outputs_node = get_node_or_null("Outputs")
+	if not outputs_node:
+		outputs_node = Node3D.new()
+		outputs_node.name = "Outputs"
+		add_child(outputs_node)
+		if Engine.is_editor_hint():
+			outputs_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+
+	for i in range(curves.size()):
+		var curve = curves[i]
+		var curve_out = Curve3D.new()
+		for p in curve.positions:
+			curve_out.add_point(p)
+
+		var node_path = get_attrib_value(curve, "prim_attribs", "hego_node_path")
+		if node_path == null or not node_path is String or node_path.is_empty():
+			node_path = "Curves/Curve3D_" + curve_type_to_string(curve.type) + "_" + str(i)
+		var path_parts = node_path.split("/", false)
+
+		var parent_node = outputs_node
+		for j in range(path_parts.size() - 1):
+			var part = path_parts[j]
+			var next_node = parent_node.get_node_or_null(part)
+			if not next_node:
+				next_node = Node3D.new()
+				next_node.name = part
+				parent_node.add_child(next_node)
+				if Engine.is_editor_hint():
+					next_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+			parent_node = next_node
+
+		var final_name = path_parts[-1] if path_parts.size() > 0 else "Curve3D_" + str(i)
+
+		var path_node = parent_node.get_node_or_null(final_name)
+		if path_node and not path_node is Path3D:
+			path_node.queue_free()
+			path_node = null
+		if not path_node:
+			path_node = Path3D.new()
+			path_node.name = final_name
+			parent_node.add_child(path_node)
+			if Engine.is_editor_hint():
+				path_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
+
+		path_node.curve = curve_out
+
+func curve_type_to_string(curve_type: int) -> String:
+	match curve_type:
+		HEGoAssetNode.CURVE_TYPE_BEZIER:
+			return "Bezier"
+		HEGoAssetNode.CURVE_TYPE_NURBS:
+			return "NURBS"
+		HEGoAssetNode.CURVE_TYPE_LINEAR:
+			return "Linear"
+		_:
+			return "Unknown"
 
 # Helper function to apply custom properties from a nested dictionary
 func apply_custom_properties(obj: Object, properties: Dictionary):
@@ -2317,3 +2381,16 @@ func _t3d_get_mesh_asset_name(mesh_asset) -> String:
 		return str(mesh_asset.call("get_name"))
 
 	return str(mesh_asset.get("name"))
+
+
+# =============================================================================
+# Misc Helper Functions
+# =============================================================================
+
+func get_attrib_value(dict: Dictionary, dict_key: String, attr_name: String):
+	if not dict.has(dict_key) or not dict[dict_key] is Array:
+		return null
+	for attr_pair in dict[dict_key]:
+		if attr_pair is Dictionary and attr_pair.get("name", "") == attr_name:
+			return attr_pair.get("value", null)
+	return null

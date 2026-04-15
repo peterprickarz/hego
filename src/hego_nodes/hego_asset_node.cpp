@@ -2,6 +2,7 @@
 
 #include "hego_api.h"
 #include "hego_asset_node.h"
+#include "util/geo/fetch_curves.h"
 #include "util/geo/fetch_heightfields.h"
 #include "util/geo/fetch_points.h"
 #include "util/geo/fetch_surfaces.h"
@@ -12,6 +13,7 @@
 #include "util/parm/get_parms.h"
 #include "util/parm/presets.h"
 #include "util/parm/set_parms.h"
+#include "util/hego_enums.h"
 
 namespace HEGo
 {
@@ -201,6 +203,17 @@ godot::Ref<godot::Image> HEGoAssetNode::fetch_heightfield_layer_image(int part_i
 	return HEGo::Util::Geo::fetch_heightfield_layer_image(get_session_manager(), node_id, part_id, auto_cook);
 }
 
+godot::Array HEGoAssetNode::fetch_curves(godot::PackedStringArray read_prim_attribs, godot::PackedStringArray read_point_attribs, bool auto_cook)
+{
+	if (get_id() < 0)
+	{
+		HEGo::Util::Log::error("Cannot fetch curves - HDA not instantiated or license issue");
+		return godot::Array();
+	}
+
+	return HEGo::Util::Geo::fetch_curves(get_session_manager(), node_id, read_prim_attribs, read_point_attribs, auto_cook);
+}
+
 void HEGoAssetNode::set_op_name(godot::String name) { op_name = name; }
 
 godot::String HEGoAssetNode::get_op_name() const { return op_name; }
@@ -226,10 +239,16 @@ void HEGoAssetNode::_bind_methods()
 			DEFVAL(godot::PackedStringArray()), DEFVAL(true));
 	godot::ClassDB::bind_method(
 			godot::D_METHOD("fetch_heightfield_layer_image", "part_id", "auto_cook"), &HEGoAssetNode::fetch_heightfield_layer_image, DEFVAL(true));
+	godot::ClassDB::bind_method(godot::D_METHOD("fetch_curves", "read_prim_attribs", "read_point_attribs", "auto_cook"), &HEGoAssetNode::fetch_curves,
+			DEFVAL(godot::PackedStringArray()), DEFVAL(godot::PackedStringArray()), DEFVAL(true));
 	godot::ClassDB::bind_method(godot::D_METHOD("reset_node_id"), &HEGoAssetNode::reset_node_id);
 	// godot::ClassDB::add_property("HEGoAssetNode", godot::PropertyInfo(godot::Variant::STRING, "op_name"),
 	// "set_op_name", "get_op_name");
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "op_name"), "set_op_name", "get_op_name");
+
+	godot::ClassDB::bind_integer_constant(get_class_static(), "", "CURVE_TYPE_BEZIER", HEGo::Util::CURVE_TYPE_BEZIER);
+	godot::ClassDB::bind_integer_constant(get_class_static(), "", "CURVE_TYPE_NURBS", HEGo::Util::CURVE_TYPE_NURBS);
+	godot::ClassDB::bind_integer_constant(get_class_static(), "", "CURVE_TYPE_LINEAR", HEGo::Util::CURVE_TYPE_LINEAR);
 }
 
 } // namespace HEGo
