@@ -14,14 +14,14 @@ uniform vec3 wind_direction = vec3(1.0, 0.0, 0.0);
 
 void vertex() {
     // Wind displacement based on UV height
-    float wind_factor = UV.y * wind_strength;
+    float wind_factor = (1.0-UV.y) * wind_strength;
     vec3 wind_offset = wind_direction * sin(TIME * wind_speed + VERTEX.x + VERTEX.z) * wind_factor;
     VERTEX += wind_offset;
 }
 
 void fragment() {
     // Base color gradient based on UV.y
-    float t = clamp(UV.y * color_transition, 0.0, 1.0);
+    float t = clamp((1.0-UV.y) * color_transition, 0.0, 1.0);
     vec3 base_color;
     if (t < 0.5) {
         base_color = mix(bottom_color, mid_color, t * 2.0);

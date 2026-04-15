@@ -4,8 +4,8 @@
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/object.hpp>
-#include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/core/class_db.hpp>
 
 #include "hego_session_manager.h"
 
@@ -21,7 +21,6 @@ private:
 	static HEGoAPI *singleton;
 	HEGoSessionManager session_mgr;
 	void *libHAPIL;
-	
 
 public:
 	bool start_session(int connection_type = 2, const godot::String &connection_data = "hapi");
@@ -30,9 +29,10 @@ public:
 	HEGoSessionManager *get_session_manager();
 	void set_houdini_installation_path(const godot::String &path);
 	godot::String get_houdini_installation_path() const;
-	
+
 	// Get dictionary of all loaded HDA libraries with their assets
 	godot::Dictionary get_hda_libraries();
+	int poll_cook_state();
 
 	static HEGoAPI *get_singleton();
 

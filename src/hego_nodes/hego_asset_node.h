@@ -33,6 +33,7 @@ public:
 	godot::PackedStringArray get_input_names();
 	godot::Array fetch_output();
 	void cook();
+	int cook_async();
 	godot::Dictionary fetch_points(godot::Ref<godot::Resource> fetch_point_config, bool auto_cook = true);
 	godot::Dictionary fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config, bool auto_cook = true);
 	godot::Array get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray(), bool auto_cook = true);
