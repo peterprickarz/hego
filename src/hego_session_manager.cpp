@@ -179,7 +179,7 @@ bool HEGoSessionManager::initialize(bool use_cooking_thread)
 		cook_options.clearErrorsAndWarnings = false;
 		cook_options.maxVerticesPerPrimitive = 3;
 		cook_options.splitGeosByGroup = false;
-		cook_options.refineCurveToLinear = true;
+		cook_options.refineCurveToLinear = false;
 		cook_options.handleBoxPartTypes = false;
 		cook_options.handleSpherePartTypes = false;
 		cook_options.splitPointsByVertexAttributes = false;
