@@ -8,14 +8,15 @@ populated from the Houdini control points.
 Curve Creation
 --------------
 
-Every curve primitive in the cooked HDA produces one ``Path3D`` node. The control points
-(``P``) are added in order to the ``Path3D``'s ``Curve3D``.
+Every curve primitive in the cooked HDA produces one ``Path3D`` node. In the case of polygonal curves, 
+the control points (``P``) are simply added in order to the ``Path3D``'s ``Curve3D``.'
 
-Higher-order NURBS and Bezier curves are tessellated into linear segments on the Houdini
-side during cook — HEGo sets ``refineCurveToLinear = true`` and ``curveRefineLOD = 8.0`` on
-the session's ``HAPI_CookOptions``. The positions that arrive in Godot are therefore dense
-polylines sampled from the source curve, and ``type`` / ``order`` in the fetched data
-reflect the original primitive, not the refined geometry.
+Godot's ``Curve3D`` doesn't currently seem to support NURBS curves, where the control points don't necessarily lie
+on the curve itself. Consequently, Houdini NURBS curves are approximated by using the rational function for a NURBS curve, 
+sampling points along the curve and adding them to the ``Curve3D``.
+
+Godot's Curve3D works for Bezier curves, so Houdini Bezier curves are output accurately with adjustable control points.
+Both open and closed curves are supported, with the curve ``is_closed`` property used to set the corresponding flag on the ``Curve3D``.
 
 Primitive Attributes
 --------------------

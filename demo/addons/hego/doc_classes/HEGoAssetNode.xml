@@ -61,6 +61,7 @@ Each curve entry contains:
 [code]knots[/code]: [PackedFloat32Array] of knot values, present only when the curve has knots.
 [code]prim_attribs[/code]: [Array] of {[code]name[/code], [code]value[/code]} dictionaries for each attribute listed in [code]read_prim_attribs[/code].
 [code]point_attribs[/code]: [Array] of {[code]name[/code], [code]value[/code]} dictionaries for each attribute listed in [code]read_point_attribs[/code].
+[code]is_closed[/code]: A boolean indicating whether the curve is closed.
 
 If [code]auto_cook[/code] is [code]true[/code], the node is cooked before reading.
 
