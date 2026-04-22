@@ -86,6 +86,7 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
             curve_data["positions"] = curve_positions;
             curve_data["prim_attribs"] = HEGo::Util::Attribs::read_attrib_pairs(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_PRIM, read_prim_attribs);
             curve_data["point_attribs"] = HEGo::Util::Attribs::read_attrib_pairs(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_POINT, read_point_attribs);
+            curve_data["is_closed"] = curve_info.isClosed;
 
             if (curve_info.hasKnots)
             {
