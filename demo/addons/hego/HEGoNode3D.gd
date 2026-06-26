@@ -1079,9 +1079,15 @@ func handle_path3d_output():
 
 	for i in range(curves.size()):
 		var curve = curves[i]
-		var curve_out = Curve3D.new()
-		for p in curve.positions:
-			curve_out.add_point(p)
+
+		var output_curve
+		match curve.type:
+			0: # Linear/poly curve
+				output_curve = build_linear_curve(curve)
+			1: # NURBS curve
+				output_curve = build_nurbs_curve(curve)
+			2: # Bezier curve
+				output_curve = build_bezier_curve(curve)
 
 		var node_path = get_attrib_value(curve, "prim_attribs", "hego_node_path")
 		if node_path == null or not node_path is String or node_path.is_empty():
@@ -1113,7 +1119,152 @@ func handle_path3d_output():
 			if Engine.is_editor_hint():
 				path_node.owner = get_tree().edited_scene_root if get_tree().edited_scene_root else self
 
-		path_node.curve = curve_out
+		path_node.curve = output_curve
+
+func build_linear_curve(curve: Dictionary) -> Curve3D:
+	var curve_out = Curve3D.new()
+
+	for p in curve.positions:
+		curve_out.add_point(p)
+
+	if curve.is_closed:
+		curve_out.set_closed(true)
+
+	return curve_out
+
+# Not sure Godot Curve3D in and out vectors can be used to store NURBS control points,
+# so we have to sample the curve and create a new Curve3D with the sampled points.
+func build_nurbs_curve(curve: Dictionary) -> Curve3D:
+	var curve_out = Curve3D.new()
+	var positions = curve.positions
+	var order = curve.order
+	var is_closed = curve.is_closed
+	
+	if positions.size() < 2:
+		push_warning("[HEGoNode3D]: NURBS curve has fewer than 2 control points, returning empty curve.")
+		return curve_out
+	
+	var knots = curve.knots if curve.has("knots") and curve.knots.size() > 0 else generate_uniform_knots(positions.size(), order)
+	
+	var degree = order - 1
+	var last_idx = positions.size()
+	
+	# Minimum and maximum U parameter range with fallbacks
+	var u_min = float(knots[degree]) if knots.size() > degree else 0.0
+	var u_max = float(knots[last_idx]) if knots.size() > last_idx else 1.0
+	
+	# Sampling kind of arbitrary
+	var num_samples = max(50, positions.size() * 10)
+	
+	for sample in range(num_samples):
+		# t parameter is a continuous value determining position along the curve. 
+		var t_param = u_min + (u_max - u_min) * sample / float(num_samples - 1) if num_samples > 1 else u_min
+		var point = evaluate_spline_at_t(t_param, positions, knots, order)
+		curve_out.add_point(point)
+	
+	if is_closed:
+		curve_out.set_closed(true)
+	
+	return curve_out
+
+
+func evaluate_spline_at_t(t_param: float, positions: Array, knots: Array, order: int) -> Vector3:
+	var degree = order - 1
+	var last_idx = positions.size()
+	
+	var u_min = float(knots[degree])
+	var u_max = float(knots[last_idx])
+	t_param = clamp(t_param, u_min, u_max)
+	
+	var k = degree
+	for i in range(degree, last_idx):
+		if t_param >= knots[i] and t_param < knots[i + 1]:
+			k = i
+			break
+	if t_param == u_max:
+		k = last_idx - 1
+	
+	var basis = compute_basis_functions(k, t_param, order, knots)
+	
+	# Evaluate curve point as weighted sum of control points
+	var result = Vector3.ZERO
+	for i in range(order):
+		var control_point_idx = k - order + 1 + i
+		if control_point_idx >= 0 and control_point_idx < positions.size():
+			result += basis[i] * positions[control_point_idx]
+	
+	return result
+
+
+func compute_basis_functions(k_param: int, t_param: float, order: int, knots: Array) -> Array:
+	var basis_values = []
+	for idx in range(order):
+		basis_values.append(0.0)
+	
+	var left_distances = []
+	var right_distances = []
+	for idx in range(order):
+		left_distances.append(0.0)
+		right_distances.append(0.0)
+	
+	basis_values[0] = 1.0
+	
+	for degree_level in range(1, order):
+		left_distances[degree_level] = t_param - float(knots[k_param + 1 - degree_level])
+		right_distances[degree_level] = float(knots[k_param + degree_level]) - t_param
+		var saved_basis = 0.0
+		for basis_idx in range(degree_level):
+			var basis_ratio = basis_values[basis_idx] / (right_distances[basis_idx + 1] + left_distances[degree_level - basis_idx])
+			basis_values[basis_idx] = saved_basis + right_distances[basis_idx + 1] * basis_ratio
+			saved_basis = left_distances[degree_level - basis_idx] * basis_ratio
+		basis_values[degree_level] = saved_basis
+	
+	return basis_values
+
+func generate_uniform_knots(num_control_points: int, order: int) -> Array:
+	var knots = []
+	var num_knots = num_control_points + order
+	
+	for i in range(num_knots):
+		if i < order:
+			knots.append(0.0)
+		elif i >= num_control_points:
+			knots.append(float(num_control_points - order + 1))
+		else:
+			knots.append(float(i - order + 1))
+	
+	return knots
+
+func build_bezier_curve(curve: Dictionary) -> Curve3D:
+	var curve_out = Curve3D.new()
+	var positions = curve.positions
+
+	if positions.size() < 4:
+		push_warning("[HEGoNode3D]: Bezier curve has fewer than the minimum 4 expected control points, returning linear curve.")
+		return build_linear_curve(curve)
+	
+	var num_points = (positions.size() + 2) / 3
+	
+	for idx in range(num_points):
+		var pos_idx = 3 * idx
+		var point_position = positions[pos_idx]
+		var in_vec = Vector3()
+		var out_vec = Vector3()
+		
+		# Houdini control point positions are in global space so we need
+		# to convert them to be relative to the current point's position
+		if idx > 0 and pos_idx - 1 >= 0:
+			in_vec = positions[pos_idx - 1] - point_position
+		
+		if pos_idx + 1 < positions.size():
+			out_vec = positions[pos_idx + 1] - point_position
+		
+		curve_out.add_point(point_position, in_vec, out_vec)
+
+	if curve.is_closed:
+		curve_out.set_closed(true)
+
+	return curve_out
 
 func curve_type_to_string(curve_type: int) -> String:
 	match curve_type:
