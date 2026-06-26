@@ -8,15 +8,18 @@ populated from the Houdini control points.
 Curve Creation
 --------------
 
-Every curve primitive in the cooked HDA produces one ``Path3D`` node. In the case of polygonal curves, 
-the control points (``P``) are simply added in order to the ``Path3D``'s ``Curve3D``.'
+Every curve primitive in the cooked HDA produces one ``Path3D`` node. In the case of polygonal
+(linear) curves, the control points (``P``) are simply added in order to the ``Path3D``'s ``Curve3D``.
 
-Godot's ``Curve3D`` doesn't currently seem to support NURBS curves, where the control points don't necessarily lie
-on the curve itself. Consequently, Houdini NURBS curves are approximated by using the rational function for a NURBS curve, 
-sampling points along the curve and adding them to the ``Curve3D``.
+Godot's ``Curve3D`` cannot represent NURBS curves directly, because their control points do not
+necessarily lie on the curve itself. Houdini NURBS curves are therefore approximated by evaluating
+the curve's basis functions, sampling points along it and adding those samples to the ``Curve3D``.
+Control-point weights are not currently applied, so the result is a non-rational (B-spline)
+approximation of the source curve.
 
-Godot's Curve3D works for Bezier curves, so Houdini Bezier curves are output accurately with adjustable control points.
-Both open and closed curves are supported, with the curve ``is_closed`` property used to set the corresponding flag on the ``Curve3D``.
+Godot's ``Curve3D`` natively supports Bezier curves, so Houdini Bezier curves are output accurately
+with adjustable in/out control handles. Both open and closed curves are supported, with the curve's
+``is_closed`` property used to set the corresponding flag on the ``Curve3D``.
 
 Primitive Attributes
 --------------------
@@ -50,6 +53,6 @@ Fetching Curves Directly
 ------------------------
 
 For custom workflows, :ref:`HEGoAssetNode.fetch_curves()<class_HEGoAssetNode_method_fetch_curves>`
-returns the raw curve data (positions, order, knots, requested prim/point attributes) as
-an ``Array`` of dictionaries, so advanced users can build their own curve resources or
-custom scene structures.
+returns the raw curve data (``type``, ``order``, ``positions``, ``knots``, ``is_closed``, and the
+requested prim/point attributes) as an ``Array`` of dictionaries, so advanced users can build their
+own curve resources or custom scene structures.
