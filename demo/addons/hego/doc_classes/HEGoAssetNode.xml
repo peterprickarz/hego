@@ -27,6 +27,25 @@ Submits a cook task for this asset node.
 Returns an [HEGoTask] that completes when cooking is finished. The task result is [code]null[/code].
 </description>
 </method>
+<method name="fetch_curves">
+<return type="HEGoTask" />
+<param index="0" name="read_prim_attribs" type="PackedStringArray" default="PackedStringArray()" />
+<param index="1" name="read_point_attribs" type="PackedStringArray" default="PackedStringArray()" />
+<description>
+Submits a task to fetch all curve parts from the cooked asset.
+
+The task result is an [Array] of [Dictionary] entries. Each curve entry contains:
+[code]type[/code]: curve type, one of [code]CURVE_TYPE_BEZIER[/code], [code]CURVE_TYPE_NURBS[/code], or [code]CURVE_TYPE_LINEAR[/code].
+[code]order[/code]: curve order.
+[code]positions[/code]: [PackedVector3Array] of control point positions for this curve.
+[code]knots[/code]: [PackedFloat32Array] of knot values, present only when the curve has knots.
+[code]prim_attribs[/code]: [Array] of {[code]name[/code], [code]value[/code]} dictionaries for each attribute listed in [code]read_prim_attribs[/code].
+[code]point_attribs[/code]: [Array] of {[code]name[/code], [code]value[/code]} dictionaries for each attribute listed in [code]read_point_attribs[/code].
+[code]is_closed[/code]: A boolean indicating whether the curve is closed.
+
+The task result is an empty array when the node is not instantiated, the session is invalid, or geometry cannot be read.
+</description>
+</method>
 <method name="fetch_heightfield_layer_image">
 <return type="HEGoTask" />
 <param index="0" name="part_id" type="int" />

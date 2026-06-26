@@ -40,6 +40,8 @@ public:
 	godot::Ref<HEGoTask> fetch_points(godot::Ref<godot::Resource> fetch_point_config);
 	godot::Ref<HEGoTask> get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray());
 	godot::Ref<HEGoTask> fetch_heightfield_layer_image(int part_id);
+	godot::Ref<HEGoTask> fetch_curves(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray(),
+			godot::PackedStringArray read_point_attribs = godot::PackedStringArray());
 
 	// Sync accessors (no HAPI call)
 	void set_op_name(godot::String name);

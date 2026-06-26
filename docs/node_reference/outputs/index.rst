@@ -8,6 +8,7 @@ that best fits your use case.
    :maxdepth: 1
 
    geometry_output
+   curve_output
    instancing_output
    object_spawning_output
    terrain3d_output
