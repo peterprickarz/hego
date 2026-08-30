@@ -8,6 +8,8 @@
 #include <godot_cpp/core/class_db.hpp>
 
 #include "hego_session_manager.h"
+#include "hego_task.h"
+#include "hego_task_scheduler.h"
 
 #include "hapi/houdini_api.h"
 
@@ -20,7 +22,7 @@ class HEGoAPI : public godot::Object
 private:
 	static HEGoAPI *singleton;
 	HEGoSessionManager session_mgr;
-	void *libHAPIL;
+	HEGoTaskScheduler scheduler;
 
 public:
 	bool start_session(int connection_type = 2, const godot::String &connection_data = "hapi");
@@ -32,7 +34,14 @@ public:
 
 	// Get dictionary of all loaded HDA libraries with their assets
 	godot::Dictionary get_hda_libraries();
-	int poll_cook_state();
+
+	// Task scheduler
+	godot::Ref<HEGoTask> submit_task(godot::Ref<HEGoTask> task);
+	int get_task_pending_count();
+	godot::Ref<HEGoTask> get_current_task();
+	godot::Array get_pending_tasks();
+	godot::Array get_completed_task_history();
+	void clear_completed_task_history();
 
 	static HEGoAPI *get_singleton();
 

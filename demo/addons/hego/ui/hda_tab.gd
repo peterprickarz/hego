@@ -52,8 +52,23 @@ var new_preset_name_line_edit: LineEdit
 @onready var new_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/NewPresetButton
 @onready var preset_dropdown: OptionButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer/PresetDropdownOptionButton
 @onready var parm_vbox = $HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer/VBoxContainer
-@onready var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
+@onready var input_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
+@onready var queued_tasks_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer/QueuedScroll/VBoxContainer
+@onready var finished_tasks_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer/FinishedScroll/VBoxContainer
 @onready var root_control = $"../.."
+
+var _last_pending_count: int = 0
+var _last_current_status: int = -1
+var _last_history_size: int = 0
+
+
+func _await_task(task: HEGoTask) -> Variant:
+	while task.get_status() < HEGoTask.COMPLETED:
+		await get_tree().process_frame
+	if task.get_status() == HEGoTask.FAILED:
+		push_error("[HEGoBottomPanel]: Task failed: " + task.get_error_message())
+		return null
+	return task.get_result()
 
 
 func _elapsed_msec(start_usec: int) -> float:
@@ -81,6 +96,12 @@ func _ready():
 	load_preset_button.pressed.connect(_on_load_preset_button_pressed)
 	save_preset_button.pressed.connect(_on_save_preset_button_pressed)
 	_set_buttons_disabled(true)
+
+	var task_queue_timer = Timer.new()
+	task_queue_timer.wait_time = 0.25
+	task_queue_timer.autostart = true
+	task_queue_timer.timeout.connect(_update_task_queue)
+	add_child(task_queue_timer)
 
 
 func _set_buttons_disabled(disabled: bool):
@@ -119,13 +140,13 @@ func update_ui():
 			child.queue_free()
 	hego_asset_node = hego_tool_node.hego_get_asset_node()
 	if hego_asset_node != null:
-		var parm_dict = hego_asset_node.get_parms_dict()
-		
+		var parm_dict = await _await_task(hego_asset_node.get_parms_dict())
+
 		if parm_dict and parm_dict.keys().size() != 0:
 			for key in parm_dict.keys():
 				add_parm_ui(parm_dict[key], parm_vbox)
-				
-		var input_names = hego_asset_node.get_input_names()
+
+		var input_names = await _await_task(hego_asset_node.get_input_names())
 		
 		input_nodes = Array()
 		for i in range(input_names.size()):
@@ -221,18 +242,18 @@ func _handle_multiparm_parm(parm_dict: Dictionary, parent: Control):
 			
 			
 func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary):
-	hego_asset_node.set_parm(parm_dict["name"], value)
-	update_ui()
+	await _await_task(hego_asset_node.set_parm(parm_dict["name"], value))
+	await update_ui()
 	
 
 func _on_insert_multiparm_instance(id: int, index: int):
-	hego_asset_node.insert_multiparm_instance(id, index)
-	update_ui()
+	await _await_task(hego_asset_node.insert_multiparm_instance(id, index))
+	await update_ui()
 	
 
 func _on_remove_multiparm_instance(id: int, index: int):
-	hego_asset_node.remove_multiparm_instance(id, index)
-	update_ui()
+	await _await_task(hego_asset_node.remove_multiparm_instance(id, index))
+	await update_ui()
 
 
 func _on_selection_changed(node):
@@ -245,11 +266,11 @@ func _on_selection_changed(node):
 	allow_cook = node is HEGoNode3D
 	_set_buttons_disabled(false)
 	hego_tool_node = node
-	update_ui()
+	await update_ui()
 	
 
 func _on_value_changed(name, value):
-	hego_asset_node.set_parm(name, value)
+	await _await_task(hego_asset_node.set_parm(name, value))
 	if auto_recook_toggle.button_pressed:
 		await recook()
 	
@@ -287,7 +308,7 @@ func _on_recook_button_pressed():
 
 	var preset_index = preset_dropdown.get_selected_id()
 	var ui_start_usec = Time.get_ticks_usec()
-	update_ui()
+	await update_ui()
 	preset_dropdown.select(preset_index)
 	ui_rebuild_msec = _elapsed_msec(ui_start_usec)
 
@@ -300,13 +321,15 @@ func recook():
 	if hego_tool_node.has_method("hego_set_parm_stash"):
 		if not hego_asset_node:
 			hego_asset_node = hego_tool_node.hego_get_asset_node()
-		hego_tool_node.hego_set_parm_stash(hego_asset_node.get_preset())
+		var preset = await _await_task(hego_asset_node.get_preset())
+		if preset != null:
+			hego_tool_node.hego_set_parm_stash(preset)
 		
 
 func create_preset_file(preset_name: String) -> void:
 	print("[HEGo]: Creating preset")
 	if hego_asset_node and hego_tool_node.has_method("hego_get_asset_name"):
-		var preset = hego_asset_node.get_preset()
+		var preset = await _await_task(hego_asset_node.get_preset())
 		if preset:
 			var res_path = get_preset_res_path()
 			
@@ -344,7 +367,7 @@ func create_preset_file(preset_name: String) -> void:
 			if error == OK:
 				print("[HEGo]: Preset saved successfully")
 				# Update UI to refresh dropdown
-				update_ui()
+				await update_ui()
 				# Select the newly created preset in the dropdown
 				_select_preset_in_dropdown(preset_name)
 			else:
@@ -418,9 +441,9 @@ func _on_load_preset_button_pressed():
 		return
 	
 	# Load and apply the preset
-	hego_asset_node.set_preset(presets_res.presets[preset_name])
+	await _await_task(hego_asset_node.set_preset(presets_res.presets[preset_name]))
 	print("[HEGo]: Loaded preset: ", preset_name)
-	update_ui()
+	await update_ui()
 	
 	# Reselect the loaded preset in the dropdown
 	_select_preset_in_dropdown(preset_name)
@@ -441,7 +464,7 @@ func _on_save_preset_button_pressed():
 	var preset_name = preset_dropdown.get_item_text(selected_index)
 	var res_path = get_preset_res_path()
 	
-	var preset = hego_asset_node.get_preset()
+	var preset = await _await_task(hego_asset_node.get_preset())
 	if not preset:
 		push_error("[HEGo]: Failed to retrieve parms from Houdini - Perhaps the node is not instantiated correctly?")
 		return
@@ -467,7 +490,7 @@ func _on_save_preset_button_pressed():
 		return
 	
 	print("[HEGo]: Preset '", preset_name, "' saved successfully")
-	update_ui()
+	await update_ui()
 	
 	# Reselect the saved preset in the dropdown
 	_select_preset_in_dropdown(preset_name)
@@ -500,10 +523,72 @@ func _on_asset_picked(asset_name: String):
 		# Clear old HDA data before setting new asset
 		if hego_tool_node.has_method("_clear_hda_data"):
 			hego_tool_node._clear_hda_data()
-		
+
 		hego_tool_node.asset_name = asset_name
 		print("[HEGo]: Set asset_name to: ", asset_name)
-		
+
 		# Optionally auto-recook if enabled
 		if auto_recook_toggle.button_pressed:
 			await recook()
+
+
+func _update_task_queue():
+	var api = HEGoAPI.get_singleton()
+	if not api:
+		return
+
+	var pending_count = api.get_task_pending_count()
+	var current_task = api.get_current_task()
+	var current_status = current_task.get_status() if current_task else -1
+	var history = api.get_completed_task_history()
+	var history_size = history.size()
+
+	# Dirty check — skip rebuild if nothing changed
+	if pending_count == _last_pending_count and current_status == _last_current_status and history_size == _last_history_size:
+		return
+
+	_last_pending_count = pending_count
+	_last_current_status = current_status
+	_last_history_size = history_size
+
+	# Clear queued section
+	for child in queued_tasks_vbox.get_children():
+		child.queue_free()
+
+	# Clear finished section
+	for child in finished_tasks_vbox.get_children():
+		child.queue_free()
+
+	# Populate queued section: pending tasks in reverse order, then current at bottom
+	var pending = api.get_pending_tasks()
+	for i in range(pending.size() - 1, -1, -1):
+		queued_tasks_vbox.add_child(_create_task_label(pending[i], false))
+
+	if current_task:
+		queued_tasks_vbox.add_child(_create_task_label(current_task, true))
+
+	# Populate finished section: newest at top
+	for i in range(history_size - 1, -1, -1):
+		finished_tasks_vbox.add_child(_create_task_label(history[i], false))
+
+
+func _create_task_label(task: HEGoTask, is_running: bool) -> Label:
+	var label = Label.new()
+	var text = task.get_description()
+	var node_id = task.get_node_id()
+	if node_id >= 0:
+		text += "  (node: %d)" % node_id
+
+	var status = task.get_status()
+	if status == HEGoTask.FAILED:
+		var err = task.get_error_message()
+		if err != "":
+			text += " - " + err
+		label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	elif status == HEGoTask.COMPLETED:
+		label.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+	elif is_running:
+		label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
+
+	label.text = text
+	return label

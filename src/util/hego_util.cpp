@@ -3,7 +3,14 @@
 #include <iostream>
 #include <string>
 
-std::string HEGoUtil::get_last_error(HAPI_Session *session)
+namespace HEGo
+{
+namespace Util
+{
+namespace Hapi
+{
+
+std::string get_last_error(HAPI_Session *session)
 {
 	int buffer_length = 0;
 	HoudiniApi::GetStatusStringBufLength(session, HAPI_STATUS_CALL_RESULT, HAPI_STATUSVERBOSITY_ERRORS, &buffer_length);
@@ -18,7 +25,7 @@ std::string HEGoUtil::get_last_error(HAPI_Session *session)
 	return result;
 }
 
-std::string HEGoUtil::get_last_cook_error(HAPI_Session *session)
+std::string get_last_cook_error(HAPI_Session *session)
 {
 	int buffer_length = 0;
 	HAPI_Result buffer_length_result;
@@ -38,7 +45,7 @@ std::string HEGoUtil::get_last_cook_error(HAPI_Session *session)
 	return result;
 }
 
-std::string HEGoUtil::get_last_cook_status(HAPI_Session *session)
+std::string get_last_cook_status(HAPI_Session *session)
 {
 	int buffer_length = 0;
 	HAPI_Result buffer_length_result;
@@ -58,7 +65,7 @@ std::string HEGoUtil::get_last_cook_status(HAPI_Session *session)
 	return result;
 }
 
-std::string HEGoUtil::get_connection_error()
+std::string get_connection_error()
 {
 	int buffer_length = 0;
 	HoudiniApi::GetConnectionErrorLength(&buffer_length);
@@ -75,7 +82,7 @@ std::string HEGoUtil::get_connection_error()
 	return result;
 }
 
-std::string HEGoUtil::get_string(const HAPI_Session *session, HAPI_StringHandle string_handle)
+std::string get_string(const HAPI_Session *session, HAPI_StringHandle string_handle)
 {
 	int length = 0;
 	HoudiniApi::GetStringBufLength(session, string_handle, &length);
@@ -88,13 +95,13 @@ std::string HEGoUtil::get_string(const HAPI_Session *session, HAPI_StringHandle 
 	return result;
 }
 
-bool HEGoUtil::save_to_hip(const HAPI_Session *session, const std::string &filename)
+bool save_to_hip(const HAPI_Session *session, const std::string &filename)
 {
 	HAPI_Result result = HoudiniApi::SaveHIPFile(session, filename.c_str(), /*lock_nodes=*/false);
 	return result == HAPI_RESULT_SUCCESS;
 }
 
-HAPI_NodeId HEGoUtil::get_parent_node_id(const HAPI_Session *session, const HAPI_NodeId &node_id)
+HAPI_NodeId get_parent_node_id(const HAPI_Session *session, const HAPI_NodeId &node_id)
 {
 	HAPI_NodeId parent_id = -1;
 	if (node_id >= 0)
@@ -106,3 +113,7 @@ HAPI_NodeId HEGoUtil::get_parent_node_id(const HAPI_Session *session, const HAPI
 
 	return parent_id;
 }
+
+} // namespace Hapi
+} // namespace Util
+} // namespace HEGo

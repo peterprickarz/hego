@@ -29,49 +29,58 @@ var hego_input_nodes: Array[HEGoInputNode]
 var hego_dist_merge_node: HEGoMergeNode
 var hego_dist_input_nodes: Array[HEGoInputNode]
 
+func _await_task(task: HEGoTask) -> Variant:
+	while task.get_status() < HEGoTask.COMPLETED:
+		await get_tree().process_frame
+	if task.get_status() == HEGoTask.FAILED:
+		push_error("Task failed: " + task.get_error_message())
+		return null
+	return task.get_result()
+
+
 func cook():
 	for child in get_children():
 		child.queue_free()
-	
+
 	# Ensure valid AssetNode object
 	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
 	hego_asset_node.op_name = ASSET_NAME
-	hego_asset_node.instantiate()
-	hego_asset_node.set_transform(global_transform)
+	await _await_task(hego_asset_node.instantiate())
+	await _await_task(hego_asset_node.set_transform(global_transform))
 	# Ensure valid MergeNode object
 	if not hego_merge_node: hego_merge_node = HEGoMergeNode.new()
-	hego_merge_node.instantiate()
+	await _await_task(hego_merge_node.instantiate())
 	if not hego_dist_merge_node: hego_dist_merge_node = HEGoMergeNode.new()
-	hego_dist_merge_node.instantiate()
+	await _await_task(hego_dist_merge_node.instantiate())
 	# Ensure array of InputNodes contains valid InputNode objects
 	if hego_input_nodes.size() > input_nodes.size():
 		hego_input_nodes.resize(input_nodes.size())
 	for i in range(input_nodes.size()):
 		if (hego_input_nodes.size() < i + 1):
 			hego_input_nodes.append(HEGoInputNode.new())
-		hego_input_nodes[i].instantiate()
-		hego_input_nodes[i].set_geo_from_mesh_instance_3d(input_nodes[i])
+		await _await_task(hego_input_nodes[i].instantiate())
+		await _await_task(hego_input_nodes[i].set_geo_from_mesh_instance_3d(input_nodes[i]))
 	if hego_dist_input_nodes.size() > dist_input_nodes.size():
 		hego_dist_input_nodes.resize(dist_input_nodes.size())
 	for i in range(dist_input_nodes.size()):
 		if (hego_dist_input_nodes.size() < i + 1):
 			hego_dist_input_nodes.append(HEGoInputNode.new())
-		hego_dist_input_nodes[i].instantiate()
-		hego_dist_input_nodes[i].set_geo_from_mesh_instance_3d(dist_input_nodes[i])
+		await _await_task(hego_dist_input_nodes[i].instantiate())
+		await _await_task(hego_dist_input_nodes[i].set_geo_from_mesh_instance_3d(dist_input_nodes[i]))
 	# Connect inputs function takes an array of InputNode objects
-	hego_merge_node.connect_inputs(hego_input_nodes)
-	hego_dist_merge_node.connect_inputs(hego_dist_input_nodes)
+	await _await_task(hego_merge_node.connect_inputs(hego_input_nodes))
+	await _await_task(hego_dist_merge_node.connect_inputs(hego_dist_input_nodes))
 	# Connect MergeNode to AssetNode and set parameters
-	hego_asset_node.connect_input(hego_merge_node, 0)
-	hego_asset_node.connect_input(hego_dist_merge_node, 1)
-	hego_asset_node.set_parm(PARM_NAME_DENSITY_BIAS, density_bias)
-	hego_asset_node.set_parm(PARM_NAME_MIN_SCALE, min_scale)
-	hego_asset_node.set_parm(PARM_NAME_MAX_SCALE, max_scale)
-	hego_asset_node.set_parm(PARM_NAME_SPIKE_DENSITY, spike_density)
-	hego_asset_node.set_parm(PARM_NAME_NORMAL_ALIGNED, int(normal_aligned))
+	await _await_task(hego_asset_node.connect_input(hego_merge_node, 0))
+	await _await_task(hego_asset_node.connect_input(hego_dist_merge_node, 1))
+	await _await_task(hego_asset_node.set_parm(PARM_NAME_DENSITY_BIAS, density_bias))
+	await _await_task(hego_asset_node.set_parm(PARM_NAME_MIN_SCALE, min_scale))
+	await _await_task(hego_asset_node.set_parm(PARM_NAME_MAX_SCALE, max_scale))
+	await _await_task(hego_asset_node.set_parm(PARM_NAME_SPIKE_DENSITY, spike_density))
+	await _await_task(hego_asset_node.set_parm(PARM_NAME_NORMAL_ALIGNED, int(normal_aligned)))
 	# Fetch and set cook result of AssetNode
 	var res = load("res://addons/hego/point_filters/fetch_points_default.tres")
-	var dict = hego_asset_node.fetch_points(res)
+	var dict = await _await_task(hego_asset_node.fetch_points(res))
 	var multimesh = MultiMesh.new()
 
 	multimesh.transform_format = RenderingServer.MULTIMESH_TRANSFORM_3D

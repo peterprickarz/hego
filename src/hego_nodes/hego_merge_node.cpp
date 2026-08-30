@@ -5,42 +5,68 @@
 #include "util/geo/input.h"
 #include "util/log/log.h"
 #include "util/node/create_nodes.h"
+#include "util/task/task_helpers.h"
+
+using HEGo::Util::Task::make_noop;
+using HEGo::Util::Task::submit;
 
 namespace HEGo
 {
-HEGoMergeNode::HEGoMergeNode()
+
+HEGoMergeNode::HEGoMergeNode() {}
+
+HEGoMergeNode::~HEGoMergeNode() {}
+
+void HEGoMergeNode::reset_node_id()
 {
-	// Constructor code, if any
+	HEGoInputReceiverNode::reset_node_id();
+	cached_source_ids.clear();
 }
 
-HEGoMergeNode::~HEGoMergeNode()
+godot::Ref<HEGoTask> HEGoMergeNode::instantiate()
 {
-	// Destructor code, if any
+	HAPI_NodeId nid = node_id;
+	HEGoMergeNode *self = this;
+
+	return submit("Instantiate merge node", nid, [self, nid](HEGoSessionManager *mgr) -> godot::Variant {
+		self->node_id = HEGo::Util::Geo::create_merge_sop(mgr, nid);
+		mgr->register_node(self);
+		return self->node_id;
+	});
 }
 
-void HEGoMergeNode::instantiate()
+godot::Ref<HEGoTask> HEGoMergeNode::connect_inputs(godot::Array inputs, bool force)
 {
-	// Always instantiate merge sop
-	node_id = HEGo::Util::Geo::create_merge_sop(get_session_manager(), node_id);
-	get_session_manager()->register_node(this);
-}
-
-void HEGoMergeNode::connect_inputs(godot::Array inputs)
-{
-	// Convert from node objects to node ids array
-	godot::Array node_ids;
-	node_ids.resize(inputs.size());
+	// Extract node IDs on main thread (accessing Godot objects)
+	godot::PackedInt32Array source_ids;
+	source_ids.resize(inputs.size());
 	for (int i = 0; i < inputs.size(); ++i)
 	{
 		HEGoBaseNode *input_node = Object::cast_to<HEGoBaseNode>(inputs[i]);
 		if (input_node)
 		{
-			node_ids[i] = input_node->get_id();
+			source_ids[i] = input_node->get_id();
 		}
 	}
-	HEGo::Util::Geo::connect_to_merge(get_session_manager(), node_id, node_ids);
+
+	HAPI_NodeId nid = node_id;
+
+	if (!force && source_ids == cached_source_ids)
+	{
+		return make_noop("Connect merge inputs (cached)", nid);
+	}
+
+	cached_source_ids = source_ids;
+
+	return submit("Connect merge inputs", nid, [nid, source_ids](HEGoSessionManager *mgr) -> godot::Variant {
+		HEGo::Util::Geo::connect_to_merge(mgr, nid, source_ids);
+		return 0;
+	});
 }
 
-void HEGoMergeNode::_bind_methods() { godot::ClassDB::bind_method(godot::D_METHOD("connect_inputs", "inputs"), &HEGoMergeNode::connect_inputs); }
+void HEGoMergeNode::_bind_methods()
+{
+	godot::ClassDB::bind_method(godot::D_METHOD("connect_inputs", "inputs", "force"), &HEGoMergeNode::connect_inputs, DEFVAL(false));
+}
 
 } // namespace HEGo

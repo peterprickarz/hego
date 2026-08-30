@@ -2,6 +2,7 @@
 import os
 import sys
 import platform
+import shutil
 
 # ───────────────────────────────────────────────
 # Determine Houdini root (HFS) with sensible defaults
@@ -90,8 +91,12 @@ if env["platform"] == "windows":
         env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
 elif env["platform"] == "linux":
-    env["CC"] = "gcc-11"
-    env["CXX"] = "g++-11"
+    # Houdini 21.0 on Linux is built with GCC 11, so prefer gcc-11/g++-11 to match its
+    # toolchain when those binaries are available. Distros that ship a different GCC and
+    # don't provide versioned gcc-11 binaries (e.g. Fedora) fall back to the default gcc/g++.
+    # An explicit CC/CXX in the environment always wins, e.g. `CC=gcc CXX=g++ scons`.
+    env["CC"] = os.environ.get("CC") or ("gcc-11" if shutil.which("gcc-11") else "gcc")
+    env["CXX"] = os.environ.get("CXX") or ("g++-11" if shutil.which("g++-11") else "g++")
     env.Append(CCFLAGS=["-std=c++17", "-fPIC"])
 
     # Ensure dynamic linking of C++ runtime

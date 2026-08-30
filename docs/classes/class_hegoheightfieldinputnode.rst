@@ -41,11 +41,11 @@ Methods
 .. table::
    :widths: auto
 
-   +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                      |
-   +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0\ ) |
-   +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                                                |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) |
+   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -60,19 +60,13 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-|void| **instantiate**\ (\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_instantiate>`
+:ref:`HEGoTask<class_HEGoTask>` **instantiate**\ (\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_instantiate>`
 
-Creates a Houdini HeightField input network for this wrapper.
-
-
+Submits a task to create a Houdini HeightField input network for this wrapper.
 
 If the node is already instantiated, the call returns immediately.
 
-
-
 The method requires an active Houdini session. On success, it stores the main node id plus internal height, mask, and merge node ids, then registers this wrapper with the session manager.
-
-
 
 On failure, all stored ids are reset to invalid values and an error is logged.
 
@@ -84,9 +78,9 @@ On failure, all stored ids are reset to invalid values and an error is logged.
 
 .. rst-class:: classref-method
 
-|void| **set_layers**\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_set_layers>`
+:ref:`HEGoTask<class_HEGoTask>` **set_layers**\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_set_layers>`
 
-Uploads all supplied layers into a newly created HeightField input node.
+Submits a task to upload all supplied layers into a newly created HeightField input node.
 
 
 
@@ -161,6 +155,8 @@ Failure behavior:
 - If no active Houdini session exists, layer upload cannot proceed.
 
 - Any HAPI node creation or write failure logs an error and aborts the current layer build.
+
+Layer content and parameters are hashed internally. If nothing has changed since the previous call a no-op task is returned, unless ``force`` is ``true``.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

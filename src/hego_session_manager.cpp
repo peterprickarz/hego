@@ -7,10 +7,13 @@
 #include <algorithm>
 #include <vector>
 
-HEGoSessionManager::HEGoSessionManager() : my_session{}, myCookOptions{} {}
+HEGoSessionManager::HEGoSessionManager() : libHAPIL(nullptr), my_session{}, myCookOptions{} {}
 
 bool HEGoSessionManager::start_session(SessionType session_type, const std::string &connection_data)
 {
+	// Load the HAPI library
+	libHAPIL = HEGoPlatform::initialize_hapi();
+
 	// Parse connection data based on session type
 	std::string named_pipe = connection_data;
 	int tcp_port = DEFAULT_TCP_PORT;
@@ -79,7 +82,7 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	{
 		if (session_type != SessionType::InProcess)
 		{
-			std::string connectionError = HEGoUtil::get_connection_error();
+			std::string connectionError = HEGo::Util::Hapi::get_connection_error();
 			if (!connectionError.empty())
 				HEGo::Util::Log::error("Houdini Engine Session failed to connect - " + godot::String(connectionError.c_str()));
 		}
@@ -276,7 +279,7 @@ bool HEGoSessionManager::wait_for_cook(HAPI_NodeId node_id)
 
 	if (status != HAPI_STATE_READY || result != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::warning("Cook failure: " + godot::String(HEGoUtil::get_last_cook_error(get_session()).c_str()));
+		HEGo::Util::Log::warning("Cook failure: " + godot::String(HEGo::Util::Hapi::get_last_cook_error(get_session()).c_str()));
 		return false;
 	}
 	HEGo::Util::Log::line();

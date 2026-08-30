@@ -4,18 +4,17 @@
 #include "hego_base_node.h"
 #include "util/geo/input.h"
 #include "util/geo/transform.h"
+#include "util/task/task_helpers.h"
+
+using HEGo::Util::Task::make_noop;
+using HEGo::Util::Task::submit;
 
 namespace HEGo
 {
-HEGoBaseNode::HEGoBaseNode() : node_id(-1)
-{
-	// Constructor code, if any
-}
 
-HEGoBaseNode::~HEGoBaseNode()
-{
-	// Destructor code, if any
-}
+HEGoBaseNode::HEGoBaseNode() : node_id(-1) {}
+
+HEGoBaseNode::~HEGoBaseNode() {}
 
 HAPI_NodeId HEGoBaseNode::get_id() const { return node_id; }
 
@@ -23,63 +22,122 @@ void HEGoBaseNode::reset_node_id() { node_id = -1; }
 
 HEGoSessionManager *HEGoBaseNode::get_session_manager() { return HEGo::HEGoAPI::get_singleton()->get_session_manager(); }
 
-void HEGoBaseNode::instantiate()
+godot::Ref<HEGoTask> HEGoBaseNode::instantiate()
 {
-	// Virtual method, does nothing by default
+	// Virtual method — default returns a no-op completed task
+	godot::Ref<HEGoTask> task;
+	task.instantiate();
+	task->description = "Instantiate (base)";
+	task->status.store(HEGoTask::COMPLETED, std::memory_order_release);
+	return task;
 }
 
 void HEGoBaseNode::_bind_methods() { godot::ClassDB::bind_method(godot::D_METHOD("instantiate"), &HEGoBaseNode::instantiate); }
 
-// Implementation of HEGoInputReceiverNode
-HEGoInputReceiverNode::HEGoInputReceiverNode()
+// HEGoInputReceiverNode
+HEGoInputReceiverNode::HEGoInputReceiverNode() {}
+
+HEGoInputReceiverNode::~HEGoInputReceiverNode() {}
+
+void HEGoInputReceiverNode::reset_node_id()
 {
-	// Constructor code, if any
+	HEGoBaseNode::reset_node_id();
+	cached_connections.clear();
 }
 
-HEGoInputReceiverNode::~HEGoInputReceiverNode()
+godot::Ref<HEGoTask> HEGoInputReceiverNode::connect_input(const HEGoBaseNode *other_node, int input_index, bool force)
 {
-	// Destructor code, if any
-}
+	HAPI_NodeId target_nid = node_id;
+	HAPI_NodeId source_nid = other_node->get_id();
 
-void HEGoInputReceiverNode::connect_input(const HEGoBaseNode *other_node, int input_index)
-{
-	HEGo::Util::Geo::connect_merge_to_input(get_session_manager(), node_id, input_index, other_node->get_id());
+	if (!force && cached_connections.has(input_index) && cached_connections[input_index] == source_nid)
+	{
+		return make_noop("Connect input (cached)", target_nid);
+	}
+
+	cached_connections[input_index] = source_nid;
+
+	return submit("Connect input", target_nid, [target_nid, input_index, source_nid](HEGoSessionManager *mgr) -> godot::Variant {
+		HEGo::Util::Geo::connect_merge_to_input(mgr, target_nid, input_index, source_nid);
+		return 0;
+	});
 }
 
 void HEGoInputReceiverNode::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("connect_input", "other_node", "input_index"), &HEGoInputReceiverNode::connect_input);
+	godot::ClassDB::bind_method(godot::D_METHOD("connect_input", "other_node", "input_index", "force"), &HEGoInputReceiverNode::connect_input, DEFVAL(false));
 }
 
-// Implementation of HEGoTransformableNode
-HEGoTransformableNode::HEGoTransformableNode()
+// HEGoTransformableNode
+HEGoTransformableNode::HEGoTransformableNode() {}
+
+HEGoTransformableNode::~HEGoTransformableNode() {}
+
+void HEGoTransformableNode::reset_node_id()
 {
-	// Constructor code, if any
+	HEGoBaseNode::reset_node_id();
+	has_cached_transform = false;
 }
 
-HEGoTransformableNode::~HEGoTransformableNode()
+godot::Ref<HEGoTask> HEGoTransformableNode::set_transform(godot::Transform3D xform, bool force)
 {
-	// Destructor code, if any
+	HAPI_NodeId nid = node_id;
+
+	if (!force && has_cached_transform && last_transform == xform)
+	{
+		return make_noop("Set transform (cached)", nid);
+	}
+
+	last_transform = xform;
+	has_cached_transform = true;
+
+	return submit("Set transform", nid, [nid, xform](HEGoSessionManager *mgr) -> godot::Variant {
+		HEGo::Util::Geo::set_object_transform(mgr, nid, xform);
+		return 0;
+	});
 }
 
-void HEGoTransformableNode::set_transform(godot::Transform3D xform) { HEGo::Util::Geo::set_object_transform(get_session_manager(), node_id, xform); }
+void HEGoTransformableNode::_bind_methods()
+{
+	godot::ClassDB::bind_method(godot::D_METHOD("set_transform", "xform", "force"), &HEGoTransformableNode::set_transform, DEFVAL(false));
+}
 
-void HEGoTransformableNode::_bind_methods() { godot::ClassDB::bind_method(godot::D_METHOD("set_transform", "xform"), &HEGoTransformableNode::set_transform); }
-
+// HEGoTransformableInputReceiverNode
 HEGoTransformableInputReceiverNode::HEGoTransformableInputReceiverNode() {}
 
 HEGoTransformableInputReceiverNode::~HEGoTransformableInputReceiverNode() {}
 
-void HEGoTransformableInputReceiverNode::connect_input(const HEGoBaseNode *other_node, int input_index)
+void HEGoTransformableInputReceiverNode::reset_node_id()
 {
-	HEGo::Util::Geo::connect_merge_to_input(get_session_manager(), node_id, input_index, other_node->get_id());
+	HEGoTransformableNode::reset_node_id();
+	cached_connections.clear();
+}
+
+godot::Ref<HEGoTask> HEGoTransformableInputReceiverNode::connect_input(const HEGoBaseNode *other_node, int input_index, bool force)
+{
+	HAPI_NodeId target_nid = node_id;
+	HAPI_NodeId source_nid = other_node->get_id();
+
+	if (!force && cached_connections.has(input_index) && cached_connections[input_index] == source_nid)
+	{
+		return make_noop("Connect input (cached)", target_nid);
+	}
+
+	cached_connections[input_index] = source_nid;
+
+	return submit("Connect input", target_nid, [target_nid, input_index, source_nid](HEGoSessionManager *mgr) -> godot::Variant {
+		HEGo::Util::Geo::connect_merge_to_input(mgr, target_nid, input_index, source_nid);
+		return 0;
+	});
 }
 
 void HEGoTransformableInputReceiverNode::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("connect_input", "other_node", "input_index"), &HEGoTransformableInputReceiverNode::connect_input);
+	godot::ClassDB::bind_method(
+			godot::D_METHOD("connect_input", "other_node", "input_index", "force"), &HEGoTransformableInputReceiverNode::connect_input, DEFVAL(false));
 }
 
+// HEGoTransformableNamedNode
 HEGoTransformableNamedNode::HEGoTransformableNamedNode() {}
 
 HEGoTransformableNamedNode::~HEGoTransformableNamedNode() {}
@@ -90,12 +148,16 @@ godot::String HEGoTransformableNamedNode::get_node_name() const { return node_na
 
 void HEGoTransformableNamedNode::_bind_methods() {}
 
+// HEGoBaseInputNode
 HEGoBaseInputNode::HEGoBaseInputNode() {}
 
 HEGoBaseInputNode::~HEGoBaseInputNode() {}
 
 void HEGoBaseInputNode::set_prim_attr(godot::String name, godot::Variant value) {}
 
-void HEGoBaseInputNode::_bind_methods() { godot::ClassDB::bind_method(godot::D_METHOD("set_prim_attr", "name", "value"), &HEGoBaseInputNode::set_prim_attr); }
+void HEGoBaseInputNode::_bind_methods()
+{
+	godot::ClassDB::bind_method(godot::D_METHOD("set_prim_attr", "name", "value"), &HEGoBaseInputNode::set_prim_attr);
+}
 
 } // namespace HEGo

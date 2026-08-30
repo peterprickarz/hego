@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoTask" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Represents an asynchronous task submitted to the HEGo task scheduler.
+</brief_description>
+<description>
+All HEGo node methods that call Houdini Engine return an [HEGoTask] instead of blocking the main thread. The task is queued on a background worker thread and executed in order.
+
+Poll [method get_status] to determine whether the task is still running. Once the status reaches [constant COMPLETED], the result is available via [method get_result]. If the status is [constant FAILED], [method get_error_message] describes what went wrong.
+
+Recommended GDScript helper for awaiting a task:
+[codeblock]
+func _await_task(task: HEGoTask) -> Variant:
+    while task.get_status() &lt; HEGoTask.COMPLETED:
+        await get_tree().process_frame
+    if task.get_status() == HEGoTask.FAILED:
+        push_error("Task failed: " + task.get_error_message())
+        return null
+    return task.get_result()
+[/codeblock]
+
+Usage example:
+[codeblock]
+var task = asset_node.cook()
+var result = await _await_task(task)
+[/codeblock]
+
+See also [method HEGoAPI.get_current_task], [method HEGoAPI.get_pending_tasks], and [method HEGoAPI.get_completed_task_history] for inspecting the scheduler queue.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="get_status" qualifiers="const">
+<return type="int" />
+<description>
+Returns the current status of this task as one of the [code]Status[/code] constants:
+[constant PENDING], [constant RUNNING], [constant COMPLETED], or [constant FAILED].
+
+A task transitions from [constant PENDING] to [constant RUNNING] when the scheduler picks it up, then to [constant COMPLETED] or [constant FAILED] when execution finishes.
+</description>
+</method>
+<method name="get_result" qualifiers="const">
+<return type="Variant" />
+<description>
+Returns the result produced by the task.
+
+Only meaningful after [method get_status] returns [constant COMPLETED]. The type depends on the originating method. For example, [method HEGoAssetNode.get_parms_dict] produces a [Dictionary], while [method HEGoAssetNode.cook] produces [code]null[/code].
+</description>
+</method>
+<method name="get_error_message" qualifiers="const">
+<return type="String" />
+<description>
+Returns the error message when [method get_status] is [constant FAILED].
+
+Returns an empty string if the task has not failed.
+</description>
+</method>
+<method name="get_description" qualifiers="const">
+<return type="String" />
+<description>
+Returns a human-readable description of what this task does, such as [code]"Cook"[/code] or [code]"Set Parameter"[/code].
+</description>
+</method>
+<method name="get_node_id" qualifiers="const">
+<return type="int" />
+<description>
+Returns the Houdini node id associated with this task, or [code]-1[/code] if no node is associated.
+</description>
+</method>
+</methods>
+<constants>
+<constant name="PENDING" value="0" enum="Status">
+The task is waiting in the queue and has not started executing.
+</constant>
+<constant name="RUNNING" value="1" enum="Status">
+The task is currently being executed on the background worker thread.
+</constant>
+<constant name="COMPLETED" value="2" enum="Status">
+The task finished successfully. The result is available via [method get_result].
+</constant>
+<constant name="FAILED" value="3" enum="Status">
+The task encountered an error. See [method get_error_message] for details.
+</constant>
+</constants>
+</class>

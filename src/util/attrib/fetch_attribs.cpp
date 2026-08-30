@@ -41,7 +41,7 @@ godot::Variant fetch_dict(
 	for (int i = 0; i < attrib_info.count * attrib_info.tupleSize; ++i)
 	{
 		// Retrieve the string immediately as handles are only valid until the next call
-		std::string json_string = HEGoUtil::get_string(session, temp_data[i]);
+		std::string json_string = HEGo::Util::Hapi::get_string(session, temp_data[i]);
 		if (json_string.empty())
 		{
 			attrib_data.append(godot::Variant());
@@ -492,7 +492,7 @@ godot::Variant fetch_by_name(
 		values.resize(attrib_info.count * attrib_info.tupleSize);
 		for (int i = 0; i < attrib_info.count * attrib_info.tupleSize; ++i)
 		{
-			std::string json_string = HEGoUtil::get_string(session, temp_data[i]);
+			std::string json_string = HEGo::Util::Hapi::get_string(session, temp_data[i]);
 			if (json_string.empty())
 			{
 				values[i] = godot::Variant();
