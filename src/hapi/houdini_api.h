@@ -441,7 +441,7 @@ public:
 
 
 public:
-    
+
    static CreateInProcessSessionFuncPtr CreateInProcessSession;
    static StartThriftSocketServerFuncPtr StartThriftSocketServer;
    static CreateThriftSocketSessionFuncPtr CreateThriftSocketSession;
@@ -870,7 +870,7 @@ public:
 
 
 public:
-    
+
    static HAPI_Result CreateInProcessSessionEmptyStub(HAPI_Session * session, const HAPI_SessionInfo * session_info);
    static HAPI_Result StartThriftSocketServerEmptyStub(const HAPI_ThriftServerOptions * options, int port, HAPI_ProcessId * process_id, const char * log_file);
    static HAPI_Result CreateThriftSocketSessionEmptyStub(HAPI_Session * session, const char * host_name, int port, const HAPI_SessionInfo * session_info);
@@ -1297,4 +1297,4 @@ public:
    static void SessionSyncInfo_InitEmptyStub(HAPI_SessionSyncInfo * in);
    static HAPI_SessionSyncInfo SessionSyncInfo_CreateEmptyStub();
 
-};    
+};

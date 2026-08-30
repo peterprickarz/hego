@@ -1,7 +1,7 @@
 
 
 #include "houdini_api.h"
-#include "hego_platform.h"    
+#include "hego_platform.h"
 
   HoudiniApi::CreateInProcessSessionFuncPtr
   HoudiniApi::CreateInProcessSession = &HoudiniApi::CreateInProcessSessionEmptyStub;
@@ -1718,7 +1718,7 @@ HoudiniApi::initialize_hapi(void* library_handle)
 void
 HoudiniApi::finalize_hapi()
 {
-    
+
   HoudiniApi::CreateInProcessSession = &HoudiniApi::CreateInProcessSessionEmptyStub;
   HoudiniApi::StartThriftSocketServer = &HoudiniApi::StartThriftSocketServerEmptyStub;
   HoudiniApi::CreateThriftSocketSession = &HoudiniApi::CreateThriftSocketSessionEmptyStub;
@@ -2154,7 +2154,7 @@ HoudiniApi::is_hapi_initialized()
 	return ( HoudiniApi::IsInitialized != &HoudiniApi::IsInitializedEmptyStub );
 }
 
-    
+
 
 
 HAPI_Result
