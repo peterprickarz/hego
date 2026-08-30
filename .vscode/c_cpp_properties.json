@@ -7,8 +7,8 @@
         "${workspaceFolder}/src/**",
         "${workspaceFolder}/src/util/**",
         "${workspaceFolder}/src/hapi/**",
-        "C:/Program Files/Side Effects Software/Houdini 21.0.631/toolkit/include",
-        "/opt/hfs21.0/toolkit/include"
+        "C:/Program Files/Side Effects Software/Houdini 22.0.368/toolkit/include",
+        "/opt/hfs22.0/toolkit/include"
       ],
       "defines": ["_DEBUG", "UNICODE", "_UNICODE"],
       "windowsSdkVersion": "10.0.22000.0",
@@ -29,7 +29,7 @@
         "${workspaceFolder}/src/util/**",
         "${workspaceFolder}/src/hapi/**",
         // Houdini on Linux
-        "/opt/hfs21.0/toolkit/include"
+        "/opt/hfs22.0/toolkit/include"
       ],
       "defines": [
         "GDEXTENSION",      

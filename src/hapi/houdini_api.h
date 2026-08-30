@@ -51,8 +51,8 @@ public:
    typedef HAPI_Result(*ClearConnectionErrorFuncPtr)();
    typedef HAPI_Result(*GetConnectionErrorLengthFuncPtr)(int * buffer_length);
    typedef HAPI_Result(*GetConnectionErrorFuncPtr)(char * string_value, int length, HAPI_Bool clear);
-   typedef HAPI_Result(*GetCookingTotalCountFuncPtr)(const HAPI_Session * session, int * count);
-   typedef HAPI_Result(*GetCookingCurrentCountFuncPtr)(const HAPI_Session * session, int * count);
+   typedef HAPI_Result(*GetCookingTotalCountFuncPtr)(const HAPI_Session* session, int * count);
+   typedef HAPI_Result(*GetCookingCurrentCountFuncPtr)(const HAPI_Session* session, int * count);
    typedef HAPI_Result(*InterruptFuncPtr)(const HAPI_Session * session);
    typedef HAPI_Result(*ConvertTransformFuncPtr)(const HAPI_Session * session, const HAPI_TransformEuler * transform_in, HAPI_RSTOrder rst_order, HAPI_XYZOrder rot_order, HAPI_TransformEuler * transform_out);
    typedef HAPI_Result(*ConvertMatrixToQuatFuncPtr)(const HAPI_Session * session, const float * matrix, HAPI_RSTOrder rst_order, HAPI_Transform * transform_out);
@@ -216,6 +216,11 @@ public:
    typedef HAPI_Result(*GetGroupMembershipOnPackedInstancePartFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_GroupType group_type, const char * group_name, HAPI_Bool * membership_array_all_equal, int * membership_array, int start, int length);
    typedef HAPI_Result(*GetInstancedPartIdsFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_PartId * instanced_parts_array, int start, int length);
    typedef HAPI_Result(*GetInstancerPartTransformsFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_RSTOrder rst_order, HAPI_Transform * transforms_array, int start, int length);
+   typedef HAPI_Result(*GetCameraInfoFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_CameraInfo * camera_info);
+   typedef HAPI_Result(*GetCameraTransformFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_Transform * transform);
+   typedef HAPI_Result(*CreateInputCameraNodeFuncPtr)(const HAPI_Session * session, HAPI_NodeId parent_node_id, HAPI_NodeId * node_id, const char * camera_name, const char * node_label);
+   typedef HAPI_Result(*SetInputCameraInfoFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, const HAPI_CameraInfo * camera_info);
+   typedef HAPI_Result(*SetInputCameraTransformFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_RSTOrder rst_order, HAPI_XYZOrder rot_order, const HAPI_Transform * transform);
    typedef HAPI_Result(*SetPartInfoFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const HAPI_PartInfo * part_info);
    typedef HAPI_Result(*SetFaceCountsFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const int * face_counts_array, int start, int length);
    typedef HAPI_Result(*SetVertexListFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const int * vertex_list_array, int start, int length);
@@ -229,7 +234,7 @@ public:
    typedef HAPI_Result(*SetAttributeFloatDataFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const char * name, const HAPI_AttributeInfo * attr_info, const float * data_array, int start, int length);
    typedef HAPI_Result(*SetAttributeFloat64DataFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const char * name, const HAPI_AttributeInfo * attr_info, const double * data_array, int start, int length);
    typedef HAPI_Result(*SetAttributeStringDataFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const char * name, const HAPI_AttributeInfo * attr_info, const char ** data_array, int start, int length);
-   typedef HAPI_Result(*SetAttributeIndexedStringDataFuncPtr)(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const char** string_array, int string_count, const int* indices_array, int indices_start, int indices_length);
+   typedef HAPI_Result(*SetAttributeIndexedStringDataFuncPtr)(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const char** string_fixed_array, int string_fixed_length, const int* indices_array, int indices_start, int indices_length);
    typedef HAPI_Result(*SetAttributeStringUniqueDataFuncPtr)(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const char* data_array, int data_length, int start_index, int num_indices);
    typedef HAPI_Result(*SetAttributeIntUniqueDataFuncPtr)(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const int* data_array, int data_length, int start_index, int num_indices);
    typedef HAPI_Result(*SetAttributeUInt8UniqueDataFuncPtr)(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const HAPI_UInt8* data_array, int data_length, int start_index, int num_indices);
@@ -295,7 +300,7 @@ public:
    typedef HAPI_Result(*GetImageMemoryBufferFuncPtr)(const HAPI_Session * session, HAPI_NodeId material_node_id, char * buffer, int length);
    typedef HAPI_Result(*GetSupportedImageFileFormatCountFuncPtr)(const HAPI_Session * session, int * file_format_count);
    typedef HAPI_Result(*GetSupportedImageFileFormatsFuncPtr)(const HAPI_Session * session, HAPI_ImageFileFormat * formats_array, int file_format_count);
-   typedef HAPI_Result(*CreateCOPImageFuncPtr)(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length);
+   typedef HAPI_Result(*CreateCOPImageFuncPtr)(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length, HAPI_NodeId * new_node_id);
    typedef HAPI_Result(*SetAnimCurveFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_ParmId parm_id, int parm_index, const HAPI_Keyframe * curve_keyframes_array, int keyframe_count);
    typedef HAPI_Result(*SetTransformAnimCurveFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_TransformComponent trans_comp, const HAPI_Keyframe * curve_keyframes_array, int keyframe_count);
    typedef HAPI_Result(*ResetSimulationFuncPtr)(const HAPI_Session * session, HAPI_NodeId node_id);
@@ -422,6 +427,8 @@ public:
    typedef HAPI_ImageInfo(*ImageInfo_CreateFuncPtr)();
    typedef void(*Keyframe_InitFuncPtr)(HAPI_Keyframe * in);
    typedef HAPI_Keyframe(*Keyframe_CreateFuncPtr)();
+   typedef void(*CameraInfo_InitFuncPtr)(HAPI_CameraInfo* in);
+   typedef HAPI_CameraInfo(*CameraInfo_CreateFuncPtr)();
    typedef void(*VolumeInfo_InitFuncPtr)(HAPI_VolumeInfo * in);
    typedef HAPI_VolumeInfo(*VolumeInfo_CreateFuncPtr)();
    typedef void(*VolumeTileInfo_InitFuncPtr)(HAPI_VolumeTileInfo * in);
@@ -645,6 +652,11 @@ public:
    static GetGroupMembershipOnPackedInstancePartFuncPtr GetGroupMembershipOnPackedInstancePart;
    static GetInstancedPartIdsFuncPtr GetInstancedPartIds;
    static GetInstancerPartTransformsFuncPtr GetInstancerPartTransforms;
+   static GetCameraInfoFuncPtr GetCameraInfo;
+   static GetCameraTransformFuncPtr GetCameraTransform;
+   static CreateInputCameraNodeFuncPtr CreateInputCameraNode;
+   static SetInputCameraInfoFuncPtr SetInputCameraInfo;
+   static SetInputCameraTransformFuncPtr SetInputCameraTransform;
    static SetPartInfoFuncPtr SetPartInfo;
    static SetFaceCountsFuncPtr SetFaceCounts;
    static SetVertexListFuncPtr SetVertexList;
@@ -851,6 +863,8 @@ public:
    static ImageInfo_CreateFuncPtr ImageInfo_Create;
    static Keyframe_InitFuncPtr Keyframe_Init;
    static Keyframe_CreateFuncPtr Keyframe_Create;
+   static CameraInfo_InitFuncPtr CameraInfo_Init;
+   static CameraInfo_CreateFuncPtr CameraInfo_Create;
    static VolumeInfo_InitFuncPtr VolumeInfo_Init;
    static VolumeInfo_CreateFuncPtr VolumeInfo_Create;
    static VolumeTileInfo_InitFuncPtr VolumeTileInfo_Init;
@@ -909,8 +923,8 @@ public:
    static HAPI_Result ClearConnectionErrorEmptyStub();
    static HAPI_Result GetConnectionErrorLengthEmptyStub(int * buffer_length);
    static HAPI_Result GetConnectionErrorEmptyStub(char * string_value, int length, HAPI_Bool clear);
-   static HAPI_Result GetCookingTotalCountEmptyStub(const HAPI_Session * session, int * count);
-   static HAPI_Result GetCookingCurrentCountEmptyStub(const HAPI_Session * session, int * count);
+   static HAPI_Result GetCookingTotalCountEmptyStub(const HAPI_Session* session, int * count);
+   static HAPI_Result GetCookingCurrentCountEmptyStub(const HAPI_Session* session, int * count);
    static HAPI_Result InterruptEmptyStub(const HAPI_Session * session);
    static HAPI_Result ConvertTransformEmptyStub(const HAPI_Session * session, const HAPI_TransformEuler * transform_in, HAPI_RSTOrder rst_order, HAPI_XYZOrder rot_order, HAPI_TransformEuler * transform_out);
    static HAPI_Result ConvertMatrixToQuatEmptyStub(const HAPI_Session * session, const float * matrix, HAPI_RSTOrder rst_order, HAPI_Transform * transform_out);
@@ -1074,6 +1088,11 @@ public:
    static HAPI_Result GetGroupMembershipOnPackedInstancePartEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_GroupType group_type, const char * group_name, HAPI_Bool * membership_array_all_equal, int * membership_array, int start, int length);
    static HAPI_Result GetInstancedPartIdsEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_PartId * instanced_parts_array, int start, int length);
    static HAPI_Result GetInstancerPartTransformsEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_RSTOrder rst_order, HAPI_Transform * transforms_array, int start, int length);
+   static HAPI_Result GetCameraInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_CameraInfo * camera_info);
+   static HAPI_Result GetCameraTransformEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_Transform * transform);
+   static HAPI_Result CreateInputCameraNodeEmptyStub(const HAPI_Session * session, HAPI_NodeId parent_node_id, HAPI_NodeId * node_id, const char * camera_name, const char * node_label);
+   static HAPI_Result SetInputCameraInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, const HAPI_CameraInfo * camera_info);
+   static HAPI_Result SetInputCameraTransformEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_RSTOrder rst_order, HAPI_XYZOrder rot_order, const HAPI_Transform * transform);
    static HAPI_Result SetPartInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const HAPI_PartInfo * part_info);
    static HAPI_Result SetFaceCountsEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const int * face_counts_array, int start, int length);
    static HAPI_Result SetVertexListEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const int * vertex_list_array, int start, int length);
@@ -1087,7 +1106,7 @@ public:
    static HAPI_Result SetAttributeFloatDataEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const char * name, const HAPI_AttributeInfo * attr_info, const float * data_array, int start, int length);
    static HAPI_Result SetAttributeFloat64DataEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const char * name, const HAPI_AttributeInfo * attr_info, const double * data_array, int start, int length);
    static HAPI_Result SetAttributeStringDataEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const char * name, const HAPI_AttributeInfo * attr_info, const char ** data_array, int start, int length);
-   static HAPI_Result SetAttributeIndexedStringDataEmptyStub(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const char** string_array, int string_count, const int* indices_array, int indices_start, int indices_length);
+   static HAPI_Result SetAttributeIndexedStringDataEmptyStub(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const char** string_fixed_array, int string_fixed_length, const int* indices_array, int indices_start, int indices_length);
    static HAPI_Result SetAttributeStringUniqueDataEmptyStub(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const char* data_array, int data_length, int start_index, int num_indices);
    static HAPI_Result SetAttributeIntUniqueDataEmptyStub(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const int* data_array, int data_length, int start_index, int num_indices);
    static HAPI_Result SetAttributeUInt8UniqueDataEmptyStub(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const HAPI_UInt8* data_array, int data_length, int start_index, int num_indices);
@@ -1153,7 +1172,7 @@ public:
    static HAPI_Result GetImageMemoryBufferEmptyStub(const HAPI_Session * session, HAPI_NodeId material_node_id, char * buffer, int length);
    static HAPI_Result GetSupportedImageFileFormatCountEmptyStub(const HAPI_Session * session, int * file_format_count);
    static HAPI_Result GetSupportedImageFileFormatsEmptyStub(const HAPI_Session * session, HAPI_ImageFileFormat * formats_array, int file_format_count);
-   static HAPI_Result CreateCOPImageEmptyStub(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length);
+   static HAPI_Result CreateCOPImageEmptyStub(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length, HAPI_NodeId * new_node_id);
    static HAPI_Result SetAnimCurveEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_ParmId parm_id, int parm_index, const HAPI_Keyframe * curve_keyframes_array, int keyframe_count);
    static HAPI_Result SetTransformAnimCurveEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_TransformComponent trans_comp, const HAPI_Keyframe * curve_keyframes_array, int keyframe_count);
    static HAPI_Result ResetSimulationEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id);
@@ -1280,6 +1299,8 @@ public:
    static HAPI_ImageInfo ImageInfo_CreateEmptyStub();
    static void Keyframe_InitEmptyStub(HAPI_Keyframe * in);
    static HAPI_Keyframe Keyframe_CreateEmptyStub();
+   static void CameraInfo_InitEmptyStub(HAPI_CameraInfo* in);
+   static HAPI_CameraInfo CameraInfo_CreateEmptyStub();
    static void VolumeInfo_InitEmptyStub(HAPI_VolumeInfo * in);
    static HAPI_VolumeInfo VolumeInfo_CreateEmptyStub();
    static void VolumeTileInfo_InitEmptyStub(HAPI_VolumeTileInfo * in);

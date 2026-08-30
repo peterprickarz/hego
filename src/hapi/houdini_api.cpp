@@ -612,6 +612,21 @@
   HoudiniApi::GetInstancerPartTransformsFuncPtr
   HoudiniApi::GetInstancerPartTransforms = &HoudiniApi::GetInstancerPartTransformsEmptyStub;
   
+  HoudiniApi::GetCameraInfoFuncPtr
+  HoudiniApi::GetCameraInfo = &HoudiniApi::GetCameraInfoEmptyStub;
+  
+  HoudiniApi::GetCameraTransformFuncPtr
+  HoudiniApi::GetCameraTransform = &HoudiniApi::GetCameraTransformEmptyStub;
+  
+  HoudiniApi::CreateInputCameraNodeFuncPtr
+  HoudiniApi::CreateInputCameraNode = &HoudiniApi::CreateInputCameraNodeEmptyStub;
+  
+  HoudiniApi::SetInputCameraInfoFuncPtr
+  HoudiniApi::SetInputCameraInfo = &HoudiniApi::SetInputCameraInfoEmptyStub;
+  
+  HoudiniApi::SetInputCameraTransformFuncPtr
+  HoudiniApi::SetInputCameraTransform = &HoudiniApi::SetInputCameraTransformEmptyStub;
+  
   HoudiniApi::SetPartInfoFuncPtr
   HoudiniApi::SetPartInfo = &HoudiniApi::SetPartInfoEmptyStub;
   
@@ -1230,6 +1245,12 @@
   HoudiniApi::Keyframe_CreateFuncPtr
   HoudiniApi::Keyframe_Create = &HoudiniApi::Keyframe_CreateEmptyStub;
   
+  HoudiniApi::CameraInfo_InitFuncPtr
+  HoudiniApi::CameraInfo_Init = &HoudiniApi::CameraInfo_InitEmptyStub;
+  
+  HoudiniApi::CameraInfo_CreateFuncPtr
+  HoudiniApi::CameraInfo_Create = &HoudiniApi::CameraInfo_CreateEmptyStub;
+  
   HoudiniApi::VolumeInfo_InitFuncPtr
   HoudiniApi::VolumeInfo_Init = &HoudiniApi::VolumeInfo_InitEmptyStub;
   
@@ -1488,6 +1509,11 @@ HoudiniApi::initialize_hapi(void* library_handle)
   HoudiniApi::GetGroupMembershipOnPackedInstancePart = (GetGroupMembershipOnPackedInstancePartFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetGroupMembershipOnPackedInstancePart");
   HoudiniApi::GetInstancedPartIds = (GetInstancedPartIdsFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetInstancedPartIds");
   HoudiniApi::GetInstancerPartTransforms = (GetInstancerPartTransformsFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetInstancerPartTransforms");
+  HoudiniApi::GetCameraInfo = (GetCameraInfoFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetCameraInfo");
+  HoudiniApi::GetCameraTransform = (GetCameraTransformFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_GetCameraTransform");
+  HoudiniApi::CreateInputCameraNode = (CreateInputCameraNodeFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_CreateInputCameraNode");
+  HoudiniApi::SetInputCameraInfo = (SetInputCameraInfoFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_SetInputCameraInfo");
+  HoudiniApi::SetInputCameraTransform = (SetInputCameraTransformFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_SetInputCameraTransform");
   HoudiniApi::SetPartInfo = (SetPartInfoFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_SetPartInfo");
   HoudiniApi::SetFaceCounts = (SetFaceCountsFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_SetFaceCounts");
   HoudiniApi::SetVertexList = (SetVertexListFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_SetVertexList");
@@ -1694,6 +1720,8 @@ HoudiniApi::initialize_hapi(void* library_handle)
   HoudiniApi::ImageInfo_Create = (ImageInfo_CreateFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_ImageInfo_Create");
   HoudiniApi::Keyframe_Init = (Keyframe_InitFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_Keyframe_Init");
   HoudiniApi::Keyframe_Create = (Keyframe_CreateFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_Keyframe_Create");
+  HoudiniApi::CameraInfo_Init = (CameraInfo_InitFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_CameraInfo_Init");
+  HoudiniApi::CameraInfo_Create = (CameraInfo_CreateFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_CameraInfo_Create");
   HoudiniApi::VolumeInfo_Init = (VolumeInfo_InitFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_VolumeInfo_Init");
   HoudiniApi::VolumeInfo_Create = (VolumeInfo_CreateFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_VolumeInfo_Create");
   HoudiniApi::VolumeTileInfo_Init = (VolumeTileInfo_InitFuncPtr)HEGoPlatform::get_dll_export(library_handle, "HAPI_VolumeTileInfo_Init");
@@ -1922,6 +1950,11 @@ HoudiniApi::finalize_hapi()
   HoudiniApi::GetGroupMembershipOnPackedInstancePart = &HoudiniApi::GetGroupMembershipOnPackedInstancePartEmptyStub;
   HoudiniApi::GetInstancedPartIds = &HoudiniApi::GetInstancedPartIdsEmptyStub;
   HoudiniApi::GetInstancerPartTransforms = &HoudiniApi::GetInstancerPartTransformsEmptyStub;
+  HoudiniApi::GetCameraInfo = &HoudiniApi::GetCameraInfoEmptyStub;
+  HoudiniApi::GetCameraTransform = &HoudiniApi::GetCameraTransformEmptyStub;
+  HoudiniApi::CreateInputCameraNode = &HoudiniApi::CreateInputCameraNodeEmptyStub;
+  HoudiniApi::SetInputCameraInfo = &HoudiniApi::SetInputCameraInfoEmptyStub;
+  HoudiniApi::SetInputCameraTransform = &HoudiniApi::SetInputCameraTransformEmptyStub;
   HoudiniApi::SetPartInfo = &HoudiniApi::SetPartInfoEmptyStub;
   HoudiniApi::SetFaceCounts = &HoudiniApi::SetFaceCountsEmptyStub;
   HoudiniApi::SetVertexList = &HoudiniApi::SetVertexListEmptyStub;
@@ -2128,6 +2161,8 @@ HoudiniApi::finalize_hapi()
   HoudiniApi::ImageInfo_Create = &HoudiniApi::ImageInfo_CreateEmptyStub;
   HoudiniApi::Keyframe_Init = &HoudiniApi::Keyframe_InitEmptyStub;
   HoudiniApi::Keyframe_Create = &HoudiniApi::Keyframe_CreateEmptyStub;
+  HoudiniApi::CameraInfo_Init = &HoudiniApi::CameraInfo_InitEmptyStub;
+  HoudiniApi::CameraInfo_Create = &HoudiniApi::CameraInfo_CreateEmptyStub;
   HoudiniApi::VolumeInfo_Init = &HoudiniApi::VolumeInfo_InitEmptyStub;
   HoudiniApi::VolumeInfo_Create = &HoudiniApi::VolumeInfo_CreateEmptyStub;
   HoudiniApi::VolumeTileInfo_Init = &HoudiniApi::VolumeTileInfo_InitEmptyStub;
@@ -2348,12 +2383,12 @@ HoudiniApi::GetConnectionErrorEmptyStub(char * string_value, int length, HAPI_Bo
     return HAPI_RESULT_FAILURE;
 }
 HAPI_Result
-HoudiniApi::GetCookingTotalCountEmptyStub(const HAPI_Session * session, int * count)
+HoudiniApi::GetCookingTotalCountEmptyStub(const HAPI_Session* session, int * count)
 {
     return HAPI_RESULT_FAILURE;
 }
 HAPI_Result
-HoudiniApi::GetCookingCurrentCountEmptyStub(const HAPI_Session * session, int * count)
+HoudiniApi::GetCookingCurrentCountEmptyStub(const HAPI_Session* session, int * count)
 {
     return HAPI_RESULT_FAILURE;
 }
@@ -3173,6 +3208,31 @@ HoudiniApi::GetInstancerPartTransformsEmptyStub(const HAPI_Session * session, HA
     return HAPI_RESULT_FAILURE;
 }
 HAPI_Result
+HoudiniApi::GetCameraInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_CameraInfo * camera_info)
+{
+    return HAPI_RESULT_FAILURE;
+}
+HAPI_Result
+HoudiniApi::GetCameraTransformEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, HAPI_Transform * transform)
+{
+    return HAPI_RESULT_FAILURE;
+}
+HAPI_Result
+HoudiniApi::CreateInputCameraNodeEmptyStub(const HAPI_Session * session, HAPI_NodeId parent_node_id, HAPI_NodeId * node_id, const char * camera_name, const char * node_label)
+{
+    return HAPI_RESULT_FAILURE;
+}
+HAPI_Result
+HoudiniApi::SetInputCameraInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, const HAPI_CameraInfo * camera_info)
+{
+    return HAPI_RESULT_FAILURE;
+}
+HAPI_Result
+HoudiniApi::SetInputCameraTransformEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_RSTOrder rst_order, HAPI_XYZOrder rot_order, const HAPI_Transform * transform)
+{
+    return HAPI_RESULT_FAILURE;
+}
+HAPI_Result
 HoudiniApi::SetPartInfoEmptyStub(const HAPI_Session * session, HAPI_NodeId node_id, HAPI_PartId part_id, const HAPI_PartInfo * part_info)
 {
     return HAPI_RESULT_FAILURE;
@@ -3238,7 +3298,7 @@ HoudiniApi::SetAttributeStringDataEmptyStub(const HAPI_Session * session, HAPI_N
     return HAPI_RESULT_FAILURE;
 }
 HAPI_Result
-HoudiniApi::SetAttributeIndexedStringDataEmptyStub(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const char** string_array, int string_count, const int* indices_array, int indices_start, int indices_length)
+HoudiniApi::SetAttributeIndexedStringDataEmptyStub(const HAPI_Session* session, HAPI_NodeId node_id, HAPI_PartId part_id, const char* name, const HAPI_AttributeInfo* attr_info, const char** string_fixed_array, int string_fixed_length, const int* indices_array, int indices_start, int indices_length)
 {
     return HAPI_RESULT_FAILURE;
 }
@@ -3568,7 +3628,7 @@ HoudiniApi::GetSupportedImageFileFormatsEmptyStub(const HAPI_Session * session, 
     return HAPI_RESULT_FAILURE;
 }
 HAPI_Result
-HoudiniApi::CreateCOPImageEmptyStub(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length)
+HoudiniApi::CreateCOPImageEmptyStub(const HAPI_Session * session, HAPI_NodeId parent_node_id, const int width, const int height, const HAPI_ImagePacking packing, HAPI_Bool flip_x, HAPI_Bool flip_y, const float * data_array, int start, int length, HAPI_NodeId * new_node_id)
 {
     return HAPI_RESULT_FAILURE;
 }
@@ -4201,6 +4261,16 @@ HAPI_Keyframe
 HoudiniApi::Keyframe_CreateEmptyStub()
 {
     return HAPI_Keyframe();
+}
+void
+HoudiniApi::CameraInfo_InitEmptyStub(HAPI_CameraInfo* in)
+{
+    return;
+}
+HAPI_CameraInfo
+HoudiniApi::CameraInfo_CreateEmptyStub()
+{
+    return HAPI_CameraInfo();
 }
 void
 HoudiniApi::VolumeInfo_InitEmptyStub(HAPI_VolumeInfo * in)
