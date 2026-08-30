@@ -8,9 +8,9 @@ import shutil
 # Determine Houdini root (HFS) with sensible defaults
 # ───────────────────────────────────────────────
 default_hfs = {
-    "Windows": r"C:\Program Files\Side Effects Software\Houdini 21.0.631",
-    "Linux":   "/opt/hfs21.0",                    # ← adjusted to match your actual path
-    "Darwin":  "/Applications/Houdini/Houdini21.0.631/Houdini.framework/Versions/Current/Resources"
+    "Windows": r"C:\Program Files\Side Effects Software\Houdini 22.0.368",
+    "Linux":   "/opt/hfs22.0",                    # ← adjusted to match your actual path
+    "Darwin":  "/Applications/Houdini/Houdini22.0.368/Houdini.framework/Versions/Current/Resources"
 }
 
 sys_name = platform.system()
@@ -42,7 +42,7 @@ houdini_vars = {
     "H":   HFS,
     "HH":  os.path.join(HFS, "houdini"),
     "HHC": os.path.join(HFS, "houdini", "config"),
-    "HHP": os.path.join(HFS, "houdini", "python3.11libs"),  # adjust python version if needed
+    "HHP": os.path.join(HFS, "houdini", "python3.13libs"),  # adjust python version if needed
     "HT":  os.path.join(HFS, "toolkit"),
     "HDSO": os.path.join(HFS, "dsolib"),
     "HSB": os.path.join(HFS, "houdini", "sbin"),
@@ -91,12 +91,12 @@ if env["platform"] == "windows":
         env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
 elif env["platform"] == "linux":
-    # Houdini 21.0 on Linux is built with GCC 11, so prefer gcc-11/g++-11 to match its
+    # Houdini 22.0 on Linux is built with GCC 14, so prefer gcc-14/g++-14 to match its
     # toolchain when those binaries are available. Distros that ship a different GCC and
-    # don't provide versioned gcc-11 binaries (e.g. Fedora) fall back to the default gcc/g++.
+    # don't provide versioned gcc-14 binaries (e.g. Fedora) fall back to the default gcc/g++.
     # An explicit CC/CXX in the environment always wins, e.g. `CC=gcc CXX=g++ scons`.
-    env["CC"] = os.environ.get("CC") or ("gcc-11" if shutil.which("gcc-11") else "gcc")
-    env["CXX"] = os.environ.get("CXX") or ("g++-11" if shutil.which("g++-11") else "g++")
+    env["CC"] = os.environ.get("CC") or ("gcc-14" if shutil.which("gcc-14") else "gcc")
+    env["CXX"] = os.environ.get("CXX") or ("g++-14" if shutil.which("g++-14") else "g++")
     env.Append(CCFLAGS=["-std=c++17", "-fPIC"])
 
     # Ensure dynamic linking of C++ runtime
@@ -117,7 +117,7 @@ elif env["platform"] == "macos" or sys_name == "Darwin":
 # Build machine info (optional, but matches setup script)
 if env["platform"] == "linux":
     env["ENV"]["HOUDINI_BUILD_PLATFORM"] = "Linux"
-    env["ENV"]["HOUDINI_BUILD_COMPILER"] = "11.2.1"  # from your setup script
+    env["ENV"]["HOUDINI_BUILD_COMPILER"] = "14.2.1"  # from Houdini 22.0 houdini_setup_bash
     env["ENV"]["HOUDINI_BUILD_LIBC"] = "glibc 2.28"
 
 

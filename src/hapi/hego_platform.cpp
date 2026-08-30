@@ -40,7 +40,7 @@ const char *HEGoPlatform::get_houdini_path()
 	}
 
 	// Final fallback to default
-	cached_path = "C:/Program Files/Side Effects Software/Houdini 21.0.631";
+	cached_path = "C:/Program Files/Side Effects Software/Houdini 22.0.368";
 	return cached_path.c_str();
 }
 

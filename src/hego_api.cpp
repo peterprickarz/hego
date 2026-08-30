@@ -24,7 +24,7 @@ HEGoAPI::HEGoAPI() : session_mgr()
 	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
 	if (!project_settings->has_setting("hego/houdini_installation_path"))
 	{
-		project_settings->set_setting("hego/houdini_installation_path", "C:/Program Files/Side Effects Software/Houdini 20.5.654");
+		project_settings->set_setting("hego/houdini_installation_path", "C:/Program Files/Side Effects Software/Houdini 22.0.368");
 	}
 
 	HEGoPlatform::set_env_vars();
@@ -86,7 +86,7 @@ void HEGoAPI::set_houdini_installation_path(const godot::String &path)
 godot::String HEGoAPI::get_houdini_installation_path() const
 {
 	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
-	return project_settings->get_setting("hego/houdini_installation_path", "C:/Program Files/Side Effects Software/Houdini 20.5.654");
+	return project_settings->get_setting("hego/houdini_installation_path", "C:/Program Files/Side Effects Software/Houdini 22.0.368");
 }
 
 godot::Dictionary HEGoAPI::get_hda_libraries()

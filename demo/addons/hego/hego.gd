@@ -68,11 +68,11 @@ func _add_project_settings():
 	# Add Houdini installation path setting if it doesn't exist
 	var setting_name = "hego/houdini_installation_path"
 	if not ProjectSettings.has_setting(setting_name):
-		var default_path = "C:/Program Files/Side Effects Software/Houdini 21.0.631"
+		var default_path = "C:/Program Files/Side Effects Software/Houdini 22.0.368"
 		if OS.get_name() == "Linux":
-			default_path = "/opt/hfs21.0.631"
+			default_path = "/opt/hfs22.0.368"
 		elif OS.get_name() == "macOS":
-			default_path = "/Applications/Houdini/Houdini21.0.631/Frameworks/Houdini.framework/Versions/Current/Resources"
+			default_path = "/Applications/Houdini/Houdini22.0.368/Frameworks/Houdini.framework/Versions/Current/Resources"
 		
 		ProjectSettings.set_setting(setting_name, default_path)
 		
