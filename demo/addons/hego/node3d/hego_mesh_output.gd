@@ -11,8 +11,8 @@ extends RefCounted
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "output"
 
-## Vertex attributes read for every surface. P always comes along.
-const VERTEX_ATTRIBS := ["N", "Cd", "uv", "uv2", "tangents"]
+## Point attributes read for every surface. P always comes along.
+const POINT_ATTRIBS := ["N", "Cd", "uv", "uv2", "tangents"]
 
 ## Primitive attributes the output is grouped by: one mesh per instance name, one
 ## surface per material within it.
@@ -70,7 +70,7 @@ static func handle(host: Node) -> void:
 
 	var fetch_start_usec := Time.get_ticks_usec()
 	var output: HEGoGeoSurfaces = await HEGoNodeUtil.await_task(host,
-		host.hego_asset_node.get_surface_output(PackedStringArray(VERTEX_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
+		host.hego_asset_node.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
 	var fetch_surfaces_msec := HEGoCookTimings.elapsed_msec(fetch_start_usec)
 	if output == null or not output.is_valid():
 		# Null means the task failed; it has already reported why.

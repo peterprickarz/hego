@@ -18,10 +18,11 @@ godot::Dictionary fetch_surfaces(
 		HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config, bool auto_cook = true);
 
 // Everything a surface build needs from Houdini for the display mesh part: the
-// per-face vertex ranges, the vertex list and the point attributes.
-// vertex_attribs names which of N, Cd, uv, uv2 and tangents to include; P is always
+// per-primitive vertex ranges, the vertex list mapping each vertex to its point,
+// and the point attributes.
+// point_attribs names which of N, Cd, uv, uv2 and tangents to include; P is always
 // read. Returns false when the geo has no mesh part with faces.
-bool prepare_surface_data(HEGo::Util::Geo::GeoCache &cache, const godot::PackedStringArray &vertex_attribs, HAPI_PartInfo &out_part, godot::Array &out_prims,
+bool prepare_surface_data(HEGo::Util::Geo::GeoCache &cache, const godot::PackedStringArray &point_attribs, HAPI_PartInfo &out_part, godot::Array &out_prims,
 		godot::Array &out_vertex_point_indices, godot::Dictionary &out_point_attrs);
 
 // Compacts point_attrs down to the points id_arr's primitives use, and returns the

@@ -69,7 +69,7 @@ godot::Array invert_vector3_array(const godot::Array &values)
 	return inverted;
 }
 
-bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &vertex_attribs, HAPI_PartInfo &out_part, godot::Array &out_prims,
+bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &point_attribs, HAPI_PartInfo &out_part, godot::Array &out_prims,
 		godot::Array &out_vertex_point_indices, godot::Dictionary &out_point_attrs)
 {
 	const HAPI_Session *session = cache.session();
@@ -102,9 +102,9 @@ bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &verte
 	out_point_attrs = godot::Dictionary();
 	out_point_attrs["P"] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, "P");
 
-	for (int i = 0; i < vertex_attribs.size(); i++)
+	for (int i = 0; i < point_attribs.size(); i++)
 	{
-		const godot::String name = vertex_attribs[i];
+		const godot::String name = point_attribs[i];
 		if (name == "uv" || name == "uv2")
 		{
 			// Houdini's UV origin is bottom-left, Godot's is top-left.
@@ -161,33 +161,33 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
 		return godot::Dictionary();
 	}
-	godot::PackedStringArray vertex_attribs;
+	godot::PackedStringArray point_attribs;
 	if (normal)
 	{
-		vertex_attribs.append("N");
+		point_attribs.append("N");
 	}
 	if (color)
 	{
-		vertex_attribs.append("Cd");
+		point_attribs.append("Cd");
 	}
 	if (uv)
 	{
-		vertex_attribs.append("uv");
+		point_attribs.append("uv");
 	}
 	if (uv2)
 	{
-		vertex_attribs.append("uv2");
+		point_attribs.append("uv2");
 	}
 	if (tangents)
 	{
-		vertex_attribs.append("tangents");
+		point_attribs.append("tangents");
 	}
 
 	HAPI_PartInfo prepared_part;
 	godot::Array prims;
 	godot::Array vt_pt_indices;
 	godot::Dictionary point_attrs;
-	if (!prepare_surface_data(*cache, vertex_attribs, prepared_part, prims, vt_pt_indices, point_attrs))
+	if (!prepare_surface_data(*cache, point_attribs, prepared_part, prims, vt_pt_indices, point_attrs))
 	{
 		return godot::Dictionary();
 	}

@@ -159,8 +159,9 @@ class HEGoGeoPrimSelection;
 ///         # surface["surface_array"] goes straight into ArrayMesh.add_surface_from_arrays
 /// [/codeblock]
 ///
-/// The vertex data is read once for the whole part; each group only compacts the
-/// points its own primitives use, and only when get_surface() is called.
+/// The mesh data - the vertex list and the point attributes - is read once for the
+/// whole part; each group only compacts the points its own primitives use, and only
+/// when get_surface() is called.
 class HEGoGeoSurfaces : public godot::RefCounted
 {
 	GDCLASS(HEGoGeoSurfaces, godot::RefCounted)
@@ -169,9 +170,9 @@ public:
 	HEGoGeoSurfaces() = default;
 
 	/// Built by HEGoAssetNode::get_surface_output(); not meant to be constructed by hand.
-	/// Reads the face and vertex lists plus the named vertex attributes, so it must
-	/// run on the worker thread.
-	bool setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &vertex_attribs);
+	/// Reads the primitive and vertex lists plus the named point attributes, so it
+	/// must run on the worker thread.
+	bool setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &point_attribs);
 
 	/// Whether the cook produced a mesh part with faces.
 	bool is_valid() const;

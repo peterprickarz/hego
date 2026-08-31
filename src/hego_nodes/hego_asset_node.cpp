@@ -248,7 +248,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fet
 	});
 }
 
-godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray vertex_attribs, godot::PackedStringArray preload_attribs)
+godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray point_attribs, godot::PackedStringArray preload_attribs)
 {
 	if (get_id() < 0)
 	{
@@ -258,7 +258,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray 
 	HAPI_NodeId nid = node_id;
 
 	return submit("Get surface output", nid,
-			[nid, vertex_attribs, preload_attribs](HEGoSessionManager *mgr) -> godot::Variant
+			[nid, point_attribs, preload_attribs](HEGoSessionManager *mgr) -> godot::Variant
 			{
 				std::shared_ptr<HEGo::Util::Geo::GeoCache> cache = HEGo::Util::Geo::GeoCache::acquire(mgr, nid, false);
 				if (!cache)
@@ -268,9 +268,9 @@ godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray 
 
 				godot::Ref<HEGoGeoSurfaces> surfaces;
 				surfaces.instantiate();
-				// Reads the face and vertex lists here, on the worker thread, so the
-				// queries the caller makes afterwards are pure in-memory work.
-				surfaces->setup(cache, nid, vertex_attribs);
+				// Reads the primitive and vertex lists here, on the worker thread, so
+				// the queries the caller makes afterwards are pure in-memory work.
+				surfaces->setup(cache, nid, point_attribs);
 				surfaces->load_attributes(preload_attribs);
 
 				return surfaces;
@@ -358,7 +358,7 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("cook"), &HEGoAssetNode::cook);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_geo_output", "preload_attribs"), &HEGoAssetNode::get_geo_output, DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config"), &HEGoAssetNode::fetch_points);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_surface_output", "vertex_attribs", "preload_attribs"), &HEGoAssetNode::get_surface_output,
+	godot::ClassDB::bind_method(godot::D_METHOD("get_surface_output", "point_attribs", "preload_attribs"), &HEGoAssetNode::get_surface_output,
 			DEFVAL(godot::PackedStringArray()), DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_surfaces", "fetch_surface_config"), &HEGoAssetNode::fetch_surfaces);
 	godot::ClassDB::bind_method(
