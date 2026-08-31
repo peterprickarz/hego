@@ -3,7 +3,6 @@
 #include "util/log/log.h"
 #include <cstdlib>
 #include <godot_cpp/classes/project_settings.hpp>
-#include <iostream>
 #include <string>
 
 #ifdef _WIN32
@@ -18,6 +17,19 @@ const char *HAPI_LIB_OBJECT_WINDOWS = "libHAPIL.dll";
 const char *HAPI_LIB_OBJECT_LINUX = "libHAPIL.so";
 const char *HAPI_LIB_OBJECT_MAC = "libHAPIL.dylib";
 
+const char *HEGoPlatform::get_default_houdini_path()
+{
+	// Keep in sync with SConstruct's default_hfs and with hego.gd, which seeds the
+	// project setting with the same per-platform defaults.
+#if defined(_WIN32)
+	return "C:/Program Files/Side Effects Software/Houdini 22.0.368";
+#elif defined(__APPLE__)
+	return "/Applications/Houdini/Houdini22.0.368/Frameworks/Houdini.framework/Versions/Current/Resources";
+#else
+	return "/opt/hfs22.0.368";
+#endif
+}
+
 const char *HEGoPlatform::get_houdini_path()
 {
 	static std::string cached_path;
@@ -27,8 +39,11 @@ const char *HEGoPlatform::get_houdini_path()
 	if (project_settings && project_settings->has_setting("hego/houdini_installation_path"))
 	{
 		godot::String setting_path = project_settings->get_setting("hego/houdini_installation_path");
-		cached_path = setting_path.utf8().get_data();
-		return cached_path.c_str();
+		if (!setting_path.is_empty())
+		{
+			cached_path = setting_path.utf8().get_data();
+			return cached_path.c_str();
+		}
 	}
 
 	// Fall back to environment variable
@@ -39,8 +54,9 @@ const char *HEGoPlatform::get_houdini_path()
 		return cached_path.c_str();
 	}
 
-	// Final fallback to default
-	cached_path = "C:/Program Files/Side Effects Software/Houdini 22.0.368";
+	// Final fallback: wherever this platform's installer puts Houdini by default.
+	// A Windows path would be useless on Linux and macOS.
+	cached_path = get_default_houdini_path();
 	return cached_path.c_str();
 }
 
@@ -97,15 +113,25 @@ void *HEGoPlatform::load_lib_hapil()
 	// Return as void* to match original API
 	return static_cast<void *>(libHAPIL);
 
-#elif defined(__linux__)
-	return dlopen(HAPI_LIB_OBJECT_LINUX, RTLD_LAZY);
 #else
-	return dlopen(HAPI_LIB_OBJECT_MAC, RTLD_LAZY);
+	// On Linux and macOS the loader finds libHAPIL through the search path that
+	// set_env_vars() prepared, so there is no full path to load from here.
+#if defined(__linux__)
+	const char *library_name = HAPI_LIB_OBJECT_LINUX;
+#else
+	const char *library_name = HAPI_LIB_OBJECT_MAC;
 #endif
 
-	std::cerr << "Failed to load the libHAPIL module." << std::endl;
-
-	return nullptr;
+	void *libHAPIL = dlopen(library_name, RTLD_LAZY);
+	if (!libHAPIL)
+	{
+		// dlerror() is the only place that says why, so surface it instead of
+		// leaving the caller with a bare null.
+		const char *dl_error = dlerror();
+		HEGo::Util::Log::error(godot::String("Failed to load ") + library_name + " from " + get_houdini_path() + ": " + (dl_error ? dl_error : "unknown error"));
+	}
+	return libHAPIL;
+#endif
 }
 
 bool HEGoPlatform::free_lib_hapil(void *libHAPIL)
@@ -127,7 +153,8 @@ bool HEGoPlatform::free_lib_hapil(void *libHAPIL)
 
 	if (result != 0)
 	{
-		const char *err = dlerror();
+		const char *dl_error = dlerror();
+		HEGo::Util::Log::error(godot::String("Failed to unload libHAPIL: ") + (dl_error ? dl_error : "unknown error"));
 		return false;
 	}
 

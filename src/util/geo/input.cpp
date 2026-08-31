@@ -176,7 +176,6 @@ HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, const god
 
 HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<godot::Mesh> mesh, HAPI_NodeId node_id, const godot::Array &attributes)
 {
-	const HAPI_CookOptions *cook_options = session_mgr->get_cook_options();
 	const HAPI_Session *session = session_mgr->get_session();
 
 	HEGo::Util::Log::message("Loading Godot mesh arrays into vectors");

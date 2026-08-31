@@ -129,8 +129,6 @@ bool add_and_set_attribute(const HAPI_Session *session, HAPI_NodeId node_id, int
 			attr_info.storage = HAPI_STORAGETYPE_STRING;
 			attr_info.tupleSize = 1;
 
-			std::string attr_name_utf8 = attr_name.utf8().get_data();
-
 			// 1. Add the attribute (defines name, owner, storage, count, tupleSize)
 			HOUDINI_CHECK_ERROR_RETURN(HoudiniApi::AddAttribute(session, node_id, part_id, attr_name_utf8.c_str(), &attr_info), false);
 

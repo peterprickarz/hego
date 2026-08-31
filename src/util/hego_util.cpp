@@ -1,7 +1,7 @@
 #include "hego_util.h"
 
-#include <iostream>
 #include <string>
+#include <vector>
 
 namespace HEGo
 {
@@ -9,90 +9,88 @@ namespace Util
 {
 namespace Hapi
 {
+namespace
+{
+// HAPI reports buffer lengths that include the terminating null, and writes the
+// string into a buffer of exactly that size. Reading into a std::string of that
+// length keeps the allocation and the free in one place, and the extra element
+// guarantees a terminator even if HAPI writes nothing at all.
+//
+// reader() is whatever HAPI call fills the buffer; it gets the buffer and its length.
+template <typename Reader> std::string read_hapi_string(int buffer_length, Reader reader)
+{
+	if (buffer_length <= 0)
+		return std::string();
+
+	std::vector<char> buffer(static_cast<size_t>(buffer_length) + 1, '\0');
+	if (reader(buffer.data(), buffer_length) != HAPI_RESULT_SUCCESS)
+		return std::string();
+
+	// Trust the terminator rather than buffer_length: HAPI counts the null byte.
+	return std::string(buffer.data());
+}
+} // namespace
 
 std::string get_last_error(HAPI_Session *session)
 {
 	int buffer_length = 0;
-	HoudiniApi::GetStatusStringBufLength(session, HAPI_STATUS_CALL_RESULT, HAPI_STATUSVERBOSITY_ERRORS, &buffer_length);
-	if (buffer_length <= 0)
-		return std::string("");
+	if (HoudiniApi::GetStatusStringBufLength(session, HAPI_STATUS_CALL_RESULT, HAPI_STATUSVERBOSITY_ERRORS, &buffer_length) != HAPI_RESULT_SUCCESS)
+		return std::string();
 
-	char *buffer = new char[buffer_length];
-	HoudiniApi::GetStatusString(session, HAPI_STATUS_CALL_RESULT, buffer, buffer_length);
-	std::string result(buffer);
-	delete[] buffer;
-
-	return result;
+	return read_hapi_string(buffer_length, [&](char *buffer, int length) { return HoudiniApi::GetStatusString(session, HAPI_STATUS_CALL_RESULT, buffer, length); });
 }
 
 std::string get_last_cook_error(HAPI_Session *session)
 {
 	int buffer_length = 0;
-	HAPI_Result buffer_length_result;
-	buffer_length_result = HoudiniApi::GetStatusStringBufLength(session, HAPI_STATUS_COOK_RESULT, HAPI_STATUSVERBOSITY_ALL, &buffer_length);
-	if (buffer_length_result != HAPI_RESULT_SUCCESS)
-	{
+	if (HoudiniApi::GetStatusStringBufLength(session, HAPI_STATUS_COOK_RESULT, HAPI_STATUSVERBOSITY_ALL, &buffer_length) != HAPI_RESULT_SUCCESS)
 		return std::string("buffer error");
-	}
-	if (buffer_length <= 0)
-		return std::string("");
 
-	char *buffer = new char[buffer_length];
-	HoudiniApi::GetStatusString(session, HAPI_STATUS_COOK_RESULT, buffer, buffer_length);
-	std::string result(buffer);
-	delete[] buffer;
-
-	return result;
+	return read_hapi_string(buffer_length, [&](char *buffer, int length) { return HoudiniApi::GetStatusString(session, HAPI_STATUS_COOK_RESULT, buffer, length); });
 }
 
 std::string get_last_cook_status(HAPI_Session *session)
 {
 	int buffer_length = 0;
-	HAPI_Result buffer_length_result;
-	buffer_length_result = HoudiniApi::GetStatusStringBufLength(session, HAPI_STATUS_COOK_STATE, HAPI_STATUSVERBOSITY_ERRORS, &buffer_length);
-	if (buffer_length_result != HAPI_RESULT_SUCCESS)
-	{
+	if (HoudiniApi::GetStatusStringBufLength(session, HAPI_STATUS_COOK_STATE, HAPI_STATUSVERBOSITY_ERRORS, &buffer_length) != HAPI_RESULT_SUCCESS)
 		return std::string("buffer error");
-	}
-	if (buffer_length <= 0)
-		return std::string("");
 
-	char *buffer = new char[buffer_length];
-	HoudiniApi::GetStatusString(session, HAPI_STATUS_COOK_STATE, buffer, buffer_length);
-	std::string result(buffer);
-	delete[] buffer;
-
-	return result;
+	return read_hapi_string(buffer_length, [&](char *buffer, int length) { return HoudiniApi::GetStatusString(session, HAPI_STATUS_COOK_STATE, buffer, length); });
 }
 
 std::string get_connection_error()
 {
 	int buffer_length = 0;
-	HoudiniApi::GetConnectionErrorLength(&buffer_length);
+	if (HoudiniApi::GetConnectionErrorLength(&buffer_length) != HAPI_RESULT_SUCCESS)
+		return std::string();
 
-	if (buffer_length <= 0)
-		return std::string("");
-
-	char *buffer = new char[buffer_length];
-	HoudiniApi::GetConnectionError(buffer, buffer_length, true);
-
-	std::string result(buffer);
-	delete[] buffer;
-
-	return result;
+	return read_hapi_string(buffer_length, [](char *buffer, int length) { return HoudiniApi::GetConnectionError(buffer, length, true); });
 }
 
 std::string get_string(const HAPI_Session *session, HAPI_StringHandle string_handle)
 {
-	int length = 0;
-	HoudiniApi::GetStringBufLength(session, string_handle, &length);
+	int buffer_length = 0;
+	if (HoudiniApi::GetStringBufLength(session, string_handle, &buffer_length) != HAPI_RESULT_SUCCESS)
+		return std::string();
 
-	char *buffer = new char[length + 1];
-	HoudiniApi::GetString(session, string_handle, buffer, length);
+	return read_hapi_string(buffer_length, [&](char *buffer, int length) { return HoudiniApi::GetString(session, string_handle, buffer, length); });
+}
 
-	std::string result(buffer);
-	delete[] buffer;
-	return result;
+godot::String get_godot_string(const HAPI_Session *session, HAPI_StringHandle string_handle)
+{
+	return godot::String::utf8(get_string(session, string_handle).c_str());
+}
+
+std::string get_composed_cook_result(const HAPI_Session *session, HAPI_NodeId node_id)
+{
+	if (node_id < 0)
+		return std::string();
+
+	int buffer_length = 0;
+	if (HoudiniApi::ComposeNodeCookResult(session, node_id, HAPI_STATUSVERBOSITY_ALL, &buffer_length) != HAPI_RESULT_SUCCESS)
+		return std::string();
+
+	return read_hapi_string(buffer_length, [&](char *buffer, int length) { return HoudiniApi::GetComposedNodeCookResult(session, buffer, length); });
 }
 
 bool save_to_hip(const HAPI_Session *session, const std::string &filename)

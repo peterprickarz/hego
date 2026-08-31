@@ -237,7 +237,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::Dictionary split_prim_dictionary = HEGo::Util::Geo::build_nested_dictionary(split_attribs, split_attribs_dict, int_ids, read_attribs_dict, 0);
 
 	godot::Array vt_pt_indices;
-	for (int i = 0; i < vertex_point_indices.size(); i++)
+	for (size_t i = 0; i < vertex_point_indices.size(); i++)
 	{
 		vt_pt_indices.append(vertex_point_indices[i]);
 	}
