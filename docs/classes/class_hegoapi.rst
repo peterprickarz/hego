@@ -21,9 +21,15 @@ Description
 
 This class owns the internal ``HEGoSessionManager`` and task scheduler, initializes the Houdini API platform layer, and exposes session and task controls to scripts.
 
+
+
 The singleton is created during module initialization and is intended to be reused for the whole runtime.
 
+
+
 All HEGo node methods that call Houdini Engine submit work through the task scheduler and return :ref:`HEGoTask<class_HEGoTask>` objects. Use the scheduler query methods on this class to inspect queued, running, and completed tasks.
+
+
 
 It also stores ``hego/houdini_installation_path`` in Godot project settings. That path is used when filtering built-in Houdini libraries from :ref:`get_hda_libraries()<class_HEGoAPI_method_get_hda_libraries>`.
 
@@ -35,33 +41,72 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | |void|                                    | :ref:`clear_completed_task_history<class_HEGoAPI_method_clear_completed_task_history>`\ (\ )                               |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | ``Array``                                 | :ref:`get_completed_task_history<class_HEGoAPI_method_get_completed_task_history>`\ (\ )                                   |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`get_current_task<class_HEGoAPI_method_get_current_task>`\ (\ )                                                       |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary``                            | :ref:`get_hda_libraries<class_HEGoAPI_method_get_hda_libraries>`\ (\ )                                                     |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | ``String``                                | :ref:`get_houdini_installation_path<class_HEGoAPI_method_get_houdini_installation_path>`\ (\ ) |const|                     |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | ``Array``                                 | :ref:`get_pending_tasks<class_HEGoAPI_method_get_pending_tasks>`\ (\ )                                                     |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoAPI<class_HEGoAPI>`             | :ref:`get_singleton<class_HEGoAPI_method_get_singleton>`\ (\ ) |static|                                                    |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | ``int``                                   | :ref:`get_task_pending_count<class_HEGoAPI_method_get_task_pending_count>`\ (\ )                                           |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | ``bool``                                  | :ref:`is_session_active<class_HEGoAPI_method_is_session_active>`\ (\ )                                                     |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | |void|                                    | :ref:`set_houdini_installation_path<class_HEGoAPI_method_set_houdini_installation_path>`\ (\ path\: ``String``\ )          |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | ``bool``                                  | :ref:`start_session<class_HEGoAPI_method_start_session>`\ (\ connection_type\: ``int``, connection_data\: ``String``\ )    |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | ``bool``                                  | :ref:`stop_session<class_HEGoAPI_method_stop_session>`\ (\ )                                                               |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`submit_task<class_HEGoAPI_method_submit_task>`\ (\ task\: :ref:`HEGoTask<class_HEGoTask>`\ )                         |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | |void|                          | :ref:`clear_completed_task_history<class_HEGoAPI_method_clear_completed_task_history>`\ (\ )                            |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``Array``                       | :ref:`get_completed_task_history<class_HEGoAPI_method_get_completed_task_history>`\ (\ )                                |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_current_task<class_HEGoAPI_method_get_current_task>`\ (\ )                                                    |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary``                  | :ref:`get_hda_libraries<class_HEGoAPI_method_get_hda_libraries>`\ (\ )                                                  |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``String``                      | :ref:`get_houdini_installation_path<class_HEGoAPI_method_get_houdini_installation_path>`\ (\ ) |const|                  |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``Array``                       | :ref:`get_pending_tasks<class_HEGoAPI_method_get_pending_tasks>`\ (\ )                                                  |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoAPI<class_HEGoAPI>`   | :ref:`get_singleton<class_HEGoAPI_method_get_singleton>`\ (\ ) |static|                                                 |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``int``                         | :ref:`get_task_pending_count<class_HEGoAPI_method_get_task_pending_count>`\ (\ )                                        |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``                        | :ref:`is_session_active<class_HEGoAPI_method_is_session_active>`\ (\ )                                                  |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | |void|                          | :ref:`set_houdini_installation_path<class_HEGoAPI_method_set_houdini_installation_path>`\ (\ path\: ``String``\ )       |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``                        | :ref:`start_session<class_HEGoAPI_method_start_session>`\ (\ connection_type\: ``int``, connection_data\: ``String``\ ) |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``                        | :ref:`stop_session<class_HEGoAPI_method_stop_session>`\ (\ )                                                            |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`submit_task<class_HEGoAPI_method_submit_task>`\ (\ task\: :ref:`HEGoTask<class_HEGoTask>`\ )                      |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+
+.. rst-class:: classref-section-separator
+
+----
+
+.. rst-class:: classref-descriptions-group
+
+Enumerations
+------------
+
+.. _enum_HEGoAPI_SessionType:
+
+.. rst-class:: classref-enumeration
+
+enum **SessionType**: :ref:`🔗<enum_HEGoAPI_SessionType>`
+
+.. _class_HEGoAPI_constant_SESSION_IN_PROCESS:
+
+.. rst-class:: classref-enumeration-constant
+
+:ref:`SessionType<enum_HEGoAPI_SessionType>` **SESSION_IN_PROCESS** = ``1``
+
+Houdini is started by HEGo and closes with it. Served by a shared memory server, which is the fastest transport but ties the session's lifetime to Godot's.
+
+.. _class_HEGoAPI_constant_SESSION_NAMED_PIPE:
+
+.. rst-class:: classref-enumeration-constant
+
+:ref:`SessionType<enum_HEGoAPI_SessionType>` **SESSION_NAMED_PIPE** = ``2``
+
+HEGo starts a Thrift server on a named pipe. ``connection_data`` is the pipe name.
+
+.. _class_HEGoAPI_constant_SESSION_TCP_SOCKET:
+
+.. rst-class:: classref-enumeration-constant
+
+:ref:`SessionType<enum_HEGoAPI_SessionType>` **SESSION_TCP_SOCKET** = ``3``
+
+HEGo starts a Thrift server on a TCP socket. ``connection_data`` is the port number.
 
 .. rst-class:: classref-section-separator
 
@@ -90,7 +135,9 @@ Clears the completed task history ring buffer.
 
 ``Array`` **get_completed_task_history**\ (\ ) :ref:`🔗<class_HEGoAPI_method_get_completed_task_history>`
 
-Returns an ``Array`` of :ref:`HEGoTask<class_HEGoTask>` objects that have finished executing (either :ref:`COMPLETED<class_HEGoTask_constant_COMPLETED>` or :ref:`FAILED<class_HEGoTask_constant_FAILED>`).
+Returns an ``Array`` of :ref:`HEGoTask<class_HEGoTask>` objects that have finished executing (either :ref:`HEGoTask.COMPLETED<class_HEGoTask_constant_COMPLETED>` or :ref:`HEGoTask.FAILED<class_HEGoTask_constant_FAILED>`).
+
+
 
 The history is stored in a ring buffer capped at 64 entries. Newest entries are at the front of the array.
 
@@ -118,6 +165,8 @@ Returns the :ref:`HEGoTask<class_HEGoTask>` currently being executed on the back
 
 Returns metadata for currently loaded non-built-in HDA libraries.
 
+
+
 The dictionary is keyed by library name when available (otherwise by library id as a string).
 
 Each value contains:
@@ -131,6 +180,8 @@ Each value contains:
 - ``asset_count``: number of available assets in the library.
 
 - ``assets``: ``PackedStringArray`` of operator names.
+
+
 
 Returns an empty dictionary if no session is active, if no libraries are loaded, or if querying HAPI fails.
 
@@ -156,7 +207,9 @@ Returns the configured Houdini installation path from project settings.
 
 ``Array`` **get_pending_tasks**\ (\ ) :ref:`🔗<class_HEGoAPI_method_get_pending_tasks>`
 
-Returns an ``Array`` of :ref:`HEGoTask<class_HEGoTask>` objects waiting in the scheduler queue (status :ref:`PENDING<class_HEGoTask_constant_PENDING>`).
+Returns an ``Array`` of :ref:`HEGoTask<class_HEGoTask>` objects waiting in the scheduler queue (status :ref:`HEGoTask.PENDING<class_HEGoTask_constant_PENDING>`).
+
+
 
 Does not include the currently running task. See :ref:`get_current_task()<class_HEGoAPI_method_get_current_task>` for that.
 
@@ -183,6 +236,8 @@ Returns the global **HEGoAPI** singleton instance created during module initiali
 ``int`` **get_task_pending_count**\ (\ ) :ref:`🔗<class_HEGoAPI_method_get_task_pending_count>`
 
 Returns the number of tasks waiting in the scheduler queue.
+
+
 
 This count does not include the currently running task.
 
@@ -222,18 +277,15 @@ Updates the ``hego/houdini_installation_path`` project setting.
 
 Starts a Houdini Engine session and initializes HAPI.
 
-\ ``connection_type`` maps to ``HEGoSessionManager::SessionType``:
 
-::
 
-    1 = InProcess
-    2 = NewNamedPipe
-    3 = NewTCPSocket
-    4 = ExistingNamedPipe
-    5 = ExistingTCPSocket
-    6 = ExistingSharedMemory
+\ ``connection_type`` is one of :ref:`SESSION_IN_PROCESS<class_HEGoAPI_constant_SESSION_IN_PROCESS>`, :ref:`SESSION_NAMED_PIPE<class_HEGoAPI_constant_SESSION_NAMED_PIPE>` or :ref:`SESSION_TCP_SOCKET<class_HEGoAPI_constant_SESSION_TCP_SOCKET>`. Any other value is rejected with an error rather than attempted.
 
-\ ``connection_data`` is transport-specific (for example named pipe string or socket endpoint data).
+
+
+\ ``connection_data`` is the pipe or shared memory name, or the port number for a TCP session. A TCP session falls back to port 9090 when it is not a valid port.
+
+
 
 Returns ``true`` on successful session startup and initialization.
 
@@ -249,7 +301,11 @@ Returns ``true`` on successful session startup and initialization.
 
 Stops the task scheduler and then closes the active Houdini Engine session, releasing all session resources.
 
+
+
 Any pending tasks in the queue are discarded. The currently running task, if any, is allowed to finish before the session is closed.
+
+
 
 Returns ``true`` when shutdown succeeds.
 
@@ -265,7 +321,11 @@ Returns ``true`` when shutdown succeeds.
 
 Submits an :ref:`HEGoTask<class_HEGoTask>` to the scheduler queue for execution on the background worker thread.
 
+
+
 This is called internally by HEGo node methods. Direct use is rarely needed unless you are building custom task pipelines.
+
+
 
 Returns the same :ref:`HEGoTask<class_HEGoTask>` that was passed in, for convenience.
 

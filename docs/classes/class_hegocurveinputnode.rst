@@ -37,9 +37,9 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_curve_from_path_3d<class_HEGoCurveInputNode_method_set_curve_from_path_3d>`\ (\ path_3d\: ``Path3D``, target_length\: ``float``, force\: ``bool`` = false\ )    |
-   +-------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_curve_from_path_3d<class_HEGoCurveInputNode_method_set_curve_from_path_3d>`\ (\ path_3d\: ``Path3D``, target_length\: ``float``, force\: ``bool`` = false\ ) |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -58,9 +58,15 @@ Method Descriptions
 
 Submits a task to convert the given ``Path3D`` into Houdini curve input data.
 
+
+
 \ ``target_length`` controls segment sampling or resampling length for generated curve points.
 
+
+
 Smaller values generally produce denser sampling, while larger values produce fewer points.
+
+
 
 Curve content and transform are hashed internally. If neither has changed since the previous call a no-op task is returned, unless ``force`` is ``true``.
 

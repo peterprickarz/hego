@@ -26,7 +26,10 @@ Welcome to the HEGo documentation site.
    classes/class_hegoapi
    classes/class_hegoassetnode
    classes/class_hegocurveinputnode
+   classes/class_hegogeooutput
+   classes/class_hegogeoselection
    classes/class_hegoheightfieldinputnode
    classes/class_hegoinputnode
+   classes/class_hegolog
    classes/class_hegomergenode
    classes/class_hegotask

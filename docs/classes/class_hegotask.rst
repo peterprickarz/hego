@@ -21,7 +21,11 @@ Description
 
 All HEGo node methods that call Houdini Engine return an **HEGoTask** instead of blocking the main thread. The task is queued on a background worker thread and executed in order.
 
+
+
 Poll :ref:`get_status()<class_HEGoTask_method_get_status>` to determine whether the task is still running. Once the status reaches :ref:`COMPLETED<class_HEGoTask_constant_COMPLETED>`, the result is available via :ref:`get_result()<class_HEGoTask_method_get_result>`. If the status is :ref:`FAILED<class_HEGoTask_constant_FAILED>`, :ref:`get_error_message()<class_HEGoTask_method_get_error_message>` describes what went wrong.
+
+
 
 Recommended GDScript helper for awaiting a task:
 
@@ -35,12 +39,16 @@ Recommended GDScript helper for awaiting a task:
             return null
         return task.get_result()
 
+
+
 Usage example:
 
 ::
 
     var task = asset_node.cook()
     var result = await _await_task(task)
+
+
 
 See also :ref:`HEGoAPI.get_current_task()<class_HEGoAPI_method_get_current_task>`, :ref:`HEGoAPI.get_pending_tasks()<class_HEGoAPI_method_get_pending_tasks>`, and :ref:`HEGoAPI.get_completed_task_history()<class_HEGoAPI_method_get_completed_task_history>` for inspecting the scheduler queue.
 
@@ -52,52 +60,62 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | ``int``     | :ref:`get_status<class_HEGoTask_method_get_status>`\ (\ ) |const|                                                                     |
-   +-------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Variant`` | :ref:`get_result<class_HEGoTask_method_get_result>`\ (\ ) |const|                                                                     |
-   +-------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | ``String``  | :ref:`get_error_message<class_HEGoTask_method_get_error_message>`\ (\ ) |const|                                                       |
-   +-------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | ``String``  | :ref:`get_description<class_HEGoTask_method_get_description>`\ (\ ) |const|                                                           |
-   +-------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | ``int``     | :ref:`get_node_id<class_HEGoTask_method_get_node_id>`\ (\ ) |const|                                                                   |
-   +-------------+---------------------------------------------------------------------------------------------------------------------------------------+
+   +-------------+---------------------------------------------------------------------------------+
+   | ``int``     | :ref:`get_status<class_HEGoTask_method_get_status>`\ (\ ) |const|               |
+   +-------------+---------------------------------------------------------------------------------+
+   | ``Variant`` | :ref:`get_result<class_HEGoTask_method_get_result>`\ (\ ) |const|               |
+   +-------------+---------------------------------------------------------------------------------+
+   | ``String``  | :ref:`get_error_message<class_HEGoTask_method_get_error_message>`\ (\ ) |const| |
+   +-------------+---------------------------------------------------------------------------------+
+   | ``String``  | :ref:`get_description<class_HEGoTask_method_get_description>`\ (\ ) |const|     |
+   +-------------+---------------------------------------------------------------------------------+
+   | ``int``     | :ref:`get_node_id<class_HEGoTask_method_get_node_id>`\ (\ ) |const|             |
+   +-------------+---------------------------------------------------------------------------------+
 
-.. rst-class:: classref-reftable-group
+.. rst-class:: classref-section-separator
 
-Constants
----------
+----
+
+.. rst-class:: classref-descriptions-group
+
+Enumerations
+------------
+
+.. _enum_HEGoTask_Status:
+
+.. rst-class:: classref-enumeration
+
+enum **Status**: :ref:`🔗<enum_HEGoTask_Status>`
 
 .. _class_HEGoTask_constant_PENDING:
 
-.. rst-class:: classref-constant
+.. rst-class:: classref-enumeration-constant
 
-**PENDING** = ``0``
+:ref:`Status<enum_HEGoTask_Status>` **PENDING** = ``0``
 
 The task is waiting in the queue and has not started executing.
 
 .. _class_HEGoTask_constant_RUNNING:
 
-.. rst-class:: classref-constant
+.. rst-class:: classref-enumeration-constant
 
-**RUNNING** = ``1``
+:ref:`Status<enum_HEGoTask_Status>` **RUNNING** = ``1``
 
 The task is currently being executed on the background worker thread.
 
 .. _class_HEGoTask_constant_COMPLETED:
 
-.. rst-class:: classref-constant
+.. rst-class:: classref-enumeration-constant
 
-**COMPLETED** = ``2``
+:ref:`Status<enum_HEGoTask_Status>` **COMPLETED** = ``2``
 
 The task finished successfully. The result is available via :ref:`get_result()<class_HEGoTask_method_get_result>`.
 
 .. _class_HEGoTask_constant_FAILED:
 
-.. rst-class:: classref-constant
+.. rst-class:: classref-enumeration-constant
 
-**FAILED** = ``3``
+:ref:`Status<enum_HEGoTask_Status>` **FAILED** = ``3``
 
 The task encountered an error. See :ref:`get_error_message()<class_HEGoTask_method_get_error_message>` for details.
 
@@ -116,7 +134,11 @@ Method Descriptions
 
 ``int`` **get_status**\ (\ ) |const| :ref:`🔗<class_HEGoTask_method_get_status>`
 
-Returns the current status of this task as one of the ``Status`` constants: :ref:`PENDING<class_HEGoTask_constant_PENDING>`, :ref:`RUNNING<class_HEGoTask_constant_RUNNING>`, :ref:`COMPLETED<class_HEGoTask_constant_COMPLETED>`, or :ref:`FAILED<class_HEGoTask_constant_FAILED>`.
+Returns the current status of this task as one of the ``Status`` constants:
+
+\ :ref:`PENDING<class_HEGoTask_constant_PENDING>`, :ref:`RUNNING<class_HEGoTask_constant_RUNNING>`, :ref:`COMPLETED<class_HEGoTask_constant_COMPLETED>`, or :ref:`FAILED<class_HEGoTask_constant_FAILED>`.
+
+
 
 A task transitions from :ref:`PENDING<class_HEGoTask_constant_PENDING>` to :ref:`RUNNING<class_HEGoTask_constant_RUNNING>` when the scheduler picks it up, then to :ref:`COMPLETED<class_HEGoTask_constant_COMPLETED>` or :ref:`FAILED<class_HEGoTask_constant_FAILED>` when execution finishes.
 
@@ -132,6 +154,8 @@ A task transitions from :ref:`PENDING<class_HEGoTask_constant_PENDING>` to :ref:
 
 Returns the result produced by the task.
 
+
+
 Only meaningful after :ref:`get_status()<class_HEGoTask_method_get_status>` returns :ref:`COMPLETED<class_HEGoTask_constant_COMPLETED>`. The type depends on the originating method. For example, :ref:`HEGoAssetNode.get_parms_dict()<class_HEGoAssetNode_method_get_parms_dict>` produces a ``Dictionary``, while :ref:`HEGoAssetNode.cook()<class_HEGoAssetNode_method_cook>` produces ``null``.
 
 .. rst-class:: classref-item-separator
@@ -145,6 +169,8 @@ Only meaningful after :ref:`get_status()<class_HEGoTask_method_get_status>` retu
 ``String`` **get_error_message**\ (\ ) |const| :ref:`🔗<class_HEGoTask_method_get_error_message>`
 
 Returns the error message when :ref:`get_status()<class_HEGoTask_method_get_status>` is :ref:`FAILED<class_HEGoTask_constant_FAILED>`.
+
+
 
 Returns an empty string if the task has not failed.
 

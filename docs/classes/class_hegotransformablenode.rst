@@ -41,9 +41,9 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_transform<class_HEGoTransformableNode_method_set_transform>`\ (\ xform\: ``Transform3D``, force\: ``bool`` = false\ )  |
-   +-------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_transform<class_HEGoTransformableNode_method_set_transform>`\ (\ xform\: ``Transform3D``, force\: ``bool`` = false\ ) |
+   +---------------------------------+---------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -62,7 +62,11 @@ Method Descriptions
 
 Submits a task to set the world transform of the wrapped Houdini node from a Godot ``Transform3D``.
 
+
+
 Call after instantiation. Reapply when your source node moves and you need Houdini output to stay in sync.
+
+
 
 The transform is cached internally. If the incoming transform is identical to the previously submitted one the call returns a no-op task unless ``force`` is ``true``.
 

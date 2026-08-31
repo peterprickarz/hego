@@ -41,11 +41,11 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                                                |
-   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) |
-   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                                                |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -64,9 +64,15 @@ Method Descriptions
 
 Submits a task to create a Houdini HeightField input network for this wrapper.
 
+
+
 If the node is already instantiated, the call returns immediately.
 
+
+
 The method requires an active Houdini session. On success, it stores the main node id plus internal height, mask, and merge node ids, then registers this wrapper with the session manager.
+
+
 
 On failure, all stored ids are reset to invalid values and an error is logged.
 
@@ -130,7 +136,7 @@ Resolution and defaults:
 
 - The first valid ``image`` found across all layers sets the heightfield resolution.
 
-- If no valid image exists in any layer, the call logs an error and returns without writing layers.
+- If no valid image exists in any layer, the task fails with an error.
 
 - If ``height`` and/or ``mask`` are missing, they are created as zero-filled layers.
 
@@ -156,7 +162,9 @@ Failure behavior:
 
 - Any HAPI node creation or write failure logs an error and aborts the current layer build.
 
-Layer content and parameters are hashed internally. If nothing has changed since the previous call a no-op task is returned, unless ``force`` is ``true``.
+
+
+Layer content is hashed internally (including image pixel data). If the layers, voxel size, and height scale are all identical to the previous call a no-op task is returned, unless ``force`` is ``true``. Pass ``force`` when image data may have been modified in-place (for example Terrain3D sculpting).
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

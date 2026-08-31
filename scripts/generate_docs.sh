@@ -8,6 +8,7 @@ TOOLS_MISC_DIR="$TOOLS_DIR/misc/utility"
 XML_SRC_DIR="$ROOT_DIR/demo/addons/hego/doc_classes"
 RST_OUT_DIR="$DOCS_DIR/classes"
 TMP_RST_DIR="$DOCS_DIR/.tmp_rst"
+STUB_XML_DIR="$DOCS_DIR/.tmp_stub_xml"
 LEGACY_TOOLS_DIR="$DOCS_DIR/tools"
 REGISTER_TYPES_CPP="$ROOT_DIR/src/register_types.cpp"
 
@@ -45,13 +46,33 @@ curl -fsSL "$VERSION_PY_URL" -o "$TOOLS_DIR/version.py"
 curl -fsSL "$MAKE_RST_URL" -o "$TOOLS_DIR/make_rst.py"
 curl -fsSL "$COLOR_PY_URL" -o "$TOOLS_MISC_DIR/color.py"
 
+# make_rst.py resolves a reference it does not recognise, such as [Dictionary] or
+# any other engine class, by looking it up in @GlobalScope. Godot's own doc build
+# always has that class; a standalone run over HEGo's classes alone does not, and
+# make_rst crashes with KeyError instead of just warning. A stub is enough to turn
+# that back into a warning.
+echo "Preparing @GlobalScope stub for standalone generation..."
+rm -rf "$STUB_XML_DIR"
+mkdir -p "$STUB_XML_DIR"
+cat > "$STUB_XML_DIR/@GlobalScope.xml" <<'STUB_EOF'
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="@GlobalScope">
+<brief_description>
+</brief_description>
+<description>
+</description>
+<tutorials>
+</tutorials>
+</class>
+STUB_EOF
+
 echo "Generating .rst class reference files from XML..."
 (
   cd "$ROOT_DIR"
   rm -rf "$TMP_RST_DIR"
   mkdir -p "$TMP_RST_DIR"
   set +e
-  python3 "$TOOLS_DIR/make_rst.py" -o "$TMP_RST_DIR" -l "en" "$XML_SRC_DIR"
+  python3 "$TOOLS_DIR/make_rst.py" -o "$TMP_RST_DIR" -l "en" "$XML_SRC_DIR" "$STUB_XML_DIR"
   MAKE_RST_EXIT=$?
   set -e
   if [[ "$MAKE_RST_EXIT" -ne 0 ]]; then
@@ -63,6 +84,7 @@ echo "Copying HEGo class pages into docs/classes..."
 rm -rf "$RST_OUT_DIR"
 mkdir -p "$RST_OUT_DIR"
 find "$TMP_RST_DIR" -maxdepth 1 -type f -name "*hego*.rst" -exec cp {} "$RST_OUT_DIR" \;
+rm -rf "$STUB_XML_DIR"
 
 if [[ ! -f "$REGISTER_TYPES_CPP" ]]; then
   echo "Error: register types file not found: $REGISTER_TYPES_CPP"
@@ -113,8 +135,10 @@ while IFS= read -r symbol; do
   symbol="${symbol// /}"
   [[ -z "$symbol" ]] && continue
 
-  # Keep only top-level HEGo API classes in sidebar (exclude util internals).
-  if [[ "$symbol" != HEGo::* ]] || [[ "$symbol" == HEGo::Util::* ]]; then
+  # Anything registered with ClassDB is API that GDScript can reach, so it belongs
+  # in the sidebar regardless of which namespace it lives in - HEGoLog sits under
+  # HEGo::Util::Log but is as public as HEGoAPI. Util internals are never registered.
+  if [[ "$symbol" != HEGo::* ]]; then
     continue
   fi
 
