@@ -44,11 +44,11 @@ godot::Ref<HEGoTask> HEGoAssetNode::instantiate()
 		if (result_id >= 0)
 		{
 			mgr->register_node(self);
-			HEGo::Util::Log::message("Successfully instantiated HDA: " + op);
+			HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Successfully instantiated HDA: " + op);
 		}
 		else
 		{
-			HEGo::Util::Log::error("Failed to instantiate HDA: " + op + " (License issue? Check if Houdini Engine has a valid license)");
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Failed to instantiate HDA: " + op + " (License issue? Check if Houdini Engine has a valid license)");
 		}
 
 		return result_id;
@@ -182,7 +182,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::cook()
 	return submit("Cook", nid, [nid](HEGoSessionManager *mgr) -> godot::Variant {
 		if (HoudiniApi::CookNode(mgr->get_session(), nid, mgr->get_cook_options()) != HAPI_RESULT_SUCCESS)
 		{
-			HEGo::Util::Log::error("Failed to cook node.");
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Failed to cook node.");
 			return -1;
 		}
 		mgr->wait_for_cook(nid);

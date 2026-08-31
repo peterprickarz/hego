@@ -9,6 +9,9 @@ extends RefCounted
 ## a previous cook are recognised by their [code]hegot3d_[/code] name prefix and reused,
 ## which keeps hand-authored mesh assets untouched.
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "terrain3d"
+
 ## Config the point fetch is driven by.
 const FETCH_CONFIG_PATH := "res://addons/hego/point_filters/fetch_points_default_terrain3d.tres"
 
@@ -41,7 +44,7 @@ static func handle(host: Node) -> void:
 
 	var fetch_config: Resource = load(FETCH_CONFIG_PATH)
 	if fetch_config == null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D instancer fetch config could not be loaded.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D instancer fetch config could not be loaded.")
 		return
 
 	var outputs: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_points(fetch_config))
@@ -57,7 +60,7 @@ static func handle(host: Node) -> void:
 
 		var per_scene_points: Variant = outputs[terrain_path_value]
 		if not per_scene_points is Dictionary:
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Unexpected Terrain3D instancer fetch structure for %s." % terrain_path)
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Unexpected Terrain3D instancer fetch structure for %s." % terrain_path)
 			continue
 
 		_populate_terrain(host, terrain_path, per_scene_points)
@@ -67,21 +70,21 @@ static func handle(host: Node) -> void:
 static func _populate_terrain(host: Node, terrain_path: String, per_scene_points: Dictionary) -> void:
 	var terrain := HEGoTerrain3DUtil.find_node_from_path(host, terrain_path)
 	if terrain == null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D node %s was not found, skipping instancer output." % terrain_path)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D node %s was not found, skipping instancer output." % terrain_path)
 		return
 
 	if not terrain.has_method("get_instancer"):
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Node %s does not expose a Terrain3D instancer." % terrain_path)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Node %s does not expose a Terrain3D instancer." % terrain_path)
 		return
 
 	var instancer: Object = terrain.call("get_instancer")
 	if instancer == null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D instancer is unavailable on %s." % terrain_path)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D instancer is unavailable on %s." % terrain_path)
 		return
 
 	var assets := HEGoTerrain3DUtil.get_terrain_assets(terrain)
 	if assets == null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D assets are unavailable on %s." % terrain_path)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D assets are unavailable on %s." % terrain_path)
 		return
 
 	# Drop everything the previous cook generated, so removed scenes disappear.
@@ -98,10 +101,10 @@ static func _populate_terrain(host: Node, terrain_path: String, per_scene_points
 
 		var point_dict: Variant = per_scene_points[scene_path_value]
 		if not point_dict is Dictionary:
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Invalid point dictionary for Terrain3D scene %s." % scene_path)
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Invalid point dictionary for Terrain3D scene %s." % scene_path)
 			continue
 		if not point_dict.has("P") or not point_dict["P"] is Array:
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Missing P attribute for Terrain3D scene %s." % scene_path)
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Missing P attribute for Terrain3D scene %s." % scene_path)
 			continue
 		if point_dict["P"].is_empty():
 			continue
@@ -110,7 +113,7 @@ static func _populate_terrain(host: Node, terrain_path: String, per_scene_points
 		if mesh_slot < 0:
 			mesh_slot = _assign_generated_mesh_slot(assets, scene_path)
 			if mesh_slot < 0:
-				push_warning(HEGoNodeUtil.LOG_PREFIX + "Could not allocate Terrain3D mesh slot for %s." % scene_path)
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Could not allocate Terrain3D mesh slot for %s." % scene_path)
 				continue
 
 		var mesh_asset: Object = assets.call("get_mesh_asset", mesh_slot)
@@ -125,7 +128,7 @@ static func _populate_terrain(host: Node, terrain_path: String, per_scene_points
 			continue
 
 		if not instancer.has_method("add_transforms"):
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D instancer on %s does not support add_transforms." % terrain_path)
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D instancer on %s does not support add_transforms." % terrain_path)
 			break
 
 		instancer.call("add_transforms", mesh_slot, instances["transforms"], instances["colors"], false)
@@ -220,21 +223,21 @@ static func _assign_generated_mesh_slot(assets: Object, scene_path: String) -> i
 		return -1
 
 	if not ResourceLoader.exists(scene_path):
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D scene resource does not exist: %s" % scene_path)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D scene resource does not exist: %s" % scene_path)
 		return -1
 
 	var scene_res: Resource = load(scene_path)
 	if not scene_res is PackedScene:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D mesh asset expects PackedScene at %s." % scene_path)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D mesh asset expects PackedScene at %s." % scene_path)
 		return -1
 
 	if not ClassDB.class_exists("Terrain3DMeshAsset"):
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3DMeshAsset class is unavailable, skipping %s." % scene_path)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3DMeshAsset class is unavailable, skipping %s." % scene_path)
 		return -1
 
 	var mesh_asset: Object = ClassDB.instantiate("Terrain3DMeshAsset")
 	if mesh_asset == null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Failed to instantiate Terrain3DMeshAsset for %s." % scene_path)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Failed to instantiate Terrain3DMeshAsset for %s." % scene_path)
 		return -1
 
 	mesh_asset.call("set_scene_file", scene_res)
@@ -249,7 +252,7 @@ static func _assign_generated_mesh_slot(assets: Object, scene_path: String) -> i
 
 	if ClassDB.class_exists("Terrain3DAssets") and ClassDB.class_has_integer_constant("Terrain3DAssets", "MAX_MESHES"):
 		if mesh_count >= int(ClassDB.class_get_integer_constant("Terrain3DAssets", "MAX_MESHES")):
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D mesh asset limit reached, cannot assign %s." % scene_path)
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D mesh asset limit reached, cannot assign %s." % scene_path)
 			return -1
 
 	assets.call("set_mesh_asset", mesh_count, mesh_asset)

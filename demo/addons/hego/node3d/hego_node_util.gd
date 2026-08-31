@@ -9,8 +9,8 @@ extends RefCounted
 ## and a way to read the attribute dictionaries HAPI hands back. They live here so
 ## the handlers only contain the logic that is actually specific to their output type.
 
-## Prefix used by every message HEGo prints from the Godot side.
-const LOG_PREFIX := "[HEGoNode3D]: "
+## Category the cook path logs under, shown in the session panel filter.
+const LOG_CATEGORY := "cook"
 
 ## Name of the node all cook output is parented under.
 const OUTPUTS_ROOT_NAME := "Outputs"
@@ -20,12 +20,12 @@ const OUTPUTS_ROOT_NAME := "Outputs"
 ## if it failed. [param host] is only needed for its scene tree, to yield a frame.
 static func await_task(host: Node, task: HEGoTask) -> Variant:
 	if task == null:
-		push_error(LOG_PREFIX + "Task was null, the session is probably not running.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Task was null, the session is probably not running.")
 		return null
 	while task.get_status() < HEGoTask.COMPLETED:
 		await host.get_tree().process_frame
 	if task.get_status() == HEGoTask.FAILED:
-		push_error(LOG_PREFIX + "Task failed: " + task.get_error_message())
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Task failed: " + task.get_error_message())
 		return null
 	return task.get_result()
 

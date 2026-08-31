@@ -19,7 +19,7 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
     const HAPI_Result session_valid = HoudiniApi::IsSessionValid(session_mgr->get_session());
 	if (session_valid != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Cannot get curve points: invalid session.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Cannot get curve points: invalid session.");
 		return curves;
 	}
 
@@ -37,7 +37,7 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
         HAPI_CurveInfo curve_info;
         if (HoudiniApi::GetCurveInfo(session_mgr->get_session(), geo_info.nodeId, part_info.id, &curve_info) != HAPI_RESULT_SUCCESS)
         {
-            HEGo::Util::Log::error("Failed to read curve info for part id " + godot::String::num_int64(part_info.id));
+            HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Failed to read curve info for part id " + godot::String::num_int64(part_info.id));
             continue;
         }
 
@@ -53,20 +53,20 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
             int num_verts = 0;
             if (HoudiniApi::GetCurveCounts(session_mgr->get_session(), geo_info.nodeId, part_info.id, &num_verts, curve_idx, 1) != HAPI_RESULT_SUCCESS)
             {
-                HEGo::Util::Log::error("Failed to read curve count for curve index " + godot::String::num_int64(curve_idx) + " in part id " + godot::String::num_int64(part_info.id));
+                HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Failed to read curve count for curve index " + godot::String::num_int64(curve_idx) + " in part id " + godot::String::num_int64(part_info.id));
                 return curves;
             }
 
             int order = 0;
             if (HoudiniApi::GetCurveOrders(session_mgr->get_session(), geo_info.nodeId, part_info.id, &order, curve_idx, 1) != HAPI_RESULT_SUCCESS)
             {
-                HEGo::Util::Log::error("Failed to read curve order for curve index " + godot::String::num_int64(curve_idx) + " in part id " + godot::String::num_int64(part_info.id));
+                HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Failed to read curve order for curve index " + godot::String::num_int64(curve_idx) + " in part id " + godot::String::num_int64(part_info.id));
                 return curves;
             }
 
             if (num_verts < order)
             {
-                HEGo::Util::Log::error("Invalid curve data for part id " + godot::String::num_int64(part_info.id) + ": num verts " + 
+                HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Invalid curve data for part id " + godot::String::num_int64(part_info.id) + ": num verts " + 
                     godot::String::num_int64(num_verts) + " is less than order " + godot::String::num_int64(order));
                 vert_offset += num_verts;
                 knot_offset += num_verts + order;
@@ -93,7 +93,7 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
                 std::vector<float> knot_array(num_verts + order);
                 if (HoudiniApi::GetCurveKnots(session_mgr->get_session(), geo_info.nodeId, part_info.id, knot_array.data(), knot_offset, num_verts + order) != HAPI_RESULT_SUCCESS)
                 {
-                    HEGo::Util::Log::error("Failed to read curve knots for curve index " + godot::String::num_int64(curve_idx) + " in part id " + godot::String::num_int64(part_info.id));
+                    HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Failed to read curve knots for curve index " + godot::String::num_int64(curve_idx) + " in part id " + godot::String::num_int64(part_info.id));
                     knot_offset += num_verts + order;
                     vert_offset += num_verts;
                     continue;

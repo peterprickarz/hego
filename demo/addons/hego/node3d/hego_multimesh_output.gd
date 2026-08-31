@@ -7,6 +7,9 @@ extends RefCounted
 ## The fetch returns points grouped by output name and then by mesh resource path, so
 ## one HDA can drive several [MultiMeshInstance3D]s with a different mesh each.
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "output"
+
 ## Config the point fetch is driven by.
 const FETCH_CONFIG_PATH := "res://addons/hego/point_filters/fetch_points_default_multimesh_instancing.tres"
 
@@ -16,7 +19,7 @@ const DEFAULT_MULTIMESH_NAME := "MultiMesh"
 
 ## Fetches the instancing points of [param host]'s asset node and builds the multimeshes.
 static func handle(host: Node) -> void:
-	print(HEGoNodeUtil.LOG_PREFIX + "Handling Multimesh Output")
+	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Multimesh Output")
 	var fetch_config: Resource = load(FETCH_CONFIG_PATH)
 	var outputs: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_points(fetch_config))
 	if not outputs is Dictionary:
@@ -33,7 +36,7 @@ static func handle(host: Node) -> void:
 				continue
 			var mesh_resource: Resource = load(resource_path)
 			if not mesh_resource is Mesh:
-				push_warning(HEGoNodeUtil.LOG_PREFIX + "Multimesh resource %s is not a Mesh, skipping." % resource_path)
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Multimesh resource %s is not a Mesh, skipping." % resource_path)
 				continue
 
 			var point_dict: Variant = per_mesh_points[resource_path]
@@ -50,7 +53,7 @@ static func handle(host: Node) -> void:
 ## and fills it with one instance per point in [param point_dict].
 static func setup_multimesh(host: Node, mesh_resource: Mesh, multimesh_name: String, point_dict: Dictionary) -> void:
 	if not point_dict.has("P") or not point_dict["P"] is Array:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Multimesh output %s has no P attribute, skipping." % multimesh_name)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Multimesh output %s has no P attribute, skipping." % multimesh_name)
 		return
 
 	var positions: Array = point_dict["P"]

@@ -64,16 +64,16 @@ godot::PackedStringArray get_input_names(HEGoSessionManager *session_mgr, HAPI_N
 HAPI_NodeId create_input_from_mesh_instance_3d(
 		HEGoSessionManager *session_mgr, godot::MeshInstance3D *mesh_instance_3d, HAPI_NodeId node_id, const godot::Array &attributes)
 {
-	HEGo::Util::Log::message("Creating Input node");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "Creating Input node");
 	if (mesh_instance_3d == nullptr)
 	{
-		HEGo::Util::Log::warning("Mesh instance 3D is null, can't send to Houdini!");
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Mesh instance 3D is null, can't send to Houdini!");
 		return -1;
 	}
 	godot::Ref<godot::Mesh> mesh = mesh_instance_3d->get_mesh();
 	if (mesh.is_null() || !mesh.is_valid())
 	{
-		HEGo::Util::Log::warning("Mesh is null or invalid, can't send to Houdini!");
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Mesh is null or invalid, can't send to Houdini!");
 		return -1;
 	}
 
@@ -88,16 +88,16 @@ HAPI_NodeId create_input_from_mesh_instance_3d(
 
 HAPI_NodeId create_input_from_path_3d(HEGoSessionManager *session_mgr, godot::Path3D *path_3d, HAPI_NodeId node_id, float target_length)
 {
-	HEGo::Util::Log::message("Setting input curve");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "Setting input curve");
 	if (path_3d == nullptr)
 	{
-		HEGo::Util::Log::warning("Path3D is null, can't send to Houdini!");
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Path3D is null, can't send to Houdini!");
 		return -1;
 	}
 	godot::Ref<godot::Curve3D> curve3d = path_3d->get_curve();
 	if (curve3d.is_null() || !curve3d.is_valid())
 	{
-		HEGo::Util::Log::warning("Curve3D is null or invalid, can't send to Houdini!");
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Curve3D is null or invalid, can't send to Houdini!");
 		return -1;
 	}
 
@@ -128,14 +128,14 @@ void disconnect_node_inputs(HEGoSessionManager *session_mgr, HAPI_NodeId target_
 	HOUDINI_CHECK_ERROR(HoudiniApi::GetNodeInfo(session_mgr->get_session(), target_node_id, &node_info));
 	for (int i = 0; i < node_info.inputCount; i++)
 	{
-		HEGo::Util::Log::message("Disconnecting node slot " + godot::String::num(i));
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "Disconnecting node slot " + godot::String::num(i));
 		HAPI_NodeId input_id = -1;
 		HOUDINI_CHECK_ERROR(HoudiniApi::QueryNodeInput(session_mgr->get_session(), target_node_id, i, &input_id));
 		if (input_id == -1)
 		{
 			break;
 		}
-		HEGo::Util::Log::message("disconnecting node id " + godot::String::num(input_id));
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "disconnecting node id " + godot::String::num(input_id));
 		HOUDINI_CHECK_ERROR(HoudiniApi::DisconnectNodeInput(session_mgr->get_session(), target_node_id, i));
 	}
 }
@@ -178,7 +178,7 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 {
 	const HAPI_Session *session = session_mgr->get_session();
 
-	HEGo::Util::Log::message("Loading Godot mesh arrays into vectors");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "Loading Godot mesh arrays into vectors");
 
 	int surface_count = mesh->get_surface_count();
 
@@ -288,7 +288,7 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 
 	node_id = HEGo::Util::Node::create_and_cook_input_node(session_mgr, name, node_id);
 
-	HEGo::Util::Log::message("Setting mesh");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "Setting mesh");
 
 	HAPI_PartInfo node_part = HoudiniApi::PartInfo_Create();
 	node_part.type = HAPI_PARTTYPE_MESH;
@@ -350,7 +350,7 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::CommitGeo(session, node_id));
 
-	HEGo::Util::Log::message("Finished creating input node");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "Finished creating input node");
 
 	return node_id;
 }

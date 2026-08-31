@@ -7,6 +7,14 @@ var editor_selection: EditorSelection
 
 const ImportPlugin = preload("hda_import_plugin.gd")
 
+## Log level settings, and the dropdown Godot shows for them.
+const LOG_LEVEL_NAMES := "TRACE,DEBUG,INFO,WARNING,ERROR"
+const SETTING_STORE_LEVEL := "hego/logging/store_level"
+const SETTING_OUTPUT_LEVEL := "hego/logging/output_level"
+const SETTING_ENABLE_FILE_LOGGING := "hego/logging/enable_file_logging"
+const SETTING_LOG_PATH := "hego/logging/log_path"
+const SETTING_MAX_LOG_FILES := "hego/logging/max_log_files"
+
 
 func _enter_tree():
 	# Initialization of the plugin goes here.
@@ -21,11 +29,22 @@ func _enter_tree():
 	
 	# Add HEGo project settings
 	_add_project_settings()
+	_add_logging_property_info()
+
+
+## Prints whatever the scheduler thread logged since the last frame.
+##
+## Log entries are recorded from whichever thread produced them, but only the main
+## thread may call into Godot, so the actual printing happens here.
+func _process(_delta):
+	var log := HEGoLog.get_singleton()
+	if log:
+		log.flush()
 
 
 func _exit_tree():
 	# Clean-up of the plugin goes here.
-	print("[HEGo]: Plugin exiting, cleaning up Houdini session...")
+	HEGoLog.get_singleton().info("session", "Plugin exiting, cleaning up Houdini session...")
 	
 	# Stop any active Houdini session
 	_cleanup_houdini_session()
@@ -41,17 +60,17 @@ func _exit_tree():
 		remove_control_from_bottom_panel(bottom_panel)
 		bottom_panel = null
 	
-	print("[HEGo]: Plugin cleanup completed")
+	HEGoLog.get_singleton().info("session", "Plugin cleanup completed")
 
 
 func _cleanup_houdini_session():
 	if HEGoAPI.get_singleton() and HEGoAPI.get_singleton().is_session_active():
-		print("[HEGo]: Stopping active Houdini session...")
-		var stop_success = HEGoAPI.get_singleton().stop_session()
-		if stop_success:
-			print("[HEGo]: Houdini session stopped successfully")
+		var log := HEGoLog.get_singleton()
+		log.info("session", "Stopping active Houdini session...")
+		if HEGoAPI.get_singleton().stop_session():
+			log.info("session", "Houdini session stopped successfully")
 		else:
-			print("[HEGo]: Warning: Failed to stop Houdini session")
+			log.warning("session", "Failed to stop Houdini session")
 
 
 func _on_selection_changed():
@@ -91,6 +110,37 @@ func _add_project_settings():
 			"[HEGo]: Houdini installation path '%s' does not exist. Set 'hego/houdini_installation_path' in Project Settings (%s expects something like '%s')."
 			% [configured_path, OS.get_name(), _default_houdini_path()]
 		)
+
+
+## Gives the hego/logging/* settings proper editors in the Project Settings dialog.
+## The settings themselves are registered by the extension, which reads them before
+## the plugin is loaded.
+func _add_logging_property_info():
+	ProjectSettings.add_property_info({
+		"name": SETTING_STORE_LEVEL,
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_ENUM,
+		"hint_string": LOG_LEVEL_NAMES,
+	})
+	ProjectSettings.add_property_info({
+		"name": SETTING_OUTPUT_LEVEL,
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_ENUM,
+		"hint_string": LOG_LEVEL_NAMES,
+	})
+	ProjectSettings.add_property_info({
+		"name": SETTING_LOG_PATH,
+		"type": TYPE_STRING,
+		"hint": PROPERTY_HINT_SAVE_FILE,
+		"hint_string": "*.log",
+	})
+	ProjectSettings.add_property_info({
+		"name": SETTING_MAX_LOG_FILES,
+		"type": TYPE_INT,
+		"hint": PROPERTY_HINT_RANGE,
+		"hint_string": "0,100,1",
+	})
+	ProjectSettings.save()
 
 
 ## Stock install location of the Houdini version HEGo is built against.

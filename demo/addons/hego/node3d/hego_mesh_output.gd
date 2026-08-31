@@ -8,6 +8,9 @@ extends RefCounted
 ## in the scene, saved as an [ArrayMesh] resource, or both, and which collision shape
 ## (if any) is generated for it.
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "output"
+
 ## Config the surface fetch is driven by.
 const FETCH_CONFIG_PATH := "res://addons/hego/surface_filters/fetch_surfaces_default.tres"
 
@@ -79,19 +82,19 @@ static func handle(host: Node) -> void:
 		var resource_save_path: Variant = _first_or_default(first_surface, "hego_resource_save_path", null)
 
 		if resource_save_path == null and storage_mode > STORAGE_MODE_INSTANCE:
-			push_error(HEGoNodeUtil.LOG_PREFIX + "Save mode set to resource, but no resource save path specified.")
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Spawning as mesh instance instead.")
+			HEGoLog.get_singleton().error(LOG_CATEGORY, "Save mode set to resource, but no resource save path specified.")
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Spawning as mesh instance instead.")
 			storage_mode = STORAGE_MODE_INSTANCE
 
 		if storage_mode > STORAGE_MODE_INSTANCE:
 			resource_save_count += 1
 			var save_result := save_mesh_resource(arr_mesh, str(resource_save_path))
 			if save_result["ok"]:
-				print(HEGoNodeUtil.LOG_PREFIX + "Successfully saved mesh to ", resource_save_path)
+				HEGoLog.get_singleton().debug(LOG_CATEGORY, "Successfully saved mesh to " + str(resource_save_path))
 			else:
-				push_warning(HEGoNodeUtil.LOG_PREFIX + "%s (error %d)" % [save_result["message"], save_result["error"]])
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "%s (error %d)" % [save_result["message"], save_result["error"]])
 				if save_result["fallback_to_instance"]:
-					push_warning(HEGoNodeUtil.LOG_PREFIX + "Spawning as mesh instance instead.")
+					HEGoLog.get_singleton().warning(LOG_CATEGORY, "Spawning as mesh instance instead.")
 					storage_mode = STORAGE_MODE_INSTANCE
 
 		if storage_mode == STORAGE_MODE_RESOURCE:
@@ -102,9 +105,9 @@ static func handle(host: Node) -> void:
 			collision_generation_count += 1
 
 	var gds_processing_msec := HEGoCookTimings.elapsed_msec(processing_start_usec)
-	print(
-		HEGoNodeUtil.LOG_PREFIX
-		+ "Mesh output breakdown: fetch_surfaces=%.3f ms, gdscript_processing=%.3f ms, total=%.3f ms, mesh_instances=%d, surfaces=%d, saves=%d, collision_generations=%d"
+	HEGoLog.get_singleton().debug(
+		LOG_CATEGORY,
+		"Mesh output breakdown: fetch_surfaces=%.3f ms, gdscript_processing=%.3f ms, total=%.3f ms, mesh_instances=%d, surfaces=%d, saves=%d, collision_generations=%d"
 		% [
 			fetch_surfaces_msec,
 			gds_processing_msec,

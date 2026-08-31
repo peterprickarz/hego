@@ -32,7 +32,7 @@ static void debug_log(const godot::String &message)
 {
 	if (kHeightfieldDebugLogs)
 	{
-		HEGo::Util::Log::message("[HFDBG] " + message);
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "[HFDBG] " + message);
 	}
 }
 
@@ -56,7 +56,7 @@ static std::vector<float> image_to_height_data(const godot::Ref<godot::Image> &i
 		const godot::Error err = image->decompress();
 		if (err != godot::OK)
 		{
-			HEGo::Util::Log::error("image_to_height_data: failed to decompress image");
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "image_to_height_data: failed to decompress image");
 			return data;
 		}
 	}
@@ -114,7 +114,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 				const int int_value = static_cast<int>(value);
 				if (HoudiniApi::AddAttribute(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info) != HAPI_RESULT_SUCCESS)
 				{
-					HEGo::Util::Log::warning("Failed to add prim attr '" + attr_name + "'");
+					HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Failed to add prim attr '" + attr_name + "'");
 					break;
 				}
 				HoudiniApi::SetAttributeIntData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &int_value, 0, 1);
@@ -128,7 +128,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 				const float float_value = static_cast<float>(value);
 				if (HoudiniApi::AddAttribute(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info) != HAPI_RESULT_SUCCESS)
 				{
-					HEGo::Util::Log::warning("Failed to add prim attr '" + attr_name + "'");
+					HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Failed to add prim attr '" + attr_name + "'");
 					break;
 				}
 				HoudiniApi::SetAttributeFloatData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &float_value, 0, 1);
@@ -143,7 +143,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 				const char *string_ptr = string_value.c_str();
 				if (HoudiniApi::AddAttribute(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info) != HAPI_RESULT_SUCCESS)
 				{
-					HEGo::Util::Log::warning("Failed to add prim attr '" + attr_name + "'");
+					HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Failed to add prim attr '" + attr_name + "'");
 					break;
 				}
 				HoudiniApi::SetAttributeStringData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, &string_ptr, 0, 1);
@@ -158,7 +158,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 				const float vec_data[3] = {vec.x, vec.y, vec.z};
 				if (HoudiniApi::AddAttribute(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info) != HAPI_RESULT_SUCCESS)
 				{
-					HEGo::Util::Log::warning("Failed to add prim attr '" + attr_name + "'");
+					HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Failed to add prim attr '" + attr_name + "'");
 					break;
 				}
 				HoudiniApi::SetAttributeFloatData(session, volume_node_id, 0, attr_name_utf8.c_str(), &attr_info, vec_data, 0, 1);
@@ -166,7 +166,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 			}
 
 			default:
-				HEGo::Util::Log::warning("Unsupported prim attr type for '" + attr_name + "'");
+				HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, "Unsupported prim attr type for '" + attr_name + "'");
 				break;
 		}
 	}
@@ -179,7 +179,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 
 	if (HoudiniApi::CookNode(session, target_node, nullptr) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed cooking layer node: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed cooking layer node: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -187,7 +187,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 	HoudiniApi::GeoInfo_Init(&geo_info);
 	if (HoudiniApi::GetGeoInfo(session, target_node, &geo_info) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed fetching geo info for layer: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed fetching geo info for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -195,7 +195,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 	HoudiniApi::PartInfo_Init(&part_info);
 	if (HoudiniApi::GetPartInfo(session, geo_info.nodeId, 0, &part_info) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed fetching part info for layer: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed fetching part info for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -203,7 +203,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 	HoudiniApi::VolumeInfo_Init(&volume_info);
 	if (HoudiniApi::GetVolumeInfo(session, geo_info.nodeId, 0, &volume_info) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed fetching volume info for layer: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed fetching volume info for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -213,7 +213,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 
 	if (HoudiniApi::SetVolumeInfo(session, target_node, 0, &volume_info) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed setting volume info for layer: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed setting volume info for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -221,7 +221,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 	std::vector<float> values = input_values;
 	if (total_size <= 0)
 	{
-		HEGo::Util::Log::error("Invalid volume size for layer: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Invalid volume size for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -232,7 +232,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 
 	if (values.empty())
 	{
-		HEGo::Util::Log::error("No voxel data to write for layer: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "No voxel data to write for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -244,7 +244,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 
 	if (HoudiniApi::SetHeightFieldData(session, target_node, 0, volume_name.c_str(), values.data(), 0, total_size) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed setting heightfield data for layer: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed setting heightfield data for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -255,7 +255,7 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 
 	if (HoudiniApi::CommitGeo(session, target_node) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed committing geo for layer: " + godot::String(layer_name.c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed committing geo for layer: " + godot::String(layer_name.c_str()));
 		return false;
 	}
 
@@ -285,7 +285,7 @@ void HEGoHeightfieldInputNode::instantiate_internal(HEGoSessionManager *session_
 
 	if (session_mgr == nullptr || session_mgr->get_session() == nullptr)
 	{
-		HEGo::Util::Log::error("No active Houdini session for heightfield node instantiation");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "No active Houdini session for heightfield node instantiation");
 		return;
 	}
 
@@ -295,7 +295,7 @@ void HEGoHeightfieldInputNode::instantiate_internal(HEGoSessionManager *session_
 
 	if (result != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed to create heightfield input node");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed to create heightfield input node");
 		node_id = -1;
 		height_node_id = -1;
 		mask_node_id = -1;
@@ -419,7 +419,7 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary laye
 				}
 				else
 				{
-					HEGo::Util::Log::error("No valid images found in layer dictionary");
+					HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "No valid images found in layer dictionary");
 					return -1;
 				}
 
@@ -443,7 +443,7 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary laye
 
 				if (self->node_id < 0 || self->height_node_id < 0 || self->mask_node_id < 0 || self->merge_node_id < 0)
 				{
-					HEGo::Util::Log::error("Failed to initialize heightfield internals");
+					HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed to initialize heightfield internals");
 					return -1;
 				}
 
@@ -537,7 +537,7 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary laye
 								session, self->node_id, &extra_volume_id, it->first.c_str(), self->x_size, self->y_size, self->voxel_size) !=
 							HAPI_RESULT_SUCCESS)
 					{
-						HEGo::Util::Log::error("Failed creating additional heightfield layer: " + godot::String(it->first.c_str()));
+						HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed creating additional heightfield layer: " + godot::String(it->first.c_str()));
 						continue;
 					}
 

@@ -62,7 +62,7 @@ const char *HEGoPlatform::get_houdini_path()
 
 void HEGoPlatform::set_env_vars()
 {
-	HEGo::Util::Log::message("Setting in process environment variables...");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::PLATFORM, "Setting in process environment variables...");
 
 	// Get Houdini path from project setting first, then environment variable, then fallback
 	const char *houdiniBasePath = get_houdini_path();
@@ -78,7 +78,7 @@ void HEGoPlatform::set_env_vars()
 	setenv("PATH", path.c_str(), 1);
 #endif
 
-	HEGo::Util::Log::message(godot::String("Using Houdini installation: ") + godot::String(houdiniBasePath));
+	HEGo::Util::Log::info(HEGo::Util::Log::Category::PLATFORM, godot::String("Using Houdini installation: ") + godot::String(houdiniBasePath));
 }
 
 void *HEGoPlatform::load_lib_hapil()
@@ -97,7 +97,7 @@ void *HEGoPlatform::load_lib_hapil()
 		godot::String msg = godot::String("Failed to load libHAPIL.dll from:\n") + godot::String(full_path.c_str()) +
 				"\nError code: " + godot::String(std::to_string(err).c_str());
 
-		HEGo::Util::Log::error(msg);
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::PLATFORM, msg);
 
 		// Optional: fallback to old SetDllDirectory method
 		std::string bin_dir = std::string(houdiniBasePath) + "\\bin";
@@ -106,7 +106,7 @@ void *HEGoPlatform::load_lib_hapil()
 
 		if (!libHAPIL)
 		{
-			HEGo::Util::Log::error("Fallback load also failed: " + godot::String(std::to_string(GetLastError()).c_str()));
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::PLATFORM, "Fallback load also failed: " + godot::String(std::to_string(GetLastError()).c_str()));
 		}
 	}
 
@@ -128,7 +128,7 @@ void *HEGoPlatform::load_lib_hapil()
 		// dlerror() is the only place that says why, so surface it instead of
 		// leaving the caller with a bare null.
 		const char *dl_error = dlerror();
-		HEGo::Util::Log::error(godot::String("Failed to load ") + library_name + " from " + get_houdini_path() + ": " + (dl_error ? dl_error : "unknown error"));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::PLATFORM, godot::String("Failed to load ") + library_name + " from " + get_houdini_path() + ": " + (dl_error ? dl_error : "unknown error"));
 	}
 	return libHAPIL;
 #endif
@@ -154,7 +154,7 @@ bool HEGoPlatform::free_lib_hapil(void *libHAPIL)
 	if (result != 0)
 	{
 		const char *dl_error = dlerror();
-		HEGo::Util::Log::error(godot::String("Failed to unload libHAPIL: ") + (dl_error ? dl_error : "unknown error"));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::PLATFORM, godot::String("Failed to unload libHAPIL: ") + (dl_error ? dl_error : "unknown error"));
 		return false;
 	}
 
@@ -182,11 +182,11 @@ void *HEGoPlatform::initialize_hapi()
 
 	if (!HoudiniApi::is_hapi_initialized())
 	{
-		HEGo::Util::Log::error("Failed to load and initialize the Houdini Engine API from libHAPIL");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::PLATFORM, "Failed to load and initialize the Houdini Engine API from libHAPIL");
 		return nullptr;
 	}
 
-	HEGo::Util::Log::message("Loaded and initialized libHAPIL.");
+	HEGo::Util::Log::info(HEGo::Util::Log::Category::PLATFORM, "Loaded and initialized libHAPIL.");
 
 	return libHAPIL;
 }

@@ -26,7 +26,7 @@ godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId
 	const HAPI_Result session_valid = HoudiniApi::IsSessionValid(session_mgr->get_session());
 	if (session_valid != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Cannot get heightfield layers: invalid session.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Cannot get heightfield layers: invalid session.");
 		return layers;
 	}
 
@@ -44,7 +44,7 @@ godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId
 		HAPI_VolumeInfo volume_info;
 		if (HoudiniApi::GetVolumeInfo(session_mgr->get_session(), geo_info.nodeId, part_info.id, &volume_info) != HAPI_RESULT_SUCCESS)
 		{
-			HEGo::Util::Log::error("Failed to read volume info for heightfield part id " + godot::String::num_int64(part_info.id));
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Failed to read volume info for heightfield part id " + godot::String::num_int64(part_info.id));
 			continue;
 		}
 
@@ -91,7 +91,7 @@ godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *sessi
 	const HAPI_Result session_valid = HoudiniApi::IsSessionValid(session_mgr->get_session());
 	if (session_valid != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Cannot fetch heightfield layer: invalid session.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Cannot fetch heightfield layer: invalid session.");
 		return image;
 	}
 
@@ -104,34 +104,34 @@ godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *sessi
 	HAPI_PartInfo part_info;
 	if (HoudiniApi::GetPartInfo(session_mgr->get_session(), geo_info.nodeId, part_id, &part_info) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Invalid part_id for heightfield layer fetch: " + godot::String::num_int64(part_id));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Invalid part_id for heightfield layer fetch: " + godot::String::num_int64(part_id));
 		return image;
 	}
 
 	if (part_info.type != HAPI_PARTTYPE_VOLUME)
 	{
-		HEGo::Util::Log::error("Requested part is not a volume part.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Requested part is not a volume part.");
 		return image;
 	}
 
 	HAPI_VolumeInfo volume_info;
 	if (HoudiniApi::GetVolumeInfo(session_mgr->get_session(), geo_info.nodeId, part_info.id, &volume_info) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed to get volume info for part id " + godot::String::num_int64(part_id));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Failed to get volume info for part id " + godot::String::num_int64(part_id));
 		return image;
 	}
 
 	const int voxel_count = volume_info.xLength * volume_info.yLength * volume_info.zLength;
 	if (voxel_count <= 0)
 	{
-		HEGo::Util::Log::error("Volume has invalid dimensions for part id " + godot::String::num_int64(part_id));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Volume has invalid dimensions for part id " + godot::String::num_int64(part_id));
 		return image;
 	}
 
 	std::vector<float> values(voxel_count, 0.0f);
 	if (HoudiniApi::GetHeightFieldData(session_mgr->get_session(), geo_info.nodeId, part_info.id, values.data(), 0, voxel_count) != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Failed to read heightfield voxel data for part id " + godot::String::num_int64(part_id));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Failed to read heightfield voxel data for part id " + godot::String::num_int64(part_id));
 		return image;
 	}
 
@@ -145,7 +145,7 @@ godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *sessi
 	image = godot::Image::create_from_data(volume_info.xLength, volume_info.yLength, false, godot::Image::FORMAT_RF, image_bytes);
 	if (image.is_null())
 	{
-		HEGo::Util::Log::error("Failed to create FORMAT_RF image for heightfield layer.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Failed to create FORMAT_RF image for heightfield layer.");
 		return image;
 	}
 

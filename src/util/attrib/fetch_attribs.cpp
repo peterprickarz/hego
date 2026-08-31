@@ -28,7 +28,7 @@ godot::Variant fetch_dict(
 	// Verify that the attribute is a dictionary type
 	if (attrib_info.storage != HAPI_STORAGETYPE_DICTIONARY)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " is not a dictionary attribute!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " is not a dictionary attribute!");
 		return godot::Variant();
 	}
 
@@ -38,6 +38,10 @@ godot::Variant fetch_dict(
 			session, mesh_geo_info.nodeId, mesh_part_info.id, attrib_name, &attrib_info, temp_data.data(), 0, attrib_info.count));
 
 	godot::Array attrib_data;
+	// A malformed attribute is usually malformed on every element, so the failures
+	// are counted and reported once instead of once per element.
+	int invalid_count = 0;
+	int first_invalid_index = -1;
 	for (int i = 0; i < attrib_info.count * attrib_info.tupleSize; ++i)
 	{
 		// Retrieve the string immediately as handles are only valid until the next call
@@ -55,11 +59,22 @@ godot::Variant fetch_dict(
 		}
 		else
 		{
-			HEGo::Util::Log::error(godot::String(attrib_name) + " contains invalid JSON dictionary format at index: " + std::to_string(i).c_str());
+			invalid_count++;
+			if (first_invalid_index < 0)
+			{
+				first_invalid_index = i;
+			}
 		}
 	}
 
-	HEGo::Util::Log::message(godot::String(attrib_name) + " dictionary attribute count: " + std::to_string(attrib_data.size()).c_str());
+	if (invalid_count > 0)
+	{
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB,
+				godot::String(attrib_name) + " contains invalid JSON dictionary format on " + std::to_string(invalid_count).c_str() + " element(s), first at index " +
+						std::to_string(first_invalid_index).c_str());
+	}
+
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " dictionary attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 godot::Variant fetch_float(
@@ -75,7 +90,7 @@ godot::Variant fetch_float(
 
 	if (attrib_info.tupleSize != 1)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -88,7 +103,7 @@ godot::Variant fetch_float(
 	{
 		attrib_data.append(value);
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 
@@ -105,7 +120,7 @@ godot::Variant fetch_vector2(
 
 	if (attrib_info.tupleSize != 2)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -118,7 +133,7 @@ godot::Variant fetch_vector2(
 	{
 		attrib_data.append(godot::Vector2(temp_data[i], temp_data[i + 1]));
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 
@@ -135,7 +150,7 @@ godot::Variant fetch_vector3(
 
 	if (attrib_info.tupleSize != 3)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -148,7 +163,7 @@ godot::Variant fetch_vector3(
 	{
 		attrib_data.append(godot::Vector3(temp_data[i], temp_data[i + 1], temp_data[i + 2]));
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 
@@ -165,7 +180,7 @@ godot::Variant fetch_vector4(
 
 	if (attrib_info.tupleSize != 4)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -178,7 +193,7 @@ godot::Variant fetch_vector4(
 	{
 		attrib_data.append(godot::Vector4(temp_data[i], temp_data[i + 1], temp_data[i + 2], temp_data[i + 3]));
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 
@@ -195,7 +210,7 @@ godot::Variant fetch_int(
 
 	if (attrib_info.tupleSize != 1)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -208,7 +223,7 @@ godot::Variant fetch_int(
 	{
 		attrib_data.append(value);
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 
@@ -225,7 +240,7 @@ godot::Variant fetch_vector2i(
 
 	if (attrib_info.tupleSize != 2)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -238,7 +253,7 @@ godot::Variant fetch_vector2i(
 	{
 		attrib_data.append(godot::Vector2i(temp_data[i], temp_data[i + 1]));
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 
@@ -255,7 +270,7 @@ godot::Variant fetch_vector3i(
 
 	if (attrib_info.tupleSize != 3)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -268,7 +283,7 @@ godot::Variant fetch_vector3i(
 	{
 		attrib_data.append(godot::Vector3i(temp_data[i], temp_data[i + 1], temp_data[i + 2]));
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 
@@ -285,7 +300,7 @@ godot::Variant fetch_vector4i(
 
 	if (attrib_info.tupleSize != 4)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -298,7 +313,7 @@ godot::Variant fetch_vector4i(
 	{
 		attrib_data.append(godot::Vector4i(temp_data[i], temp_data[i + 1], temp_data[i + 2], temp_data[i + 3]));
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 
@@ -315,7 +330,7 @@ godot::Variant fetch_string(
 
 	if (attrib_info.tupleSize != 1)
 	{
-		HEGo::Util::Log::error(godot::String(attrib_name) + " has wrong tuple size!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " has wrong tuple size!");
 		return godot::Variant();
 	}
 
@@ -334,7 +349,7 @@ godot::Variant fetch_string(
 
 		attrib_data.append(godot::String(buffer.data()));
 	}
-	HEGo::Util::Log::message(godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, godot::String(attrib_name) + " attribute count: " + std::to_string(attrib_data.size()).c_str());
 	return attrib_data;
 }
 

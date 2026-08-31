@@ -82,11 +82,11 @@ void set_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Pac
 		return;
 	}
 
-	HEGo::Util::Log::message("Setting preset");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::PARM, "Setting preset");
 	HAPI_Result result = HoudiniApi::SetPreset(session, node_id, HAPI_PRESETTYPE_BINARY, nullptr, buffer, buffer_length);
 	if (result != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error("Error setting preset!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::PARM, "Error setting preset!");
 		return;
 	}
 }

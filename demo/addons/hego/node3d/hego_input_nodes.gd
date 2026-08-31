@@ -9,6 +9,9 @@ extends RefCounted
 ## heightfield input. The node path of the source is always sent along as
 ## [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "input"
+
 ## Attributes attached to every input.
 const NODE_PATH_ATTRIB := "_hego_node_path"
 const RESOURCE_PATH_ATTRIB := "_hego_resource_path"
@@ -32,7 +35,7 @@ const CURVE_INPUT_MODE := 1
 static func sync(host: Node, existing_node: Variant, input_node_path: Variant, settings: Dictionary) -> Variant:
 	var input := _resolve_input_node(host, input_node_path)
 	if input == null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Input node %s could not be found, skipping it." % str(input_node_path))
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input node %s could not be found, skipping it." % str(input_node_path))
 		return existing_node
 
 	var attrs := [{
@@ -49,7 +52,7 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 
 	if input is MeshInstance3D:
 		if input.mesh == null:
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Input %s has no mesh, skipping it." % str(input_node_path))
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s has no mesh, skipping it." % str(input_node_path))
 			return existing_node
 		attrs.append({
 			"name": RESOURCE_PATH_ATTRIB,
@@ -78,7 +81,7 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 			await HEGoNodeUtil.await_task(host, terrain_node.set_layers(layers, HEGoTerrain3DInput.get_vertex_spacing(input), 1.0, true))
 		return terrain_node
 
-	push_warning(HEGoNodeUtil.LOG_PREFIX + "Input %s is not a Path3D, MeshInstance3D, CSGShape3D or Terrain3D." % str(input_node_path))
+	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s is not a Path3D, MeshInstance3D, CSGShape3D or Terrain3D." % str(input_node_path))
 	return existing_node
 
 

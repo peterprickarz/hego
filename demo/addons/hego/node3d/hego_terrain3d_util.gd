@@ -8,6 +8,9 @@ extends RefCounted
 ## everything goes through [ClassDB], [method Object.call] and [method Object.get],
 ## and every entry point degrades to a warning when the addon or a method is missing.
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "terrain3d"
+
 ## Prefix of every heightfield layer and attribute HEGo exchanges with Terrain3D.
 const ATTRIB_PREFIX := "hegot3d_"
 
@@ -98,7 +101,7 @@ static func collect_texture_layers(layers: Array) -> Array:
 			continue
 		var slot := parse_texture_layer_index(layer_name)
 		if slot < 0 or slot > MAX_TEXTURE_SLOT:
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Ignoring invalid Terrain3D texture layer name %s." % layer_name)
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Ignoring invalid Terrain3D texture layer name %s." % layer_name)
 			continue
 		texture_layers.append({
 			"slot": slot,
@@ -201,7 +204,7 @@ static func validate_texture_layers(texture_layers: Array) -> Dictionary:
 static func _validation_error(reason: String) -> Dictionary:
 	return {
 		"ok": false,
-		"warning": HEGoNodeUtil.LOG_PREFIX + reason + ", skipping Terrain3D control maps.",
+		"warning": reason + ", skipping Terrain3D control maps.",
 	}
 
 

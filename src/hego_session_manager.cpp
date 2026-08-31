@@ -56,7 +56,7 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 		}
 		else
 		{
-			HEGo::Util::Log::warning(godot::String("Connection data '") + connection_data.c_str() + "' is not a valid port number, using " +
+			HEGo::Util::Log::warning(HEGo::Util::Log::Category::SESSION, godot::String("Connection data '") + connection_data.c_str() + "' is not a valid port number, using " +
 					godot::String::num_int64(DEFAULT_TCP_PORT) + ".");
 		}
 	}
@@ -80,24 +80,24 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	if (session_type == SessionType::NewNamedPipe)
 	{
 		// Start our server
-		HEGo::Util::Log::message("Starting a named-pipe server...");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Starting a named-pipe server...");
 		HAPI_ProcessId process_id;
 		HOUDINI_CHECK_ERROR(HoudiniApi::StartThriftNamedPipeServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
 
 		// Connect to the newly started server
-		HEGo::Util::Log::message("Connecting to the named-pipe session...");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Connecting to the named-pipe session...");
 		HAPI_SessionInfo session_info = HoudiniApi::SessionInfo_Create();
 		session_result = HoudiniApi::CreateThriftNamedPipeSession(&my_session, my_named_pipe.c_str(), &session_info);
 	}
 	else if (session_type == SessionType::NewTCPSocket)
 	{
 		// Start our server
-		HEGo::Util::Log::message("Starting a TCP socket server...");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Starting a TCP socket server...");
 		HAPI_ProcessId process_id;
 		HOUDINI_CHECK_ERROR(HoudiniApi::StartThriftSocketServer(&server_options, my_tcp_port, &process_id, nullptr));
 
 		// Connect to the newly started server
-		HEGo::Util::Log::message("Connecting to the TCP socket session...");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Connecting to the TCP socket session...");
 		HAPI_SessionInfo session_info = HoudiniApi::SessionInfo_Create();
 		session_result = HoudiniApi::CreateThriftSocketSession(&my_session, DEFAULT_HOST_NAME, my_tcp_port, &session_info);
 	}
@@ -106,17 +106,17 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 		// InProcess is served by a shared memory server: it is in-process from the
 		// user's point of view (Houdini is started by HEGo and closes with it), but
 		// it is not HAPI's in-process session type.
-		HEGo::Util::Log::message("Starting a Shared Memory server...");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Starting a Shared Memory server...");
 		HAPI_ProcessId process_id;
 		HOUDINI_CHECK_ERROR(HoudiniApi::StartThriftSharedMemoryServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
-		HEGo::Util::Log::message("Connecting to shared memory session...");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Connecting to shared memory session...");
 		HAPI_SessionInfo session_info = HoudiniApi::SessionInfo_Create();
 		session_result = HoudiniApi::CreateThriftSharedMemorySession(&my_session, my_named_pipe.c_str(), &session_info);
 	}
 	else
 	{
 		// The Existing* types are declared but not implemented yet.
-		HEGo::Util::Log::error(godot::String("Unsupported session type ") + godot::String::num_int64(session_type) + ".");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, godot::String("Unsupported session type ") + godot::String::num_int64(session_type) + ".");
 	}
 
 	if (session_result != HAPI_RESULT_SUCCESS)
@@ -125,30 +125,30 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 		{
 			std::string connectionError = HEGo::Util::Hapi::get_connection_error();
 			if (!connectionError.empty())
-				HEGo::Util::Log::error("Houdini Engine Session failed to connect - " + godot::String(connectionError.c_str()));
+				HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, "Houdini Engine Session failed to connect - " + godot::String(connectionError.c_str()));
 		}
 
 		return false;
 	}
 
-	HEGo::Util::Log::message("Started Session.");
+	HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Started Session.");
 
 	bool use_cooking_thread = true; // Enables asynchronous cooking of nodes.
 
 	if (!initialize(use_cooking_thread))
 	{
-		HEGo::Util::Log::error("Failed to initialize HAPI.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, "Failed to initialize HAPI.");
 		return false;
 	}
 
-	HEGo::Util::Log::message("Initialized HAPI");
+	HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Initialized HAPI");
 
 	return true;
 }
 
 bool HEGoSessionManager::stop_session()
 {
-	HEGo::Util::Log::message("Cleaning up and closing session...");
+	HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Cleaning up and closing session...");
 
 	if (HAPI_RESULT_SUCCESS == HoudiniApi::IsSessionValid(&my_session))
 	{
@@ -169,17 +169,17 @@ bool HEGoSessionManager::stop_session()
 	// Reset node_id for all tracked nodes
 	for (HEGo::HEGoTrackableNode *node : nodes)
 	{
-		HEGo::Util::Log::message("resetting node id");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "resetting node id");
 		node->reset_node_id();
 	}
 
-	HEGo::Util::Log::message("Closed Session, finalized hapi and freed libHAPIL.");
+	HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Closed Session, finalized hapi and freed libHAPIL.");
 	return true;
 }
 
 bool HEGoSessionManager::restart_session(SessionType session_type, bool use_cooking_thread)
 {
-	HEGo::Util::Log::message("Restarting the Houdini Engine session...");
+	HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Restarting the Houdini Engine session...");
 
 	// Make sure we stop the current session if it is still valid
 	stop_session();
@@ -191,14 +191,14 @@ bool HEGoSessionManager::restart_session(SessionType session_type, bool use_cook
 
 	if (!start_session(session_type, connection_data))
 	{
-		HEGo::Util::Log::error("Failed to restart the Houdini Engine session - Failed to start the new Session");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, "Failed to restart the Houdini Engine session - Failed to start the new Session");
 		return false;
 	}
 
 	// Now initialize HAPI with this session
 	if (!initialize(use_cooking_thread))
 	{
-		HEGo::Util::Log::error("Failed to restart the Houdini Engine session - Failed to initialize HAPI");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, "Failed to restart the Houdini Engine session - Failed to initialize HAPI");
 		return false;
 	}
 
@@ -210,7 +210,7 @@ bool HEGoSessionManager::initialize(bool use_cooking_thread)
 	// We need a Valid Session
 	if (HAPI_RESULT_SUCCESS != HoudiniApi::IsSessionValid(get_session()))
 	{
-		HEGo::Util::Log::error("Failed to initialize HAPI: The session is invalid.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, "Failed to initialize HAPI: The session is invalid.");
 		return false;
 	}
 
@@ -244,16 +244,16 @@ bool HEGoSessionManager::initialize(bool use_cooking_thread)
 
 		if (result == HAPI_RESULT_SUCCESS)
 		{
-			HEGo::Util::Log::message("Successfully initialized Houdini Engine.");
+			HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Successfully initialized Houdini Engine.");
 		}
 		else if (result == HAPI_RESULT_ALREADY_INITIALIZED)
 		{
 			// Reused session? just notify the user
-			HEGo::Util::Log::message("Successfully initialized Houdini Engine - HAPI was already initialized.");
+			HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Successfully initialized Houdini Engine - HAPI was already initialized.");
 		}
 		else
 		{
-			HEGo::Util::Log::error("Houdini Engine API initialization failed");
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, "Houdini Engine API initialization failed");
 			return false;
 		}
 	}
@@ -311,23 +311,23 @@ bool HEGoSessionManager::wait_for_cook(HAPI_NodeId node_id)
 		const std::string cook_result = HEGo::Util::Hapi::get_composed_cook_result(get_session(), node_id);
 		if (!cook_result.empty())
 		{
-			HEGo::Util::Log::message(godot::String(cook_result.c_str()));
+			HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, godot::String(cook_result.c_str()));
 		}
 	}
 
 	if (status != HAPI_STATE_READY || result != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::warning("Cook failure: " + godot::String(HEGo::Util::Hapi::get_last_cook_error(get_session()).c_str()));
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::SESSION, "Cook failure: " + godot::String(HEGo::Util::Hapi::get_last_cook_error(get_session()).c_str()));
 		return false;
 	}
 	HEGo::Util::Log::line();
-	HEGo::Util::Log::message("Cooking completed!");
+	HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Cooking completed!");
 	return true;
 }
 
 bool HEGoSessionManager::wait_for_ready()
 {
-	HEGo::Util::Log::message("Waiting for async call");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Waiting for async call");
 	if (!get_session())
 	{
 		return false;

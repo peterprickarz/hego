@@ -21,7 +21,7 @@ bool add_and_set_attribute(const HAPI_Session *session, HAPI_NodeId node_id, int
 {
 	if (!attr_dict.has("name") || !attr_dict.has("value") || !attr_dict.has("type"))
 	{
-		HEGo::Util::Log::warning("Attribute dict missing required keys: name, value, type");
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB, "Attribute dict missing required keys: name, value, type");
 		return false;
 	}
 
@@ -31,7 +31,7 @@ bool add_and_set_attribute(const HAPI_Session *session, HAPI_NodeId node_id, int
 
 	if (attr_name.is_empty())
 	{
-		HEGo::Util::Log::warning("Empty attribute name");
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB, "Empty attribute name");
 		return false;
 	}
 
@@ -50,13 +50,13 @@ bool add_and_set_attribute(const HAPI_Session *session, HAPI_NodeId node_id, int
 	}
 	else
 	{
-		HEGo::Util::Log::warning("Unsupported owner type: '" + owner_str + "' (expected 'point' or 'prim')");
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB, "Unsupported owner type: '" + owner_str + "' (expected 'point' or 'prim')");
 		return false;
 	}
 
 	if (element_count <= 0)
 	{
-		HEGo::Util::Log::warning("Cannot create attribute '" + attr_name + "' — zero elements for owner");
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB, "Cannot create attribute '" + attr_name + "' — zero elements for owner");
 		return false;
 	}
 
@@ -153,7 +153,7 @@ bool add_and_set_attribute(const HAPI_Session *session, HAPI_NodeId node_id, int
 
 		default:
 		{
-			HEGo::Util::Log::warning("Unsupported Variant type for attribute '" + attr_name + "': " + godot::String::num(value.get_type()));
+			HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB, "Unsupported Variant type for attribute '" + attr_name + "': " + godot::String::num(value.get_type()));
 			break;
 		}
 	}
@@ -168,14 +168,14 @@ void apply_attributes(const HAPI_Session *session, HAPI_NodeId node_id, int part
 		return;
 	}
 
-	HEGo::Util::Log::message("Applying " + godot::String::num(attributes.size()) + " custom attributes");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::ATTRIB, "Applying " + godot::String::num(attributes.size()) + " custom attributes");
 
 	for (int i = 0; i < attributes.size(); ++i)
 	{
 		godot::Variant v = attributes[i];
 		if (v.get_type() != godot::Variant::DICTIONARY)
 		{
-			HEGo::Util::Log::warning("Attribute entry at index " + godot::String::num(i) + " is not a Dictionary");
+			HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB, "Attribute entry at index " + godot::String::num(i) + " is not a Dictionary");
 			continue;
 		}
 
@@ -185,7 +185,7 @@ void apply_attributes(const HAPI_Session *session, HAPI_NodeId node_id, int part
 
 		if (!ok)
 		{
-			HEGo::Util::Log::warning("Failed to set attribute at index " + godot::String::num(i));
+			HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB, "Failed to set attribute at index " + godot::String::num(i));
 		}
 	}
 }

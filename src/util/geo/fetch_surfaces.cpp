@@ -69,7 +69,7 @@ godot::Array invert_vector3_array(const godot::Array &values)
 godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config, bool auto_cook)
 {
 	HEGo::Util::Log::line();
-	HEGo::Util::Log::message("Fetching Surface Dictionary");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Fetching Surface Dictionary");
 	HAPI_Result session_valid = HoudiniApi::IsSessionValid(session_mgr->get_session());
 	if (session_valid != HAPI_RESULT_SUCCESS)
 	{
@@ -96,7 +96,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	HAPI_PartInfo mesh_part_info;
 	if (!find_part_by_type(session_mgr->get_session(), mesh_geo_info, HAPI_PARTTYPE_MESH, mesh_part_info))
 	{
-		HEGo::Util::Log::error("Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
 		return godot::Dictionary();
 	}
 	if (mesh_part_info.faceCount <= 0)
@@ -143,7 +143,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	}
 	if (tangents)
 	{
-		HEGo::Util::Log::message("getting tangent attrs");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "getting tangent attrs");
 		point_attrs["tangentu"] =
 				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentu");
 		point_attrs["tangentv"] = invert_vector3_array(
@@ -151,7 +151,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	}
 	else
 	{
-		HEGo::Util::Log::message("Getting tangents disabled");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Getting tangents disabled");
 	}
 	for (int i = 0; i < read_attribs.size(); i++)
 	{
@@ -242,7 +242,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 		vt_pt_indices.append(vertex_point_indices[i]);
 	}
 	modify_base_entries(split_prim_dictionary, vt_pt_indices, point_attrs, filtered_prims);
-	HEGo::Util::Log::message("Finished fetching surfaces");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Finished fetching surfaces");
 	HEGo::Util::Log::line();
 	return split_prim_dictionary;
 }
@@ -321,11 +321,11 @@ void modify_base_entries(
 				int vertex_count = tangentu_attr.size();
 				if (tangentv_attr.size() != vertex_count || normal_attr.size() != vertex_count)
 				{
-					HEGo::Util::Log::error("Tangent arrays and normal array size mismatch!");
+					HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Tangent arrays and normal array size mismatch!");
 				}
 				else
 				{
-					HEGo::Util::Log::message("Calculating tangents");
+					HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Calculating tangents");
 					godot::PackedFloat32Array tangent_array;
 					tangent_array.resize(vertex_count * 4); // 4 floats per vertex: [tangent.x, tangent.y, tangent.z, bitangent_sign]
 

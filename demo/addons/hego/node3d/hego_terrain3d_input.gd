@@ -9,6 +9,9 @@ extends RefCounted
 ## control map is unpacked into one weight layer per texture used, plus masks marking
 ## which pixels belong to a region at all and which are holes.
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "terrain3d"
+
 ## Terrain3DData.get_maps() map types.
 const MAP_TYPE_HEIGHT := 0
 const MAP_TYPE_CONTROL := 1
@@ -35,17 +38,17 @@ static func read_layers(terrain3d_node: Node, input_node_path: String = "") -> D
 
 	var terrain_data: Object = terrain3d_node.get("data")
 	if terrain_data == null:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Failed to get Terrain3D data")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Failed to get Terrain3D data")
 		return {}
 
 	var region_locations: Array = terrain_data.call("get_region_locations")
 	if region_locations.is_empty():
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D has no regions")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D has no regions")
 		return {}
 
 	var height_maps: Variant = terrain_data.call("get_maps", MAP_TYPE_HEIGHT)
 	if not height_maps is Array or height_maps.is_empty():
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Failed to fetch Terrain3D height maps.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Failed to fetch Terrain3D height maps.")
 		return {}
 
 	var control_maps: Variant = terrain_data.call("get_maps", MAP_TYPE_CONTROL)
@@ -53,23 +56,23 @@ static func read_layers(terrain3d_node: Node, input_node_path: String = "") -> D
 		control_maps = []
 
 	if not ClassDB.class_exists("Terrain3DUtil"):
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Terrain3DUtil is unavailable.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Terrain3DUtil is unavailable.")
 		return {}
 	var terrain3d_util: Object = ClassDB.instantiate("Terrain3DUtil")
 	if terrain3d_util == null:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Failed to instantiate Terrain3DUtil.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Failed to instantiate Terrain3DUtil.")
 		return {}
 
 	var region_pixel_size := _get_region_pixel_size(height_maps)
 	if region_pixel_size <= 1:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Invalid Terrain3D region image size.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Invalid Terrain3D region image size.")
 		return {}
 	# Adjacent regions share one border sample, so stride is size-1 in pixel space.
 	var region_pixel_stride := region_pixel_size - 1
 
 	var region_count := mini(region_locations.size(), height_maps.size())
 	if region_count != region_locations.size() or region_count != height_maps.size():
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D region metadata and height maps count differ. Truncating to shared count.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D region metadata and height maps count differ. Truncating to shared count.")
 
 	# Regions sit on an integer grid; the stitched image spans its bounding box.
 	var min_x := INF

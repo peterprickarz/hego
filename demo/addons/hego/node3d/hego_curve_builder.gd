@@ -8,6 +8,9 @@ extends RefCounted
 ## dictionary holds [code]positions[/code], [code]type[/code], [code]order[/code],
 ## [code]is_closed[/code] and, for NURBS, [code]knots[/code].
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "output"
+
 ## Number of samples used for the shortest NURBS curves.
 const MIN_NURBS_SAMPLES := 50
 
@@ -29,7 +32,7 @@ static func build(curve: Dictionary) -> Curve3D:
 			return build_nurbs_curve(curve)
 		HEGoAssetNode.CURVE_TYPE_BEZIER:
 			return build_bezier_curve(curve)
-	push_warning(HEGoNodeUtil.LOG_PREFIX + "Unsupported curve type %s, building a poly curve instead." % str(curve.get("type", "?")))
+	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Unsupported curve type %s, building a poly curve instead." % str(curve.get("type", "?")))
 	return build_linear_curve(curve)
 
 
@@ -65,13 +68,13 @@ static func build_nurbs_curve(curve: Dictionary) -> Curve3D:
 	var order := int(curve.get("order", 4))
 
 	if positions.size() < 2:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "NURBS curve has fewer than 2 control points, returning empty curve.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "NURBS curve has fewer than 2 control points, returning empty curve.")
 		return curve_out
 
 	var knots: Array = curve["knots"] if curve.has("knots") and curve["knots"] is Array and not curve["knots"].is_empty() else generate_uniform_knots(positions.size(), order)
 
 	if order < 2:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "NURBS curve has an invalid order (%d), building a poly curve instead." % order)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "NURBS curve has an invalid order (%d), building a poly curve instead." % order)
 		return build_linear_curve(curve)
 
 	# The evaluation reads knots up to index positions.size() + order - 2, so a knot
@@ -79,7 +82,7 @@ static func build_nurbs_curve(curve: Dictionary) -> Curve3D:
 	# positions.size() + order knots; anything shorter falls back to a poly curve.
 	var required_knots := positions.size() + order - 1
 	if knots.size() < required_knots:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "NURBS curve has too few knots (%d, expected at least %d), building a poly curve instead." % [knots.size(), required_knots])
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "NURBS curve has too few knots (%d, expected at least %d), building a poly curve instead." % [knots.size(), required_knots])
 		return build_linear_curve(curve)
 
 	var degree := order - 1
@@ -173,7 +176,7 @@ static func build_bezier_curve(curve: Dictionary) -> Curve3D:
 	var positions: Array = curve["positions"]
 
 	if positions.size() < 4:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Bezier curve has fewer than the minimum 4 expected control points, returning linear curve.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Bezier curve has fewer than the minimum 4 expected control points, returning linear curve.")
 		return build_linear_curve(curve)
 
 	@warning_ignore("integer_division")

@@ -18,6 +18,9 @@ extends RefCounted
 ## }
 ## [/codeblock]
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "output"
+
 ## Key holding the value of a property inside the nested dictionary.
 const VALUE_KEY := "hego_val"
 
@@ -28,7 +31,7 @@ static func apply_custom_properties(obj: Object, properties: Dictionary) -> void
 		var value: Variant = properties[key]
 
 		if not value is Dictionary or not value.has(VALUE_KEY):
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Invalid property format for %s, expected dictionary with %s" % [key, VALUE_KEY])
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Invalid property format for %s, expected dictionary with %s" % [key, VALUE_KEY])
 			continue
 
 		var actual_value: Variant = value[VALUE_KEY]
@@ -69,7 +72,7 @@ static func apply_custom_properties(obj: Object, properties: Dictionary) -> void
 static func set_property(obj: Object, property: String, value: Variant) -> void:
 	var prop_info := find_property_info(obj, property)
 	if prop_info.is_empty():
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Property %s does not exist on %s, skipping" % [property, obj.get_class()])
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Property %s does not exist on %s, skipping" % [property, obj.get_class()])
 		return
 
 	var expected_class: String = prop_info.get("class_name", "")
@@ -78,9 +81,9 @@ static func set_property(obj: Object, property: String, value: Variant) -> void:
 		return
 
 	var value_class: String = value.get_class() if value is Object else "none"
-	push_warning(
-		HEGoNodeUtil.LOG_PREFIX
-		+ "Type mismatch for %s.%s (expected %s:%s, got %s:%s), skipping"
+	HEGoLog.get_singleton().warning(
+		LOG_CATEGORY,
+		"Type mismatch for %s.%s (expected %s:%s, got %s:%s), skipping"
 		% [obj.get_class(), property, prop_info["type"], expected_class if expected_class else "unknown", typeof(value), value_class]
 	)
 

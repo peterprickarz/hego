@@ -46,7 +46,7 @@ HEGoAPI::~HEGoAPI()
 
 	if (session_mgr.is_session_active())
 	{
-		HEGo::Util::Log::message(godot::String("HEGoAPI destructor: Stopping active session"));
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, godot::String("HEGoAPI destructor: Stopping active session"));
 		session_mgr.stop_session();
 	}
 
@@ -60,13 +60,13 @@ HEGoAPI *HEGoAPI::get_singleton() { return singleton; }
 
 bool HEGoAPI::start_session(int connection_type, const godot::String &connection_data)
 {
-	HEGo::Util::Log::message(connection_data);
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, connection_data);
 
 	// connection_type comes straight from GDScript, so check it names a session
 	// type we can actually start before casting it to the enum.
 	if (!HEGoSessionManager::is_supported_session_type(connection_type))
 	{
-		HEGo::Util::Log::error(godot::String("Unsupported session type ") + godot::String::num_int64(connection_type) +
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, godot::String("Unsupported session type ") + godot::String::num_int64(connection_type) +
 				". Use HEGoAPI.SESSION_IN_PROCESS, SESSION_NAMED_PIPE or SESSION_TCP_SOCKET.");
 		return false;
 	}
@@ -112,7 +112,7 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 
 	if (!session_mgr.is_session_active())
 	{
-		HEGo::Util::Log::error(godot::String("Session is not active. Cannot get HDA libraries."));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, godot::String("Session is not active. Cannot get HDA libraries."));
 		return result;
 	}
 
@@ -123,7 +123,7 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 	res = HoudiniApi::GetLoadedAssetLibraryCount(session_mgr.get_session(), &library_count);
 	if (res != HAPI_RESULT_SUCCESS || library_count == 0)
 	{
-		HEGo::Util::Log::message(godot::String("No asset libraries loaded"));
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, godot::String("No asset libraries loaded"));
 		return result;
 	}
 
@@ -132,7 +132,7 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 	res = HoudiniApi::GetAssetLibraryIds(session_mgr.get_session(), library_ids.data(), 0, library_count);
 	if (res != HAPI_RESULT_SUCCESS)
 	{
-		HEGo::Util::Log::error(godot::String("Failed to get asset library IDs"));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, godot::String("Failed to get asset library IDs"));
 		return result;
 	}
 

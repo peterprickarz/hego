@@ -95,7 +95,7 @@ void set_parm(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Strin
 	}
 	else
 	{
-		HEGo::Util::Log::error("Unsupported Variant type");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::PARM, "Unsupported Variant type");
 	}
 }
 
@@ -162,7 +162,7 @@ void set_parm_no_wait(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godo
 	}
 	else
 	{
-		HEGo::Util::Log::error("Unsupported Variant type");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::PARM, "Unsupported Variant type");
 	}
 }
 

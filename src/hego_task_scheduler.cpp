@@ -26,7 +26,7 @@ void HEGoTaskScheduler::start(HEGoSessionManager *mgr)
 	running.store(true);
 	worker_thread = std::thread(&HEGoTaskScheduler::worker_loop, this);
 
-	HEGo::Util::Log::message("Task scheduler started.");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Task scheduler started.");
 }
 
 void HEGoTaskScheduler::stop()
@@ -62,7 +62,7 @@ void HEGoTaskScheduler::stop()
 
 	session_mgr = nullptr;
 
-	HEGo::Util::Log::message("Task scheduler stopped.");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Task scheduler stopped.");
 }
 
 godot::Ref<HEGoTask> HEGoTaskScheduler::submit(godot::Ref<HEGoTask> task)

@@ -26,17 +26,17 @@ godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node
 	{
 		return godot::Dictionary();
 	}
-	HEGo::Util::Log::message("fetch_points: display geo part count = " + godot::String::num_int64(static_cast<int64_t>(mesh_geo_info.partCount)));
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "fetch_points: display geo part count = " + godot::String::num_int64(static_cast<int64_t>(mesh_geo_info.partCount)));
 	for (int part_index = 0; part_index < mesh_geo_info.partCount; ++part_index)
 	{
 		HAPI_PartInfo candidate;
 		if (HoudiniApi::GetPartInfo(session_mgr->get_session(), mesh_geo_info.nodeId, part_index, &candidate) != HAPI_RESULT_SUCCESS)
 		{
-			HEGo::Util::Log::warning("fetch_points: failed to read part info at index " + godot::String::num_int64(static_cast<int64_t>(part_index)));
+			HEGo::Util::Log::warning(HEGo::Util::Log::Category::OUTPUT, "fetch_points: failed to read part info at index " + godot::String::num_int64(static_cast<int64_t>(part_index)));
 			continue;
 		}
 
-		HEGo::Util::Log::message("fetch_points: part[" + godot::String::num_int64(static_cast<int64_t>(part_index)) + "]" + " type=" +
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "fetch_points: part[" + godot::String::num_int64(static_cast<int64_t>(part_index)) + "]" + " type=" +
 				godot::String::num_int64(static_cast<int64_t>(candidate.type)) + " id=" + godot::String::num_int64(static_cast<int64_t>(candidate.id)) +
 				" points=" + godot::String::num_int64(static_cast<int64_t>(candidate.pointCount)) +
 				" vertices=" + godot::String::num_int64(static_cast<int64_t>(candidate.vertexCount)) +
@@ -45,7 +45,7 @@ godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node
 	std::vector<HAPI_PartInfo> mesh_parts = get_parts_by_type(session_mgr->get_session(), mesh_geo_info, HAPI_PARTTYPE_MESH);
 	if (mesh_parts.empty())
 	{
-		HEGo::Util::Log::error("Requested points(HAPI_PARTTYPE_MESH) but no mesh part was found.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Requested points(HAPI_PARTTYPE_MESH) but no mesh part was found.");
 		return godot::Dictionary();
 	}
 
@@ -63,11 +63,11 @@ godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node
 
 	if (!found_loose_points_part)
 	{
-		HEGo::Util::Log::message("fetch_points: no loose-point mesh part found (all mesh parts have vertices).");
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "fetch_points: no loose-point mesh part found (all mesh parts have vertices).");
 		return godot::Dictionary();
 	}
 
-	HEGo::Util::Log::message("fetch_points: selected mesh part id=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.id)) +
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "fetch_points: selected mesh part id=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.id)) +
 			" points=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.pointCount)) +
 			" vertices=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.vertexCount)) +
 			" faces=" + godot::String::num_int64(static_cast<int64_t>(mesh_part_info.faceCount)));

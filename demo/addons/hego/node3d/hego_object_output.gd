@@ -8,6 +8,9 @@ extends RefCounted
 ## packed scene), where to put it, how to orient it and which of its properties to
 ## override. Points without those attributes fall back to a plain [Node3D].
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "output"
+
 ## Config the point fetch is driven by.
 const FETCH_CONFIG_PATH := "res://addons/hego/point_filters/fetch_points_default_object_spawning.tres"
 
@@ -26,7 +29,7 @@ const SPAWN_TYPE_SCENE := 1
 
 ## Fetches the output points of [param host]'s asset node and spawns a node for each.
 static func handle(host: Node) -> void:
-	print(HEGoNodeUtil.LOG_PREFIX + "Handling Object Spawn Output")
+	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Object Spawn Output")
 	var fetch_config: Resource = load(FETCH_CONFIG_PATH)
 	var points: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_points(fetch_config))
 
@@ -35,7 +38,7 @@ static func handle(host: Node) -> void:
 
 	var positions: Array = points["P"]
 	if positions.is_empty():
-		print(HEGoNodeUtil.LOG_PREFIX + "No points to process")
+		HEGoLog.get_singleton().debug(LOG_CATEGORY, "No points to process")
 		return
 
 	var outputs_root := HEGoNodeUtil.ensure_outputs_root(host)
@@ -73,33 +76,33 @@ static func _spawn_node(points: Dictionary, index: int, scene_cache: Dictionary)
 		SPAWN_TYPE_CLASS:
 			var class_name_attr := str(HEGoNodeUtil.get_typed_point_attrib(points, "hego_class_name", index, TYPE_STRING, DEFAULT_CLASS_NAME))
 			if not ClassDB.class_exists(class_name_attr):
-				push_warning(HEGoNodeUtil.LOG_PREFIX + "Invalid class name '%s', falling back to Node3D" % class_name_attr)
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Invalid class name '%s', falling back to Node3D" % class_name_attr)
 				return Node3D.new()
 			# Checked before instantiating: assigning a non-Node3D to a Node3D
 			# would abort the cook instead of falling back.
 			if not ClassDB.is_parent_class(class_name_attr, DEFAULT_CLASS_NAME):
-				push_warning(HEGoNodeUtil.LOG_PREFIX + "Class '%s' is not a Node3D, falling back to Node3D" % class_name_attr)
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Class '%s' is not a Node3D, falling back to Node3D" % class_name_attr)
 				return Node3D.new()
 			return ClassDB.instantiate(class_name_attr) as Node3D
 
 		SPAWN_TYPE_SCENE:
 			var resource_path := str(HEGoNodeUtil.get_typed_point_attrib(points, "hego_resource_path", index, TYPE_STRING, ""))
 			if not ResourceLoader.exists(resource_path):
-				push_warning(HEGoNodeUtil.LOG_PREFIX + "Resource path %s does not exist, falling back to Node3D" % resource_path)
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Resource path %s does not exist, falling back to Node3D" % resource_path)
 				return Node3D.new()
 			if not scene_cache.has(resource_path):
 				scene_cache[resource_path] = load(resource_path) as PackedScene
 			var scene: PackedScene = scene_cache[resource_path]
 			if scene == null or not scene.can_instantiate():
-				push_warning(HEGoNodeUtil.LOG_PREFIX + "Invalid scene at %s, falling back to Node3D" % resource_path)
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Invalid scene at %s, falling back to Node3D" % resource_path)
 				return Node3D.new()
 			var instance := scene.instantiate() as Node3D
 			if instance == null:
-				push_warning(HEGoNodeUtil.LOG_PREFIX + "Resource %s is not a Node3D scene, falling back to Node3D" % resource_path)
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Resource %s is not a Node3D scene, falling back to Node3D" % resource_path)
 				return Node3D.new()
 			return instance
 
-	push_warning(HEGoNodeUtil.LOG_PREFIX + "Invalid spawn type %d, falling back to Node3D" % spawn_type)
+	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Invalid spawn type %d, falling back to Node3D" % spawn_type)
 	return Node3D.new()
 
 
@@ -114,7 +117,7 @@ static func _build_transform(points: Dictionary, index: int, position: Vector3) 
 	var basis := Basis()
 	var right := up.cross(normal).normalized()
 	if right == Vector3.ZERO:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Invalid normal or up vector for point %d (collinear), using default basis" % index)
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Invalid normal or up vector for point %d (collinear), using default basis" % index)
 	else:
 		basis.x = right
 		basis.y = up

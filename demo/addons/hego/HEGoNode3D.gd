@@ -22,6 +22,9 @@ class_name HEGoNode3D
 ## Input stash to store references to the inputs between sessions
 @export var input_stash: Array
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "cook"
+
 ## Operator table used when [member asset_name] does not name one itself.
 const DEFAULT_OPERATOR_TABLE := "Sop"
 
@@ -69,8 +72,8 @@ func cook() -> void:
 	var cook_result = await _await_task(hego_asset_node.cook())
 	timings.end_phase("cook")
 	if cook_result == null:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Cook failed")
-		print(timings.format_summary())
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Cook failed")
+		HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 		return
 
 	# Remove old output now that the cook is done (keeps previous output visible during cook)
@@ -102,7 +105,7 @@ func cook() -> void:
 	await HEGoCurveOutput.handle(self)
 	timings.end_phase("path3d_output")
 
-	print(timings.format_summary())
+	HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 
 
 ## Makes sure the asset node exists in the session and carries this node's transform
@@ -281,7 +284,7 @@ func _on_asset_selected(selected_asset: String) -> void:
 
 	asset_name = selected_asset
 	notify_property_list_changed()
-	print(HEGoNodeUtil.LOG_PREFIX + "Selected asset: ", selected_asset)
+	HEGoLog.get_singleton().info(LOG_CATEGORY, "Selected asset: " + selected_asset)
 
 
 ## Forgets everything tied to the previous HDA: the Houdini node, its parameters,
@@ -299,7 +302,7 @@ func _clear_hda_data() -> void:
 	if outputs_node:
 		outputs_node.queue_free()
 
-	print(HEGoNodeUtil.LOG_PREFIX + "Cleared old HDA data and reset node ID")
+	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Cleared old HDA data and reset node ID")
 
 
 # ─────────────────────────────────────────────

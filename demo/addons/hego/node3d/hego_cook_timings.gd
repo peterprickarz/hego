@@ -39,10 +39,10 @@ func total_msec() -> float:
 ## Human readable summary of every recorded phase plus the cook total.
 func format_summary() -> String:
 	var lines := PackedStringArray()
-	lines.append(HEGoNodeUtil.LOG_PREFIX + "Cook timing summary")
+	lines.append("Cook timing summary")
 	for phase_name in _phase_order:
-		lines.append(HEGoNodeUtil.LOG_PREFIX + "  %s: %.3f ms" % [_label_for(phase_name), _phase_msec[phase_name]])
-	lines.append(HEGoNodeUtil.LOG_PREFIX + "  Total cook(): %.3f ms" % total_msec())
+		lines.append("  %s: %.3f ms" % [_label_for(phase_name), _phase_msec[phase_name]])
+	lines.append("  Total cook(): %.3f ms" % total_msec())
 	return "\n".join(lines)
 
 

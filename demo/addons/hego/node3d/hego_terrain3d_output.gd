@@ -9,6 +9,9 @@ extends RefCounted
 ## colour maps. Everything is driven by detail attributes on the height layer, so an
 ## HDA that does not set [code]hegot3d_spawn_terrain[/code] is skipped entirely.
 
+## Category this file logs under, shown in the session panel filter.
+const LOG_CATEGORY := "terrain3d"
+
 ## Attributes read off the height layer.
 const SPAWN_ATTRIB := "hegot3d_spawn_terrain"
 const DATA_DIRECTORY_ATTRIB := "hegot3d_data_directory"
@@ -58,7 +61,7 @@ const UPDATE_MAPS_HEIGHT_AND_CONTROL := 3
 ## Fetches the heightfield layers of [param host]'s asset node and builds the terrain.
 static func handle(host: Node) -> void:
 	if not HEGoTerrain3DUtil.is_available():
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D addon is not installed, skipping Terrain3D output.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D addon is not installed, skipping Terrain3D output.")
 		return
 
 	var layers: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_heightfield_layers(PackedStringArray(REQUESTED_ATTRIBS)))
@@ -87,7 +90,7 @@ static func handle(host: Node) -> void:
 
 	var terrain_data: Object = terrain.get("data")
 	if terrain_data == null:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Terrain3D data object is not available.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Terrain3D data object is not available.")
 		return
 
 	if texture_setup["enabled"]:
@@ -98,7 +101,7 @@ static func handle(host: Node) -> void:
 		var hole_layer := HEGoTerrain3DUtil.get_layer_by_name(layers, HOLE_LAYER)
 		hole_image = await _fetch_layer_image(host, hole_layer)
 		if hole_image == null and not hole_layer.is_empty():
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Failed to fetch %s layer, continuing without hole control bits." % HOLE_LAYER)
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Failed to fetch %s layer, continuing without hole control bits." % HOLE_LAYER)
 
 	# Clear all regions to avoid stale content when reusing an existing data directory.
 	for region in terrain_data.call("get_regions_active"):
@@ -107,7 +110,7 @@ static func handle(host: Node) -> void:
 
 	var height_image := await _fetch_layer_image(host, height_layer)
 	if height_image == null:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Failed to fetch height image for Terrain3D output.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Failed to fetch height image for Terrain3D output.")
 		return
 
 	var region_map_image := await _fetch_layer_image(host, HEGoTerrain3DUtil.get_layer_by_name(layers, REGION_MAP_LAYER))
@@ -127,19 +130,19 @@ static func handle(host: Node) -> void:
 static func _read_config(height_layer: Dictionary) -> Dictionary:
 	var transform_rotation: Vector3 = height_layer.get("transform_rotation", Vector3.ZERO)
 	if not HEGoTerrain3DUtil.approx_equal_vec3(transform_rotation, EXPECTED_HEIGHTFIELD_ROTATION, ROTATION_TOLERANCE):
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Heightfield rotation is not default (-90,-90,0). Terrain3D output may be incorrect.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Heightfield rotation is not default (-90,-90,0). Terrain3D output may be incorrect.")
 
 	var voxel_scale_x := float(height_layer.get("voxel_scale_x", 1.0))
 	var voxel_scale_y := float(height_layer.get("voxel_scale_y", voxel_scale_x))
 	if absf(voxel_scale_x - voxel_scale_y) > 0.0001:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "voxel_scale_x and voxel_scale_y differ. Terrain3D uses uniform vertex spacing.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "voxel_scale_x and voxel_scale_y differ. Terrain3D uses uniform vertex spacing.")
 	if voxel_scale_x <= 0.0:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Invalid voxel_scale_x for Terrain3D output.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Invalid voxel_scale_x for Terrain3D output.")
 		return {"ok": false}
 
 	var data_directory := HEGoTerrain3DUtil.get_attr_string(height_layer, DATA_DIRECTORY_ATTRIB)
 	if data_directory.is_empty():
-		push_error(HEGoNodeUtil.LOG_PREFIX + "%s is required for Terrain3D output." % DATA_DIRECTORY_ATTRIB)
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "%s is required for Terrain3D output." % DATA_DIRECTORY_ATTRIB)
 		return {"ok": false}
 
 	var node_path := HEGoTerrain3DUtil.get_attr_string(height_layer, NODE_PATH_ATTRIB)
@@ -151,11 +154,11 @@ static func _read_config(height_layer: Dictionary) -> Dictionary:
 	if HEGoTerrain3DUtil.is_valid_region_size(region_size_attr):
 		region_size = int(region_size_attr)
 	elif region_size_attr != null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Invalid %s. Using default value %d." % [REGION_SIZE_ATTRIB, DEFAULT_REGION_SIZE])
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Invalid %s. Using default value %d." % [REGION_SIZE_ATTRIB, DEFAULT_REGION_SIZE])
 
 	var region_world_size := float(region_size) * voxel_scale_x
 	if region_world_size <= 0.0:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Invalid region world size for Terrain3D output.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Invalid region world size for Terrain3D output.")
 		return {"ok": false}
 
 	return {
@@ -181,16 +184,16 @@ static func _prepare_texture_layers(layers: Array) -> Dictionary:
 
 	var validation_result := HEGoTerrain3DUtil.validate_texture_layers(texture_layers)
 	if not validation_result.get("ok", false):
-		push_warning(validation_result.get("warning", HEGoNodeUtil.LOG_PREFIX + "Skipping Terrain3D control maps."))
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, validation_result.get("warning", "Skipping Terrain3D control maps."))
 		return disabled
 
 	if not ClassDB.class_exists("Terrain3DUtil"):
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3DUtil is unavailable, skipping Terrain3D control maps.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3DUtil is unavailable, skipping Terrain3D control maps.")
 		return disabled
 
 	var terrain3d_util: Object = ClassDB.instantiate("Terrain3DUtil")
 	if terrain3d_util == null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Failed to instantiate Terrain3DUtil, skipping Terrain3D control maps.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Failed to instantiate Terrain3DUtil, skipping Terrain3D control maps.")
 		return disabled
 
 	var lowest_slot := int(validation_result.get("lowest_slot", -1))
@@ -210,7 +213,7 @@ static func _prepare_texture_layers(layers: Array) -> Dictionary:
 static func _spawn_terrain(host: Node, config: Dictionary) -> Node:
 	var path_parts: PackedStringArray = str(config["node_path"]).split("/", false)
 	if path_parts.is_empty():
-		push_error(HEGoNodeUtil.LOG_PREFIX + "%s is invalid." % NODE_PATH_ATTRIB)
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "%s is invalid." % NODE_PATH_ATTRIB)
 		return null
 
 	var parent_node := HEGoNodeUtil.ensure_parent_path(host, host, path_parts)
@@ -222,7 +225,7 @@ static func _spawn_terrain(host: Node, config: Dictionary) -> Node:
 
 	var terrain: Node = ClassDB.instantiate("Terrain3D")
 	if terrain == null:
-		push_error(HEGoNodeUtil.LOG_PREFIX + "Failed to instantiate Terrain3D.")
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Failed to instantiate Terrain3D.")
 		return null
 
 	terrain.name = terrain_name
@@ -256,13 +259,13 @@ static func _apply_texture_assets(host: Node, terrain: Node, texture_setup: Dict
 		terrain_assets = ClassDB.instantiate("Terrain3DAssets")
 		terrain.set("assets", terrain_assets)
 	if terrain_assets == null:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D assets object is unavailable, skipping Terrain3D control maps.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D assets object is unavailable, skipping Terrain3D control maps.")
 		return disabled
 
 	for texture_layer in texture_setup["layers"]:
 		var texture_asset: Object = ClassDB.instantiate("Terrain3DTextureAsset")
 		if texture_asset == null:
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Failed to instantiate Terrain3DTextureAsset, skipping Terrain3D control maps.")
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Failed to instantiate Terrain3DTextureAsset, skipping Terrain3D control maps.")
 			return disabled
 
 		texture_asset.call("set_albedo_texture", texture_layer["albedo_texture"])
@@ -278,7 +281,7 @@ static func _apply_texture_assets(host: Node, terrain: Node, texture_setup: Dict
 
 		var weight_image := await _fetch_image_for_part(host, int(texture_layer["part_id"]))
 		if weight_image == null:
-			push_warning(HEGoNodeUtil.LOG_PREFIX + "Failed to fetch weight image for layer %s, skipping Terrain3D control maps." % texture_layer["layer_name"])
+			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Failed to fetch weight image for layer %s, skipping Terrain3D control maps." % texture_layer["layer_name"])
 			return disabled
 		texture_layer["weight_image"] = weight_image
 
@@ -335,7 +338,7 @@ static func _write_regions(
 	var snapped_x := snappedf(corner_x, region_world_size)
 	var snapped_z := snappedf(corner_z, region_world_size)
 	if absf(snapped_x - corner_x) > 0.0001 or absf(snapped_z - corner_z) > 0.0001:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Heightfield offset snapped to Terrain3D region grid.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Heightfield offset snapped to Terrain3D region grid.")
 
 	var image_world_end_x := corner_x + (float(voxel_count_x) * voxel_scale)
 	var image_world_end_z := corner_z + (float(voxel_count_y) * voxel_scale)
@@ -402,7 +405,7 @@ static func _write_regions(
 			wrote_any_region = true
 
 	if not wrote_any_region:
-		push_warning(HEGoNodeUtil.LOG_PREFIX + "Terrain3D output produced no regions.")
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D output produced no regions.")
 
 
 ## Builds the control map of one region from the texture weight layers.
