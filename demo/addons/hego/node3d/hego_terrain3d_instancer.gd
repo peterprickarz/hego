@@ -12,8 +12,16 @@ extends RefCounted
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "terrain3d"
 
-## Config the point fetch is driven by.
-const FETCH_CONFIG_PATH := "res://addons/hego/point_filters/fetch_points_default_terrain3d.tres"
+## Points with this attribute set to 1 are scattered onto a terrain.
+const INSTANCING_FILTER_ATTRIB := "hegot3d_use_terrain3d_instancer"
+
+## Attributes naming the terrain to scatter onto and the scene to scatter.
+const TERRAIN_PATH_ATTRIB := "hegot3d_terrain3d_node_path"
+const SCENE_PATH_ATTRIB := "hegot3d_scene_resource_path"
+
+## Per-instance attributes this handler reads. The mesh asset settings below are
+## read as well, so they only have to be named once.
+const POINT_ATTRIBS := ["N", "Cd", "up", "pscale", "scale"]
 
 ## Name prefix of the mesh asset slots HEGo owns.
 const GENERATED_MESH_PREFIX := "hegot3d_"
@@ -42,26 +50,32 @@ static func handle(host: Node) -> void:
 	if not HEGoTerrain3DUtil.is_available():
 		return
 
-	var fetch_config: Resource = load(FETCH_CONFIG_PATH)
-	if fetch_config == null:
-		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D instancer fetch config could not be loaded.")
+	var output: HEGoGeoOutput = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_geo_output())
+	if output == null or not output.is_valid():
 		return
 
-	var outputs: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_points(fetch_config))
-	if not outputs is Dictionary or outputs.is_empty():
+	var wanted := POINT_ATTRIBS + MESH_ASSET_ATTRIBS.keys()
+	await HEGoNodeUtil.await_task(host,
+		output.load_attributes(PackedStringArray(wanted + [INSTANCING_FILTER_ATTRIB, TERRAIN_PATH_ATTRIB, SCENE_PATH_ATTRIB])))
+
+	var selection := output.filter_by(INSTANCING_FILTER_ATTRIB, 1)
+	if selection.size() == 0:
 		return
 
-	for terrain_path_value in outputs.keys():
+	# Grouped by terrain first, then by scene: one HDA can populate several
+	# terrains with several scenes each.
+	var by_terrain := selection.split_by(TERRAIN_PATH_ATTRIB)
+	for terrain_path_value in by_terrain:
 		if terrain_path_value == null:
 			continue
 		var terrain_path := str(terrain_path_value).strip_edges()
 		if terrain_path.is_empty():
 			continue
 
-		var per_scene_points: Variant = outputs[terrain_path_value]
-		if not per_scene_points is Dictionary:
-			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Unexpected Terrain3D instancer fetch structure for %s." % terrain_path)
-			continue
+		var by_scene: Dictionary = by_terrain[terrain_path_value].split_by(SCENE_PATH_ATTRIB)
+		var per_scene_points := {}
+		for scene_path_value in by_scene:
+			per_scene_points[scene_path_value] = by_scene[scene_path_value].get_points(PackedStringArray(wanted))
 
 		_populate_terrain(host, terrain_path, per_scene_points)
 

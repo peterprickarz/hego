@@ -14,12 +14,21 @@ which is what you want as soon as the decision depends on anything:
     var output = await _await_task(asset_node.get_geo_output())
     await _await_task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
 
-    for node_path in output.filter_by("hego_spawn", 1).split_by("hego_node_path"):
-        var group = output.filter_by("hego_spawn", 1).split_by("hego_node_path")[node_path]
-        var points = group.get_points(["N", "up", "pscale"])
+    var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
+    for node_path in groups:
+        var points = groups[node_path].get_points(["N", "up", "pscale"])
         # points == { "P": [...], "N": [...], "up": [...], "pscale": [...] }
 
-Both read the same cache, so mixing them costs nothing extra.
+Both read the same cache, so mixing them costs nothing extra. A fetch config is
+literally a saved set of arguments for this API: ``fetch_points()`` builds an output,
+applies the config's filters and splits through it, and assembles the leaves with
+``get_points()``. There is one implementation underneath both.
+
+The built-in object spawning, multimesh and Terrain3D instancer handlers use the code
+path, which is why their attribute lists live in the handler scripts rather than in a
+resource beside them. Mesh output still goes through
+:ref:`HEGoFetchSurfacesConfig`, since surface splitting works on vertices and
+primitives rather than points.
 
 Why it is fast
 --------------

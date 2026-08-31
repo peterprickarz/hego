@@ -11,8 +11,15 @@ extends RefCounted
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "output"
 
-## Config the point fetch is driven by.
-const FETCH_CONFIG_PATH := "res://addons/hego/point_filters/fetch_points_default_object_spawning.tres"
+## Points with this attribute set to 1 are spawned.
+const SPAWN_FILTER_ATTRIB := "hego_spawn"
+
+## Attributes this handler reads off each spawned point.
+const POINT_ATTRIBS := [
+	"N", "up", "pscale", "scale",
+	"hego_node_path", "hego_spawn_type", "hego_resource_path", "hego_class_name",
+	"hego_custom_properties",
+]
 
 ## Node path used when a point does not specify hego_node_path.
 const DEFAULT_NODE_PATH := "Objects"
@@ -30,16 +37,20 @@ const SPAWN_TYPE_SCENE := 1
 ## Fetches the output points of [param host]'s asset node and spawns a node for each.
 static func handle(host: Node) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Object Spawn Output")
-	var fetch_config: Resource = load(FETCH_CONFIG_PATH)
-	var points: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_points(fetch_config))
 
-	if not points is Dictionary or not points.has("P") or not points["P"] is Array:
+	var output: HEGoGeoOutput = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_geo_output())
+	if output == null or not output.is_valid():
 		return
 
-	var positions: Array = points["P"]
-	if positions.is_empty():
+	await HEGoNodeUtil.await_task(host, output.load_attributes(PackedStringArray(POINT_ATTRIBS + [SPAWN_FILTER_ATTRIB])))
+
+	var selection := output.filter_by(SPAWN_FILTER_ATTRIB, 1)
+	if selection.size() == 0:
 		HEGoLog.get_singleton().debug(LOG_CATEGORY, "No points to process")
 		return
+
+	var points := selection.get_points(PackedStringArray(POINT_ATTRIBS))
+	var positions: Array = points["P"]
 
 	var outputs_root := HEGoNodeUtil.ensure_outputs_root(host)
 	# Scenes are usually shared by many points, so only load each one once per cook.

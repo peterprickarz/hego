@@ -10,8 +10,15 @@ extends RefCounted
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "output"
 
-## Config the point fetch is driven by.
-const FETCH_CONFIG_PATH := "res://addons/hego/point_filters/fetch_points_default_multimesh_instancing.tres"
+## Points with this attribute set to 1 are instanced.
+const INSTANCING_FILTER_ATTRIB := "hego_use_multimesh"
+
+## Attribute naming the output a point belongs to, and the mesh to instance.
+const OUTPUT_NAME_ATTRIB := "hego_multimesh"
+const MESH_RESOURCE_ATTRIB := "hego_mesh_resource"
+
+## Per-instance attributes this handler reads.
+const POINT_ATTRIBS := ["N", "Cd", "up", "pscale", "scale"]
 
 ## Node name prefix used when an HDA does not name its multimesh output.
 const DEFAULT_MULTIMESH_NAME := "MultiMesh"
@@ -20,18 +27,26 @@ const DEFAULT_MULTIMESH_NAME := "MultiMesh"
 ## Fetches the instancing points of [param host]'s asset node and builds the multimeshes.
 static func handle(host: Node) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Multimesh Output")
-	var fetch_config: Resource = load(FETCH_CONFIG_PATH)
-	var outputs: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_points(fetch_config))
-	if not outputs is Dictionary:
+
+	var output: HEGoGeoOutput = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_geo_output())
+	if output == null or not output.is_valid():
 		return
 
-	for output_key in outputs.keys():
-		var output_name := DEFAULT_MULTIMESH_NAME if output_key == null else str(output_key)
-		var per_mesh_points: Variant = outputs[output_key]
-		if not per_mesh_points is Dictionary:
-			continue
+	await HEGoNodeUtil.await_task(host,
+		output.load_attributes(PackedStringArray(POINT_ATTRIBS + [INSTANCING_FILTER_ATTRIB, OUTPUT_NAME_ATTRIB, MESH_RESOURCE_ATTRIB])))
 
-		for resource_path in per_mesh_points.keys():
+	var selection := output.filter_by(INSTANCING_FILTER_ATTRIB, 1)
+	if selection.size() == 0:
+		return
+
+	# Grouped by output first, then by mesh, so one HDA can drive several
+	# multimeshes and each of those several meshes.
+	var by_output := selection.split_by(OUTPUT_NAME_ATTRIB)
+	for output_key in by_output:
+		var output_name := DEFAULT_MULTIMESH_NAME if output_key == null else str(output_key)
+
+		var by_mesh: Dictionary = by_output[output_key].split_by(MESH_RESOURCE_ATTRIB)
+		for resource_path in by_mesh:
 			if resource_path == null:
 				continue
 			var mesh_resource: Resource = load(resource_path)
@@ -39,13 +54,10 @@ static func handle(host: Node) -> void:
 				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Multimesh resource %s is not a Mesh, skipping." % resource_path)
 				continue
 
-			var point_dict: Variant = per_mesh_points[resource_path]
-			if not point_dict is Dictionary:
-				continue
-
 			# One multimesh per (output, mesh) pair, named after both so several
 			# meshes coming out of the same output do not collide.
 			var mesh_file_name: String = str(resource_path).get_file().get_basename()
+			var point_dict: Dictionary = by_mesh[resource_path].get_points(PackedStringArray(POINT_ATTRIBS))
 			setup_multimesh(host, mesh_resource, output_name + "_" + mesh_file_name, point_dict)
 
 

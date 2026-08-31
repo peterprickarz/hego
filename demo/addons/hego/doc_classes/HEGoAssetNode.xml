@@ -55,6 +55,22 @@ Submits a task to fetch one heightfield layer as an [Image] from the specified p
 The task result is an [Image], or an invalid image reference when the node is not instantiated or the requested part cannot be read.
 </description>
 </method>
+<method name="get_geo_output">
+<return type="HEGoTask" />
+<param index="0" name="preload_attribs" type="PackedStringArray" default="PackedStringArray()" />
+<description>
+Submits a task returning a [HEGoGeoOutput]: the cooked output, read and split from code rather than through a fetch configuration.
+
+Pass [code]preload_attribs[/code] to have those point attributes loaded while the task runs, so no further await is needed before querying:
+[codeblock]
+var output = await _await_task(asset_node.get_geo_output(["N", "up", "hego_spawn"]))
+for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path").values():
+    var points = group.get_points(["N", "up"])
+[/codeblock]
+
+Attribute values are cached per cook and shared with [method fetch_points] and [method fetch_surfaces], so reading the same attribute twice only reaches Houdini once.
+</description>
+</method>
 <method name="fetch_points">
 <return type="HEGoTask" />
 <param index="0" name="fetch_point_config" type="Resource" />

@@ -97,6 +97,19 @@ godot::Ref<HEGoTask> HEGoGeoOutput::load_attributes(const godot::PackedStringArr
 			});
 }
 
+void HEGoGeoOutput::load_attributes_now(const godot::PackedStringArray &names, int owner)
+{
+	if (!is_valid())
+	{
+		return;
+	}
+	const HAPI_PartInfo *part = my_cache->points_part();
+	for (int i = 0; i < names.size(); ++i)
+	{
+		my_cache->attribute(*part, to_hapi_owner(owner), names[i]);
+	}
+}
+
 godot::Array HEGoGeoOutput::get_attribute(const godot::String &name, int owner) const
 {
 	if (!is_valid())
@@ -214,11 +227,19 @@ godot::Dictionary HEGoGeoSelection::split_by(const godot::String &name)
 		return groups;
 	}
 
+	// An HDA that does not set the split attribute at all is not an error: the
+	// points simply form one unnamed group, which is what the handlers expect when
+	// they see a null key. Not having loaded an attribute that does exist is a
+	// mistake worth saying out loud.
 	const godot::Array values = my_output->get_attribute(name, HEGoGeoOutput::OWNER_POINT);
 	if (values.is_empty())
 	{
-		HEGo::Util::Log::warning(HEGo::Util::Log::Category::OUTPUT,
-				godot::String("Cannot split by '") + name + "': the attribute is missing or was not loaded. Call load_attributes([\"" + name + "\"]) first.");
+		if (my_output->has_attribute(name, HEGoGeoOutput::OWNER_POINT))
+		{
+			HEGo::Util::Log::warning(HEGo::Util::Log::Category::OUTPUT,
+					godot::String("Cannot split by '") + name + "': it was not loaded. Call load_attributes([\"" + name + "\"]) first.");
+		}
+		groups[godot::Variant()] = godot::Ref<HEGoGeoSelection>(this);
 		return groups;
 	}
 
@@ -227,11 +248,7 @@ godot::Dictionary HEGoGeoSelection::split_by(const godot::String &name)
 	godot::Dictionary grouped;
 	for (const int index : my_indices)
 	{
-		if (index >= values.size() || values[index].get_type() == godot::Variant::NIL)
-		{
-			continue;
-		}
-		const godot::Variant key = values[index];
+		const godot::Variant key = index < values.size() ? values[index] : godot::Variant();
 		if (!grouped.has(key))
 		{
 			grouped[key] = godot::PackedInt32Array();

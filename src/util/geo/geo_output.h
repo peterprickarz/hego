@@ -76,6 +76,11 @@ public:
 	/// Attributes already read by this cook are served from the cache.
 	godot::Ref<HEGoTask> load_attributes(const godot::PackedStringArray &names, int owner = OWNER_POINT);
 
+	/// Loads attributes right here instead of through a task. Only safe on the
+	/// worker thread, which is where the fetch functions already run; GDScript wants
+	/// load_attributes() instead.
+	void load_attributes_now(const godot::PackedStringArray &names, int owner = OWNER_POINT);
+
 	/// The values of a loaded attribute, or an empty array with a warning if it was
 	/// never loaded. Synchronous: this only reads what is already in memory.
 	godot::Array get_attribute(const godot::String &name, int owner = OWNER_POINT) const;
@@ -122,7 +127,8 @@ public:
 	godot::Ref<HEGoGeoSelection> filter_by(const godot::String &name, const godot::Variant &value);
 
 	/// This selection grouped by the value of [param name], as { value: selection }.
-	/// Values the attribute does not have on a point are skipped.
+	/// Points the attribute is not set on land under a null key, and an attribute the
+	/// HDA does not have at all yields one null-keyed group holding everything.
 	godot::Dictionary split_by(const godot::String &name);
 
 	/// The named attributes for the points in this selection, as { name: values },
