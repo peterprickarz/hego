@@ -266,7 +266,12 @@ void modify_base_entries(
 		}
 
 		godot::Dictionary filtered_point_attrs = point_attrs;
-		filter_and_update_dictionary(filtered_point_attrs, id_arr, vertex_point_indices);
+
+		// Compacting rewrites the vertex indices in place, so each group needs its
+		// own copy. Sharing one array means the second group remaps indices the
+		// first group already remapped, which scrambles every group but the first.
+		godot::Array leaf_vertex_indices = vertex_point_indices.duplicate();
+		filter_and_update_dictionary(filtered_point_attrs, id_arr, leaf_vertex_indices);
 		godot::Array surface_array;
 		surface_array.resize(godot::Mesh::ARRAY_MAX);
 		surface_array[godot::Mesh::ARRAY_VERTEX] = godot::PackedVector3Array(filtered_point_attrs["P"]);
@@ -366,7 +371,7 @@ void modify_base_entries(
 			int start = id_range.x;
 			for (int j = 0; j < id_range.y; j++)
 			{
-				indices.append(vertex_point_indices[start + j]);
+				indices.append(leaf_vertex_indices[start + j]);
 			}
 		}
 
