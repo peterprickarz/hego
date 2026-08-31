@@ -1,6 +1,7 @@
 #include "fetch_curves.h"
 
 #include "util/attrib/fetch_attribs.h"
+#include "util/geo/geo_cache.h"
 #include "util/geo/part_selection.h"
 #include "util/log/log.h"
 
@@ -23,11 +24,12 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
 		return curves;
 	}
 
-    HAPI_GeoInfo geo_info;
-	if (!get_display_geo_info(session_mgr, node_id, geo_info, auto_cook))
+	std::shared_ptr<GeoCache> cache = GeoCache::acquire(session_mgr, node_id, auto_cook);
+	if (!cache)
 	{
 		return curves;
 	}
+	const HAPI_GeoInfo &geo_info = cache->geo_info();
 
     std::vector<HAPI_PartInfo> curve_parts = get_parts_by_type(session_mgr->get_session(), geo_info, HAPI_PARTTYPE_CURVE);
     std::sort(curve_parts.begin(), curve_parts.end(), [](const HAPI_PartInfo &a, const HAPI_PartInfo &b) { return a.id < b.id; });
@@ -43,7 +45,7 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
 
         const int curve_count = curve_info.curveCount;
 
-        godot::Array positions = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_POINT, "P");
+        godot::Array positions = cache->attribute(part_info, HAPI_ATTROWNER_POINT, "P");
 
         int knot_offset = 0;
         int vert_offset = 0;
@@ -84,8 +86,8 @@ godot::Array fetch_curves(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, 
             curve_data["type"] = curve_info.curveType;
             curve_data["order"] = order;
             curve_data["positions"] = curve_positions;
-            curve_data["prim_attribs"] = HEGo::Util::Attribs::read_attrib_pairs(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_PRIM, read_prim_attribs);
-            curve_data["point_attribs"] = HEGo::Util::Attribs::read_attrib_pairs(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_POINT, read_point_attribs);
+            curve_data["prim_attribs"] = cache->attribute_pairs(part_info, HAPI_ATTROWNER_PRIM, read_prim_attribs);
+            curve_data["point_attribs"] = cache->attribute_pairs(part_info, HAPI_ATTROWNER_POINT, read_point_attribs);
             curve_data["is_closed"] = curve_info.isClosed;
 
             if (curve_info.hasKnots)

@@ -9,5 +9,6 @@ The pages below are generated from XML class docs in demo/addons/hego/doc_classe
    :maxdepth: 2
 
    task_pattern
+   geo_output
    logging
    ../classes/index

@@ -1,6 +1,7 @@
 #include "fetch_heightfields.h"
 
 #include "util/attrib/fetch_attribs.h"
+#include "util/geo/geo_cache.h"
 #include "util/geo/part_selection.h"
 #include "util/hego_util.h"
 #include "util/log/log.h"
@@ -30,11 +31,12 @@ godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId
 		return layers;
 	}
 
-	HAPI_GeoInfo geo_info;
-	if (!get_display_geo_info(session_mgr, node_id, geo_info, auto_cook))
+	std::shared_ptr<GeoCache> cache = GeoCache::acquire(session_mgr, node_id, auto_cook);
+	if (!cache)
 	{
 		return layers;
 	}
+	const HAPI_GeoInfo &geo_info = cache->geo_info();
 
 	std::vector<HAPI_PartInfo> volume_parts = get_parts_by_type(session_mgr->get_session(), geo_info, HAPI_PARTTYPE_VOLUME);
 	std::sort(volume_parts.begin(), volume_parts.end(), [](const HAPI_PartInfo &a, const HAPI_PartInfo &b) { return a.id < b.id; });
@@ -70,7 +72,7 @@ godot::Array get_heightfield_layers(HEGoSessionManager *session_mgr, HAPI_NodeId
 
 		layer["part_id"] = part_info.id;
 		layer["layer_name"] = layer_name;
-		layer["attrs"] = HEGo::Util::Attribs::read_attrib_pairs(session_mgr->get_session(), geo_info, part_info, HAPI_ATTROWNER_PRIM, read_prim_attribs);
+		layer["attrs"] = cache->attribute_pairs(part_info, HAPI_ATTROWNER_PRIM, read_prim_attribs);
 		layer["voxel_count_x"] = volume_info.xLength;
 		layer["voxel_count_y"] = volume_info.yLength;
 		layer["voxel_scale_x"] = voxel_scale_x;
@@ -95,11 +97,12 @@ godot::Ref<godot::Image> fetch_heightfield_layer_image(HEGoSessionManager *sessi
 		return image;
 	}
 
-	HAPI_GeoInfo geo_info;
-	if (!get_display_geo_info(session_mgr, node_id, geo_info, auto_cook))
+	std::shared_ptr<GeoCache> cache = GeoCache::acquire(session_mgr, node_id, auto_cook);
+	if (!cache)
 	{
 		return image;
 	}
+	const HAPI_GeoInfo &geo_info = cache->geo_info();
 
 	HAPI_PartInfo part_info;
 	if (HoudiniApi::GetPartInfo(session_mgr->get_session(), geo_info.nodeId, part_id, &part_info) != HAPI_RESULT_SUCCESS)

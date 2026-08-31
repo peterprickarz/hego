@@ -5,6 +5,8 @@
 #include "util/geo/fetch_curves.h"
 #include "util/geo/fetch_heightfields.h"
 #include "util/geo/fetch_points.h"
+#include "util/geo/geo_cache.h"
+#include "util/geo/geo_output.h"
 #include "util/geo/fetch_surfaces.h"
 #include "util/geo/input.h"
 #include "util/geo/output.h"
@@ -190,6 +192,43 @@ godot::Ref<HEGoTask> HEGoAssetNode::cook()
 	});
 }
 
+godot::Ref<HEGoTask> HEGoAssetNode::get_geo_output(godot::PackedStringArray preload_attribs)
+{
+	if (get_id() < 0)
+	{
+		return make_failed("Cannot read output - HDA not instantiated or license issue", "Get geo output");
+	}
+
+	HAPI_NodeId nid = node_id;
+
+	return submit("Get geo output", nid,
+			[nid, preload_attribs](HEGoSessionManager *mgr) -> godot::Variant
+			{
+				std::shared_ptr<HEGo::Util::Geo::GeoCache> cache = HEGo::Util::Geo::GeoCache::acquire(mgr, nid, false);
+				if (!cache)
+				{
+					return godot::Variant();
+				}
+
+				godot::Ref<HEGoGeoOutput> output;
+				output.instantiate();
+				output->setup(cache, nid);
+
+				// Loaded here, on the worker thread, so the queries the caller makes
+				// afterwards are pure in-memory work on the main thread.
+				const HAPI_PartInfo *part = cache->points_part();
+				if (part != nullptr)
+				{
+					for (int i = 0; i < preload_attribs.size(); ++i)
+					{
+						cache->attribute(*part, HAPI_ATTROWNER_POINT, preload_attribs[i]);
+					}
+				}
+
+				return output;
+			});
+}
+
 godot::Ref<HEGoTask> HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fetch_point_config)
 {
 	if (get_id() < 0)
@@ -288,6 +327,7 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_op_name", "name"), &HEGoAssetNode::set_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_op_name"), &HEGoAssetNode::get_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("cook"), &HEGoAssetNode::cook);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_geo_output", "preload_attribs"), &HEGoAssetNode::get_geo_output, DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config"), &HEGoAssetNode::fetch_points);
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_surfaces", "fetch_surface_config"), &HEGoAssetNode::fetch_surfaces);
 	godot::ClassDB::bind_method(

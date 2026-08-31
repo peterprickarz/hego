@@ -3,6 +3,7 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include "hapi/hego_platform.h"
+#include "util/geo/geo_cache.h"
 
 #include <algorithm>
 #include <chrono>
@@ -165,6 +166,10 @@ bool HEGoSessionManager::stop_session()
 
 	HoudiniApi::finalize_hapi();
 	HEGoPlatform::free_lib_hapil(libHAPIL);
+
+	// Node ids are only meaningful inside a session, so cached geometry cannot
+	// outlive it.
+	HEGo::Util::Geo::GeoCache::invalidate_all();
 
 	// Reset node_id for all tracked nodes
 	for (HEGo::HEGoTrackableNode *node : nodes)

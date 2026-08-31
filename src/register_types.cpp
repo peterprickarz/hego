@@ -2,6 +2,7 @@
 
 #include "hego_api.h"
 #include "hego_task.h"
+#include "util/geo/geo_output.h"
 #include "util/log/log.h"
 
 #include "hego_nodes/hego_base_node.h"
@@ -34,6 +35,9 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 	ClassDB::register_class<HEGo::Util::Log::HEGoLog>();
 	memnew(HEGo::Util::Log::HEGoLog);
 	HEGo::Util::Log::HEGoLog::get_singleton()->configure();
+
+	ClassDB::register_class<HEGo::HEGoGeoOutput>();
+	ClassDB::register_class<HEGo::HEGoGeoSelection>();
 
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);

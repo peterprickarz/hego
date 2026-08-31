@@ -1,6 +1,7 @@
 #include "fetch_surfaces.h"
 
 #include "util/attrib/fetch_attribs.h"
+#include "util/geo/geo_cache.h"
 #include "util/geo/output.h"
 #include "util/geo/part_selection.h"
 #include "util/hego_util.h"
@@ -88,11 +89,15 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::Array filter_attrib_values = fetch_surfaces_config->get("filter_attrib_values");
 	godot::PackedStringArray split_attribs = fetch_surfaces_config->get("split_attribs");
 
-	HAPI_GeoInfo mesh_geo_info;
-	if (!get_display_geo_info(session_mgr, node_id, mesh_geo_info, auto_cook))
+	// Shared with every other output of this cook, so attributes several of them
+	// want only cross the connection once.
+	std::shared_ptr<GeoCache> cache = GeoCache::acquire(session_mgr, node_id, auto_cook);
+	if (!cache)
 	{
 		return godot::Dictionary();
 	}
+	const HAPI_GeoInfo &mesh_geo_info = cache->geo_info();
+
 	HAPI_PartInfo mesh_part_info;
 	if (!find_part_by_type(session_mgr->get_session(), mesh_geo_info, HAPI_PARTTYPE_MESH, mesh_part_info))
 	{
@@ -121,33 +126,33 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::Array unique_prim_attrs;
 
 	godot::Dictionary point_attrs;
-	point_attrs["P"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "P");
+	point_attrs["P"] = cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "P");
 
 	if (normal)
 	{
-		point_attrs["N"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "N");
+		point_attrs["N"] = cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "N");
 	}
 	if (color)
 	{
-		point_attrs["Cd"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "Cd");
+		point_attrs["Cd"] = cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "Cd");
 	}
 	if (uv)
 	{
 		point_attrs["uv"] =
-				flip_uv_v_axis(HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv"));
+				flip_uv_v_axis(cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "uv"));
 	}
 	if (uv2)
 	{
 		point_attrs["uv2"] =
-				flip_uv_v_axis(HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv2"));
+				flip_uv_v_axis(cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "uv2"));
 	}
 	if (tangents)
 	{
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "getting tangent attrs");
 		point_attrs["tangentu"] =
-				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentu");
+				cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "tangentu");
 		point_attrs["tangentv"] = invert_vector3_array(
-				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentv"));
+				cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "tangentv"));
 	}
 	else
 	{
@@ -184,8 +189,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	for (int i = 0; i < unique_prim_attrs.size(); i++)
 	{
 		godot::String attr_name = unique_prim_attrs[i];
-		prim_attr_cache[attr_name] =
-				HEGo::Util::Attribs::fetch_by_name(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_PRIM, attr_name.utf8().get_data());
+		prim_attr_cache[attr_name] = cache->attribute(mesh_part_info, HAPI_ATTROWNER_PRIM, attr_name);
 	}
 
 	for (int i = 0; i < read_attribs.size(); i++)

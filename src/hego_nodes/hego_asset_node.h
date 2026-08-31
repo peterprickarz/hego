@@ -36,6 +36,11 @@ public:
 	godot::Ref<HEGoTask> remove_multiparm_instance(int parm_id, int index);
 	godot::Ref<HEGoTask> get_parms_dict();
 	godot::Ref<HEGoTask> get_input_names();
+	// The cooked output, for reading and splitting it from GDScript in code rather
+	// than through a fetch config. Optionally loads attributes up front, so a handler
+	// can do its whole job with one await.
+	godot::Ref<HEGoTask> get_geo_output(godot::PackedStringArray preload_attribs = godot::PackedStringArray());
+
 	godot::Ref<HEGoTask> fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config);
 	godot::Ref<HEGoTask> fetch_points(godot::Ref<godot::Resource> fetch_point_config);
 	godot::Ref<HEGoTask> get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray());

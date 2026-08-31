@@ -21,6 +21,7 @@ Welcome to the HEGo documentation site.
    :caption: API Reference
 
    api/task_pattern
+   api/geo_output
    api/logging
    classes/class_hegoapi
    classes/class_hegoassetnode
