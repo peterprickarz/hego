@@ -11,8 +11,19 @@ extends RefCounted
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "output"
 
-## Config the surface fetch is driven by.
-const FETCH_CONFIG_PATH := "res://addons/hego/surface_filters/fetch_surfaces_default.tres"
+## Vertex attributes read for every surface. P always comes along.
+const VERTEX_ATTRIBS := ["N", "Cd", "uv", "uv2", "tangents"]
+
+## Primitive attributes the output is grouped by: one mesh per instance name, one
+## surface per material within it.
+const MESH_INSTANCE_ATTRIB := "hego_mesh_instance"
+const MATERIAL_ATTRIB := "hego_material"
+
+## Primitive attributes this handler reads off each surface.
+const SURFACE_ATTRIBS := [
+	"hego_lod", "hego_col_type", "hego_col_decomp_settings",
+	"hego_storage_mode", "hego_resource_save_path",
+]
 
 ## Node name used when an HDA does not name its mesh output.
 const DEFAULT_MESH_NODE_NAME := "hego_output_mesh_inst"
@@ -57,18 +68,24 @@ static func handle(host: Node) -> void:
 	var resource_save_count := 0
 	var collision_generation_count := 0
 
-	var fetch_config: Resource = load(FETCH_CONFIG_PATH)
 	var fetch_start_usec := Time.get_ticks_usec()
-	var dict: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_surfaces(fetch_config))
+	var output: HEGoGeoSurfaces = await HEGoNodeUtil.await_task(host,
+		host.hego_asset_node.get_surface_output(PackedStringArray(VERTEX_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
 	var fetch_surfaces_msec := HEGoCookTimings.elapsed_msec(fetch_start_usec)
-	if not dict is Dictionary:
-		# Null means the fetch task failed; it has already reported why.
+	if output == null or not output.is_valid():
+		# Null means the task failed; it has already reported why.
 		return
 
 	var processing_start_usec := Time.get_ticks_usec()
-	for mesh_instance_key in dict.keys():
+	var by_instance := output.split_by(MESH_INSTANCE_ATTRIB)
+	for mesh_instance_key in by_instance:
 		mesh_instance_count += 1
-		var surfaces: Dictionary = dict[mesh_instance_key]
+
+		# One surface per material, each assembled only now that we know we want it.
+		var by_material: Dictionary = by_instance[mesh_instance_key].split_by(MATERIAL_ATTRIB)
+		var surfaces := {}
+		for material_key in by_material:
+			surfaces[material_key] = by_material[material_key].get_surface(PackedStringArray(SURFACE_ATTRIBS))
 		if surfaces.is_empty():
 			continue
 
@@ -126,10 +143,13 @@ static func _build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
 	var arr_mesh := ArrayMesh.new()
 	var surface_id := 0
 	for material_key in surfaces:
-		var surface_array: Array = surfaces[material_key]["surface_array"]
-		var hego_lod_array: Array = surfaces[material_key]["hego_lod"]
+		var surface: Dictionary = surfaces[material_key]
+		var surface_array: Array = surface["surface_array"]
 
-		if hego_lod_array[0] != null:
+		# An HDA that sets no LOD attribute simply has no such key here.
+		var hego_lod_array: Array = surface.get("hego_lod", [])
+
+		if not hego_lod_array.is_empty() and hego_lod_array[0] != null:
 			# hego_lod holds one screen-space distance per LOD, and the index array
 			# holds the triangles of all LODs back to back. Group the triangles by
 			# distance; distance 0.0 is the base surface, the rest become Godot LODs.

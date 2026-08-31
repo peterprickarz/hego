@@ -50,6 +50,10 @@ public:
 
 	const HAPI_GeoInfo &geo_info() const { return my_geo_info; }
 
+	/// The session this cache reads through, for callers that need HAPI calls the
+	/// cache does not wrap, such as the face and vertex lists.
+	const HAPI_Session *session() const { return my_session_mgr->get_session(); }
+
 	/// Every part of the display geo, in part index order.
 	const std::vector<HAPI_PartInfo> &parts() const { return my_parts; }
 

@@ -41,6 +41,11 @@ public:
 	// can do its whole job with one await.
 	godot::Ref<HEGoTask> get_geo_output(godot::PackedStringArray preload_attribs = godot::PackedStringArray());
 
+	// The cooked surfaces, for reading and splitting them from GDScript in code.
+	// vertex_attribs names which of N, Cd, uv, uv2 and tangents to read; P always is.
+	godot::Ref<HEGoTask> get_surface_output(
+			godot::PackedStringArray vertex_attribs = godot::PackedStringArray(), godot::PackedStringArray preload_attribs = godot::PackedStringArray());
+
 	godot::Ref<HEGoTask> fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config);
 	godot::Ref<HEGoTask> fetch_points(godot::Ref<godot::Resource> fetch_point_config);
 	godot::Ref<HEGoTask> get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray());

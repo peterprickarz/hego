@@ -69,6 +69,61 @@ godot::Array invert_vector3_array(const godot::Array &values)
 	return inverted;
 }
 
+bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &vertex_attribs, HAPI_PartInfo &out_part, godot::Array &out_prims,
+		godot::Array &out_vertex_point_indices, godot::Dictionary &out_point_attrs)
+{
+	const HAPI_Session *session = cache.session();
+	const HAPI_GeoInfo &geo_info = cache.geo_info();
+
+	if (!find_part_by_type(session, geo_info, HAPI_PARTTYPE_MESH, out_part))
+	{
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
+		return false;
+	}
+	if (out_part.faceCount <= 0)
+	{
+		return false;
+	}
+
+	std::vector<int> face_counts(out_part.faceCount);
+	HOUDINI_CHECK_ERROR_RETURN(HoudiniApi::GetFaceCounts(session, geo_info.nodeId, out_part.id, face_counts.data(), 0, out_part.faceCount), false);
+	std::vector<int> vertex_point_indices(out_part.vertexCount);
+	HOUDINI_CHECK_ERROR_RETURN(HoudiniApi::GetVertexList(session, geo_info.nodeId, out_part.id, vertex_point_indices.data(), 0, out_part.vertexCount), false);
+
+	out_prims = convert_face_counts_to_array(face_counts);
+
+	out_vertex_point_indices = godot::Array();
+	out_vertex_point_indices.resize(static_cast<int>(vertex_point_indices.size()));
+	for (size_t i = 0; i < vertex_point_indices.size(); i++)
+	{
+		out_vertex_point_indices[static_cast<int>(i)] = vertex_point_indices[i];
+	}
+
+	out_point_attrs = godot::Dictionary();
+	out_point_attrs["P"] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, "P");
+
+	for (int i = 0; i < vertex_attribs.size(); i++)
+	{
+		const godot::String name = vertex_attribs[i];
+		if (name == "uv" || name == "uv2")
+		{
+			// Houdini's UV origin is bottom-left, Godot's is top-left.
+			out_point_attrs[name] = flip_uv_v_axis(cache.attribute(out_part, HAPI_ATTROWNER_POINT, name));
+		}
+		else if (name == "tangents")
+		{
+			out_point_attrs["tangentu"] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, "tangentu");
+			out_point_attrs["tangentv"] = invert_vector3_array(cache.attribute(out_part, HAPI_ATTROWNER_POINT, "tangentv"));
+		}
+		else
+		{
+			out_point_attrs[name] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, name);
+		}
+	}
+
+	return true;
+}
+
 godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config, bool auto_cook)
 {
 	HEGo::Util::Log::line();
@@ -106,18 +161,37 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
 		return godot::Dictionary();
 	}
-	if (mesh_part_info.faceCount <= 0)
+	godot::PackedStringArray vertex_attribs;
+	if (normal)
+	{
+		vertex_attribs.append("N");
+	}
+	if (color)
+	{
+		vertex_attribs.append("Cd");
+	}
+	if (uv)
+	{
+		vertex_attribs.append("uv");
+	}
+	if (uv2)
+	{
+		vertex_attribs.append("uv2");
+	}
+	if (tangents)
+	{
+		vertex_attribs.append("tangents");
+	}
+
+	HAPI_PartInfo prepared_part;
+	godot::Array prims;
+	godot::Array vt_pt_indices;
+	godot::Dictionary point_attrs;
+	if (!prepare_surface_data(*cache, vertex_attribs, prepared_part, prims, vt_pt_indices, point_attrs))
 	{
 		return godot::Dictionary();
 	}
-	std::vector<int> face_counts(mesh_part_info.faceCount);
-	HOUDINI_CHECK_ERROR(
-			HoudiniApi::GetFaceCounts(session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, face_counts.data(), 0, mesh_part_info.faceCount));
-	std::vector<int> vertex_point_indices(mesh_part_info.vertexCount);
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetVertexList(
-			session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, vertex_point_indices.data(), 0, mesh_part_info.vertexCount));
-
-	godot::Array prims = convert_face_counts_to_array(face_counts);
+	mesh_part_info = prepared_part;
 
 	// get read, split and filter attrs
 	godot::Dictionary read_attribs_dict;
@@ -127,39 +201,6 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::Dictionary seen_prim_attrs;
 	godot::Array unique_prim_attrs;
 
-	godot::Dictionary point_attrs;
-	point_attrs["P"] = cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "P");
-
-	if (normal)
-	{
-		point_attrs["N"] = cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "N");
-	}
-	if (color)
-	{
-		point_attrs["Cd"] = cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "Cd");
-	}
-	if (uv)
-	{
-		point_attrs["uv"] =
-				flip_uv_v_axis(cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "uv"));
-	}
-	if (uv2)
-	{
-		point_attrs["uv2"] =
-				flip_uv_v_axis(cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "uv2"));
-	}
-	if (tangents)
-	{
-		HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "getting tangent attrs");
-		point_attrs["tangentu"] =
-				cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "tangentu");
-		point_attrs["tangentv"] = invert_vector3_array(
-				cache->attribute(mesh_part_info, HAPI_ATTROWNER_POINT, "tangentv"));
-	}
-	else
-	{
-		HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Getting tangents disabled");
-	}
 	for (int i = 0; i < read_attribs.size(); i++)
 	{
 		godot::String attr_name = read_attribs[i];
@@ -242,11 +283,6 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 
 	godot::Dictionary split_prim_dictionary = HEGo::Util::Geo::build_nested_dictionary(split_attribs, split_attribs_dict, int_ids, read_attribs_dict, 0);
 
-	godot::Array vt_pt_indices;
-	for (size_t i = 0; i < vertex_point_indices.size(); i++)
-	{
-		vt_pt_indices.append(vertex_point_indices[i]);
-	}
 	modify_base_entries(split_prim_dictionary, vt_pt_indices, point_attrs, filtered_prims);
 	HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Finished fetching surfaces");
 	HEGo::Util::Log::line();

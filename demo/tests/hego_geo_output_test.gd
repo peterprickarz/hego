@@ -39,6 +39,26 @@ func _initialize() -> void:
 
 	check(has_method_bound("HEGoAssetNode", "get_geo_output"), "HEGoAssetNode.get_geo_output is bound")
 
+	# --- the surface side ---------------------------------------------------
+	check(ClassDB.class_exists("HEGoGeoSurfaces"), "HEGoGeoSurfaces is registered")
+	check(ClassDB.class_exists("HEGoGeoPrimSelection"), "HEGoGeoPrimSelection is registered")
+
+	for method in ["is_valid", "get_primitive_count", "get_attribute_names", "has_attribute",
+			"get_attribute_names_with_prefix", "load_attributes", "get_attribute",
+			"select_all", "filter_by", "split_by"]:
+		check(has_method_bound("HEGoGeoSurfaces", method), "HEGoGeoSurfaces.%s is bound" % method)
+
+	for method in ["size", "get_indices", "filter_by", "split_by", "get_surface"]:
+		check(has_method_bound("HEGoGeoPrimSelection", method), "HEGoGeoPrimSelection.%s is bound" % method)
+
+	check(has_method_bound("HEGoAssetNode", "get_surface_output"), "HEGoAssetNode.get_surface_output is bound")
+
+	var surfaces := HEGoGeoSurfaces.new()
+	check(not surfaces.is_valid(), "a bare surface output is not valid")
+	check(surfaces.get_primitive_count() == 0, "a bare surface output has no primitives")
+	check(surfaces.select_all().size() == 0, "select_all on a bare surface output is empty")
+	check(HEGoGeoPrimSelection.new().get_surface().is_empty(), "a bare prim selection yields no surface")
+
 	# --- owner constants ----------------------------------------------------
 	# HAPI_AttributeOwner: VERTEX 0, POINT 1, PRIM 2, DETAIL 3.
 	check(HEGoGeoOutput.OWNER_VERTEX == 0, "OWNER_VERTEX matches HAPI_ATTROWNER_VERTEX")

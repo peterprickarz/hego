@@ -38,6 +38,8 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 
 	ClassDB::register_class<HEGo::HEGoGeoOutput>();
 	ClassDB::register_class<HEGo::HEGoGeoSelection>();
+	ClassDB::register_class<HEGo::HEGoGeoSurfaces>();
+	ClassDB::register_class<HEGo::HEGoGeoPrimSelection>();
 
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);

@@ -143,6 +143,121 @@ private:
 	std::vector<int> my_indices;
 };
 
+class HEGoGeoPrimSelection;
+
+/// A cooked node's surface output, queried from GDScript.
+///
+/// The surface counterpart of [HEGoGeoOutput]: where that one selects points, this
+/// selects primitives and turns a group of them into a Godot surface array.
+/// [codeblock]
+/// var surfaces = await _await_task(asset_node.get_surface_output(["N", "uv"]))
+/// await _await_task(surfaces.load_attributes(["hego_mesh_instance", "hego_material"]))
+///
+/// for instance_name in surfaces.split_by("hego_mesh_instance"):
+///     for material in group.split_by("hego_material"):
+///         var surface = by_material[material].get_surface(["hego_lod"])
+///         # surface["surface_array"] goes straight into ArrayMesh.add_surface_from_arrays
+/// [/codeblock]
+///
+/// The vertex data is read once for the whole part; each group only compacts the
+/// points its own primitives use, and only when get_surface() is called.
+class HEGoGeoSurfaces : public godot::RefCounted
+{
+	GDCLASS(HEGoGeoSurfaces, godot::RefCounted)
+
+public:
+	HEGoGeoSurfaces() = default;
+
+	/// Built by HEGoAssetNode::get_surface_output(); not meant to be constructed by hand.
+	/// Reads the face and vertex lists plus the named vertex attributes, so it must
+	/// run on the worker thread.
+	bool setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &vertex_attribs);
+
+	/// Whether the cook produced a mesh part with faces.
+	bool is_valid() const;
+
+	/// Number of primitives in the output.
+	int get_primitive_count() const;
+
+	/// Names of every primitive attribute, available without loading anything.
+	godot::PackedStringArray get_attribute_names() const;
+
+	/// Whether a primitive attribute of that name exists.
+	bool has_attribute(const godot::String &name) const;
+
+	/// The primitive attribute names starting with [param prefix].
+	godot::PackedStringArray get_attribute_names_with_prefix(const godot::String &prefix) const;
+
+	/// Reads primitive attributes so filtering, splitting and get_surface() can use them.
+	godot::Ref<HEGoTask> load_attributes(const godot::PackedStringArray &names);
+
+	/// The values of a loaded primitive attribute, one per primitive.
+	godot::Array get_attribute(const godot::String &name) const;
+
+	/// Every primitive, as a selection to filter and split further.
+	godot::Ref<HEGoGeoPrimSelection> select_all();
+
+	/// The primitives whose [param name] attribute equals [param value].
+	godot::Ref<HEGoGeoPrimSelection> filter_by(const godot::String &name, const godot::Variant &value);
+
+	/// The primitives grouped by the value of [param name], as { value: selection }.
+	godot::Dictionary split_by(const godot::String &name);
+
+protected:
+	static void _bind_methods();
+
+private:
+	friend class HEGoGeoPrimSelection;
+
+	std::shared_ptr<HEGo::Util::Geo::GeoCache> my_cache;
+	HAPI_NodeId my_node_id = -1;
+	HAPI_PartInfo my_part{};
+	bool my_valid = false;
+
+	// Read once for the whole part and shared by every group.
+	godot::Array my_prims; // One Vector2i(first vertex, vertex count) per primitive.
+	godot::Array my_vertex_point_indices;
+	godot::Dictionary my_point_attrs;
+};
+
+/// A set of primitives of a [HEGoGeoSurfaces].
+///
+/// Like [HEGoGeoSelection], a selection is a list of indices: filtering and
+/// splitting cost nothing but the indices, and only get_surface() assembles data.
+class HEGoGeoPrimSelection : public godot::RefCounted
+{
+	GDCLASS(HEGoGeoPrimSelection, godot::RefCounted)
+
+public:
+	HEGoGeoPrimSelection() = default;
+
+	void setup(const godot::Ref<HEGoGeoSurfaces> &surfaces, const std::vector<int> &indices);
+
+	/// How many primitives this selection holds.
+	int size() const;
+
+	/// The primitive indices.
+	godot::PackedInt32Array get_indices() const;
+
+	/// The subset whose [param name] attribute equals [param value].
+	godot::Ref<HEGoGeoPrimSelection> filter_by(const godot::String &name, const godot::Variant &value);
+
+	/// This selection grouped by the value of [param name], as { value: selection }.
+	godot::Dictionary split_by(const godot::String &name);
+
+	/// Builds the Godot surface for these primitives, as
+	/// [code]{ "surface_array": [...], <requested attributes>: [...] }[/code].
+	/// The attribute arrays hold one value per primitive in this selection.
+	godot::Dictionary get_surface(const godot::PackedStringArray &read_attribs = godot::PackedStringArray());
+
+protected:
+	static void _bind_methods();
+
+private:
+	godot::Ref<HEGoGeoSurfaces> my_surfaces;
+	std::vector<int> my_indices;
+};
+
 } // namespace HEGo
 
 VARIANT_ENUM_CAST(HEGo::HEGoGeoOutput::Owner);
