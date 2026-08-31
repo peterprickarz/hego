@@ -8,7 +8,9 @@ HEGo Class Reference
    class_hegoassetnode
    class_hegocurveinputnode
    class_hegogeooutput
+   class_hegogeoprimselection
    class_hegogeoselection
+   class_hegogeosurfaces
    class_hegoheightfieldinputnode
    class_hegoinputnode
    class_hegolog

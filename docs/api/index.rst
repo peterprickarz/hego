@@ -10,5 +10,6 @@ The pages below are generated from XML class docs in demo/addons/hego/doc_classe
 
    task_pattern
    geo_output
+   node3d_modules
    logging
    ../classes/index

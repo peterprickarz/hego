@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoGeoPrimSelection" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+A set of primitives of a [HEGoGeoSurfaces].
+</brief_description>
+<description>
+A selection is a list of primitive indices, not a copy of the geometry. Filtering and splitting build new selections without touching any geometry; only [method get_surface] assembles anything, and only for the primitives the selection holds.
+
+Selections chain, which is how one mesh output becomes one node per instance name with one surface per material:
+[codeblock]
+var by_material = surfaces.filter_by("hego_visible", 1).split_by("hego_material")
+for material in by_material:
+    var surface = by_material[material].get_surface(["hego_lod", "hego_col_type"])
+[/codeblock]
+
+Obtained from [method HEGoGeoSurfaces.select_all], [method HEGoGeoSurfaces.filter_by] or [method HEGoGeoSurfaces.split_by].
+</description>
+<tutorials>
+<link title="Reading Output in Code">https://hego.readthedocs.io/en/latest/api/geo_output.html</link>
+</tutorials>
+<methods>
+<method name="size" qualifiers="const">
+<return type="int" />
+<description>
+How many primitives this selection holds.
+</description>
+</method>
+<method name="get_indices" qualifiers="const">
+<return type="PackedInt32Array" />
+<description>
+The primitive indices, for callers that want to index into [method HEGoGeoSurfaces.get_attribute] themselves.
+</description>
+</method>
+<method name="filter_by">
+<return type="HEGoGeoPrimSelection" />
+<param index="0" name="name" type="String" />
+<param index="1" name="value" type="Variant" />
+<description>
+The subset whose [code]name[/code] attribute equals [code]value[/code]. Returns an empty selection, with a warning, when the attribute is missing or was never loaded.
+</description>
+</method>
+<method name="split_by">
+<return type="Dictionary" />
+<param index="0" name="name" type="String" />
+<description>
+This selection grouped by the value of [code]name[/code], as [code]{ value: HEGoGeoPrimSelection }[/code].
+
+Primitives the attribute is not set on land under a [code]null[/code] key, and an attribute the HDA does not have at all yields a single [code]null[/code] group holding everything, so a handler can fall back to a default name rather than losing the geometry.
+</description>
+</method>
+<method name="get_surface">
+<return type="Dictionary" />
+<param index="0" name="read_attribs" type="PackedStringArray" default="PackedStringArray()" />
+<description>
+Builds the Godot surface for these primitives, as [code]{ "surface_array": [...], &lt;requested attributes&gt;: [...] }[/code].
+
+[code]surface_array[/code] goes straight into [method ArrayMesh.add_surface_from_arrays]. It holds only the points these primitives use, compacted, with the indices remapped to match.
+
+The requested primitive attributes come back as one value per primitive in this selection, in the same order as [method get_indices]. Attributes the HDA does not have are left out, so read them with [code]Dictionary.get()[/code] rather than assuming the key exists.
+</description>
+</method>
+</methods>
+</class>
