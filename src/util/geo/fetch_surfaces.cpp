@@ -2,6 +2,8 @@
 
 #include "util/attrib/fetch_attribs.h"
 #include "util/geo/geo_cache.h"
+
+#include <vector>
 #include "util/geo/output.h"
 #include "util/geo/part_selection.h"
 #include "util/hego_util.h"
@@ -252,7 +254,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 }
 
 void modify_base_entries(
-		godot::Dictionary &nested_dict, godot::Array &vertex_point_indices, const godot::Dictionary &point_attrs, const godot::Array &filtered_prims)
+		godot::Dictionary &nested_dict, const godot::Array &vertex_point_indices, const godot::Dictionary &point_attrs, const godot::Array &filtered_prims)
 {
 	// Check if we are at the base level by looking for the "ids" key
 	if (nested_dict.has("ids"))
@@ -267,11 +269,10 @@ void modify_base_entries(
 
 		godot::Dictionary filtered_point_attrs = point_attrs;
 
-		// Compacting rewrites the vertex indices in place, so each group needs its
-		// own copy. Sharing one array means the second group remaps indices the
-		// first group already remapped, which scrambles every group but the first.
-		godot::Array leaf_vertex_indices = vertex_point_indices.duplicate();
-		filter_and_update_dictionary(filtered_point_attrs, id_arr, leaf_vertex_indices);
+		// Each group gets its own mapping and applies it only to its own vertices.
+		// Nothing shared is rewritten, so groups cannot disturb each other even when
+		// they share points, and no group walks the whole mesh's vertex list.
+		const godot::PackedInt32Array index_mapping = filter_and_update_dictionary(filtered_point_attrs, id_arr, vertex_point_indices);
 		godot::Array surface_array;
 		surface_array.resize(godot::Mesh::ARRAY_MAX);
 		surface_array[godot::Mesh::ARRAY_VERTEX] = godot::PackedVector3Array(filtered_point_attrs["P"]);
@@ -371,7 +372,12 @@ void modify_base_entries(
 			int start = id_range.x;
 			for (int j = 0; j < id_range.y; j++)
 			{
-				indices.append(leaf_vertex_indices[start + j]);
+				const int old_index = vertex_point_indices[start + j];
+				const int new_index = (old_index >= 0 && old_index < index_mapping.size()) ? index_mapping[old_index] : -1;
+				// An unmapped vertex means the point was not marked used, which should
+				// not happen for a group's own vertices; keep the original index rather
+				// than writing a negative one into the mesh.
+				indices.append(new_index >= 0 ? new_index : old_index);
 			}
 		}
 
@@ -398,24 +404,18 @@ void modify_base_entries(
 	}
 }
 
-void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::Array &id_arr, godot::Array &vertex_point_indices)
+godot::PackedInt32Array filter_and_update_dictionary(
+		godot::Dictionary &point_attrs, const godot::Array &id_arr, const godot::Array &vertex_point_indices)
 {
 	// Get the keys from the point_attrs dictionary
 	godot::Array keys = point_attrs.keys();
 	godot::Array first_attr = point_attrs[keys[0]];
+	const int point_count = first_attr.size();
 
-	// Step 1: Mark which indices in point_attrs are being used
-	godot::Array is_index_used;
-	is_index_used.resize(first_attr.size());
+	// Step 1: Mark which points this group's primitives use. Plain bytes rather
+	// than an Array, which would box one Variant per point of the whole mesh.
+	std::vector<bool> is_index_used(point_count, false);
 
-	// Initialize all indices to false (unused)
-	for (int i = 0; i < is_index_used.size(); ++i)
-	{
-		is_index_used[i] = false;
-	}
-
-	// Iterate through id_arr to mark the relevant ranges of
-	// vertex_point_indices as used
 	for (int i = 0; i < id_arr.size(); ++i)
 	{
 		godot::Vector2i range = id_arr[i];
@@ -426,7 +426,7 @@ void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::A
 		{
 			// Mark the vertex_point_indices within this range as used
 			int vertex_index = vertex_point_indices[j];
-			if (vertex_index < is_index_used.size())
+			if (vertex_index >= 0 && vertex_index < point_count)
 			{
 				is_index_used[vertex_index] = true;
 			}
@@ -434,24 +434,14 @@ void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::A
 	}
 
 	// Step 2: Create a mapping from old indices to new indices (compact the
-	// used indices)
-	godot::Array index_mapping; // Maps old indices to new indices
-	index_mapping.resize(vertex_point_indices.size());
+	// used indices). One entry per point, not per vertex.
+	godot::PackedInt32Array index_mapping;
+	index_mapping.resize(point_count);
 
-	// Initialize the mapping with invalid values (-1)
-	for (int i = 0; i < index_mapping.size(); ++i)
-	{
-		index_mapping[i] = -1;
-	}
-
-	// Assign new indices for only the used entries
 	int next_available_index = 0;
-	for (int i = 0; i < is_index_used.size(); ++i)
+	for (int i = 0; i < point_count; ++i)
 	{
-		if (is_index_used[i])
-		{
-			index_mapping[i] = next_available_index++;
-		}
+		index_mapping.set(i, is_index_used[i] ? next_available_index++ : -1);
 	}
 
 	// Step 3: Filter point_attrs arrays based on the used indices
@@ -464,8 +454,9 @@ void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::A
 		godot::Array original_array = point_attrs[key];
 		godot::Array filtered_array;
 
-		// Only append used entries to the filtered array
-		for (int i = 0; i < original_array.size(); ++i)
+		// Only append used entries to the filtered array. The bound keeps a
+		// mismatched attribute length from reading past the used-point flags.
+		for (int i = 0; i < original_array.size() && i < point_count; ++i)
 		{
 			if (is_index_used[i])
 			{
@@ -477,18 +468,11 @@ void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::A
 		filtered_point_attrs[key] = filtered_array;
 	}
 
-	// Step 4: Update vertex_point_indices to reflect the new compacted indices
-	for (int i = 0; i < vertex_point_indices.size(); ++i)
-	{
-		int old_index = vertex_point_indices[i];
-		if (old_index < index_mapping.size() && int(index_mapping[old_index]) != -1)
-		{
-			vertex_point_indices[i] = index_mapping[old_index];
-		}
-	}
-
-	// Step 5: Replace the original point_attrs with the filtered version
+	// Step 4: Replace the original point_attrs with the filtered version. The
+	// caller applies the mapping to its own vertices; the shared vertex list is
+	// left alone.
 	point_attrs = filtered_point_attrs;
+	return index_mapping;
 }
 
 } // namespace Geo
