@@ -45,6 +45,13 @@ const MESH_ASSET_ATTRIBS := {
 }
 
 
+## Whether the cook produced points flagged for Terrain3D instancing.
+static func should_handle(summary: Dictionary) -> bool:
+	return HEGoTerrain3DUtil.is_available() \
+		and HEGoNodeUtil.output_has(summary, "has_points") \
+		and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", INSTANCING_FILTER_ATTRIB)
+
+
 ## Fetches the instancing points of [param host]'s asset node and populates the terrains.
 static func handle(host: Node) -> void:
 	if not HEGoTerrain3DUtil.is_available():

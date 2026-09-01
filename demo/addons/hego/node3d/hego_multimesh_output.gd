@@ -24,6 +24,12 @@ const POINT_ATTRIBS := ["N", "Cd", "up", "pscale", "scale"]
 const DEFAULT_MULTIMESH_NAME := "MultiMesh"
 
 
+## Whether the cook produced points flagged for multimesh instancing.
+static func should_handle(summary: Dictionary) -> bool:
+	return HEGoNodeUtil.output_has(summary, "has_points") \
+		and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", INSTANCING_FILTER_ATTRIB)
+
+
 ## Fetches the instancing points of [param host]'s asset node and builds the multimeshes.
 static func handle(host: Node) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Multimesh Output")

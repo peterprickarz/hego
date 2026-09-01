@@ -42,9 +42,11 @@ one to see how an output type is built.
    * - ``HEGoTerrain3DInput``
      - An existing Terrain3D to heightfield layers for Houdini
 
-Every output handler exposes the same entry point, ``handle(host)``, where ``host``
-is the ``HEGoNode3D``. :ref:`HEGoNode3D<class_HEGoNode3D>` calls them in turn and
-times each one.
+Every output handler exposes the same two entry points: ``should_handle(summary)``,
+which decides from :ref:`get_output_summary()<class_HEGoAssetNode_method_get_output_summary>`
+whether the cook produced anything it cares about, and ``handle(host)``, which does
+the work. :ref:`HEGoNode3D<class_HEGoNode3D>` asks for the summary once, then calls
+each handler that wants it and times them all.
 
 Writing your own output handler
 -------------------------------
@@ -60,6 +62,10 @@ The shape to copy, in a script of your own:
     const LOG_CATEGORY := "output"
     const POINT_ATTRIBS := ["N", "up", "pscale"]
     const FILTER_ATTRIB := "my_scatter"
+
+    static func should_handle(summary: Dictionary) -> bool:
+        return HEGoNodeUtil.output_has(summary, "has_points") \
+            and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", FILTER_ATTRIB)
 
     static func handle(host: Node) -> void:
         var output = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_geo_output())
@@ -82,10 +88,13 @@ The shape to copy, in a script of your own:
                 parent.add_child(node)
                 HEGoNodeUtil.set_editor_owner(host, node)
 
-Three things matter here:
+Four things matter here:
 
 - **Ask for what you need, once.** ``load_attributes()`` is the only call that
   reaches Houdini. See :doc:`geo_output`.
+- **Say when you have nothing to do.** ``should_handle()`` keeps a cook from paying
+  for a handler the HDA never feeds. ``HEGoNodeUtil.output_has()`` and
+  ``output_has_attribute()`` follow the rule that anything unknown means run.
 - **Own the nodes you create.** ``set_editor_owner()`` is what makes them survive a
   scene save in the editor; a node without an owner silently disappears.
 - **Log through** :ref:`HEGoLog<class_HEGoLog>` so your messages show up in the

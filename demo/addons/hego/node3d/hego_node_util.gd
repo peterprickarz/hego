@@ -30,6 +30,27 @@ static func await_task(host: Node, task: HEGoTask) -> Variant:
 	return task.get_result()
 
 
+## Whether the cook produced the kind of geometry a handler needs.
+##
+## [param summary] is [method HEGoAssetNode.get_output_summary]'s result and
+## [param key] one of its has_* flags. An unknown summary or a missing key means
+## the handler runs: skipping is only ever done on positive knowledge that there is
+## nothing to do, so a failed summary costs time rather than output.
+static func output_has(summary: Dictionary, key: String) -> bool:
+	if summary.is_empty() or not summary.has(key):
+		return true
+	return bool(summary[key])
+
+
+## Whether the cooked geometry carries an attribute a handler keys off, for example
+## hego_spawn. Follows the same "unknown means run it" rule as [method output_has].
+static func output_has_attribute(summary: Dictionary, list_key: String, attribute: String) -> bool:
+	if summary.is_empty() or not summary.has(list_key):
+		return true
+	var names: PackedStringArray = summary[list_key]
+	return names.has(attribute)
+
+
 ## Makes [param node] show up in the saved scene while running in the editor.
 ##
 ## Nodes created at runtime need no owner, and a node whose owner is left unset in

@@ -14,6 +14,11 @@ const NODE_PATH_ATTRIB := "hego_node_path"
 const DEFAULT_CURVE_FOLDER := "Curves"
 
 
+## Whether the cook produced curves.
+static func should_handle(summary: Dictionary) -> bool:
+	return HEGoNodeUtil.output_has(summary, "has_curves")
+
+
 ## Fetches the curves of [param host]'s asset node and builds the Path3D output.
 static func handle(host: Node) -> void:
 	var curves: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_curves([NODE_PATH_ATTRIB], []))

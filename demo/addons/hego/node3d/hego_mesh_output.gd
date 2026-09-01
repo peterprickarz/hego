@@ -60,6 +60,11 @@ const DECOMPOSITION_PROPERTIES := [
 ]
 
 
+## Whether the cook produced surfaces worth building.
+static func should_handle(summary: Dictionary) -> bool:
+	return HEGoNodeUtil.output_has(summary, "has_mesh")
+
+
 ## Fetches the surfaces of [param host]'s asset node and builds the mesh output.
 static func handle(host: Node) -> void:
 	var output_start_usec := Time.get_ticks_usec()

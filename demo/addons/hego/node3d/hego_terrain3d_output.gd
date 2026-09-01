@@ -58,6 +58,11 @@ const ROTATION_TOLERANCE := 0.5
 const UPDATE_MAPS_HEIGHT_AND_CONTROL := 3
 
 
+## Whether the cook produced heightfield volumes, and Terrain3D is there to receive them.
+static func should_handle(summary: Dictionary) -> bool:
+	return HEGoTerrain3DUtil.is_available() and HEGoNodeUtil.output_has(summary, "has_volumes")
+
+
 ## Fetches the heightfield layers of [param host]'s asset node and builds the terrain.
 static func handle(host: Node) -> void:
 	if not HEGoTerrain3DUtil.is_available():

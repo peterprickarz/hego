@@ -81,30 +81,61 @@ func cook() -> void:
 	if outputs_node:
 		outputs_node.free()
 
+	# One look at what the cook produced, so a handler with nothing to do is skipped
+	# rather than asking Houdini for attributes that are not there. Each handler
+	# decides for itself; an unreadable summary means they all run, as before.
 	timings.begin_phase()
-	await HEGoMeshOutput.handle(self)
+	var summary: Variant = await _await_task(hego_asset_node.get_output_summary())
+	if not summary is Dictionary:
+		summary = {}
+	timings.end_phase("output_summary")
+
+	var skipped := PackedStringArray()
+
+	timings.begin_phase()
+	if HEGoMeshOutput.should_handle(summary):
+		await HEGoMeshOutput.handle(self)
+	else:
+		skipped.append("mesh")
 	timings.end_phase("mesh_output")
 
 	timings.begin_phase()
-	await HEGoMultiMeshOutput.handle(self)
+	if HEGoMultiMeshOutput.should_handle(summary):
+		await HEGoMultiMeshOutput.handle(self)
+	else:
+		skipped.append("multimesh")
 	timings.end_phase("multimesh_output")
 
 	timings.begin_phase()
-	await HEGoObjectOutput.handle(self)
+	if HEGoObjectOutput.should_handle(summary):
+		await HEGoObjectOutput.handle(self)
+	else:
+		skipped.append("object spawn")
 	timings.end_phase("object_spawn_output")
 
 	timings.begin_phase()
-	await HEGoTerrain3DOutput.handle(self)
+	if HEGoTerrain3DOutput.should_handle(summary):
+		await HEGoTerrain3DOutput.handle(self)
+	else:
+		skipped.append("terrain3d")
 	timings.end_phase("terrain3d_output")
 
 	timings.begin_phase()
-	await HEGoTerrain3DInstancer.handle(self)
+	if HEGoTerrain3DInstancer.should_handle(summary):
+		await HEGoTerrain3DInstancer.handle(self)
+	else:
+		skipped.append("terrain3d instancer")
 	timings.end_phase("terrain3d_instancer_output")
 
 	timings.begin_phase()
-	await HEGoCurveOutput.handle(self)
+	if HEGoCurveOutput.should_handle(summary):
+		await HEGoCurveOutput.handle(self)
+	else:
+		skipped.append("curve")
 	timings.end_phase("path3d_output")
 
+	if not skipped.is_empty():
+		HEGoLog.get_singleton().debug(LOG_CATEGORY, "Nothing to do for: " + ", ".join(skipped))
 	HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 
 

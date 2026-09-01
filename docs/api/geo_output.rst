@@ -116,3 +116,30 @@ Reference
 
 ``owner`` is one of ``HEGoGeoOutput.OWNER_VERTEX``, ``OWNER_POINT`` (the default),
 ``OWNER_PRIM`` or ``OWNER_DETAIL``.
+
+Skipping handlers that have nothing to do
+-----------------------------------------
+
+A cook runs every output handler, and most HDAs feed one or two of them. Rather
+than have each handler ask Houdini for attributes that are not there,
+``get_output_summary()`` answers once what the cook produced:
+
+.. code-block:: gdscript
+
+    var summary = await _await_task(asset_node.get_output_summary())
+    # {
+    #     "has_mesh": true, "has_points": false, "has_curves": false, "has_volumes": false,
+    #     "point_attributes": [...], "prim_attributes": [...],
+    # }
+
+It costs nothing beyond the attribute name lookups, which are cached like
+everything else, and the part list is already known from the cook.
+
+Each built-in handler exposes ``should_handle(summary)`` deciding from it, so the
+requirement stays next to the code that has it: mesh output wants ``has_mesh``,
+object spawning wants points carrying ``hego_spawn``, Terrain3D output wants
+volume parts, and so on. Your own handler can do the same.
+
+The rule is deliberately one-sided: **anything unknown means the handler runs**. A
+summary that could not be read, or that is missing a key, costs a little time
+rather than silently producing no output.

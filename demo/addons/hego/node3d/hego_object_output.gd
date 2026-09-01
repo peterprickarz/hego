@@ -34,6 +34,12 @@ const SPAWN_TYPE_CLASS := 0
 const SPAWN_TYPE_SCENE := 1
 
 
+## Whether the cook produced points flagged for spawning.
+static func should_handle(summary: Dictionary) -> bool:
+	return HEGoNodeUtil.output_has(summary, "has_points") \
+		and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", SPAWN_FILTER_ATTRIB)
+
+
 ## Fetches the output points of [param host]'s asset node and spawns a node for each.
 static func handle(host: Node) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Object Spawn Output")

@@ -65,6 +65,8 @@ Methods
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_heightfield_layer_image<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`\ (\ part_id\: ``int``\ )                                                                               |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_output_summary<class_HEGoAssetNode_method_get_output_summary>`\ (\ )                                                                                                                        |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_geo_output<class_HEGoAssetNode_method_get_geo_output>`\ (\ preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ )                                                                 |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_points<class_HEGoAssetNode_method_fetch_points>`\ (\ fetch_point_config\: ``Resource``\ )                                                                                                 |
@@ -184,6 +186,26 @@ Submits a task to fetch one heightfield layer as an ``Image`` from the specified
 
 
 The task result is an ``Image``, or an invalid image reference when the node is not instantiated or the requested part cannot be read.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetNode_method_get_output_summary:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **get_output_summary**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_output_summary>`
+
+Submits a task returning what the last cook produced, so an output handler with nothing to do can be skipped without asking Houdini for attributes that are not there.
+
+
+
+The result is a ``Dictionary`` with ``has_mesh``, ``has_points``, ``has_curves`` and ``has_volumes`` flags, plus ``point_attributes`` and ``prim_attributes`` listing the attribute names the geometry carries. It is empty when the output cannot be read.
+
+
+
+Costs only the attribute name lookups, which are cached per cook like every other read.
 
 .. rst-class:: classref-item-separator
 

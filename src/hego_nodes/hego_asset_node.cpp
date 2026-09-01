@@ -248,6 +248,68 @@ godot::Ref<HEGoTask> HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fet
 	});
 }
 
+godot::Ref<HEGoTask> HEGoAssetNode::get_output_summary()
+{
+	if (get_id() < 0)
+	{
+		return make_failed("Cannot read output - HDA not instantiated or license issue", "Get output summary");
+	}
+
+	HAPI_NodeId nid = node_id;
+
+	return submit("Get output summary", nid,
+			[nid](HEGoSessionManager *mgr) -> godot::Variant
+			{
+				std::shared_ptr<HEGo::Util::Geo::GeoCache> cache = HEGo::Util::Geo::GeoCache::acquire(mgr, nid, false);
+				if (!cache)
+				{
+					return godot::Dictionary();
+				}
+
+				// The part list is already cached, so this only costs the attribute
+				// name lookups, one per part and owner, and those are cached too.
+				bool has_mesh = false;
+				bool has_points = false;
+				for (const HAPI_PartInfo &part : cache->parts())
+				{
+					if (part.type != HAPI_PARTTYPE_MESH)
+					{
+						continue;
+					}
+					if (part.faceCount > 0)
+					{
+						has_mesh = true;
+					}
+					if (part.vertexCount == 0)
+					{
+						has_points = true;
+					}
+				}
+
+				godot::Dictionary summary;
+				summary["has_mesh"] = has_mesh;
+				summary["has_points"] = has_points;
+				summary["has_curves"] = !cache->parts_of_type(HAPI_PARTTYPE_CURVE).empty();
+				summary["has_volumes"] = !cache->parts_of_type(HAPI_PARTTYPE_VOLUME).empty();
+
+				const HAPI_PartInfo *points_part = cache->points_part();
+				summary["point_attributes"] = points_part != nullptr ? cache->attribute_names(*points_part, HAPI_ATTROWNER_POINT) : godot::PackedStringArray();
+
+				godot::PackedStringArray prim_attributes;
+				for (const HAPI_PartInfo &part : cache->parts())
+				{
+					if (part.type == HAPI_PARTTYPE_MESH && part.faceCount > 0)
+					{
+						prim_attributes = cache->attribute_names(part, HAPI_ATTROWNER_PRIM);
+						break;
+					}
+				}
+				summary["prim_attributes"] = prim_attributes;
+
+				return summary;
+			});
+}
+
 godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray point_attribs, godot::PackedStringArray preload_attribs)
 {
 	if (get_id() < 0)
@@ -358,6 +420,7 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("cook"), &HEGoAssetNode::cook);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_geo_output", "preload_attribs"), &HEGoAssetNode::get_geo_output, DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config"), &HEGoAssetNode::fetch_points);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_output_summary"), &HEGoAssetNode::get_output_summary);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_surface_output", "point_attribs", "preload_attribs"), &HEGoAssetNode::get_surface_output,
 			DEFVAL(godot::PackedStringArray()), DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_surfaces", "fetch_surface_config"), &HEGoAssetNode::fetch_surfaces);
