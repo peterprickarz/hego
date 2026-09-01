@@ -298,7 +298,20 @@ func _show_select_hda_dialog() -> void:
 	if not Engine.is_editor_hint():
 		return
 
-	var viewport := EditorInterface.get_editor_viewport_3d()
+	# Looked up by name rather than referenced directly. EditorInterface exists only in
+	# an editor build, so naming it here would fail this script's parse in an exported
+	# game and take every method above down with it, leaving cooked scenes with a node
+	# that has lost its script. The Terrain3D paths go through Object.call() for the
+	# same reason.
+	var editor_interface := Engine.get_singleton("EditorInterface")
+	if editor_interface == null:
+		return
+
+	var viewport := editor_interface.call("get_editor_viewport_3d") as Node
+	if viewport == null:
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "No 3D editor viewport to show the HDA picker in")
+		return
+
 	var picker_scene := preload("res://addons/hego/ui/asset_picker_dialog.tscn")
 	var picker := picker_scene.instantiate()
 
