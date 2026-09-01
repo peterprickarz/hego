@@ -125,6 +125,10 @@ Shared helpers
      - Element ``index`` of an attribute array, with a fallback for missing data
    * - ``get_typed_point_attrib(points, key, index, type, fallback)``
      - The same, but also falls back when the value is of the wrong type
+   * - ``output_has(summary, key)``
+     - Whether a cook produced a kind of geometry; unknown means yes
+   * - ``output_has_attribute(summary, list_key, attribute)``
+     - Whether the geometry carries an attribute; unknown means yes
 
 ``HEGoPropertyUtil``
 ~~~~~~~~~~~~~~~~~~~~

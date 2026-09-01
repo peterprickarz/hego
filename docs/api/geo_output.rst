@@ -24,11 +24,11 @@ literally a saved set of arguments for this API: ``fetch_points()`` builds an ou
 applies the config's filters and splits through it, and assembles the leaves with
 ``get_points()``. There is one implementation underneath both.
 
-The built-in object spawning, multimesh and Terrain3D instancer handlers use the code
-path, which is why their attribute lists live in the handler scripts rather than in a
-resource beside them. Mesh output still goes through
-:ref:`HEGoFetchSurfacesConfig`, since surface splitting works on vertices and
-primitives rather than points.
+Every built-in handler uses the code path, which is why their attribute lists live in
+the handler scripts rather than in a resource beside them. Points go through
+``get_geo_output()`` and surfaces through ``get_surface_output()``, which returns a
+:ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>` selecting primitives rather than points.
+The configs still work for anyone using them.
 
 Why it is fast
 --------------
