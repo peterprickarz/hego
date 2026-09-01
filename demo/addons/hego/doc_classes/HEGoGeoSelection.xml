@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoGeoSelection" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+A set of points of a [HEGoGeoOutput].
+</brief_description>
+<description>
+A selection is a list of point indices, not a copy of the geometry. Filtering and splitting build new selections without touching attribute values, so narrowing a hundred thousand points down to the few hundred you want costs almost nothing; only [method get_points] assembles data, and only for the points the selection holds.
+
+Selections chain, which is how one HDA output feeds several handlers:
+[codeblock]
+var scattered = output.filter_by("hego_spawn", 1)
+var by_path = scattered.split_by("hego_node_path")
+for node_path in by_path:
+    var points = by_path[node_path].get_points(["N", "up", "pscale"])
+[/codeblock]
+
+Obtained from [method HEGoGeoOutput.select_all], [method HEGoGeoOutput.filter_by] or [method HEGoGeoOutput.split_by].
+</description>
+<tutorials>
+<link title="Reading Output in Code">https://hego.readthedocs.io/en/latest/api/geo_output.html</link>
+</tutorials>
+<methods>
+<method name="size" qualifiers="const">
+<return type="int" />
+<description>
+How many points this selection holds.
+</description>
+</method>
+<method name="get_indices" qualifiers="const">
+<return type="PackedInt32Array" />
+<description>
+The point indices, for callers that want to index into [method HEGoGeoOutput.get_attribute] themselves.
+</description>
+</method>
+<method name="filter_by">
+<return type="HEGoGeoSelection" />
+<param index="0" name="name" type="String" />
+<param index="1" name="value" type="Variant" />
+<description>
+The subset whose [code]name[/code] attribute equals [code]value[/code].
+
+Returns an empty selection, with a warning, when the attribute is missing or was never loaded.
+</description>
+</method>
+<method name="split_by">
+<return type="Dictionary" />
+<param index="0" name="name" type="String" />
+<description>
+This selection grouped by the value of [code]name[/code], as [code]{ value: HEGoGeoSelection }[/code].
+
+Points the attribute is not set on land under a [code]null[/code] key, and an attribute the HDA does not have at all yields a single [code]null[/code] group holding everything, so a handler can fall back to a default name rather than losing the points.
+</description>
+</method>
+<method name="get_points">
+<return type="Dictionary" />
+<param index="0" name="names" type="PackedStringArray" default="PackedStringArray()" />
+<description>
+The named attributes for the points in this selection, as [code]{ name: values }[/code], always including [code]P[/code]. Attributes that were never loaded are left out.
+
+This is the point where data crosses from C++ into GDScript, so ask for what you need rather than everything.
+</description>
+</method>
+</methods>
+</class>

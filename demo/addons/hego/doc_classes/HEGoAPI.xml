@@ -99,17 +99,9 @@ Updates the [code]hego/houdini_installation_path[/code] project setting.
 <description>
 Starts a Houdini Engine session and initializes HAPI.
 
-[code]connection_type[/code] maps to [code]HEGoSessionManager::SessionType[/code]:
-[codeblock]
-1 = InProcess
-2 = NewNamedPipe
-3 = NewTCPSocket
-4 = ExistingNamedPipe
-5 = ExistingTCPSocket
-6 = ExistingSharedMemory
-[/codeblock]
+[code]connection_type[/code] is one of [constant SESSION_IN_PROCESS], [constant SESSION_NAMED_PIPE] or [constant SESSION_TCP_SOCKET]. Any other value is rejected with an error rather than attempted.
 
-[code]connection_data[/code] is transport-specific (for example named pipe string or socket endpoint data).
+[code]connection_data[/code] is the pipe or shared memory name, or the port number for a TCP session. A TCP session falls back to port 9090 when it is not a valid port.
 
 Returns [code]true[/code] on successful session startup and initialization.
 </description>
@@ -136,4 +128,15 @@ Returns the same [HEGoTask] that was passed in, for convenience.
 </description>
 </method>
 </methods>
+<constants>
+<constant name="SESSION_IN_PROCESS" value="1" enum="SessionType">
+Houdini is started by HEGo and closes with it. Served by a shared memory server, which is the fastest transport but ties the session's lifetime to Godot's.
+</constant>
+<constant name="SESSION_NAMED_PIPE" value="2" enum="SessionType">
+HEGo starts a Thrift server on a named pipe. [code]connection_data[/code] is the pipe name.
+</constant>
+<constant name="SESSION_TCP_SOCKET" value="3" enum="SessionType">
+HEGo starts a Thrift server on a TCP socket. [code]connection_data[/code] is the port number.
+</constant>
+</constants>
 </class>

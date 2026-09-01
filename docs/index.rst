@@ -21,10 +21,18 @@ Welcome to the HEGo documentation site.
    :caption: API Reference
 
    api/task_pattern
+   api/geo_output
+   api/node3d_modules
+   api/logging
    classes/class_hegoapi
    classes/class_hegoassetnode
    classes/class_hegocurveinputnode
+   classes/class_hegogeooutput
+   classes/class_hegogeoprimselection
+   classes/class_hegogeoselection
+   classes/class_hegogeosurfaces
    classes/class_hegoheightfieldinputnode
    classes/class_hegoinputnode
+   classes/class_hegolog
    classes/class_hegomergenode
    classes/class_hegotask

@@ -25,7 +25,17 @@ private:
 	HEGoTaskScheduler scheduler;
 
 public:
-	bool start_session(int connection_type = 2, const godot::String &connection_data = "hapi");
+	// Session types exposed to GDScript, mirroring HEGoSessionManager::SessionType.
+	// Only these three can be started; the manager's Existing* types are reserved.
+	enum SessionType
+	{
+		SESSION_IN_PROCESS = HEGoSessionManager::InProcess,
+		SESSION_NAMED_PIPE = HEGoSessionManager::NewNamedPipe,
+		SESSION_TCP_SOCKET = HEGoSessionManager::NewTCPSocket,
+	};
+
+	// connection_data is the pipe or shared memory name, or the port for TCP sessions.
+	bool start_session(int connection_type = SESSION_NAMED_PIPE, const godot::String &connection_data = DEFAULT_NAMED_PIPE);
 	bool stop_session();
 	bool is_session_active();
 	HEGoSessionManager *get_session_manager();
@@ -51,4 +61,7 @@ public:
 	~HEGoAPI();
 };
 } // Namespace HEGo
-#endif // HEGO_H
+
+VARIANT_ENUM_CAST(HEGo::HEGoAPI::SessionType);
+
+#endif // HEGO_API_H

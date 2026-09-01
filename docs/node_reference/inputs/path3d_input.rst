@@ -23,3 +23,20 @@ Attributes
 
 No special HEGo metadata attributes are added for Path3D inputs. The curve points are
 directly converted from the Path3D's baked points.
+
+Unlike mesh inputs, a curve input carries no ``_hego_node_path``, so an HDA taking
+several curve inputs tells them apart by input index rather than by attribute.
+
+Example
+-------
+
+The curve arrives as ordinary points on a polyline, so nothing special is needed to
+read it:
+
+.. code-block:: c
+
+   // Point wrangle on input 0
+   @P += normalize(@N) * 0.5;   // the baked Path3D points, in Godot's coordinates
+
+Because the points are baked, the density you get is the one Godot resampled the
+``Curve3D`` to. Resample in Houdini if you need a different one.

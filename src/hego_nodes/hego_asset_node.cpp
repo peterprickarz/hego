@@ -5,6 +5,8 @@
 #include "util/geo/fetch_curves.h"
 #include "util/geo/fetch_heightfields.h"
 #include "util/geo/fetch_points.h"
+#include "util/geo/geo_cache.h"
+#include "util/geo/geo_output.h"
 #include "util/geo/fetch_surfaces.h"
 #include "util/geo/input.h"
 #include "util/geo/output.h"
@@ -44,11 +46,11 @@ godot::Ref<HEGoTask> HEGoAssetNode::instantiate()
 		if (result_id >= 0)
 		{
 			mgr->register_node(self);
-			HEGo::Util::Log::message("Successfully instantiated HDA: " + op);
+			HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Successfully instantiated HDA: " + op);
 		}
 		else
 		{
-			HEGo::Util::Log::error("Failed to instantiate HDA: " + op + " (License issue? Check if Houdini Engine has a valid license)");
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Failed to instantiate HDA: " + op + " (License issue? Check if Houdini Engine has a valid license)");
 		}
 
 		return result_id;
@@ -182,12 +184,49 @@ godot::Ref<HEGoTask> HEGoAssetNode::cook()
 	return submit("Cook", nid, [nid](HEGoSessionManager *mgr) -> godot::Variant {
 		if (HoudiniApi::CookNode(mgr->get_session(), nid, mgr->get_cook_options()) != HAPI_RESULT_SUCCESS)
 		{
-			HEGo::Util::Log::error("Failed to cook node.");
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Failed to cook node.");
 			return -1;
 		}
 		mgr->wait_for_cook(nid);
 		return 0;
 	});
+}
+
+godot::Ref<HEGoTask> HEGoAssetNode::get_geo_output(godot::PackedStringArray preload_attribs)
+{
+	if (get_id() < 0)
+	{
+		return make_failed("Cannot read output - HDA not instantiated or license issue", "Get geo output");
+	}
+
+	HAPI_NodeId nid = node_id;
+
+	return submit("Get geo output", nid,
+			[nid, preload_attribs](HEGoSessionManager *mgr) -> godot::Variant
+			{
+				std::shared_ptr<HEGo::Util::Geo::GeoCache> cache = HEGo::Util::Geo::GeoCache::acquire(mgr, nid, false);
+				if (!cache)
+				{
+					return godot::Variant();
+				}
+
+				godot::Ref<HEGoGeoOutput> output;
+				output.instantiate();
+				output->setup(cache, nid);
+
+				// Loaded here, on the worker thread, so the queries the caller makes
+				// afterwards are pure in-memory work on the main thread.
+				const HAPI_PartInfo *part = cache->points_part();
+				if (part != nullptr)
+				{
+					for (int i = 0; i < preload_attribs.size(); ++i)
+					{
+						cache->attribute(*part, HAPI_ATTROWNER_POINT, preload_attribs[i]);
+					}
+				}
+
+				return output;
+			});
 }
 
 godot::Ref<HEGoTask> HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fetch_point_config)
@@ -207,6 +246,97 @@ godot::Ref<HEGoTask> HEGoAssetNode::fetch_points(godot::Ref<godot::Resource> fet
 	return submit("Fetch points", nid, [nid, fetch_point_config](HEGoSessionManager *mgr) -> godot::Variant {
 		return HEGo::Util::Geo::fetch_points(mgr, nid, fetch_point_config, false);
 	});
+}
+
+godot::Ref<HEGoTask> HEGoAssetNode::get_output_summary()
+{
+	if (get_id() < 0)
+	{
+		return make_failed("Cannot read output - HDA not instantiated or license issue", "Get output summary");
+	}
+
+	HAPI_NodeId nid = node_id;
+
+	return submit("Get output summary", nid,
+			[nid](HEGoSessionManager *mgr) -> godot::Variant
+			{
+				std::shared_ptr<HEGo::Util::Geo::GeoCache> cache = HEGo::Util::Geo::GeoCache::acquire(mgr, nid, false);
+				if (!cache)
+				{
+					return godot::Dictionary();
+				}
+
+				// The part list is already cached, so this only costs the attribute
+				// name lookups, one per part and owner, and those are cached too.
+				bool has_mesh = false;
+				bool has_points = false;
+				for (const HAPI_PartInfo &part : cache->parts())
+				{
+					if (part.type != HAPI_PARTTYPE_MESH)
+					{
+						continue;
+					}
+					if (part.faceCount > 0)
+					{
+						has_mesh = true;
+					}
+					if (part.vertexCount == 0)
+					{
+						has_points = true;
+					}
+				}
+
+				godot::Dictionary summary;
+				summary["has_mesh"] = has_mesh;
+				summary["has_points"] = has_points;
+				summary["has_curves"] = !cache->parts_of_type(HAPI_PARTTYPE_CURVE).empty();
+				summary["has_volumes"] = !cache->parts_of_type(HAPI_PARTTYPE_VOLUME).empty();
+
+				const HAPI_PartInfo *points_part = cache->points_part();
+				summary["point_attributes"] = points_part != nullptr ? cache->attribute_names(*points_part, HAPI_ATTROWNER_POINT) : godot::PackedStringArray();
+
+				godot::PackedStringArray prim_attributes;
+				for (const HAPI_PartInfo &part : cache->parts())
+				{
+					if (part.type == HAPI_PARTTYPE_MESH && part.faceCount > 0)
+					{
+						prim_attributes = cache->attribute_names(part, HAPI_ATTROWNER_PRIM);
+						break;
+					}
+				}
+				summary["prim_attributes"] = prim_attributes;
+
+				return summary;
+			});
+}
+
+godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray point_attribs, godot::PackedStringArray preload_attribs)
+{
+	if (get_id() < 0)
+	{
+		return make_failed("Cannot read surfaces - HDA not instantiated or license issue", "Get surface output");
+	}
+
+	HAPI_NodeId nid = node_id;
+
+	return submit("Get surface output", nid,
+			[nid, point_attribs, preload_attribs](HEGoSessionManager *mgr) -> godot::Variant
+			{
+				std::shared_ptr<HEGo::Util::Geo::GeoCache> cache = HEGo::Util::Geo::GeoCache::acquire(mgr, nid, false);
+				if (!cache)
+				{
+					return godot::Variant();
+				}
+
+				godot::Ref<HEGoGeoSurfaces> surfaces;
+				surfaces.instantiate();
+				// Reads the primitive and vertex lists here, on the worker thread, so
+				// the queries the caller makes afterwards are pure in-memory work.
+				surfaces->setup(cache, nid, point_attribs);
+				surfaces->load_attributes(preload_attribs);
+
+				return surfaces;
+			});
 }
 
 godot::Ref<HEGoTask> HEGoAssetNode::fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config)
@@ -288,7 +418,11 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_op_name", "name"), &HEGoAssetNode::set_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_op_name"), &HEGoAssetNode::get_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("cook"), &HEGoAssetNode::cook);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_geo_output", "preload_attribs"), &HEGoAssetNode::get_geo_output, DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config"), &HEGoAssetNode::fetch_points);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_output_summary"), &HEGoAssetNode::get_output_summary);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_surface_output", "point_attribs", "preload_attribs"), &HEGoAssetNode::get_surface_output,
+			DEFVAL(godot::PackedStringArray()), DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_surfaces", "fetch_surface_config"), &HEGoAssetNode::fetch_surfaces);
 	godot::ClassDB::bind_method(
 			godot::D_METHOD("get_heightfield_layers", "read_prim_attribs"), &HEGoAssetNode::get_heightfield_layers, DEFVAL(godot::PackedStringArray()));

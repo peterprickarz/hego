@@ -37,9 +37,9 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>`           | :ref:`connect_input<class_HEGoInputReceiverNode_method_connect_input>`\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``, force\: ``bool`` = false\ )  |
-   +-------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`connect_input<class_HEGoInputReceiverNode_method_connect_input>`\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``, force\: ``bool`` = false\ ) |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -58,7 +58,11 @@ Method Descriptions
 
 Submits a task to connect ``other_node`` into this node's ``input_index``.
 
+
+
 Both nodes should already be instantiated. If either node id is invalid, downstream HAPI calls can fail and log errors.
+
+
 
 The connection is cached internally. If the same source node is already connected at the same index the call returns a no-op task unless ``force`` is ``true``.
 

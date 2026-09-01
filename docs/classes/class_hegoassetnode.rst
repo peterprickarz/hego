@@ -58,37 +58,43 @@ Methods
 .. table::
    :widths: auto
 
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`cook<class_HEGoAssetNode_method_cook>`\ (\ )                                                                                                                                                    |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_curves<class_HEGoAssetNode_method_fetch_curves>`\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray(), read_point_attribs\: ``PackedStringArray`` = PackedStringArray()\ ) |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_heightfield_layer_image<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`\ (\ part_id\: ``int``\ )                                                                               |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_points<class_HEGoAssetNode_method_fetch_points>`\ (\ fetch_point_config\: ``Resource``\ )                                                                                                 |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_surfaces<class_HEGoAssetNode_method_fetch_surfaces>`\ (\ fetch_surface_config\: ``Resource``\ )                                                                                           |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_heightfield_layers<class_HEGoAssetNode_method_get_heightfield_layers>`\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray()\ )                                               |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_input_names<class_HEGoAssetNode_method_get_input_names>`\ (\ )                                                                                                                              |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_parms_dict<class_HEGoAssetNode_method_get_parms_dict>`\ (\ )                                                                                                                                |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_preset<class_HEGoAssetNode_method_get_preset>`\ (\ )                                                                                                                                        |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`insert_multiparm_instance<class_HEGoAssetNode_method_insert_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                                                                      |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoAssetNode_method_instantiate>`\ (\ )                                                                                                                                      |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`remove_multiparm_instance<class_HEGoAssetNode_method_remove_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                                                                      |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_parm<class_HEGoAssetNode_method_set_parm>`\ (\ parm_name\: ``String``, value\: ``Variant``\ )                                                                                               |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_parms_batch<class_HEGoAssetNode_method_set_parms_batch>`\ (\ parms\: ``Dictionary``\ )                                                                                                      |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_preset<class_HEGoAssetNode_method_set_preset>`\ (\ preset\: ``PackedByteArray``\ )                                                                                                          |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`cook<class_HEGoAssetNode_method_cook>`\ (\ )                                                                                                                                                         |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_curves<class_HEGoAssetNode_method_fetch_curves>`\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray(), read_point_attribs\: ``PackedStringArray`` = PackedStringArray()\ )      |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_heightfield_layer_image<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`\ (\ part_id\: ``int``\ )                                                                                    |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_output_summary<class_HEGoAssetNode_method_get_output_summary>`\ (\ )                                                                                                                             |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_geo_output<class_HEGoAssetNode_method_get_geo_output>`\ (\ preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ )                                                                      |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_points<class_HEGoAssetNode_method_fetch_points>`\ (\ fetch_point_config\: ``Resource``\ )                                                                                                      |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_surface_output<class_HEGoAssetNode_method_get_surface_output>`\ (\ point_attribs\: ``PackedStringArray`` = PackedStringArray(), preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ ) |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_surfaces<class_HEGoAssetNode_method_fetch_surfaces>`\ (\ fetch_surface_config\: ``Resource``\ )                                                                                                |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_heightfield_layers<class_HEGoAssetNode_method_get_heightfield_layers>`\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray()\ )                                                    |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_input_names<class_HEGoAssetNode_method_get_input_names>`\ (\ )                                                                                                                                   |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_parms_dict<class_HEGoAssetNode_method_get_parms_dict>`\ (\ )                                                                                                                                     |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_preset<class_HEGoAssetNode_method_get_preset>`\ (\ )                                                                                                                                             |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`insert_multiparm_instance<class_HEGoAssetNode_method_insert_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                                                                           |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoAssetNode_method_instantiate>`\ (\ )                                                                                                                                           |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`remove_multiparm_instance<class_HEGoAssetNode_method_remove_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                                                                           |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_parm<class_HEGoAssetNode_method_set_parm>`\ (\ parm_name\: ``String``, value\: ``Variant``\ )                                                                                                    |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_parms_batch<class_HEGoAssetNode_method_set_parms_batch>`\ (\ parms\: ``Dictionary``\ )                                                                                                           |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_preset<class_HEGoAssetNode_method_set_preset>`\ (\ preset\: ``PackedByteArray``\ )                                                                                                               |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -187,13 +193,65 @@ The task result is an ``Image``, or an invalid image reference when the node is 
 
 ----
 
+.. _class_HEGoAssetNode_method_get_output_summary:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **get_output_summary**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_output_summary>`
+
+Submits a task returning what the last cook produced, so an output handler with nothing to do can be skipped without asking Houdini for attributes that are not there.
+
+
+
+The result is a ``Dictionary`` with ``has_mesh``, ``has_points``, ``has_curves`` and ``has_volumes`` flags, plus ``point_attributes`` and ``prim_attributes`` listing the attribute names the geometry carries. It is empty when the output cannot be read.
+
+
+
+Costs only the attribute name lookups, which are cached per cook like every other read.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetNode_method_get_geo_output:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **get_geo_output**\ (\ preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ ) :ref:`🔗<class_HEGoAssetNode_method_get_geo_output>`
+
+Submits a task returning a :ref:`HEGoGeoOutput<class_HEGoGeoOutput>`: the cooked output, read and split from code rather than through a fetch configuration.
+
+
+
+Pass ``preload_attribs`` to have those point attributes loaded while the task runs, so no further await is needed before querying:
+
+::
+
+    var output = await _await_task(asset_node.get_geo_output(["N", "up", "hego_spawn"]))
+    for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path").values():
+        var points = group.get_points(["N", "up"])
+
+
+
+Attribute values are cached per cook and shared with :ref:`fetch_points()<class_HEGoAssetNode_method_fetch_points>` and :ref:`fetch_surfaces()<class_HEGoAssetNode_method_fetch_surfaces>`, so reading the same attribute twice only reaches Houdini once.
+
+.. rst-class:: classref-item-separator
+
+----
+
 .. _class_HEGoAssetNode_method_fetch_points:
 
 .. rst-class:: classref-method
 
 :ref:`HEGoTask<class_HEGoTask>` **fetch_points**\ (\ fetch_point_config\: ``Resource``\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_points>`
 
+**Deprecated:** Use :ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>` instead. Fetch configs are kept only so existing projects can move across.
+
 Submits a task to fetch point data using a point-fetch configuration resource.
+
+
+
+\ **Deprecated.** :ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>` does the same thing from code, decides at runtime, and keeps the attribute names next to the code that reads them. Both share one implementation and one per-cook cache, so results are identical.
 
 
 
@@ -235,13 +293,45 @@ Returns an empty dictionary when no points pass filters, when no mesh part exist
 
 ----
 
+.. _class_HEGoAssetNode_method_get_surface_output:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **get_surface_output**\ (\ point_attribs\: ``PackedStringArray`` = PackedStringArray(), preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ ) :ref:`🔗<class_HEGoAssetNode_method_get_surface_output>`
+
+Submits a task returning a :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>`: the cooked surfaces, read and split from code rather than through a fetch configuration.
+
+
+
+\ ``point_attribs`` names which of ``N``, ``Cd``, ``uv``, ``uv2`` and ``tangents`` to read; ``P`` always comes along. ``preload_attribs`` are primitive attributes, loaded while the task runs so the queries afterwards need no further await:
+
+::
+
+    var output = await _await_task(asset_node.get_surface_output(["N", "uv"], ["hego_material"]))
+    for material in output.split_by("hego_material"):
+        var surface = by_material[material].get_surface()
+
+
+
+Attribute values are cached per cook and shared with :ref:`fetch_surfaces()<class_HEGoAssetNode_method_fetch_surfaces>` and :ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>`.
+
+.. rst-class:: classref-item-separator
+
+----
+
 .. _class_HEGoAssetNode_method_fetch_surfaces:
 
 .. rst-class:: classref-method
 
 :ref:`HEGoTask<class_HEGoTask>` **fetch_surfaces**\ (\ fetch_surface_config\: ``Resource``\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_surfaces>`
 
+**Deprecated:** Use :ref:`get_surface_output()<class_HEGoAssetNode_method_get_surface_output>` instead. Fetch configs are kept only so existing projects can move across.
+
 Submits a task to fetch surface data using a surface-fetch configuration resource.
+
+
+
+\ **Deprecated.** :ref:`get_surface_output()<class_HEGoAssetNode_method_get_surface_output>` does the same thing from code. Both share one implementation and one per-cook cache, so results are identical.
 
 
 

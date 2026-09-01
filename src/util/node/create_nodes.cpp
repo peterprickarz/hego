@@ -38,8 +38,8 @@ HAPI_NodeId instantiate_hda_from_name(HEGoSessionManager *session_mgr, const god
 
 	if (node_id < 0)
 	{
-		HEGo::Util::Log::error("Couldn't instantiate asset. Make sure your name is correct, e.g. Sop/hego_example_hda");
-		HEGo::Util::Log::error("Check https://www.sidefx.com/docs/hengine/group___nodes.html#ga805b9d498cfd0b8709b1a05f59a538a6 for "
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Couldn't instantiate asset. Make sure your name is correct, e.g. Sop/hego_example_hda");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Check https://www.sidefx.com/docs/hengine/group___nodes.html#ga805b9d498cfd0b8709b1a05f59a538a6 for "
 							   "reference");
 	}
 
@@ -49,7 +49,7 @@ HAPI_NodeId instantiate_hda_from_name(HEGoSessionManager *session_mgr, const god
 HAPI_NodeId instantiate_hda_from_path(HEGoSessionManager *session_mgr, const godot::String &path, HAPI_NodeId node_id)
 {
 	HEGo::Util::Log::line();
-	HEGo::Util::Log::message("Loading asset");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Loading asset");
 
 	std::string otl_path = std::string(path.utf8().get_data(), path.utf8().size());
 	HAPI_AssetLibraryId asset_id = -1;
@@ -57,24 +57,24 @@ HAPI_NodeId instantiate_hda_from_path(HEGoSessionManager *session_mgr, const god
 
 	if (!load_asset(session_mgr, otl_path.c_str(), asset_id, asset_name))
 	{
-		HEGo::Util::Log::error("Can't load asset!");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Can't load asset!");
 	}
 
-	HEGo::Util::Log::message("Loaded asset");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Loaded asset");
 	return instantiate_hda(session_mgr, &asset_name, node_id);
 }
 
 HAPI_NodeId instantiate_hda(HEGoSessionManager *session_mgr, const std::string *asset_name, HAPI_NodeId node_id)
 {
 	RETURN_IF_VALID_NODE_ID(node_id, session_mgr->get_session());
-	HEGo::Util::Log::message("Instantiating op: " + godot::String(asset_name->c_str()));
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Instantiating op: " + godot::String(asset_name->c_str()));
 	return create_and_cook_node(session_mgr, asset_name->c_str(), node_id);
 }
 
 HAPI_NodeId create_and_cook_node(HEGoSessionManager *session_mgr, const char *operator_name, HAPI_NodeId node_id)
 {
 	RETURN_IF_VALID_NODE_ID(node_id, session_mgr->get_session());
-	HEGo::Util::Log::message("Creating and cooking node: " + godot::String(operator_name) + "...");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Creating and cooking node: " + godot::String(operator_name) + "...");
 	
 	// Use HOUDINI_CHECK_ERROR_RETURN to gracefully handle license failures and return invalid node
 	HOUDINI_CHECK_ERROR_RETURN(HoudiniApi::CreateNode(session_mgr->get_session(), -1, operator_name, "", false, &node_id), -1);
@@ -87,7 +87,7 @@ HAPI_NodeId create_and_cook_node(HEGoSessionManager *session_mgr, const char *op
 HAPI_NodeId create_and_cook_input_node(HEGoSessionManager *session_mgr, const godot::String &name, HAPI_NodeId node_id)
 {
 	RETURN_IF_VALID_NODE_ID(node_id, session_mgr->get_session());
-	HEGo::Util::Log::message("Creating input node");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Creating input node");
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::CreateInputNode(session_mgr->get_session(), -1, &node_id, name.utf8()));
 	HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()));
@@ -98,7 +98,7 @@ HAPI_NodeId create_and_cook_input_node(HEGoSessionManager *session_mgr, const go
 HAPI_NodeId create_and_cook_input_curve_node(HEGoSessionManager *session_mgr, const godot::String &name, HAPI_NodeId node_id)
 {
 	RETURN_IF_VALID_NODE_ID(node_id, session_mgr->get_session());
-	HEGo::Util::Log::message("Creating input curve node");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Creating input curve node");
 	HOUDINI_CHECK_ERROR(HoudiniApi::CreateInputCurveNode(session_mgr->get_session(), -1, &node_id, name.utf8()));
 	session_mgr->wait_for_ready();
 	return node_id;

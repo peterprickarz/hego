@@ -36,6 +36,23 @@ public:
 	godot::Ref<HEGoTask> remove_multiparm_instance(int parm_id, int index);
 	godot::Ref<HEGoTask> get_parms_dict();
 	godot::Ref<HEGoTask> get_input_names();
+	// The cooked output, for reading and splitting it from GDScript in code rather
+	// than through a fetch config. Optionally loads attributes up front, so a handler
+	// can do its whole job with one await.
+	godot::Ref<HEGoTask> get_geo_output(godot::PackedStringArray preload_attribs = godot::PackedStringArray());
+
+	// What the last cook actually produced, so a handler that has nothing to do can
+	// be skipped without probing for its attributes. Returns a dictionary with
+	// has_mesh, has_points, has_curves, has_volumes, point_attributes and
+	// prim_attributes; empty when the output cannot be read.
+	godot::Ref<HEGoTask> get_output_summary();
+
+	// The cooked surfaces, for reading and splitting them from GDScript in code.
+	// point_attribs names which of N, Cd, uv, uv2 and tangents to read; P always is.
+	// preload_attribs are primitive attributes, loaded while the task runs.
+	godot::Ref<HEGoTask> get_surface_output(
+			godot::PackedStringArray point_attribs = godot::PackedStringArray(), godot::PackedStringArray preload_attribs = godot::PackedStringArray());
+
 	godot::Ref<HEGoTask> fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config);
 	godot::Ref<HEGoTask> fetch_points(godot::Ref<godot::Resource> fetch_point_config);
 	godot::Ref<HEGoTask> get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray());

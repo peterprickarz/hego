@@ -1,3 +1,9 @@
+## Attributes, filters and splits for a surface fetch, saved as a resource.
+##
+## @deprecated: Use HEGoAssetNode.get_surface_output() instead. Fetch configs are kept
+## only so existing projects can move across, and will be removed. The code API
+## takes the same arguments, shares the same implementation and cache, and can
+## decide what to read at runtime.
 extends Resource
 class_name HEGoFetchSurfacesConfig
 

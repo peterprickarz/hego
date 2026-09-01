@@ -78,7 +78,11 @@ Returns the Houdini node id, or ``-1`` when not instantiated.
 
 Submits a task to create the underlying Houdini node.
 
+
+
 This base implementation does nothing. Concrete subclasses override it and usually register themselves with the session manager after successful creation.
+
+
 
 Returns an :ref:`HEGoTask<class_HEGoTask>` that completes when the node has been created.
 

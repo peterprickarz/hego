@@ -43,6 +43,26 @@ The following attributes are available on the Houdini side for both input types:
      - Prim
      - Godot scene path of the source node
 
+Example
+-------
+
+The metadata arrives as primitive attributes, so an HDA can react to which node it was
+handed or which material a face had:
+
+.. code-block:: c
+
+   // Primitive wrangle on the input geometry
+   if (s@_hego_surface_material == "res://materials/glass.tres") {
+       @group_glass = 1;
+   }
+
+   // The Godot node this came from, useful when one input takes several nodes
+   s@source = s@_hego_node_path;
+
+Sending it back out is the mirror image: set ``hego_material`` on the output
+primitives and HEGo assigns the material to the generated surface. See
+:doc:`Geometry Output </node_reference/outputs/geometry_output>`.
+
 MeshInstance3D-Specific Attributes
 -----------------------------------
 

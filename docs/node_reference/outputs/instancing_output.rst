@@ -50,6 +50,28 @@ Transform and color data is specified via point attributes:
      - Point
      - Mesh resource path to instance
 
+Example
+-------
+
+A point wrangle over scattered points, instancing a rock scene with random scale and
+orientation:
+
+.. code-block:: c
+
+   // Point wrangle on the scatter output
+   i@hego_use_multimesh = 1;                              // required
+   s@hego_multimesh = "Rocks";                            // node name under Outputs
+   s@hego_mesh_resource = "res://meshes/rock_01.res";     // the mesh to instance
+
+   f@pscale = fit01(rand(@ptnum), 0.6, 1.4);
+   v@up = {0, 1, 0};
+   v@N = normalize(set(rand(@ptnum + 11) - 0.5, 0, rand(@ptnum + 27) - 0.5));
+
+Every attribute except ``hego_use_multimesh`` and ``hego_mesh_resource`` is optional:
+without ``N`` and ``up`` the instances keep the default orientation, without
+``pscale`` or ``scale`` they stay at unit size, and ``Cd`` only needs to be there if
+you want per-instance colour.
+
 Splitting into Multiple Instancers
 -----------------------------------
 

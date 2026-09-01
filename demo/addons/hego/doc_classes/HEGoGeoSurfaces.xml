@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoGeoSurfaces" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+A cooked node's surfaces, read and split from code.
+</brief_description>
+<description>
+Returned by [method HEGoAssetNode.get_surface_output], and the surface counterpart of [HEGoGeoOutput]: where that one selects points, this selects primitives and turns a group of them into a Godot surface array.
+[codeblock]
+var output = await _await_task(asset_node.get_surface_output(["N", "uv"], ["hego_mesh_instance", "hego_material"]))
+
+var by_instance = output.split_by("hego_mesh_instance")
+for instance_name in by_instance:
+    var by_material = by_instance[instance_name].split_by("hego_material")
+    for material in by_material:
+        var surface = by_material[material].get_surface(["hego_lod"])
+        arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface["surface_array"])
+[/codeblock]
+
+The primitive and vertex lists and the point attributes are read once for the whole mesh part. Splitting is index work; a group only compacts the points its own primitives use, and only when [method HEGoGeoPrimSelection.get_surface] is called, so a mesh split into many materials does not pay for the whole mesh per material.
+
+Attribute values come from the same per-cook cache as every other output, so the point attributes this reads cost nothing if another output already read them.
+
+Note that the geometry attributes HEGo reads - [code]N[/code], [code]Cd[/code], [code]uv[/code], [code]uv2[/code] and the tangents - are [b]point[/b] attributes. Promote vertex attributes to points in your HDA before outputting.
+</description>
+<tutorials>
+<link title="Reading Output in Code">https://hego.readthedocs.io/en/latest/api/geo_output.html</link>
+</tutorials>
+<methods>
+<method name="is_valid" qualifiers="const">
+<return type="bool" />
+<description>
+Whether the cook produced a mesh part with faces.
+</description>
+</method>
+<method name="get_primitive_count" qualifiers="const">
+<return type="int" />
+<description>
+Number of primitives in the output.
+</description>
+</method>
+<method name="get_attribute_names" qualifiers="const">
+<return type="PackedStringArray" />
+<description>
+Names of every primitive attribute, as Houdini reports them. Available without loading anything.
+</description>
+</method>
+<method name="get_attribute_names_with_prefix" qualifiers="const">
+<return type="PackedStringArray" />
+<param index="0" name="prefix" type="String" />
+<description>
+The primitive attribute names starting with [code]prefix[/code], for handling whatever an HDA chose to add without naming each one in advance.
+</description>
+</method>
+<method name="has_attribute" qualifiers="const">
+<return type="bool" />
+<param index="0" name="name" type="String" />
+<description>
+Whether a primitive attribute of that name exists.
+</description>
+</method>
+<method name="load_attributes">
+<return type="HEGoTask" />
+<param index="0" name="names" type="PackedStringArray" />
+<description>
+Reads primitive attributes so filtering, splitting and [method HEGoGeoPrimSelection.get_surface] can use them. The only call here that talks to the session.
+</description>
+</method>
+<method name="get_attribute" qualifiers="const">
+<return type="Array" />
+<param index="0" name="name" type="String" />
+<description>
+The values of a loaded primitive attribute, one per primitive. Empty, with a warning, for an attribute that exists but was never loaded.
+</description>
+</method>
+<method name="select_all">
+<return type="HEGoGeoPrimSelection" />
+<description>
+Every primitive, as a selection to filter and split further.
+</description>
+</method>
+<method name="filter_by">
+<return type="HEGoGeoPrimSelection" />
+<param index="0" name="name" type="String" />
+<param index="1" name="value" type="Variant" />
+<description>
+The primitives whose [code]name[/code] attribute equals [code]value[/code].
+</description>
+</method>
+<method name="split_by">
+<return type="Dictionary" />
+<param index="0" name="name" type="String" />
+<description>
+The primitives grouped by the value of [code]name[/code], as [code]{ value: HEGoGeoPrimSelection }[/code].
+</description>
+</method>
+</methods>
+</class>

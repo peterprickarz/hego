@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoGeoOutput" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+A cooked node's output, read and split from code.
+</brief_description>
+<description>
+Returned by [method HEGoAssetNode.get_geo_output]. Where a fetch config describes the wanted attributes and splits ahead of time in a resource, this describes them in code, at the point of use:
+[codeblock]
+var output = await _await_task(asset_node.get_geo_output())
+await _await_task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
+
+var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
+for node_path in groups:
+    var points = groups[node_path].get_points(["N", "up", "pscale"])
+[/codeblock]
+
+The geometry itself never leaves C++. A [HEGoGeoSelection] is a list of point indices; filtering and splitting produce new selections without copying attribute values, and only [method HEGoGeoSelection.get_points] assembles data to hand over.
+
+Attribute values are cached per cook and shared with [method HEGoAssetNode.fetch_points] and [method HEGoAssetNode.fetch_surfaces], so reading the same attribute from two outputs only reaches Houdini once. The cache invalidates itself when the node cooks again.
+
+[method load_attributes] is the only call that talks to the session and therefore the only one that returns a [HEGoTask]; everything else reads memory and returns immediately.
+</description>
+<tutorials>
+<link title="Reading Output in Code">https://hego.readthedocs.io/en/latest/api/geo_output.html</link>
+</tutorials>
+<methods>
+<method name="is_valid" qualifiers="const">
+<return type="bool" />
+<description>
+Whether the cook produced geometry with points to read.
+</description>
+</method>
+<method name="get_point_count" qualifiers="const">
+<return type="int" />
+<description>
+Number of points in the output.
+</description>
+</method>
+<method name="get_attribute_names" qualifiers="const">
+<return type="PackedStringArray" />
+<param index="0" name="owner" type="int" default="1" />
+<description>
+Names of every attribute of [code]owner[/code], as Houdini reports them. Available without loading anything, so an HDA can be inspected before it is read.
+</description>
+</method>
+<method name="get_attribute_names_with_prefix" qualifiers="const">
+<return type="PackedStringArray" />
+<param index="0" name="prefix" type="String" />
+<param index="1" name="owner" type="int" default="1" />
+<description>
+The attribute names starting with [code]prefix[/code], for handling whatever an HDA chose to add without naming each one in advance.
+</description>
+</method>
+<method name="has_attribute" qualifiers="const">
+<return type="bool" />
+<param index="0" name="name" type="String" />
+<param index="1" name="owner" type="int" default="1" />
+<description>
+Whether an attribute of that name and owner exists on the output.
+</description>
+</method>
+<method name="load_attributes">
+<return type="HEGoTask" />
+<param index="0" name="names" type="PackedStringArray" />
+<param index="1" name="owner" type="int" default="1" />
+<description>
+Reads attributes from Houdini so the queries below can use them. Attributes another output of the same cook already read are served from the cache without a round trip.
+</description>
+</method>
+<method name="get_attribute" qualifiers="const">
+<return type="Array" />
+<param index="0" name="name" type="String" />
+<param index="1" name="owner" type="int" default="1" />
+<description>
+The values of a loaded attribute, one entry per point.
+
+Returns an empty array, with a warning, for an attribute that exists but was never loaded; it does not fetch from the main thread.
+</description>
+</method>
+<method name="select_all">
+<return type="HEGoGeoSelection" />
+<description>
+Every point, as a selection to filter and split further.
+</description>
+</method>
+<method name="filter_by">
+<return type="HEGoGeoSelection" />
+<param index="0" name="name" type="String" />
+<param index="1" name="value" type="Variant" />
+<description>
+The points whose [code]name[/code] attribute equals [code]value[/code]. Shorthand for [code]select_all().filter_by(...)[/code].
+</description>
+</method>
+<method name="split_by">
+<return type="Dictionary" />
+<param index="0" name="name" type="String" />
+<description>
+The points grouped by the value of [code]name[/code], as [code]{ value: HEGoGeoSelection }[/code]. Shorthand for [code]select_all().split_by(...)[/code].
+</description>
+</method>
+</methods>
+<constants>
+<constant name="OWNER_VERTEX" value="0" enum="Owner">
+Attributes owned by vertices.
+</constant>
+<constant name="OWNER_POINT" value="1" enum="Owner">
+Attributes owned by points. The default for every method taking an owner.
+</constant>
+<constant name="OWNER_PRIM" value="2" enum="Owner">
+Attributes owned by primitives.
+</constant>
+<constant name="OWNER_DETAIL" value="3" enum="Owner">
+Attributes owned by the detail, i.e. one value for the whole geometry.
+</constant>
+</constants>
+</class>

@@ -4,6 +4,7 @@
 #include "hapi/houdini_api.h"
 #include "util/log/log.h"
 
+#include <godot_cpp/variant/string.hpp>
 #include <string>
 
 namespace HEGo
@@ -17,7 +18,15 @@ std::string get_last_error(HAPI_Session *session = nullptr);
 std::string get_last_cook_error(HAPI_Session *session = nullptr);
 std::string get_last_cook_status(HAPI_Session *session);
 std::string get_connection_error();
+
+// Resolves a HAPI string handle. Returns an empty string if the handle cannot be read.
 std::string get_string(const HAPI_Session *session, HAPI_StringHandle string_handle);
+
+// Same as get_string(), for the places that need a Godot string. HAPI hands out UTF-8.
+godot::String get_godot_string(const HAPI_Session *session, HAPI_StringHandle string_handle);
+
+// Composed cook result of a node, i.e. the errors and warnings its last cook produced.
+std::string get_composed_cook_result(const HAPI_Session *session, HAPI_NodeId node_id);
 bool save_to_hip(const HAPI_Session *session, const std::string &filename);
 HAPI_NodeId get_parent_node_id(const HAPI_Session *session, const HAPI_NodeId &node_id);
 
@@ -57,7 +66,8 @@ HAPI_NodeId get_parent_node_id(const HAPI_Session *session, const HAPI_NodeId &n
 		*HAPI_PARAM_RESULT = HAPI_PARAM_CALL;                                                                                                                  \
 		if (*HAPI_PARAM_RESULT != HAPI_RESULT_SUCCESS)                                                                                                         \
 		{                                                                                                                                                      \
-			std::cout << "HAPI failed: " << HEGo::Util::Hapi::get_last_error() << "  (" << __FILE__ << ":" << __LINE__ << ")" << std::endl;                    \
+			HEGo::Util::Log::error(                                                                                                                            \
+					godot::String("HAPI failed: ") + HEGo::Util::Hapi::get_last_error().c_str() + "  (" + __FILE__ + ":" + std::to_string(__LINE__).c_str() + ")"); \
 		}                                                                                                                                                      \
 	} while (0)
 

@@ -30,8 +30,13 @@ HB = os.path.join(HFS, "bin")
 # Load godot-cpp environment
 # ───────────────────────────────────────────────
 env = SConscript("godot-cpp/SConstruct")
-# Remove static C++ runtime flags (they break Houdini / USD)
-env["LINKFLAGS"] = [f for f in env.get("LINKFLAGS", []) if f not in ["-static-libstdc++", "-static-libgcc"]]
+
+# Houdini ships its own libstdc++, and a statically linked C++ runtime clashes with it
+# once libHAPIL is loaded into the same process. That only matters where HEGo runs next
+# to Houdini's own libraries. A Windows build links no Houdini code at all, so it keeps
+# godot-cpp's static runtime and the DLL stays free of MinGW redistributables.
+if env["platform"] != "windows":
+    env["LINKFLAGS"] = [f for f in env.get("LINKFLAGS", []) if f not in ["-static-libstdc++", "-static-libgcc"]]
 
 # ───────────────────────────────────────────────
 # Common Houdini-related environment variables
@@ -126,7 +131,11 @@ if env["platform"] == "linux":
 # Source collection
 # ───────────────────────────────────────────────
 src_dir = "src"
-build_dir = "build"
+
+# One object tree per configuration. A shared "build" directory would make every switch
+# between platforms or targets recompile everything, which matters most when building
+# the Linux and Windows binaries of a release back to back.
+build_dir = f"build/{env['platform']}.{env['target']}.{env['arch']}"
 
 VariantDir(build_dir, src_dir, duplicate=0)
 
