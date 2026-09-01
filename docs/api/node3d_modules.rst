@@ -45,17 +45,17 @@ one to see how an output type is built.
 Every output handler exposes the same two entry points: ``should_handle(summary)``,
 which decides from :ref:`get_output_summary()<class_HEGoAssetNode_method_get_output_summary>`
 whether the cook produced anything it cares about, and ``handle(host)``, which does
-the work. :ref:`HEGoNode3D<class_HEGoNode3D>` asks for the summary once, then calls
+the work. :doc:`HEGoNode3D </node_reference/hego_node_3d>` asks for the summary once, then calls
 each handler that wants it and times them all.
 
 Writing your own output handler
 -------------------------------
 
-The shape to copy, in a script of your own:
+The shape to copy, in a script of your own. Mark it ``@tool`` so it runs in the
+editor, as every HEGo handler does:
 
 .. code-block:: gdscript
 
-    @tool
     class_name MyScatterOutput
     extends RefCounted
 

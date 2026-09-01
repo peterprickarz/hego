@@ -4,8 +4,8 @@ Reading Output in Code
 Overview
 --------
 
-A cook can be read in two ways. The fetch configs (:ref:`HEGoFetchPointsConfig`,
-:ref:`HEGoFetchSurfacesConfig`) describe the wanted attributes and splits ahead of
+A cook can be read in two ways. The fetch configs (``HEGoFetchPointsConfig``,
+``HEGoFetchSurfacesConfig``) describe the wanted attributes and splits ahead of
 time in a resource. ``get_geo_output()`` describes them in code, at the point of use,
 which is what you want as soon as the decision depends on anything:
 

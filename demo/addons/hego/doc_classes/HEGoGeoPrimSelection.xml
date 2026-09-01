@@ -54,7 +54,7 @@ Primitives the attribute is not set on land under a [code]null[/code] key, and a
 <description>
 Builds the Godot surface for these primitives, as [code]{ "surface_array": [...], &lt;requested attributes&gt;: [...] }[/code].
 
-[code]surface_array[/code] goes straight into [method ArrayMesh.add_surface_from_arrays]. It holds only the points these primitives use, compacted, with the indices remapped to match.
+[code]surface_array[/code] goes straight into [code]ArrayMesh.add_surface_from_arrays()[/code]. It holds only the points these primitives use, compacted, with the indices remapped to match.
 
 The requested primitive attributes come back as one value per primitive in this selection, in the same order as [method get_indices]. Attributes the HDA does not have are left out, so read them with [code]Dictionary.get()[/code] rather than assuming the key exists.
 </description>

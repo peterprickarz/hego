@@ -133,7 +133,7 @@ Builds the Godot surface for these primitives, as ``{ "surface_array": [...], <r
 
 
 
-\ ``surface_array`` goes straight into :ref:`ArrayMesh.add_surface_from_arrays()<class_ArrayMesh_method_add_surface_from_arrays>`. It holds only the points these primitives use, compacted, with the indices remapped to match.
+\ ``surface_array`` goes straight into ``ArrayMesh.add_surface_from_arrays()``. It holds only the points these primitives use, compacted, with the indices remapped to match.
 
 
 
