@@ -81,11 +81,13 @@ for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path").values
 Attribute values are cached per cook and shared with [method fetch_points] and [method fetch_surfaces], so reading the same attribute twice only reaches Houdini once.
 </description>
 </method>
-<method name="fetch_points">
+<method name="fetch_points" deprecated="Use [method get_geo_output] instead. Fetch configs are kept only so existing projects can move across.">
 <return type="HEGoTask" />
 <param index="0" name="fetch_point_config" type="Resource" />
 <description>
 Submits a task to fetch point data using a point-fetch configuration resource.
+
+[b]Deprecated.[/b] [method get_geo_output] does the same thing from code, decides at runtime, and keeps the attribute names next to the code that reads them. Both share one implementation and one per-cook cache, so results are identical.
 
 Config fields are interpreted as follows:
 [code]filter_attribs[/code] and [code]filter_attrib_values[/code]: paired by index; a point is kept only if all [code]point_attr == filter_value[/code] checks pass.
@@ -123,11 +125,13 @@ for material in output.split_by("hego_material"):
 Attribute values are cached per cook and shared with [method fetch_surfaces] and [method get_geo_output].
 </description>
 </method>
-<method name="fetch_surfaces">
+<method name="fetch_surfaces" deprecated="Use [method get_surface_output] instead. Fetch configs are kept only so existing projects can move across.">
 <return type="HEGoTask" />
 <param index="0" name="fetch_surface_config" type="Resource" />
 <description>
 Submits a task to fetch surface data using a surface-fetch configuration resource.
+
+[b]Deprecated.[/b] [method get_surface_output] does the same thing from code. Both share one implementation and one per-cook cache, so results are identical.
 
 Config fields are interpreted as follows:
 [code]normal[/code], [code]color[/code], [code]uv[/code], [code]uv2[/code], [code]tangents[/code]: toggles for point-derived channels included in generated Godot surface arrays.

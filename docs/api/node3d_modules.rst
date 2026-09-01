@@ -91,7 +91,8 @@ editor, as every HEGo handler does:
 Four things matter here:
 
 - **Ask for what you need, once.** ``load_attributes()`` is the only call that
-  reaches Houdini. See :doc:`geo_output`.
+  reaches Houdini. Use ``get_geo_output()`` / ``get_surface_output()``, not the
+  deprecated fetch configs. See :doc:`geo_output`.
 - **Say when you have nothing to do.** ``should_handle()`` keeps a cook from paying
   for a handler the HDA never feeds. ``HEGoNodeUtil.output_has()`` and
   ``output_has_attribute()`` follow the rule that anything unknown means run.

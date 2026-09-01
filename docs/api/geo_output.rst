@@ -4,10 +4,7 @@ Reading Output in Code
 Overview
 --------
 
-A cook can be read in two ways. The fetch configs (``HEGoFetchPointsConfig``,
-``HEGoFetchSurfacesConfig``) describe the wanted attributes and splits ahead of
-time in a resource. ``get_geo_output()`` describes them in code, at the point of use,
-which is what you want as soon as the decision depends on anything:
+Read a cook's output in code, at the point of use:
 
 .. code-block:: gdscript
 
@@ -19,16 +16,57 @@ which is what you want as soon as the decision depends on anything:
         var points = groups[node_path].get_points(["N", "up", "pscale"])
         # points == { "P": [...], "N": [...], "up": [...], "pscale": [...] }
 
-Both read the same cache, so mixing them costs nothing extra. A fetch config is
-literally a saved set of arguments for this API: ``fetch_points()`` builds an output,
-applies the config's filters and splits through it, and assembles the leaves with
-``get_points()``. There is one implementation underneath both.
+Points go through ``get_geo_output()``; surfaces go through ``get_surface_output()``,
+which returns a :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>` selecting primitives
+rather than points. Every built-in handler uses this API, which is why their
+attribute lists live in the handler scripts rather than in a resource beside them.
 
-Every built-in handler uses the code path, which is why their attribute lists live in
-the handler scripts rather than in a resource beside them. Points go through
-``get_geo_output()`` and surfaces through ``get_surface_output()``, which returns a
-:ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>` selecting primitives rather than points.
-The configs still work for anyone using them.
+.. warning::
+
+   The fetch configs - ``HEGoFetchPointsConfig``, ``HEGoFetchSurfacesConfig`` and the
+   ``.tres`` files under ``point_filters/`` and ``surface_filters/`` - are
+   **deprecated**. They still work, and will keep working long enough for existing
+   projects to move across, but they will be removed. **Use this API for anything
+   new**, and port existing code when convenient.
+
+   Nothing is lost in the move. A fetch config is a saved set of arguments for this
+   same API: ``fetch_points()`` builds an output, applies the config's filters and
+   splits through it, and assembles the leaves with ``get_points()``. One
+   implementation underneath both, one cache, same results - the difference is that
+   the code path can decide anything at runtime and keeps the attribute names next to
+   the code that reads them.
+
+Porting from a fetch config
+---------------------------
+
+Each config field maps onto a call:
+
+.. list-table::
+   :widths: 34 66
+   :header-rows: 1
+
+   * - Config field
+     - Code
+   * - ``read_attribs``
+     - ``load_attributes([...])``, then the names you pass to ``get_points()``
+   * - ``filter_attribs`` / ``filter_attrib_values``
+     - ``filter_by(name, value)``, chained for more than one
+   * - ``split_attribs``
+     - ``split_by(name)``, nested for more than one level
+   * - ``normal``, ``color``, ``uv``, ``uv2``, ``tangents``
+     - the ``point_attribs`` argument of ``get_surface_output()``
+
+So a points config reading ``N`` and ``pscale``, filtering on ``hego_spawn == 1`` and
+splitting on ``hego_node_path`` becomes:
+
+.. code-block:: gdscript
+
+    var output = await _await_task(asset_node.get_geo_output())
+    await _await_task(output.load_attributes(["N", "pscale", "hego_spawn", "hego_node_path"]))
+
+    var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
+    for node_path in groups:
+        var points = groups[node_path].get_points(["N", "pscale"])
 
 Why it is fast
 --------------

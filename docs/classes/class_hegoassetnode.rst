@@ -245,7 +245,13 @@ Attribute values are cached per cook and shared with :ref:`fetch_points()<class_
 
 :ref:`HEGoTask<class_HEGoTask>` **fetch_points**\ (\ fetch_point_config\: ``Resource``\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_points>`
 
+**Deprecated:** Use :ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>` instead. Fetch configs are kept only so existing projects can move across.
+
 Submits a task to fetch point data using a point-fetch configuration resource.
+
+
+
+\ **Deprecated.** :ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>` does the same thing from code, decides at runtime, and keeps the attribute names next to the code that reads them. Both share one implementation and one per-cook cache, so results are identical.
 
 
 
@@ -319,7 +325,13 @@ Attribute values are cached per cook and shared with :ref:`fetch_surfaces()<clas
 
 :ref:`HEGoTask<class_HEGoTask>` **fetch_surfaces**\ (\ fetch_surface_config\: ``Resource``\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_surfaces>`
 
+**Deprecated:** Use :ref:`get_surface_output()<class_HEGoAssetNode_method_get_surface_output>` instead. Fetch configs are kept only so existing projects can move across.
+
 Submits a task to fetch surface data using a surface-fetch configuration resource.
+
+
+
+\ **Deprecated.** :ref:`get_surface_output()<class_HEGoAssetNode_method_get_surface_output>` does the same thing from code. Both share one implementation and one per-cook cache, so results are identical.
 
 
 
