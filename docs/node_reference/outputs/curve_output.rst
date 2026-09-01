@@ -41,6 +41,18 @@ Curve output placement is controlled by primitive attributes:
        containers; the last path component is the name of the ``Path3D`` itself. When
        missing, a default name of the form ``Curves/Curve3D_<type>_<index>`` is used.
 
+Example
+-------
+
+.. code-block:: c
+
+   // Primitive wrangle on the curves you want to output
+   s@hego_node_path = "Paths/PatrolRoute";
+
+That produces ``HEGoNode3D/Outputs/Paths/PatrolRoute`` as a ``Path3D``, with
+``Paths`` created as a plain ``Node3D`` container. Leave the attribute off and the
+curves land under ``Curves/`` with generated names.
+
 Splitting Output into Multiple Curves
 -------------------------------------
 

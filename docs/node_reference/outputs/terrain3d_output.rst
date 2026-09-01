@@ -22,6 +22,15 @@ Required Setup
 - Height layer attribute ``hegot3d_spawn_terrain`` must be 1
 - Height layer attribute ``hegot3d_data_directory`` must be a non-empty path
 
+The smallest thing that works, in a primitive wrangle on the ``height`` volume:
+
+.. code-block:: c
+
+   i@hegot3d_spawn_terrain = 1;
+   s@hegot3d_data_directory = "res://terrain_data";
+
+Everything below is optional refinement on top of that.
+
 Height Layer Attributes
 ~~~~~~~~~~~~~~~~~~~~~~~
 

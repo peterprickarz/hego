@@ -51,11 +51,11 @@ each handler that wants it and times them all.
 Writing your own output handler
 -------------------------------
 
-The shape to copy, in a script of your own. Mark it ``@tool`` so it runs in the
-editor, as every HEGo handler does:
+The shape to copy, in a script of your own:
 
 .. code-block:: gdscript
 
+    @tool
     class_name MyScatterOutput
     extends RefCounted
 
