@@ -102,8 +102,11 @@ void HEGoAPI::set_houdini_installation_path(const godot::String &path)
 
 godot::String HEGoAPI::get_houdini_installation_path() const
 {
-	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
-	return project_settings->get_setting(HOUDINI_PATH_SETTING, HEGoPlatform::get_default_houdini_path());
+	// Resolved the same way the loader resolves it, so the setting, $HFS and this
+	// platform's default are consulted in that order. Reading the setting directly
+	// would hand back an empty string when it is set but blank, and an empty prefix
+	// makes every library look built-in in get_hda_libraries().
+	return godot::String(HEGoPlatform::get_houdini_path());
 }
 
 godot::Dictionary HEGoAPI::get_hda_libraries()
