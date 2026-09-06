@@ -22,13 +22,13 @@ To pick a specific install:
 
 ```bash
 # Windows
-python hapi_generator/generate_houdini_api.py --hfs "C:\Program Files\Side Effects Software\Houdini 22.0.368"
+python hapi_generator/generate_houdini_api.py --hfs "C:\Program Files\Side Effects Software\Houdini 22.0.429"
 
 # Linux
-python hapi_generator/generate_houdini_api.py --hfs /opt/hfs22.0.368
+python hapi_generator/generate_houdini_api.py --hfs /opt/hfs22.0.429
 
 # macOS
-python hapi_generator/generate_houdini_api.py --hfs "/Applications/Houdini/Houdini22.0.368/Frameworks/Houdini.framework/Versions/Current/Resources"
+python hapi_generator/generate_houdini_api.py --hfs "/Applications/Houdini/Houdini22.0.429/Frameworks/Houdini.framework/Versions/Current/Resources"
 ```
 
 The install is resolved the same way the build resolves it, so generating and building stay in

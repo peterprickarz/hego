@@ -9,7 +9,7 @@ You need a full Houdini FX, Core, or commercial Houdini Engine license to use th
 Houdini
 -------
 
-Make sure you have the correct Houdini version installed. Currently **22.0.368**. It may work with
+Make sure you have the correct Houdini version installed. Currently **22.0.429**. It may work with
 other versions, but that is what it is built with. It works on Windows and Linux. Linux testing is
 done on Linux Mint, so other distros may have issues. Please create an issue on GitHub or let us
 know on the Discord if you run into issues.
@@ -21,8 +21,11 @@ Simply download the release and unzip into your Godot project. In the project se
 to enable the ``HEGo`` addon under the **Plugins** tab, and set your Houdini installation path
 (filter by ``Houdini Installation Path`` under the **General** tab).
 
-- **Windows:** ``C:/Program Files/Side Effects Software/Houdini 22.0.368``
-- **Linux:** ``/opt/hfs22.0.368``
+- **Windows:** ``C:/Program Files/Side Effects Software/Houdini 22.0.429``
+- **Linux:** ``/opt/hfs22.0`` (the symlink to the installed build)
+
+Leaving the setting empty is fine too: HEGo then falls back to ``$HFS``, and after that to
+the stock install path for your platform.
 
 You will need to restart Godot after enabling the plugin.
 

@@ -8,9 +8,9 @@ import shutil
 # Determine Houdini root (HFS) with sensible defaults
 # ───────────────────────────────────────────────
 default_hfs = {
-    "Windows": r"C:\Program Files\Side Effects Software\Houdini 22.0.368",
-    "Linux":   "/opt/hfs22.0",                    # ← adjusted to match your actual path
-    "Darwin":  "/Applications/Houdini/Houdini22.0.368/Houdini.framework/Versions/Current/Resources"
+    "Windows": r"C:\Program Files\Side Effects Software\Houdini 22.0.429",
+    "Linux":   "/opt/hfs22.0",  # the symlink, so a new production build needs no change
+    "Darwin":  "/Applications/Houdini/Houdini22.0.429/Houdini.framework/Versions/Current/Resources"
 }
 
 sys_name = platform.system()

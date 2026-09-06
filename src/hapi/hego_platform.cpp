@@ -21,12 +21,17 @@ const char *HEGoPlatform::get_default_houdini_path()
 {
 	// Keep in sync with SConstruct's default_hfs and with hego.gd, which seeds the
 	// project setting with the same per-platform defaults.
+	//
+	// Linux points at the hfs22.0 symlink SideFX maintains, so a new production build
+	// of the same major version is picked up without a code change. Windows and macOS
+	// install into a directory named after the exact build and have no such symlink,
+	// so those have to name one.
 #if defined(_WIN32)
-	return "C:/Program Files/Side Effects Software/Houdini 22.0.368";
+	return "C:/Program Files/Side Effects Software/Houdini 22.0.429";
 #elif defined(__APPLE__)
-	return "/Applications/Houdini/Houdini22.0.368/Frameworks/Houdini.framework/Versions/Current/Resources";
+	return "/Applications/Houdini/Houdini22.0.429/Frameworks/Houdini.framework/Versions/Current/Resources";
 #else
-	return "/opt/hfs22.0.368";
+	return "/opt/hfs22.0";
 #endif
 }
 

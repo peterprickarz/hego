@@ -148,7 +148,8 @@ func _add_logging_property_info():
 func _default_houdini_path() -> String:
 	match OS.get_name():
 		"Linux":
-			return "/opt/hfs22.0.368"
+			# The symlink SideFX maintains, so a new production build needs no change here.
+			return "/opt/hfs22.0"
 		"macOS":
-			return "/Applications/Houdini/Houdini22.0.368/Frameworks/Houdini.framework/Versions/Current/Resources"
-	return "C:/Program Files/Side Effects Software/Houdini 22.0.368"
+			return "/Applications/Houdini/Houdini22.0.429/Frameworks/Houdini.framework/Versions/Current/Resources"
+	return "C:/Program Files/Side Effects Software/Houdini 22.0.429"

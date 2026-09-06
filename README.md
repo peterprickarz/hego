@@ -42,7 +42,7 @@ git submodule update --init --recursive
 
 ## Requirements
 
-- **Houdini 22.0.368** - No license needed for building, active commercial(FX,Core or Houdini Engine) license required for runtime
+- **Houdini 22.0.429** - No license needed for building, active commercial(FX,Core or Houdini Engine) license required for runtime
 - **Godot 4.4+** - Stable or newer versions supported  
 
 ## Developer Setup
@@ -69,7 +69,7 @@ git submodule update --init --recursive
 
 3. **Set Houdini environment** (optional)
    ```bash
-   set HFS=C:\Program Files\Side Effects Software\Houdini 22.0.368
+   set HFS=C:\Program Files\Side Effects Software\Houdini 22.0.429
    ```
 
 ### Building

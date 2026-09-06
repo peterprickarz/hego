@@ -7,7 +7,7 @@
         "${workspaceFolder}/src/**",
         "${workspaceFolder}/src/util/**",
         "${workspaceFolder}/src/hapi/**",
-        "C:/Program Files/Side Effects Software/Houdini 22.0.368/toolkit/include",
+        "C:/Program Files/Side Effects Software/Houdini 22.0.429/toolkit/include",
         "/opt/hfs22.0/toolkit/include"
       ],
       "defines": ["_DEBUG", "UNICODE", "_UNICODE"],
