@@ -31,12 +31,12 @@ HB = os.path.join(HFS, "bin")
 # ───────────────────────────────────────────────
 env = SConscript("godot-cpp/SConstruct")
 
-# Houdini ships its own libstdc++, and a statically linked C++ runtime clashes with it
-# once libHAPIL is loaded into the same process. That only matters where HEGo runs next
-# to Houdini's own libraries. A Windows build links no Houdini code at all, so it keeps
-# godot-cpp's static runtime and the DLL stays free of MinGW redistributables.
-if env["platform"] != "windows":
-    env["LINKFLAGS"] = [f for f in env.get("LINKFLAGS", []) if f not in ["-static-libstdc++", "-static-libgcc"]]
+# godot-cpp links libstdc++ and libgcc statically by default. That is what lets a binary
+# load on distributions older than the machine that built it, and it is the same choice
+# the official Godot builds make - they carry no libstdc++ dependency at all. These flags
+# used to be stripped here, out of a concern about clashing with Houdini's own C++
+# runtime, but Houdini ships no libstdc++ and HAPI is a pure C API reached through
+# dlopen, so no C++ runtime state crosses that boundary.
 
 # ───────────────────────────────────────────────
 # Common Houdini-related environment variables
@@ -103,9 +103,6 @@ elif env["platform"] == "linux":
     env["CC"] = os.environ.get("CC") or ("gcc-14" if shutil.which("gcc-14") else "gcc")
     env["CXX"] = os.environ.get("CXX") or ("g++-14" if shutil.which("g++-14") else "g++")
     env.Append(CCFLAGS=["-std=c++17", "-fPIC"])
-
-    # Ensure dynamic linking of C++ runtime
-    env["LINKFLAGS"] = [f for f in env.get("LINKFLAGS", []) if f not in ["-static-libstdc++", "-static-libgcc"]]
 
     env.Append(LINKFLAGS=[
         f"-Wl,-rpath,{os.path.join(HFS, 'dsolib')}",
