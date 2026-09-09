@@ -106,7 +106,12 @@ elif env["platform"] == "linux":
 
     env.Append(LINKFLAGS=[
         f"-Wl,-rpath,{os.path.join(HFS, 'dsolib')}",
-        "-shared"
+        "-shared",
+        # Keep the statically linked C++ runtime to ourselves. Without this its symbols
+        # are exported from the .so and interpose on the libstdc++ that libHAPIL and
+        # Houdini's own libraries use, which corrupts their stream and locale state and
+        # segfaults inside HAPI_StartThriftNamedPipeServer.
+        "-Wl,--exclude-libs,ALL",
     ])
 
     env.Append(LIBS=["dl", "pthread"])
