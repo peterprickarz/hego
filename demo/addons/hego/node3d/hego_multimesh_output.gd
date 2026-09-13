@@ -43,15 +43,9 @@ static func should_handle(summary: Dictionary) -> bool:
 static func handle(ctx: HEGoOutputContext) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Multimesh Output")
 
-	var output: HEGoGeoOutput = await ctx.await_task(ctx.asset.get_geo_output())
-	if output == null or not output.is_valid():
-		return
-
-	await ctx.await_task(
-		output.load_attributes(PackedStringArray(point_attribs() + [INSTANCING_FILTER_ATTRIB, OUTPUT_NAME_ATTRIB, MESH_RESOURCE_ATTRIB])))
-
-	var selection := output.filter_by(INSTANCING_FILTER_ATTRIB, 1)
-	if selection.size() == 0:
+	var selection := await ctx.select_points(INSTANCING_FILTER_ATTRIB,
+		PackedStringArray(point_attribs() + [OUTPUT_NAME_ATTRIB, MESH_RESOURCE_ATTRIB]))
+	if selection == null:
 		return
 
 	# Grouped by output first, then by mesh, so one HDA can drive several
@@ -88,14 +82,7 @@ static func setup_multimesh(ctx: HEGoOutputContext, mesh_resource: Mesh, multime
 	if point_count == 0:
 		return
 
-	var outputs_root := ctx.outputs_root()
-	var path_parts := multimesh_name.split("/", false)
-	var parent_node := ctx.ensure_parent(outputs_root, path_parts)
-
-	var multimesh_instance := MultiMeshInstance3D.new()
-	multimesh_instance.name = path_parts[path_parts.size() - 1] if path_parts.size() > 0 else DEFAULT_MULTIMESH_NAME
-	parent_node.add_child(multimesh_instance)
-	ctx.own(multimesh_instance)
+	var multimesh_instance := ctx.place(multimesh_name, DEFAULT_MULTIMESH_NAME, MultiMeshInstance3D.new) as MultiMeshInstance3D
 
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D

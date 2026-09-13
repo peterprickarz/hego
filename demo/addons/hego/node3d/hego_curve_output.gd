@@ -30,29 +30,15 @@ static func handle(ctx: HEGoOutputContext) -> void:
 	if not curves is Array:
 		return
 
-	var outputs_root := ctx.outputs_root()
-
 	for i in range(curves.size()):
 		var curve: Dictionary = curves[i]
-		var output_curve := HEGoCurveBuilder.build(curve)
 
 		var node_path: Variant = HEGoNodeUtil.get_attrib_value(curve, "prim_attribs", NODE_PATH_ATTRIB)
 		if not node_path is String or node_path.is_empty():
 			node_path = "%s/Curve3D_%s_%d" % [DEFAULT_CURVE_FOLDER, HEGoCurveBuilder.curve_type_to_string(int(curve.get("type", -1))), i]
 
-		var path_parts := str(node_path).split("/", false)
-		var parent_node := ctx.ensure_parent(outputs_root, path_parts)
-		var final_name := path_parts[path_parts.size() - 1] if path_parts.size() > 0 else "Curve3D_" + str(i)
-
-		# Reuse an existing Path3D at this location so followers keep their reference.
-		var path_node := parent_node.get_node_or_null(final_name)
-		if path_node != null and not path_node is Path3D:
-			path_node.queue_free()
-			path_node = null
-		if path_node == null:
-			path_node = Path3D.new()
-			path_node.name = final_name
-			parent_node.add_child(path_node)
-			ctx.own(path_node)
-
-		path_node.curve = output_curve
+		# place() reuses a Path3D already at this location, so anything following the path
+		# keeps its reference. In practice nothing is there to reuse yet, because a cook
+		# frees the whole Outputs subtree before the handlers run.
+		var path_node := ctx.place(str(node_path), "Curve3D_" + str(i), Path3D.new) as Path3D
+		path_node.curve = HEGoCurveBuilder.build(curve)

@@ -52,21 +52,14 @@ static func should_handle(summary: Dictionary) -> bool:
 static func handle(ctx: HEGoOutputContext) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Object Spawn Output")
 
-	var output: HEGoGeoOutput = await ctx.await_task(ctx.asset.get_geo_output())
-	if output == null or not output.is_valid():
-		return
-
-	await ctx.await_task(output.load_attributes(PackedStringArray(point_attribs() + [SPAWN_FILTER_ATTRIB])))
-
-	var selection := output.filter_by(SPAWN_FILTER_ATTRIB, 1)
-	if selection.size() == 0:
+	var selection := await ctx.select_points(SPAWN_FILTER_ATTRIB, PackedStringArray(point_attribs()))
+	if selection == null:
 		HEGoLog.get_singleton().debug(LOG_CATEGORY, "No points to process")
 		return
 
 	var points := selection.get_points(PackedStringArray(point_attribs()))
 	var positions: Array = points["P"]
 
-	var outputs_root := ctx.outputs_root()
 	# Scenes are usually shared by many points, so only load each one once per cook.
 	var scene_cache := {}
 	# Counted rather than reported per point: a scatter with a bad N/up pair usually has it
@@ -79,22 +72,23 @@ static func handle(ctx: HEGoOutputContext) -> void:
 			continue
 
 		var node_path := str(HEGoNodeUtil.get_typed_point_attrib(points, "hego_node_path", i, TYPE_STRING, DEFAULT_NODE_PATH))
-		var path_parts := node_path.split("/", false)
-		var parent_node := ctx.ensure_parent(outputs_root, path_parts)
-
-		var new_node := _spawn_node(points, i, scene_cache)
-		var base_name := path_parts[path_parts.size() - 1] if path_parts.size() > 0 else "Object_" + str(i)
-		new_node.name = HEGoNodeUtil.unique_child_name(parent_node, base_name)
-		new_node.transform = HEGoPointUtil.transform_from_point(points, i, position)
-		if HEGoPointUtil.is_orientation_collinear(points, i):
-			collinear_count += 1
 
 		var custom_properties: Variant = HEGoNodeUtil.get_typed_point_attrib(points, "hego_custom_properties", i, TYPE_DICTIONARY, {})
-		if not custom_properties.is_empty():
-			HEGoPropertyUtil.apply_custom_properties(new_node, custom_properties)
+		var point_transform := HEGoPointUtil.transform_from_point(points, i, position)
 
-		parent_node.add_child(new_node)
-		ctx.own(new_node)
+		# unique: every point gets its own node, so names are suffixed rather than reused.
+		# The transform and the HDA's overrides go through configure, so they are in place
+		# before the node enters the tree and its _ready() can read them.
+		ctx.place(node_path, "Object_" + str(i),
+			func(): return _spawn_node(points, i, scene_cache),
+			true,
+			func(node: Node):
+				node.transform = point_transform
+				if not custom_properties.is_empty():
+					HEGoPropertyUtil.apply_custom_properties(node, custom_properties))
+
+		if HEGoPointUtil.is_orientation_collinear(points, i):
+			collinear_count += 1
 
 	if collinear_count > 0:
 		HEGoLog.get_singleton().warning(LOG_CATEGORY,

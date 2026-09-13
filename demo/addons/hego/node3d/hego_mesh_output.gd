@@ -184,14 +184,7 @@ static func _spawn_mesh_instance(ctx: HEGoOutputContext, mesh_instance_key: Vari
 	if mesh_instance_key != null:
 		node_path = str(mesh_instance_key)
 
-	var outputs_root := ctx.outputs_root()
-	var path_parts := node_path.split("/", false)
-	var parent_node := ctx.ensure_parent(outputs_root, path_parts)
-
-	var mesh_instance := MeshInstance3D.new()
-	mesh_instance.name = path_parts[path_parts.size() - 1] if path_parts.size() > 0 else DEFAULT_MESH_NODE_NAME
-	parent_node.add_child(mesh_instance)
-	ctx.own(mesh_instance)
+	var mesh_instance := ctx.place(node_path, DEFAULT_MESH_NODE_NAME, MeshInstance3D.new) as MeshInstance3D
 
 	if storage_mode == STORAGE_MODE_INSTANCE:
 		mesh_instance.mesh = arr_mesh

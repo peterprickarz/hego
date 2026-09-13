@@ -64,16 +64,10 @@ static func handle(ctx: HEGoOutputContext) -> void:
 	if not HEGoTerrain3DUtil.is_available():
 		return
 
-	var output: HEGoGeoOutput = await ctx.await_task(ctx.asset.get_geo_output())
-	if output == null or not output.is_valid():
-		return
-
 	var wanted := point_attribs() + MESH_ASSET_ATTRIBS.keys()
-	await ctx.await_task(
-		output.load_attributes(PackedStringArray(wanted + [INSTANCING_FILTER_ATTRIB, TERRAIN_PATH_ATTRIB, SCENE_PATH_ATTRIB])))
-
-	var selection := output.filter_by(INSTANCING_FILTER_ATTRIB, 1)
-	if selection.size() == 0:
+	var selection := await ctx.select_points(INSTANCING_FILTER_ATTRIB,
+		PackedStringArray(wanted + [TERRAIN_PATH_ATTRIB, SCENE_PATH_ATTRIB]))
+	if selection == null:
 		return
 
 	# Grouped by terrain first, then by scene: one HDA can populate several
