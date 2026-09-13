@@ -39,7 +39,9 @@ const PARM_UI_SCENES = {
 var hego_tool_node: Node
 var hego_asset_node: HEGoAssetNode
 var input_nodes: Array
-var allow_cook: bool = false
+## Whether a cook started from this panel is still running. Recook is disabled meanwhile, so
+## a second cook cannot be fired into a node that is already cooking.
+var _cooking: bool = false
 var new_preset_name_diag: ConfirmationDialog
 var new_preset_name_line_edit: LineEdit
 
@@ -90,7 +92,7 @@ func _ready():
 	add_child(new_preset_name_diag)
 	recook_button.button_down.connect(_on_recook_button_pressed)
 	asset_picker_button.pressed.connect(_on_asset_picker_button_pressed)
-	root_control.selected_hego_node_changed.connect(_on_selection_changed)
+	root_control.selected_hego_node_changed.connect(set_selected_node)
 	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
 	new_preset_name_diag.confirmed.connect(_on_preset_dialog_confirmed)
 	load_preset_button.pressed.connect(_on_load_preset_button_pressed)
@@ -102,6 +104,21 @@ func _ready():
 	task_queue_timer.autostart = true
 	task_queue_timer.timeout.connect(_update_task_queue)
 	add_child(task_queue_timer)
+
+
+## Drops every parameter and input widget on screen.
+##
+## Detached before being freed: queue_free() defers the removal, so the old widgets would
+## otherwise stay in the tree for a frame, still able to take input and still wired to the
+## node that is no longer selected.
+func _clear_widgets():
+	for child in parm_vbox.get_children():
+		parm_vbox.remove_child(child)
+		child.queue_free()
+	for child in input_vbox.get_children():
+		input_vbox.remove_child(child)
+		child.queue_free()
+	input_nodes = []
 
 
 func _set_buttons_disabled(disabled: bool):
@@ -129,16 +146,19 @@ func _on_preset_dialog_confirmed():
 
 
 func update_ui():
-	if allow_cook:
-		_set_buttons_disabled(false)
-	else:
-		return _set_buttons_disabled(true)
+	_clear_widgets()
 
-	for child in parm_vbox.get_children():
-		child.queue_free()
-	for child in input_vbox.get_children():
-			child.queue_free()
-	hego_asset_node = hego_tool_node.hego_get_asset_node()
+	if hego_tool_node == null:
+		preset_dropdown.clear()
+		preset_dropdown.add_item("No HEGo node selected")
+		preset_dropdown.set_item_disabled(0, true)
+		_set_buttons_disabled(true)
+		return
+
+	_set_buttons_disabled(_cooking)
+	asset_picker_button.visible = _can_pick_asset()
+
+	hego_asset_node = hego_tool_node.hego_get_asset_node() if hego_tool_node.has_method("hego_get_asset_node") else null
 	if hego_asset_node != null:
 		var parm_dict = await _await_task(hego_asset_node.get_parms_dict())
 
@@ -256,16 +276,15 @@ func _on_remove_multiparm_instance(id: int, index: int):
 	await update_ui()
 
 
-func _on_selection_changed(node):
-	# These are the only nodes that can be cooked by the HEGo HDA Tab
-	#var nodes = EditorInterface.get_selection().get_selected_nodes()
-	#if nodes.size() == 0:
-	#	_set_buttons_disabled(true)
-	#	return
-	#var node = nodes[0]
-	allow_cook = node is HEGoNode3D
-	_set_buttons_disabled(false)
+## Points the panel at [param node], or at nothing when it is null.
+##
+## There is deliberately no type check here. The panel used to set
+## allow_cook = node is HEGoNode3D, and update_ui() returned on that before building
+## anything, which made every has_method() guard in this file unreachable: a script could
+## implement the whole documented interface and still get an empty, all-disabled tab.
+func set_selected_node(node):
 	hego_tool_node = node
+	hego_asset_node = null
 	await update_ui()
 	
 
@@ -324,14 +343,26 @@ func _on_recook_button_pressed():
 		
 		
 func recook():
+	if hego_tool_node == null or _cooking:
+		return
+
+	_cooking = true
+	_set_buttons_disabled(true)
 	if hego_tool_node.has_method("cook"):
 		await hego_tool_node.cook()
+	_cooking = false
+	_set_buttons_disabled(false)
+
+	# Read the parameters back so they survive a scene reload. Guarded because a node whose
+	# cook did not instantiate anything - a missing HDA, or no session - still has no asset
+	# node here, and asking a null for its preset is an error rather than an empty result.
 	if hego_tool_node.has_method("hego_set_parm_stash"):
-		if not hego_asset_node:
+		if not hego_asset_node and hego_tool_node.has_method("hego_get_asset_node"):
 			hego_asset_node = hego_tool_node.hego_get_asset_node()
-		var preset = await _await_task(hego_asset_node.get_preset())
-		if preset != null:
-			hego_tool_node.hego_set_parm_stash(preset)
+		if hego_asset_node:
+			var preset = await _await_task(hego_asset_node.get_preset())
+			if preset != null:
+				hego_tool_node.hego_set_parm_stash(preset)
 		
 
 func create_preset_file(preset_name: String) -> void:
@@ -512,8 +543,8 @@ func _select_preset_in_dropdown(preset_name: String) -> void:
 
 # Handle asset picker button press
 func _on_asset_picker_button_pressed():
-	if not hego_tool_node or not hego_tool_node is HEGoNode3D:
-		push_error("[HEGo]: No HEGoNode3D selected. Please select a HEGoNode3D first.")
+	if not _can_pick_asset():
+		push_error("[HEGo]: This node's HDA is fixed and cannot be chosen from the panel.")
 		return
 	
 	# Load the asset picker dialog
@@ -525,19 +556,24 @@ func _on_asset_picker_button_pressed():
 	picker.asset_selected.connect(_on_asset_picked)
 	picker.popup_centered()
 
+## Whether the selected node lets the panel choose its HDA.
+##
+## A node whose operator is written into its script has no use for the picker, and answering
+## this with a method probe rather than a type check is what lets any script say so.
+func _can_pick_asset() -> bool:
+	return hego_tool_node != null and hego_tool_node.has_method("hego_set_asset_name")
+
+
 # Handle asset selection from picker
 func _on_asset_picked(asset_name: String):
-	if hego_tool_node and hego_tool_node is HEGoNode3D:
-		# Clear old HDA data before setting new asset
-		if hego_tool_node.has_method("_clear_hda_data"):
-			hego_tool_node._clear_hda_data()
+	if not _can_pick_asset():
+		return
 
-		hego_tool_node.asset_name = asset_name
-		print("[HEGo]: Set asset_name to: ", asset_name)
+	# The node decides what changing its HDA means, including forgetting the old one.
+	hego_tool_node.hego_set_asset_name(asset_name)
 
-		# Optionally auto-recook if enabled
-		if auto_recook_toggle.button_pressed:
-			await recook()
+	if auto_recook_toggle.button_pressed:
+		await recook()
 
 
 func _update_task_queue():

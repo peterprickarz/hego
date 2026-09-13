@@ -319,6 +319,13 @@ func _show_select_hda_dialog() -> void:
 	picker.popup_centered()
 
 
+## Lets the panel's asset picker change which HDA this node cooks.
+##
+## Implementing this is what tells the panel the picker applies at all.
+func hego_set_asset_name(new_asset_name: String) -> void:
+	_on_asset_selected(new_asset_name)
+
+
 func _on_asset_selected(selected_asset: String) -> void:
 	# Clear old HDA data when selecting a new asset
 	_clear_hda_data()

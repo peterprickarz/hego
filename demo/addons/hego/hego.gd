@@ -73,14 +73,23 @@ func _cleanup_houdini_session():
 			log.warning("session", "Failed to stop Houdini session")
 
 
+## Tells the panel what is selected, including when that is nothing.
+##
+## It used to be told only about nodes that opted in, so selecting anything else, or nothing,
+## left it driving the node from before: that node's parameter widgets stayed on screen, and
+## Recook still cooked it.
 func _on_selection_changed():
+	if not bottom_panel:
+		return
+
 	var selected_nodes = editor_selection.get_selected_nodes()
-	if selected_nodes.size() > 0:
-		var selected_node = selected_nodes[0]
-		if selected_node.has_method("hego_use_bottom_panel"):
-			if selected_node.hego_use_bottom_panel():
-				if bottom_panel:
-					bottom_panel.update_hego_asset_node(selected_node)
+	var selected_node: Node = selected_nodes[0] if selected_nodes.size() > 0 else null
+	if selected_node != null and not selected_node.has_method("hego_use_bottom_panel"):
+		selected_node = null
+	if selected_node != null and not selected_node.hego_use_bottom_panel():
+		selected_node = null
+
+	bottom_panel.set_selected_node(selected_node)
 
 
 func _add_project_settings():

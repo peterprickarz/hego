@@ -61,8 +61,8 @@ func _notification(what):
 			HEGoAPI.get_singleton().stop_session()
 
 
-## Update the currently selected HEGo asset node
-func update_hego_asset_node(node: Node):
+## Tells the HDA tab which node is selected, or null when none is.
+func set_selected_node(node: Node):
 	selected_hego_node_changed.emit(node)
 
 
