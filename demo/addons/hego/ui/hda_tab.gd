@@ -276,14 +276,22 @@ func _on_value_changed(name, value):
 	
 
 func _on_input_changed():
+	# The per-input settings dictionary belongs to the node, not to this panel. Building a
+	# fresh empty one here threw away whatever the node had stored the moment anyone
+	# touched an input row, so read the current stash and carry each entry through.
+	var stashed = []
+	if hego_tool_node and hego_tool_node.has_method("hego_get_input_stash"):
+		stashed = hego_tool_node.hego_get_input_stash()
+
 	var inputs = Array()
-	for input_node in input_nodes:
-		var input_node_inputs = input_node.get_inputs()
-		var input_node_settings = Dictionary()
-		var inputs_dict = Dictionary()
-		inputs_dict["inputs"] = input_node_inputs
-		inputs_dict["settings"] = input_node_settings
-		inputs.append(inputs_dict)
+	for i in range(input_nodes.size()):
+		var settings = {}
+		if i < stashed.size() and stashed[i] is Dictionary:
+			settings = stashed[i].get("settings", {})
+		inputs.append({
+			"inputs": input_nodes[i].get_inputs(),
+			"settings": settings,
+		})
 	if hego_tool_node.has_method("hego_set_input_stash"):
 		hego_tool_node.hego_set_input_stash(inputs)
 	if auto_recook_toggle.button_pressed:
