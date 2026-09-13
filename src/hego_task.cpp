@@ -12,11 +12,20 @@ HEGoTask::~HEGoTask() {}
 
 godot::Variant HEGoTask::execute(HEGoSessionManager *mgr)
 {
-	if (work_fn)
+	if (!work_fn)
 	{
-		return work_fn(mgr);
+		return godot::Variant();
 	}
-	return godot::Variant();
+
+	const godot::Variant value = work_fn(mgr);
+
+	// Release the captures now the work is done. A completed task stays in the
+	// scheduler's history so the bottom panel can list it, and keeping its lambda alive
+	// there pins everything the lambda captured: the node reference, mesh data, whole
+	// heightfield images. Only the status, result and description are wanted afterwards.
+	work_fn = nullptr;
+
+	return value;
 }
 
 int HEGoTask::get_status() const { return status.load(std::memory_order_acquire); }

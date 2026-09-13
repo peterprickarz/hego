@@ -68,11 +68,13 @@ godot::Ref<HEGoTask> HEGoInputNode::instantiate()
 {
 	HAPI_NodeId nid = node_id;
 	godot::String name = node_name;
-	HEGoInputNode *self = this;
+	// A reference, not a raw pointer: the task runs on the worker thread and must not
+	// find this node destroyed underneath it if the owning script is freed meanwhile.
+	godot::Ref<HEGoInputNode> self = this;
 
 	return submit("Instantiate input node", nid, [self, name, nid](HEGoSessionManager *mgr) -> godot::Variant {
 		self->node_id = HEGo::Util::Node::create_and_cook_input_node(mgr, name, nid);
-		mgr->register_node(self);
+		mgr->register_node(self.ptr());
 		return self->node_id;
 	});
 }

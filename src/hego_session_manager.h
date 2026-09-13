@@ -3,6 +3,7 @@
 
 #include "hapi/houdini_api.h"
 #include "hego_nodes/hego_trackable_node.h"
+#include <mutex>
 #include <string>
 
 #define DEFAULT_NAMED_PIPE "hapi"
@@ -90,7 +91,17 @@ private:
 	std::string my_named_pipe = DEFAULT_NAMED_PIPE;
 	int my_tcp_port = DEFAULT_TCP_PORT;
 	std::string my_shared_memory_name;
+
+	// Every node instantiated in the session, so their ids can be reset when it ends.
+	//
+	// Deliberately non-owning: holding a reference would keep every node HEGo ever
+	// created alive for the lifetime of the plugin. Each node removes itself in
+	// ~HEGoTrackableNode instead, which is what keeps these pointers valid.
+	//
+	// Guarded because register_node runs on the task scheduler's worker thread while
+	// stop_session iterates from the main thread.
 	std::vector<HEGo::HEGoTrackableNode *> nodes;
+	std::mutex nodes_mutex;
 };
 
 #endif // HEGO_SESSION_MANAGER_H

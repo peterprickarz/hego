@@ -310,7 +310,9 @@ void HEGoHeightfieldInputNode::instantiate_internal(HEGoSessionManager *session_
 
 godot::Ref<HEGoTask> HEGoHeightfieldInputNode::instantiate()
 {
-	HEGoHeightfieldInputNode *self = this;
+	// A reference, not a raw pointer: the task runs on the worker thread and must not
+	// find this node destroyed underneath it if the owning script is freed meanwhile.
+	godot::Ref<HEGoHeightfieldInputNode> self = this;
 
 	return submit("Instantiate heightfield", node_id, [self](HEGoSessionManager *mgr) -> godot::Variant {
 		self->instantiate_internal(mgr);
@@ -384,7 +386,9 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary laye
 
 	last_layers_hash = layers_hash;
 
-	HEGoHeightfieldInputNode *self = this;
+	// Held by reference for the same reason as in instantiate(), and for longer: this
+	// task carries the full layer images and outlives most others.
+	godot::Ref<HEGoHeightfieldInputNode> self = this;
 
 	return submit("Set heightfield layers", node_id,
 			[self, layers, voxel_size_value, height_scale_value](HEGoSessionManager *mgr) -> godot::Variant {

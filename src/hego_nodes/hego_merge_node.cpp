@@ -26,11 +26,13 @@ void HEGoMergeNode::reset_node_id()
 godot::Ref<HEGoTask> HEGoMergeNode::instantiate()
 {
 	HAPI_NodeId nid = node_id;
-	HEGoMergeNode *self = this;
+	// A reference, not a raw pointer: the task runs on the worker thread and must not
+	// find this node destroyed underneath it if the owning script is freed meanwhile.
+	godot::Ref<HEGoMergeNode> self = this;
 
 	return submit("Instantiate merge node", nid, [self, nid](HEGoSessionManager *mgr) -> godot::Variant {
 		self->node_id = HEGo::Util::Geo::create_merge_sop(mgr, nid);
-		mgr->register_node(self);
+		mgr->register_node(self.ptr());
 		return self->node_id;
 	});
 }

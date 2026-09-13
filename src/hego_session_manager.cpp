@@ -171,12 +171,20 @@ bool HEGoSessionManager::stop_session()
 	// outlive it.
 	HEGo::Util::Geo::GeoCache::invalidate_all();
 
-	// Reset node_id for all tracked nodes
-	for (HEGo::HEGoTrackableNode *node : nodes)
+	// Reset node_id for all tracked nodes. Snapshot under the lock and reset outside it,
+	// so a node destroyed on another thread cannot invalidate the iterator mid-loop.
+	std::vector<HEGo::HEGoTrackableNode *> tracked;
 	{
-		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "resetting node id");
+		std::lock_guard<std::mutex> lock(nodes_mutex);
+		tracked = nodes;
+	}
+
+	for (HEGo::HEGoTrackableNode *node : tracked)
+	{
 		node->reset_node_id();
 	}
+
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Reset " + godot::String::num_int64(tracked.size()) + " node ids");
 
 	HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Closed Session, finalized hapi and freed libHAPIL.");
 	return true;
@@ -279,25 +287,25 @@ void HEGoSessionManager::register_node(HEGo::HEGoTrackableNode *node)
 		return;
 	}
 
-	// Check if the node is already in the registered_nodes vector
-	bool is_already_registered = false;
+	std::lock_guard<std::mutex> lock(nodes_mutex);
+
+	// Instantiating a node that already exists re-registers it, so skip duplicates.
 	for (unsigned int i = 0; i < nodes.size(); i++)
 	{
 		if (nodes[i] == node)
 		{
-			is_already_registered = true;
-			break;
+			return;
 		}
 	}
 
-	// Add the node only if it is not already registered
-	if (!is_already_registered)
-	{
-		nodes.push_back(node);
-	}
+	nodes.push_back(node);
 }
 
-void HEGoSessionManager::unregister_node(HEGo::HEGoTrackableNode *node) { nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end()); }
+void HEGoSessionManager::unregister_node(HEGo::HEGoTrackableNode *node)
+{
+	std::lock_guard<std::mutex> lock(nodes_mutex);
+	nodes.erase(std::remove(nodes.begin(), nodes.end(), node), nodes.end());
+}
 
 bool HEGoSessionManager::wait_for_cook(HAPI_NodeId node_id)
 {

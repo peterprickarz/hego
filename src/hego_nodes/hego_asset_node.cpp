@@ -37,7 +37,9 @@ godot::Ref<HEGoTask> HEGoAssetNode::instantiate()
 
 	godot::String op = op_name;
 	HAPI_NodeId nid = node_id;
-	HEGoAssetNode *self = this;
+	// A reference, not a raw pointer: the task runs on the worker thread and must not
+	// find this node destroyed underneath it if the owning script is freed meanwhile.
+	godot::Ref<HEGoAssetNode> self = this;
 
 	return submit("Instantiate " + op_name, nid, [self, op, nid](HEGoSessionManager *mgr) -> godot::Variant {
 		HAPI_NodeId result_id = HEGo::Util::Node::instantiate_hda_from_name(mgr, op, nid);
@@ -45,7 +47,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::instantiate()
 
 		if (result_id >= 0)
 		{
-			mgr->register_node(self);
+			mgr->register_node(self.ptr());
 			HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Successfully instantiated HDA: " + op);
 		}
 		else
