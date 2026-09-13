@@ -27,6 +27,22 @@ print(f"Using HFS = {HFS}")
 HB = os.path.join(HFS, "bin")
 
 # ───────────────────────────────────────────────
+# One build signature database per platform
+#
+# SCons keeps a single .sconsign.dblite for the whole build, and the Linux and Windows
+# builds of this repo share the directory. Alternating them invalidated each other's
+# godot-cpp entries: a rebuild with nothing changed recompiled every one of godot-cpp's
+# ~970 sources while correctly skipping all of HEGo's. Two consecutive builds of the same
+# platform were already incremental, which is what narrows it to the sharing.
+#
+# Must be set before godot-cpp's SConstruct runs, since that is where its targets are
+# defined. The platform is read from the command line rather than from env, which does not
+# exist yet; the fallback matches godot-cpp's own default of building for the host.
+# ───────────────────────────────────────────────
+_target_platform = ARGUMENTS.get("platform", ARGUMENTS.get("p", sys_name.lower()))
+SConsignFile(f".sconsign-{_target_platform}.dblite")
+
+# ───────────────────────────────────────────────
 # Load godot-cpp environment
 # ───────────────────────────────────────────────
 env = SConscript("godot-cpp/SConstruct")
