@@ -70,6 +70,46 @@ static func should_handle(summary: Dictionary) -> bool:
 	return HEGoNodeUtil.output_has(summary, "has_mesh")
 
 
+## Fetches the cook's surfaces and groups them the way the HDA asked for.
+##
+## Returns [code]{ mesh_instance_key: { material_key: surface } }[/code], keyed by the
+## hego_mesh_instance and hego_material attributes, with a [code]null[/code] key wherever
+## the geometry does not name one. Empty when the fetch failed or produced nothing.
+##
+## Nothing here touches the scene, so a node that wants to place the result itself can use
+## this and [method build_array_mesh] instead of [method handle].
+static func fetch_surface_groups(ctx: HEGoOutputContext) -> Dictionary:
+	var output: HEGoGeoSurfaces = await ctx.await_task(
+		ctx.asset.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
+	if output == null or not output.is_valid():
+		return {}
+
+	var groups := {}
+	var by_instance := output.split_by(MESH_INSTANCE_ATTRIB)
+	for mesh_instance_key in by_instance:
+		# One surface per material, each assembled only now that we know we want it.
+		var by_material: Dictionary = by_instance[mesh_instance_key].split_by(MATERIAL_ATTRIB)
+		var surfaces := {}
+		for material_key in by_material:
+			surfaces[material_key] = by_material[material_key].get_surface(PackedStringArray(SURFACE_ATTRIBS))
+		if not surfaces.is_empty():
+			groups[mesh_instance_key] = surfaces
+	return groups
+
+
+## One [ArrayMesh] per mesh instance the HDA asked for, without touching the scene.
+##
+## Returns [code]{ mesh_instance_key: ArrayMesh }[/code]. This is the half of
+## [method handle] a custom node usually wants: it builds the meshes and leaves where they
+## go, and whether they are saved as resources, to the caller.
+static func fetch_meshes(ctx: HEGoOutputContext) -> Dictionary:
+	var groups := await fetch_surface_groups(ctx)
+	var meshes := {}
+	for mesh_instance_key in groups:
+		meshes[mesh_instance_key] = build_array_mesh(groups[mesh_instance_key])
+	return meshes
+
+
 ## Fetches the cook's surfaces and builds the mesh output.
 static func handle(ctx: HEGoOutputContext) -> void:
 	var output_start_usec := Time.get_ticks_usec()
@@ -79,27 +119,19 @@ static func handle(ctx: HEGoOutputContext) -> void:
 	var collision_generation_count := 0
 
 	var fetch_start_usec := Time.get_ticks_usec()
-	var output: HEGoGeoSurfaces = await ctx.await_task(
-		ctx.asset.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
+	var groups := await fetch_surface_groups(ctx)
 	var fetch_surfaces_msec := HEGoCookTimings.elapsed_msec(fetch_start_usec)
-	if output == null or not output.is_valid():
-		# Null means the task failed; it has already reported why.
+	if groups.is_empty():
+		# Either the fetch failed, in which case it has already reported why, or the cook
+		# produced no surfaces worth building.
 		return
 
 	var processing_start_usec := Time.get_ticks_usec()
-	var by_instance := output.split_by(MESH_INSTANCE_ATTRIB)
-	for mesh_instance_key in by_instance:
+	for mesh_instance_key in groups:
 		mesh_instance_count += 1
+		var surfaces: Dictionary = groups[mesh_instance_key]
 
-		# One surface per material, each assembled only now that we know we want it.
-		var by_material: Dictionary = by_instance[mesh_instance_key].split_by(MATERIAL_ATTRIB)
-		var surfaces := {}
-		for material_key in by_material:
-			surfaces[material_key] = by_material[material_key].get_surface(PackedStringArray(SURFACE_ATTRIBS))
-		if surfaces.is_empty():
-			continue
-
-		var arr_mesh := _build_array_mesh(surfaces)
+		var arr_mesh := build_array_mesh(surfaces)
 		surface_count += surfaces.size()
 
 		# The output-wide settings are detail attributes, so they are identical on
@@ -134,7 +166,10 @@ static func handle(ctx: HEGoOutputContext) -> void:
 	var gds_processing_msec := HEGoCookTimings.elapsed_msec(processing_start_usec)
 	HEGoLog.get_singleton().debug(
 		LOG_CATEGORY,
-		"Mesh output breakdown: fetch_surfaces=%.3f ms, gdscript_processing=%.3f ms, total=%.3f ms, mesh_instances=%d, surfaces=%d, saves=%d, collision_generations=%d"
+		# fetch_and_group covers the HAPI round trip and assembling the surface arrays, which
+		# fetch_surface_groups now does together; the rest is mesh building, saving and
+		# collision. The first field used to be named fetch_surfaces and measured less.
+		"Mesh output breakdown: fetch_and_group=%.3f ms, gdscript_processing=%.3f ms, total=%.3f ms, mesh_instances=%d, surfaces=%d, saves=%d, collision_generations=%d"
 		% [
 			fetch_surfaces_msec,
 			gds_processing_msec,
@@ -149,7 +184,7 @@ static func handle(ctx: HEGoOutputContext) -> void:
 
 ## Builds one [ArrayMesh] from a { material path: surface data } dictionary,
 ## adding a surface per material and wiring up LODs and materials.
-static func _build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
+static func build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
 	var arr_mesh := ArrayMesh.new()
 	var surface_id := 0
 	for material_key in surfaces:
