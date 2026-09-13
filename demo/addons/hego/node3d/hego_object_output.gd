@@ -37,21 +37,26 @@ const SPAWN_TYPE_CLASS := 0
 const SPAWN_TYPE_SCENE := 1
 
 
+## Name of the cook phase this handler is timed under.
+static func output_phase() -> String:
+	return "object_spawn_output"
+
+
 ## Whether the cook produced points flagged for spawning.
 static func should_handle(summary: Dictionary) -> bool:
 	return HEGoNodeUtil.output_has(summary, "has_points") \
 		and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", SPAWN_FILTER_ATTRIB)
 
 
-## Fetches the output points of [param host]'s asset node and spawns a node for each.
-static func handle(host: Node) -> void:
+## Fetches the cook's output points and spawns a node for each.
+static func handle(ctx: HEGoOutputContext) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Object Spawn Output")
 
-	var output: HEGoGeoOutput = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_geo_output())
+	var output: HEGoGeoOutput = await ctx.await_task(ctx.asset.get_geo_output())
 	if output == null or not output.is_valid():
 		return
 
-	await HEGoNodeUtil.await_task(host, output.load_attributes(PackedStringArray(point_attribs() + [SPAWN_FILTER_ATTRIB])))
+	await ctx.await_task(output.load_attributes(PackedStringArray(point_attribs() + [SPAWN_FILTER_ATTRIB])))
 
 	var selection := output.filter_by(SPAWN_FILTER_ATTRIB, 1)
 	if selection.size() == 0:
@@ -61,7 +66,7 @@ static func handle(host: Node) -> void:
 	var points := selection.get_points(PackedStringArray(point_attribs()))
 	var positions: Array = points["P"]
 
-	var outputs_root := HEGoNodeUtil.ensure_outputs_root(host)
+	var outputs_root := ctx.outputs_root()
 	# Scenes are usually shared by many points, so only load each one once per cook.
 	var scene_cache := {}
 	# Counted rather than reported per point: a scatter with a bad N/up pair usually has it
@@ -75,7 +80,7 @@ static func handle(host: Node) -> void:
 
 		var node_path := str(HEGoNodeUtil.get_typed_point_attrib(points, "hego_node_path", i, TYPE_STRING, DEFAULT_NODE_PATH))
 		var path_parts := node_path.split("/", false)
-		var parent_node := HEGoNodeUtil.ensure_parent_path(host, outputs_root, path_parts)
+		var parent_node := ctx.ensure_parent(outputs_root, path_parts)
 
 		var new_node := _spawn_node(points, i, scene_cache)
 		var base_name := path_parts[path_parts.size() - 1] if path_parts.size() > 0 else "Object_" + str(i)
@@ -89,7 +94,7 @@ static func handle(host: Node) -> void:
 			HEGoPropertyUtil.apply_custom_properties(new_node, custom_properties)
 
 		parent_node.add_child(new_node)
-		HEGoNodeUtil.set_editor_owner(host, new_node)
+		ctx.own(new_node)
 
 	if collinear_count > 0:
 		HEGoLog.get_singleton().warning(LOG_CATEGORY,

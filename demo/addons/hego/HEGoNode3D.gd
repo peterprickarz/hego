@@ -108,52 +108,42 @@ func cook() -> void:
 	timings.end_phase("output_summary")
 
 	var skipped := PackedStringArray()
+	var ctx := HEGoOutputContext.create(self, hego_asset_node, summary)
 
-	timings.begin_phase()
-	if HEGoMeshOutput.should_handle(summary):
-		await HEGoMeshOutput.handle(self)
-	else:
-		skipped.append("mesh")
-	timings.end_phase("mesh_output")
-
-	timings.begin_phase()
-	if HEGoMultiMeshOutput.should_handle(summary):
-		await HEGoMultiMeshOutput.handle(self)
-	else:
-		skipped.append("multimesh")
-	timings.end_phase("multimesh_output")
-
-	timings.begin_phase()
-	if HEGoObjectOutput.should_handle(summary):
-		await HEGoObjectOutput.handle(self)
-	else:
-		skipped.append("object spawn")
-	timings.end_phase("object_spawn_output")
-
-	timings.begin_phase()
-	if HEGoTerrain3DOutput.should_handle(summary):
-		await HEGoTerrain3DOutput.handle(self)
-	else:
-		skipped.append("terrain3d")
-	timings.end_phase("terrain3d_output")
-
-	timings.begin_phase()
-	if HEGoTerrain3DInstancer.should_handle(summary):
-		await HEGoTerrain3DInstancer.handle(self)
-	else:
-		skipped.append("terrain3d instancer")
-	timings.end_phase("terrain3d_instancer_output")
-
-	timings.begin_phase()
-	if HEGoCurveOutput.should_handle(summary):
-		await HEGoCurveOutput.handle(self)
-	else:
-		skipped.append("curve")
-	timings.end_phase("path3d_output")
+	for handler in output_handlers():
+		var phase: String = handler.output_phase()
+		timings.begin_phase()
+		if handler.should_handle(summary):
+			await handler.handle(ctx)
+		else:
+			skipped.append(phase.trim_suffix("_output").replace("_", " "))
+		timings.end_phase(phase)
 
 	if not skipped.is_empty():
 		HEGoLog.get_singleton().debug(LOG_CATEGORY, "Nothing to do for: " + ", ".join(skipped))
 	HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
+
+
+## The output handlers a cook runs, in the order it runs them.
+##
+## Each is a script exposing [code]output_phase()[/code], [code]should_handle(summary)[/code]
+## and [code]handle(ctx)[/code]. Override this in a subclass to add a handler of your own, to
+## drop one this node does not need, or to change the order.
+##
+## A function rather than a constant, because GDScript cannot build a constant out of other
+## classes' references, and because the Terrain3D pair can then be left out entirely when
+## that addon is absent rather than being asked six times per cook.
+func output_handlers() -> Array:
+	var handlers := [
+		HEGoMeshOutput,
+		HEGoMultiMeshOutput,
+		HEGoObjectOutput,
+	]
+	if HEGoTerrain3DUtil.is_available():
+		handlers.append(HEGoTerrain3DOutput)
+		handlers.append(HEGoTerrain3DInstancer)
+	handlers.append(HEGoCurveOutput)
+	return handlers
 
 
 ## Makes sure the asset node exists in the session and carries this node's transform

@@ -19,8 +19,6 @@ const INSTANCING_FILTER_ATTRIB := "hegot3d_use_terrain3d_instancer"
 const TERRAIN_PATH_ATTRIB := "hegot3d_terrain3d_node_path"
 const SCENE_PATH_ATTRIB := "hegot3d_scene_resource_path"
 
-## Per-instance attributes this handler reads. The mesh asset settings below are
-## read as well, so they only have to be named once.
 ## Attributes this handler reads off each instanced point: the shared orientation set plus
 ## colour. A function rather than a const, because a const cannot be built from another
 ## class's constant. See [HEGoPointUtil].
@@ -49,6 +47,11 @@ const MESH_ASSET_ATTRIBS := {
 }
 
 
+## Name of the cook phase this handler is timed under.
+static func output_phase() -> String:
+	return "terrain3d_instancer_output"
+
+
 ## Whether the cook produced points flagged for Terrain3D instancing.
 static func should_handle(summary: Dictionary) -> bool:
 	return HEGoTerrain3DUtil.is_available() \
@@ -56,17 +59,17 @@ static func should_handle(summary: Dictionary) -> bool:
 		and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", INSTANCING_FILTER_ATTRIB)
 
 
-## Fetches the instancing points of [param host]'s asset node and populates the terrains.
-static func handle(host: Node) -> void:
+## Fetches the cook's instancing points and populates the terrains.
+static func handle(ctx: HEGoOutputContext) -> void:
 	if not HEGoTerrain3DUtil.is_available():
 		return
 
-	var output: HEGoGeoOutput = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_geo_output())
+	var output: HEGoGeoOutput = await ctx.await_task(ctx.asset.get_geo_output())
 	if output == null or not output.is_valid():
 		return
 
 	var wanted := point_attribs() + MESH_ASSET_ATTRIBS.keys()
-	await HEGoNodeUtil.await_task(host,
+	await ctx.await_task(
 		output.load_attributes(PackedStringArray(wanted + [INSTANCING_FILTER_ATTRIB, TERRAIN_PATH_ATTRIB, SCENE_PATH_ATTRIB])))
 
 	var selection := output.filter_by(INSTANCING_FILTER_ATTRIB, 1)
@@ -88,12 +91,12 @@ static func handle(host: Node) -> void:
 		for scene_path_value in by_scene:
 			per_scene_points[scene_path_value] = by_scene[scene_path_value].get_points(PackedStringArray(wanted))
 
-		_populate_terrain(host, terrain_path, per_scene_points)
+		_populate_terrain(ctx, terrain_path, per_scene_points)
 
 
 ## Fills one terrain's instancer with every scene in [param per_scene_points].
-static func _populate_terrain(host: Node, terrain_path: String, per_scene_points: Dictionary) -> void:
-	var terrain := HEGoTerrain3DUtil.find_node_from_path(host, terrain_path)
+static func _populate_terrain(ctx: HEGoOutputContext, terrain_path: String, per_scene_points: Dictionary) -> void:
+	var terrain := HEGoTerrain3DUtil.find_node_from_path(ctx.host, terrain_path)
 	if terrain == null:
 		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D node %s was not found, skipping instancer output." % terrain_path)
 		return

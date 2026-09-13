@@ -14,18 +14,23 @@ const NODE_PATH_ATTRIB := "hego_node_path"
 const DEFAULT_CURVE_FOLDER := "Curves"
 
 
+## Name of the cook phase this handler is timed under.
+static func output_phase() -> String:
+	return "path3d_output"
+
+
 ## Whether the cook produced curves.
 static func should_handle(summary: Dictionary) -> bool:
 	return HEGoNodeUtil.output_has(summary, "has_curves")
 
 
-## Fetches the curves of [param host]'s asset node and builds the Path3D output.
-static func handle(host: Node) -> void:
-	var curves: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_curves([NODE_PATH_ATTRIB], []))
+## Fetches the cooked curves and builds the Path3D output.
+static func handle(ctx: HEGoOutputContext) -> void:
+	var curves: Variant = await ctx.await_task(ctx.asset.fetch_curves([NODE_PATH_ATTRIB], []))
 	if not curves is Array:
 		return
 
-	var outputs_root := HEGoNodeUtil.ensure_outputs_root(host)
+	var outputs_root := ctx.outputs_root()
 
 	for i in range(curves.size()):
 		var curve: Dictionary = curves[i]
@@ -36,7 +41,7 @@ static func handle(host: Node) -> void:
 			node_path = "%s/Curve3D_%s_%d" % [DEFAULT_CURVE_FOLDER, HEGoCurveBuilder.curve_type_to_string(int(curve.get("type", -1))), i]
 
 		var path_parts := str(node_path).split("/", false)
-		var parent_node := HEGoNodeUtil.ensure_parent_path(host, outputs_root, path_parts)
+		var parent_node := ctx.ensure_parent(outputs_root, path_parts)
 		var final_name := path_parts[path_parts.size() - 1] if path_parts.size() > 0 else "Curve3D_" + str(i)
 
 		# Reuse an existing Path3D at this location so followers keep their reference.
@@ -48,6 +53,6 @@ static func handle(host: Node) -> void:
 			path_node = Path3D.new()
 			path_node.name = final_name
 			parent_node.add_child(path_node)
-			HEGoNodeUtil.set_editor_owner(host, path_node)
+			ctx.own(path_node)
 
 		path_node.curve = output_curve

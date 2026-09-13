@@ -60,13 +60,18 @@ const DECOMPOSITION_PROPERTIES := [
 ]
 
 
+## Name of the cook phase this handler is timed under.
+static func output_phase() -> String:
+	return "mesh_output"
+
+
 ## Whether the cook produced surfaces worth building.
 static func should_handle(summary: Dictionary) -> bool:
 	return HEGoNodeUtil.output_has(summary, "has_mesh")
 
 
-## Fetches the surfaces of [param host]'s asset node and builds the mesh output.
-static func handle(host: Node) -> void:
+## Fetches the cook's surfaces and builds the mesh output.
+static func handle(ctx: HEGoOutputContext) -> void:
 	var output_start_usec := Time.get_ticks_usec()
 	var mesh_instance_count := 0
 	var surface_count := 0
@@ -74,8 +79,8 @@ static func handle(host: Node) -> void:
 	var collision_generation_count := 0
 
 	var fetch_start_usec := Time.get_ticks_usec()
-	var output: HEGoGeoSurfaces = await HEGoNodeUtil.await_task(host,
-		host.hego_asset_node.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
+	var output: HEGoGeoSurfaces = await ctx.await_task(
+		ctx.asset.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
 	var fetch_surfaces_msec := HEGoCookTimings.elapsed_msec(fetch_start_usec)
 	if output == null or not output.is_valid():
 		# Null means the task failed; it has already reported why.
@@ -122,7 +127,7 @@ static func handle(host: Node) -> void:
 		if storage_mode == STORAGE_MODE_RESOURCE:
 			continue
 
-		var mesh_instance := _spawn_mesh_instance(host, mesh_instance_key, arr_mesh, storage_mode, resource_save_path)
+		var mesh_instance := _spawn_mesh_instance(ctx, mesh_instance_key, arr_mesh, storage_mode, resource_save_path)
 		if _generate_collision(mesh_instance, first_surface):
 			collision_generation_count += 1
 
@@ -174,19 +179,19 @@ static func _build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
 
 
 ## Adds the mesh to the scene at the path the HDA asked for and returns the instance.
-static func _spawn_mesh_instance(host: Node, mesh_instance_key: Variant, arr_mesh: ArrayMesh, storage_mode: int, resource_save_path: Variant) -> MeshInstance3D:
+static func _spawn_mesh_instance(ctx: HEGoOutputContext, mesh_instance_key: Variant, arr_mesh: ArrayMesh, storage_mode: int, resource_save_path: Variant) -> MeshInstance3D:
 	var node_path := DEFAULT_MESH_NODE_NAME
 	if mesh_instance_key != null:
 		node_path = str(mesh_instance_key)
 
-	var outputs_root := HEGoNodeUtil.ensure_outputs_root(host)
+	var outputs_root := ctx.outputs_root()
 	var path_parts := node_path.split("/", false)
-	var parent_node := HEGoNodeUtil.ensure_parent_path(host, outputs_root, path_parts)
+	var parent_node := ctx.ensure_parent(outputs_root, path_parts)
 
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = path_parts[path_parts.size() - 1] if path_parts.size() > 0 else DEFAULT_MESH_NODE_NAME
 	parent_node.add_child(mesh_instance)
-	HEGoNodeUtil.set_editor_owner(host, mesh_instance)
+	ctx.own(mesh_instance)
 
 	if storage_mode == STORAGE_MODE_INSTANCE:
 		mesh_instance.mesh = arr_mesh

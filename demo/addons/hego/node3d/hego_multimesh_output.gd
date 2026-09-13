@@ -28,21 +28,26 @@ static func point_attribs() -> Array:
 const DEFAULT_MULTIMESH_NAME := "MultiMesh"
 
 
+## Name of the cook phase this handler is timed under.
+static func output_phase() -> String:
+	return "multimesh_output"
+
+
 ## Whether the cook produced points flagged for multimesh instancing.
 static func should_handle(summary: Dictionary) -> bool:
 	return HEGoNodeUtil.output_has(summary, "has_points") \
 		and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", INSTANCING_FILTER_ATTRIB)
 
 
-## Fetches the instancing points of [param host]'s asset node and builds the multimeshes.
-static func handle(host: Node) -> void:
+## Fetches the instancing points of the cook and builds the multimeshes.
+static func handle(ctx: HEGoOutputContext) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Multimesh Output")
 
-	var output: HEGoGeoOutput = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_geo_output())
+	var output: HEGoGeoOutput = await ctx.await_task(ctx.asset.get_geo_output())
 	if output == null or not output.is_valid():
 		return
 
-	await HEGoNodeUtil.await_task(host,
+	await ctx.await_task(
 		output.load_attributes(PackedStringArray(point_attribs() + [INSTANCING_FILTER_ATTRIB, OUTPUT_NAME_ATTRIB, MESH_RESOURCE_ATTRIB])))
 
 	var selection := output.filter_by(INSTANCING_FILTER_ATTRIB, 1)
@@ -68,12 +73,12 @@ static func handle(host: Node) -> void:
 			# meshes coming out of the same output do not collide.
 			var mesh_file_name: String = str(resource_path).get_file().get_basename()
 			var point_dict: Dictionary = by_mesh[resource_path].get_points(PackedStringArray(point_attribs()))
-			setup_multimesh(host, mesh_resource, output_name + "_" + mesh_file_name, point_dict)
+			setup_multimesh(ctx, mesh_resource, output_name + "_" + mesh_file_name, point_dict)
 
 
 ## Creates a [MultiMeshInstance3D] named [param multimesh_name] under [code]Outputs/[/code]
 ## and fills it with one instance per point in [param point_dict].
-static func setup_multimesh(host: Node, mesh_resource: Mesh, multimesh_name: String, point_dict: Dictionary) -> void:
+static func setup_multimesh(ctx: HEGoOutputContext, mesh_resource: Mesh, multimesh_name: String, point_dict: Dictionary) -> void:
 	if not point_dict.has("P") or not point_dict["P"] is Array:
 		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Multimesh output %s has no P attribute, skipping." % multimesh_name)
 		return
@@ -83,14 +88,14 @@ static func setup_multimesh(host: Node, mesh_resource: Mesh, multimesh_name: Str
 	if point_count == 0:
 		return
 
-	var outputs_root := HEGoNodeUtil.ensure_outputs_root(host)
+	var outputs_root := ctx.outputs_root()
 	var path_parts := multimesh_name.split("/", false)
-	var parent_node := HEGoNodeUtil.ensure_parent_path(host, outputs_root, path_parts)
+	var parent_node := ctx.ensure_parent(outputs_root, path_parts)
 
 	var multimesh_instance := MultiMeshInstance3D.new()
 	multimesh_instance.name = path_parts[path_parts.size() - 1] if path_parts.size() > 0 else DEFAULT_MULTIMESH_NAME
 	parent_node.add_child(multimesh_instance)
-	HEGoNodeUtil.set_editor_owner(host, multimesh_instance)
+	ctx.own(multimesh_instance)
 
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D

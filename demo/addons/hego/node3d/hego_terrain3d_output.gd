@@ -58,18 +58,23 @@ const ROTATION_TOLERANCE := 0.5
 const UPDATE_MAPS_HEIGHT_AND_CONTROL := 3
 
 
+## Name of the cook phase this handler is timed under.
+static func output_phase() -> String:
+	return "terrain3d_output"
+
+
 ## Whether the cook produced heightfield volumes, and Terrain3D is there to receive them.
 static func should_handle(summary: Dictionary) -> bool:
 	return HEGoTerrain3DUtil.is_available() and HEGoNodeUtil.output_has(summary, "has_volumes")
 
 
-## Fetches the heightfield layers of [param host]'s asset node and builds the terrain.
-static func handle(host: Node) -> void:
+## Fetches the cook's heightfield layers and builds the terrain.
+static func handle(ctx: HEGoOutputContext) -> void:
 	if not HEGoTerrain3DUtil.is_available():
 		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D addon is not installed, skipping Terrain3D output.")
 		return
 
-	var layers: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_heightfield_layers(PackedStringArray(REQUESTED_ATTRIBS)))
+	var layers: Variant = await ctx.await_task(ctx.asset.get_heightfield_layers(PackedStringArray(REQUESTED_ATTRIBS)))
 	if not layers is Array:
 		return
 
@@ -89,7 +94,7 @@ static func handle(host: Node) -> void:
 	# here only disables the control maps rather than the whole output.
 	var texture_setup := _prepare_texture_layers(layers)
 
-	var terrain := _spawn_terrain(host, config)
+	var terrain := _spawn_terrain(ctx, config)
 	if terrain == null:
 		return
 
@@ -99,12 +104,12 @@ static func handle(host: Node) -> void:
 		return
 
 	if texture_setup["enabled"]:
-		texture_setup = await _apply_texture_assets(host, terrain, texture_setup)
+		texture_setup = await _apply_texture_assets(ctx, terrain, texture_setup)
 
 	var hole_image: Image = null
 	if texture_setup["enabled"]:
 		var hole_layer := HEGoTerrain3DUtil.get_layer_by_name(layers, HOLE_LAYER)
-		hole_image = await _fetch_layer_image(host, hole_layer)
+		hole_image = await _fetch_layer_image(ctx, hole_layer)
 		if hole_image == null and not hole_layer.is_empty():
 			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Failed to fetch %s layer, continuing without hole control bits." % HOLE_LAYER)
 
@@ -113,16 +118,16 @@ static func handle(host: Node) -> void:
 		terrain_data.call("remove_region", region, false)
 	terrain_data.call("update_maps", UPDATE_MAPS_HEIGHT_AND_CONTROL, true, false)
 
-	var height_image := await _fetch_layer_image(host, height_layer)
+	var height_image := await _fetch_layer_image(ctx, height_layer)
 	if height_image == null:
 		HEGoLog.get_singleton().error(LOG_CATEGORY, "Failed to fetch height image for Terrain3D output.")
 		return
 
-	var region_map_image := await _fetch_layer_image(host, HEGoTerrain3DUtil.get_layer_by_name(layers, REGION_MAP_LAYER))
+	var region_map_image := await _fetch_layer_image(ctx, HEGoTerrain3DUtil.get_layer_by_name(layers, REGION_MAP_LAYER))
 
 	var color_images := {}
 	for channel in COLOR_LAYERS.keys():
-		color_images[channel] = await _fetch_layer_image(host, HEGoTerrain3DUtil.get_layer_by_name(layers, COLOR_LAYERS[channel]))
+		color_images[channel] = await _fetch_layer_image(ctx, HEGoTerrain3DUtil.get_layer_by_name(layers, COLOR_LAYERS[channel]))
 	var has_any_color := color_images.values().any(func(image): return image != null)
 
 	_write_regions(terrain_data, config, height_layer, height_image, region_map_image, color_images, has_any_color, texture_setup, hole_image)
@@ -215,13 +220,15 @@ static func _prepare_texture_layers(layers: Array) -> Dictionary:
 
 ## Creates the Terrain3D node at the path the HDA asked for, replacing any node
 ## already sitting there, and applies the terrain-wide settings.
-static func _spawn_terrain(host: Node, config: Dictionary) -> Node:
+static func _spawn_terrain(ctx: HEGoOutputContext, config: Dictionary) -> Node:
 	var path_parts: PackedStringArray = str(config["node_path"]).split("/", false)
 	if path_parts.is_empty():
 		HEGoLog.get_singleton().error(LOG_CATEGORY, "%s is invalid." % NODE_PATH_ATTRIB)
 		return null
 
-	var parent_node := HEGoNodeUtil.ensure_parent_path(host, host, path_parts)
+	# Parented under the host rather than under Outputs/, deliberately: a cook frees and
+	# rebuilds that subtree, and a terrain must outlive it. ctx.host exists for this.
+	var parent_node := ctx.ensure_parent(ctx.host, path_parts)
 	var terrain_name := path_parts[path_parts.size() - 1]
 
 	var existing_terrain := parent_node.get_node_or_null(terrain_name)
@@ -235,7 +242,7 @@ static func _spawn_terrain(host: Node, config: Dictionary) -> Node:
 
 	terrain.name = terrain_name
 	parent_node.add_child(terrain)
-	HEGoNodeUtil.set_editor_owner(host, terrain)
+	ctx.own(terrain)
 
 	terrain.set("region_size", config["region_size"])
 	terrain.set("vertex_spacing", config["voxel_scale"])
@@ -256,7 +263,7 @@ static func _spawn_terrain(host: Node, config: Dictionary) -> Node:
 ##
 ## Returns the texture setup with the weight images filled in, or with
 ## [code]enabled[/code] cleared when any part of it failed.
-static func _apply_texture_assets(host: Node, terrain: Node, texture_setup: Dictionary) -> Dictionary:
+static func _apply_texture_assets(ctx: HEGoOutputContext, terrain: Node, texture_setup: Dictionary) -> Dictionary:
 	var disabled := {"enabled": false, "layers": [], "lowest_slot": -1, "util": null}
 
 	var terrain_assets := HEGoTerrain3DUtil.get_terrain_assets(terrain)
@@ -284,7 +291,7 @@ static func _apply_texture_assets(host: Node, terrain: Node, texture_setup: Dict
 
 		terrain_assets.call("set_texture", int(texture_layer["slot"]), texture_asset)
 
-		var weight_image := await _fetch_image_for_part(host, int(texture_layer["part_id"]))
+		var weight_image := await _fetch_image_for_part(ctx, int(texture_layer["part_id"]))
 		if weight_image == null:
 			HEGoLog.get_singleton().warning(LOG_CATEGORY, "Failed to fetch weight image for layer %s, skipping Terrain3D control maps." % texture_layer["layer_name"])
 			return disabled
@@ -298,16 +305,16 @@ static func _apply_texture_assets(host: Node, terrain: Node, texture_setup: Dict
 
 ## Fetches a layer's image and rotates it into Terrain3D orientation.
 ## Returns null for missing layers and failed fetches alike.
-static func _fetch_layer_image(host: Node, layer: Dictionary) -> Image:
+static func _fetch_layer_image(ctx: HEGoOutputContext, layer: Dictionary) -> Image:
 	if layer.is_empty() or not layer.has("part_id"):
 		return null
-	return await _fetch_image_for_part(host, int(layer["part_id"]))
+	return await _fetch_image_for_part(ctx, int(layer["part_id"]))
 
 
-static func _fetch_image_for_part(host: Node, part_id: int) -> Image:
+static func _fetch_image_for_part(ctx: HEGoOutputContext, part_id: int) -> Image:
 	if part_id < 0:
 		return null
-	var image: Variant = await HEGoNodeUtil.await_task(host, host.hego_asset_node.fetch_heightfield_layer_image(part_id))
+	var image: Variant = await ctx.await_task(ctx.asset.fetch_heightfield_layer_image(part_id))
 	if image == null:
 		return null
 	return HEGoTerrain3DUtil.fix_heightfield_image_transform(image)
