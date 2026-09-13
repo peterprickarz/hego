@@ -37,8 +37,6 @@ const ALL_CATEGORIES := "All categories"
 @onready var log_toolbar: HBoxContainer = %Session/%LogToolbar
 @onready var library_control: Control = $TabContainer/Library
 
-var hego_tool_node: Node
-
 var _log_cursor: int = 0
 var _visible_lines: int = 0
 var _level_filter: OptionButton
@@ -65,7 +63,6 @@ func _notification(what):
 
 ## Update the currently selected HEGo asset node
 func update_hego_asset_node(node: Node):
-	hego_tool_node = node
 	selected_hego_node_changed.emit(node)
 
 

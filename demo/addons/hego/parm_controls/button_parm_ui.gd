@@ -7,22 +7,13 @@ signal value_changed(param_name: String, value: Variant)
 @onready var button = $HBoxContainer/Button
 
 var param: Dictionary = {}
-var hego_node = null  # Reference to HEGoAssetNode
 
 func _ready():
 	if not label or not button:
 		push_error("ButtonParmUI: One or more nodes are null. Check scene structure: Label=%s, Button=%s" % [label, button])
 		return
-	
-	if Engine.is_editor_hint():
-		button.pressed.connect(_on_button_pressed)
-	else:
-		button.pressed.connect(_on_button_pressed)
-	
-	# Find HEGoAssetNode in the scene tree (adjust path as needed)
-	hego_node = get_tree().get_root().find_child("HEGoAssetNode", true, false)
-	if not hego_node:
-		push_warning("ButtonParmUI: HEGoAssetNode not found in scene tree.")
+
+	button.pressed.connect(_on_button_pressed)
 
 func setup(_param: Dictionary):
 	if not label:
@@ -49,10 +40,11 @@ func _on_button_pressed():
 		push_error("ButtonParmUI: Button node is null. Cannot process press.")
 		return
 	
-	if hego_node and hego_node.has_method("pressButton"):
-		hego_node.pressButton()
-	else:
-		push_error("ButtonParmUI: HEGoAssetNode not set or pressButton() not found.")
-	
-	# Emit value_changed for consistency, but value is ignored
+	# Button parameters are not wired through to Houdini yet. Pressing one used to look up
+	# a scene node named "HEGoAssetNode" and call pressButton() on it. Neither can exist:
+	# HEGoAssetNode is RefCounted and never enters the scene tree, and no HEGo class binds
+	# pressButton. So every rendered button logged a warning and every press an error.
+	push_warning("HEGo: button parameter '%s' is not supported yet." % param.get("label", param.get("name", "")))
+
+	# Emitted for consistency with the other parm widgets; the value is ignored.
 	value_changed.emit(param.get("name", ""), 0)

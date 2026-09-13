@@ -274,16 +274,6 @@ func hego_set_parm_stash(preset: PackedByteArray) -> void:
 	parm_stash = preset
 
 
-## Deprecated alias of [method hego_set_parm_stash].
-func hego_stash_parms(preset: PackedByteArray) -> void:
-	hego_set_parm_stash(preset)
-
-
-## The stored parameter preset.
-func hego_get_parm_stash() -> PackedByteArray:
-	return parm_stash
-
-
 ## The stored input references.
 func hego_get_input_stash() -> Array:
 	return input_stash

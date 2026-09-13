@@ -55,9 +55,6 @@ func cook():
 func hego_set_parm_stash(preset: PackedByteArray):
 	stash = preset
 	
-func hego_get_stashed_parms():
-	return stash
-	
 func hego_use_bottom_panel():
 	return true
 	
