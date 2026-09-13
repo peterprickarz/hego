@@ -328,13 +328,29 @@ bool HEGoSessionManager::wait_for_cook(HAPI_NodeId node_id)
 		}
 	}
 
-	if (status != HAPI_STATE_READY || result != HAPI_RESULT_SUCCESS)
+	// Three outcomes are possible here and they are not the same thing.
+	//
+	// A bad HAPI result, or a cook that ended with fatal errors, means there is no usable
+	// geometry: the caller must not carry on. An HDA that ends in READY_WITH_COOK_ERRORS
+	// reported errors but still produced geometry, which is common and often deliberate,
+	// so that is a warning and not a failure - treating it as one would stop output for
+	// assets that work today.
+	if (result != HAPI_RESULT_SUCCESS || status == HAPI_STATE_READY_WITH_FATAL_ERRORS)
 	{
-		HEGo::Util::Log::warning(HEGo::Util::Log::Category::SESSION, "Cook failure: " + godot::String(HEGo::Util::Hapi::get_last_cook_error(get_session()).c_str()));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, "Cook failed: " + godot::String(HEGo::Util::Hapi::get_last_cook_error(get_session()).c_str()));
 		return false;
 	}
+
 	HEGo::Util::Log::line();
-	HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Cooking completed!");
+	if (status != HAPI_STATE_READY)
+	{
+		HEGo::Util::Log::warning(
+				HEGo::Util::Log::Category::SESSION, "Cooked with errors: " + godot::String(HEGo::Util::Hapi::get_last_cook_error(get_session()).c_str()));
+	}
+	else
+	{
+		HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Cooking completed!");
+	}
 	return true;
 }
 

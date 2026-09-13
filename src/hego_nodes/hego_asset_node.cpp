@@ -189,8 +189,10 @@ godot::Ref<HEGoTask> HEGoAssetNode::cook()
 			HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Failed to cook node.");
 			return -1;
 		}
-		mgr->wait_for_cook(nid);
-		return 0;
+		// wait_for_cook is what reports whether the cook actually produced anything.
+		// Discarding it made every cook look successful, so a failure fell through to the
+		// output handlers, which then failed one by one over the previous cook's geometry.
+		return mgr->wait_for_cook(nid) ? 0 : -1;
 	});
 }
 

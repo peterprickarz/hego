@@ -54,6 +54,16 @@ func cook() -> void:
 	var was_instantiated := await _instantiate_asset_node()
 	timings.end_phase("instantiation")
 
+	# instantiate() reports a license problem by completing with an id of -1 rather than
+	# failing its task, so the id is the only signal for it. An unknown operator name is
+	# not caught here - Houdini hands back a valid id for one and the cook below is what
+	# rejects it - so this guard is narrow on purpose.
+	if hego_asset_node.get_id() == UNINSTANTIATED_NODE_ID:
+		HEGoLog.get_singleton().error(LOG_CATEGORY,
+			"Cook aborted: could not instantiate " + hego_asset_node.op_name)
+		HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
+		return
+
 	timings.begin_phase()
 	if not was_instantiated:
 		# A failed fetch returns null, which must not end up in the typed member.
@@ -71,8 +81,15 @@ func cook() -> void:
 	timings.begin_phase()
 	var cook_result = await _await_task(hego_asset_node.cook())
 	timings.end_phase("cook")
-	if cook_result == null:
-		HEGoLog.get_singleton().error(LOG_CATEGORY, "Cook failed")
+	# A null result means the task itself failed. A result of -1 means HAPI_CookNode was
+	# rejected outright while the task still completed, which a null check alone misses
+	# and which would otherwise let the handlers run over the previous cook's geometry.
+	#
+	# Errors the HDA raises while cooking are not covered here: HEGoAssetNode::cook()
+	# discards what wait_for_cook() reports, and that call cannot tell a fatal error from
+	# a cook error the geometry survives. Separating those is C++ work, tracked separately.
+	if cook_result == null or int(cook_result) != 0:
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Cook failed, leaving the previous output in place")
 		HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 		return
 
