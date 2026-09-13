@@ -14,12 +14,15 @@ const LOG_CATEGORY := "output"
 ## Points with this attribute set to 1 are spawned.
 const SPAWN_FILTER_ATTRIB := "hego_spawn"
 
-## Attributes this handler reads off each spawned point.
-const POINT_ATTRIBS := [
-	"N", "up", "pscale", "scale",
-	"hego_node_path", "hego_spawn_type", "hego_resource_path", "hego_class_name",
-	"hego_custom_properties",
-]
+## Attributes this handler reads off each spawned point: the shared orientation set plus
+## its own. Cd is not among them, because spawned nodes are not tinted. A function rather
+## than a const, because a const cannot be built from another class's constant.
+## See [HEGoPointUtil].
+static func point_attribs() -> Array:
+	return HEGoPointUtil.ORIENTATION_ATTRIBS + [
+		"hego_node_path", "hego_spawn_type", "hego_resource_path", "hego_class_name",
+		"hego_custom_properties",
+	]
 
 ## Node path used when a point does not specify hego_node_path.
 const DEFAULT_NODE_PATH := "Objects"
@@ -48,19 +51,22 @@ static func handle(host: Node) -> void:
 	if output == null or not output.is_valid():
 		return
 
-	await HEGoNodeUtil.await_task(host, output.load_attributes(PackedStringArray(POINT_ATTRIBS + [SPAWN_FILTER_ATTRIB])))
+	await HEGoNodeUtil.await_task(host, output.load_attributes(PackedStringArray(point_attribs() + [SPAWN_FILTER_ATTRIB])))
 
 	var selection := output.filter_by(SPAWN_FILTER_ATTRIB, 1)
 	if selection.size() == 0:
 		HEGoLog.get_singleton().debug(LOG_CATEGORY, "No points to process")
 		return
 
-	var points := selection.get_points(PackedStringArray(POINT_ATTRIBS))
+	var points := selection.get_points(PackedStringArray(point_attribs()))
 	var positions: Array = points["P"]
 
 	var outputs_root := HEGoNodeUtil.ensure_outputs_root(host)
 	# Scenes are usually shared by many points, so only load each one once per cook.
 	var scene_cache := {}
+	# Counted rather than reported per point: a scatter with a bad N/up pair usually has it
+	# on thousands of points, and one line saying how many is more use than thousands.
+	var collinear_count := 0
 
 	for i in range(positions.size()):
 		var position: Variant = positions[i]
@@ -74,7 +80,9 @@ static func handle(host: Node) -> void:
 		var new_node := _spawn_node(points, i, scene_cache)
 		var base_name := path_parts[path_parts.size() - 1] if path_parts.size() > 0 else "Object_" + str(i)
 		new_node.name = HEGoNodeUtil.unique_child_name(parent_node, base_name)
-		new_node.transform = _build_transform(points, i, position)
+		new_node.transform = HEGoPointUtil.transform_from_point(points, i, position)
+		if HEGoPointUtil.is_orientation_collinear(points, i):
+			collinear_count += 1
 
 		var custom_properties: Variant = HEGoNodeUtil.get_typed_point_attrib(points, "hego_custom_properties", i, TYPE_DICTIONARY, {})
 		if not custom_properties.is_empty():
@@ -82,6 +90,10 @@ static func handle(host: Node) -> void:
 
 		parent_node.add_child(new_node)
 		HEGoNodeUtil.set_editor_owner(host, new_node)
+
+	if collinear_count > 0:
+		HEGoLog.get_singleton().warning(LOG_CATEGORY,
+			"%d spawned point(s) had a collinear N and up, so they are unrotated" % collinear_count)
 
 
 ## Creates the node for point [param index], falling back to a plain [Node3D]
@@ -123,21 +135,3 @@ static func _spawn_node(points: Dictionary, index: int, scene_cache: Dictionary)
 	return Node3D.new()
 
 
-## Builds the spawn transform from the point's orientation and scale attributes.
-## Kept identical to the multimesh output so both spawn modes line up.
-static func _build_transform(points: Dictionary, index: int, position: Vector3) -> Transform3D:
-	var normal: Vector3 = HEGoNodeUtil.get_typed_point_attrib(points, "N", index, TYPE_VECTOR3, Vector3(0, 0, 1)).normalized()
-	var up: Vector3 = HEGoNodeUtil.get_typed_point_attrib(points, "up", index, TYPE_VECTOR3, Vector3(0, 1, 0)).normalized()
-	var point_scale: Vector3 = HEGoNodeUtil.get_typed_point_attrib(points, "scale", index, TYPE_VECTOR3, Vector3.ONE)
-	var pscale := float(HEGoNodeUtil.get_typed_point_attrib(points, "pscale", index, TYPE_FLOAT, 1.0))
-
-	var basis := Basis()
-	var right := up.cross(normal).normalized()
-	if right == Vector3.ZERO:
-		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Invalid normal or up vector for point %d (collinear), using default basis" % index)
-	else:
-		basis.x = right
-		basis.y = up
-		basis.z = normal
-
-	return Transform3D(basis.scaled(point_scale * pscale), position)

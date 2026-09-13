@@ -18,7 +18,11 @@ const OUTPUT_NAME_ATTRIB := "hego_multimesh"
 const MESH_RESOURCE_ATTRIB := "hego_mesh_resource"
 
 ## Per-instance attributes this handler reads.
-const POINT_ATTRIBS := ["N", "Cd", "up", "pscale", "scale"]
+## Attributes this handler reads off each instanced point: the shared orientation set plus
+## colour. A function rather than a const, because a const cannot be built from another
+## class's constant. See [HEGoPointUtil].
+static func point_attribs() -> Array:
+	return HEGoPointUtil.ORIENTATION_ATTRIBS + [HEGoPointUtil.COLOR_ATTRIB]
 
 ## Node name prefix used when an HDA does not name its multimesh output.
 const DEFAULT_MULTIMESH_NAME := "MultiMesh"
@@ -39,7 +43,7 @@ static func handle(host: Node) -> void:
 		return
 
 	await HEGoNodeUtil.await_task(host,
-		output.load_attributes(PackedStringArray(POINT_ATTRIBS + [INSTANCING_FILTER_ATTRIB, OUTPUT_NAME_ATTRIB, MESH_RESOURCE_ATTRIB])))
+		output.load_attributes(PackedStringArray(point_attribs() + [INSTANCING_FILTER_ATTRIB, OUTPUT_NAME_ATTRIB, MESH_RESOURCE_ATTRIB])))
 
 	var selection := output.filter_by(INSTANCING_FILTER_ATTRIB, 1)
 	if selection.size() == 0:
@@ -63,7 +67,7 @@ static func handle(host: Node) -> void:
 			# One multimesh per (output, mesh) pair, named after both so several
 			# meshes coming out of the same output do not collide.
 			var mesh_file_name: String = str(resource_path).get_file().get_basename()
-			var point_dict: Dictionary = by_mesh[resource_path].get_points(PackedStringArray(POINT_ATTRIBS))
+			var point_dict: Dictionary = by_mesh[resource_path].get_points(PackedStringArray(point_attribs()))
 			setup_multimesh(host, mesh_resource, output_name + "_" + mesh_file_name, point_dict)
 
 
@@ -100,45 +104,15 @@ static func setup_multimesh(host: Node, mesh_resource: Mesh, multimesh_name: Str
 	center /= point_count
 	multimesh_instance.transform.origin = center
 
-	var use_colors := _has_any_color(point_dict)
+	var use_colors := HEGoPointUtil.has_any_color(point_dict)
 	multimesh.use_colors = use_colors
 	multimesh.instance_count = point_count
 
 	for i in range(point_count):
-		var normal: Vector3 = HEGoNodeUtil.get_typed_point_attrib(point_dict, "N", i, TYPE_VECTOR3, Vector3(0, 0, 1)).normalized()
-		var up: Vector3 = HEGoNodeUtil.get_typed_point_attrib(point_dict, "up", i, TYPE_VECTOR3, Vector3(0, 1, 0)).normalized()
-		var point_scale: Vector3 = HEGoNodeUtil.get_typed_point_attrib(point_dict, "scale", i, TYPE_VECTOR3, Vector3.ONE)
-		var pscale := float(HEGoNodeUtil.get_typed_point_attrib(point_dict, "pscale", i, TYPE_FLOAT, 1.0))
-
-		var basis := Basis()
-		var right := up.cross(normal).normalized()
-		if right != Vector3.ZERO:
-			basis.x = right
-			basis.y = up
-			basis.z = normal
-		basis = basis.scaled(point_scale * pscale)
-
-		multimesh.set_instance_transform(i, Transform3D(basis, positions[i] - center))
+		multimesh.set_instance_transform(i,
+			HEGoPointUtil.transform_from_point(point_dict, i, positions[i] - center))
 
 		if use_colors:
-			multimesh.set_instance_color(i, _read_color(point_dict, i))
+			multimesh.set_instance_color(i, HEGoPointUtil.read_color(point_dict, i))
 
 	multimesh_instance.multimesh = multimesh
-
-
-## Whether the points carry a usable Cd attribute.
-static func _has_any_color(point_dict: Dictionary) -> bool:
-	if not point_dict.has("Cd") or not point_dict["Cd"] is Array:
-		return false
-	var colors: Array = point_dict["Cd"]
-	return not colors.is_empty() and colors[0] != null
-
-
-## Reads Cd for one point, accepting both [Color] and [Vector3] and defaulting to white.
-static func _read_color(point_dict: Dictionary, index: int) -> Color:
-	var value: Variant = HEGoNodeUtil.get_point_attrib(point_dict, "Cd", index, null)
-	if value is Color:
-		return value
-	if value is Vector3:
-		return Color(value.x, value.y, value.z, 1.0)
-	return Color(1, 1, 1, 1)

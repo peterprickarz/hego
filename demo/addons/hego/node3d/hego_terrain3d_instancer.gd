@@ -21,7 +21,11 @@ const SCENE_PATH_ATTRIB := "hegot3d_scene_resource_path"
 
 ## Per-instance attributes this handler reads. The mesh asset settings below are
 ## read as well, so they only have to be named once.
-const POINT_ATTRIBS := ["N", "Cd", "up", "pscale", "scale"]
+## Attributes this handler reads off each instanced point: the shared orientation set plus
+## colour. A function rather than a const, because a const cannot be built from another
+## class's constant. See [HEGoPointUtil].
+static func point_attribs() -> Array:
+	return HEGoPointUtil.ORIENTATION_ATTRIBS + [HEGoPointUtil.COLOR_ATTRIB]
 
 ## Name prefix of the mesh asset slots HEGo owns.
 const GENERATED_MESH_PREFIX := "hegot3d_"
@@ -61,7 +65,7 @@ static func handle(host: Node) -> void:
 	if output == null or not output.is_valid():
 		return
 
-	var wanted := POINT_ATTRIBS + MESH_ASSET_ATTRIBS.keys()
+	var wanted := point_attribs() + MESH_ASSET_ATTRIBS.keys()
 	await HEGoNodeUtil.await_task(host,
 		output.load_attributes(PackedStringArray(wanted + [INSTANCING_FILTER_ATTRIB, TERRAIN_PATH_ATTRIB, SCENE_PATH_ATTRIB])))
 
@@ -159,7 +163,6 @@ static func _populate_terrain(host: Node, terrain_path: String, per_scene_points
 
 
 ## Builds the per-point transforms and colours for one scene.
-## Kept in sync with the multimesh output so both scatter modes orient points alike.
 static func _build_instances(point_dict: Dictionary) -> Dictionary:
 	var transforms: Array[Transform3D] = []
 	var colors: Array[Color] = []
@@ -170,32 +173,10 @@ static func _build_instances(point_dict: Dictionary) -> Dictionary:
 		if not position is Vector3:
 			continue
 
-		var normal: Vector3 = HEGoNodeUtil.get_typed_point_attrib(point_dict, "N", i, TYPE_VECTOR3, Vector3(0, 0, 1)).normalized()
-		var up: Vector3 = HEGoNodeUtil.get_typed_point_attrib(point_dict, "up", i, TYPE_VECTOR3, Vector3(0, 1, 0)).normalized()
-		var point_scale: Vector3 = HEGoNodeUtil.get_typed_point_attrib(point_dict, "scale", i, TYPE_VECTOR3, Vector3.ONE)
-		var pscale := float(HEGoNodeUtil.get_typed_point_attrib(point_dict, "pscale", i, TYPE_FLOAT, 1.0))
-
-		var basis := Basis()
-		var right := up.cross(normal).normalized()
-		if right != Vector3.ZERO:
-			basis.x = right
-			basis.y = up
-			basis.z = normal
-		transforms.append(Transform3D(basis.scaled(point_scale * pscale), position))
-
-		colors.append(_read_color(point_dict, i))
+		transforms.append(HEGoPointUtil.transform_from_point(point_dict, i, position))
+		colors.append(HEGoPointUtil.read_color(point_dict, i))
 
 	return {"transforms": transforms, "colors": colors}
-
-
-## Reads Cd for one point, accepting both [Color] and [Vector3] and defaulting to white.
-static func _read_color(point_dict: Dictionary, index: int) -> Color:
-	var value: Variant = HEGoNodeUtil.get_point_attrib(point_dict, "Cd", index, null)
-	if value is Color:
-		return value
-	if value is Vector3:
-		return Color(value.x, value.y, value.z, 1.0)
-	return Color(1.0, 1.0, 1.0, 1.0)
 
 
 ## Empties every mesh slot HEGo generated, returning the slots that were freed.
