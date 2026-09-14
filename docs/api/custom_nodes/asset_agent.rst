@@ -200,6 +200,18 @@ The paths must be **relative to the edited scene root**, which is the form the p
 pane writes and the form HEGo resolves them in. ``get_path_to(node)`` from your own node
 gives a path that resolves in the editor and not at runtime, and nothing reports it.
 
+.. warning::
+
+   ``agent.set_input()`` and ``agent.sync_inputs()`` reach the stash **through your node**,
+   using :doc:`hego_get_input_stash() and hego_set_input_stash() <bottom_panel>`. A node that
+   does not implement both gets no error: ``set_input()`` discards the row it built,
+   ``sync_inputs()`` finds no rows, and the HDA cooks with its inputs unconnected.
+
+   The cook then **succeeds** and produces nothing, so ``await agent.task(asset.cook()) ==
+   null`` does not catch it either; the only sign is a line like *"Not enough sources
+   specified"* from Houdini in the session log. An exported ``input_stash`` array is not
+   enough on its own — those two methods are what the agent looks for.
+
 ``agent.output_context(asset)``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
