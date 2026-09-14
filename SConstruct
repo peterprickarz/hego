@@ -50,9 +50,10 @@ env = SConscript("godot-cpp/SConstruct")
 # godot-cpp links libstdc++ and libgcc statically by default. That is what lets a binary
 # load on distributions older than the machine that built it, and it is the same choice
 # the official Godot builds make - they carry no libstdc++ dependency at all. These flags
-# used to be stripped here, out of a concern about clashing with Houdini's own C++
-# runtime, but Houdini ships no libstdc++ and HAPI is a pure C API reached through
-# dlopen, so no C++ runtime state crosses that boundary.
+# used to be stripped here, out of a concern about clashing with Houdini's own C++ runtime.
+# The concern was real - a static runtime whose symbols are exported does clash, and did
+# crash sessions on sight - but the fix is to keep those symbols private rather than to
+# link dynamically. See --exclude-libs below.
 
 # ───────────────────────────────────────────────
 # Common Houdini-related environment variables
