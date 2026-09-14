@@ -1,0 +1,90 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoCurveBuilder" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Converts the curve dictionaries a curve fetch returns into [Curve3D]s.
+	</brief_description>
+	<description>
+		Pure geometry, no scene access: [HEGoCurveOutput] handles the nodes. A curve dictionary holds [code]positions[/code], [code]type[/code], [code]order[/code], [code]is_closed[/code] and, for NURBS, [code]knots[/code].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="build" qualifiers="static">
+			<return type="Curve3D" />
+			<param index="0" name="curve" type="Dictionary" />
+			<description>
+				Builds the [Curve3D] matching [param curve]'s type, falling back to a poly curve for types this build does not know about.
+			</description>
+		</method>
+		<method name="curve_type_to_string" qualifiers="static">
+			<return type="String" />
+			<param index="0" name="curve_type" type="int" />
+			<description>
+				Name of a curve type, used to name generated nodes.
+			</description>
+		</method>
+		<method name="build_linear_curve" qualifiers="static">
+			<return type="Curve3D" />
+			<param index="0" name="curve" type="Dictionary" />
+			<description>
+				Poly curve: every control point becomes a [Curve3D] point.
+			</description>
+		</method>
+		<method name="build_nurbs_curve" qualifiers="static">
+			<return type="Curve3D" />
+			<param index="0" name="curve" type="Dictionary" />
+			<description>
+				NURBS curve, approximated by sampling.  Curve3D's in/out handles cannot represent NURBS control points, so the curve is evaluated at a fixed number of parameter values and rebuilt from those samples.
+			</description>
+		</method>
+		<method name="evaluate_spline_at_t" qualifiers="static">
+			<return type="Vector3" />
+			<param index="0" name="t_param" type="float" />
+			<param index="1" name="positions" type="Array" />
+			<param index="2" name="knots" type="Array" />
+			<param index="3" name="order" type="int" />
+			<description>
+				Evaluates the B-spline defined by [param positions] and [param knots] at [param t_param].
+			</description>
+		</method>
+		<method name="compute_basis_functions" qualifiers="static">
+			<return type="Array" />
+			<param index="0" name="k_param" type="int" />
+			<param index="1" name="t_param" type="float" />
+			<param index="2" name="order" type="int" />
+			<param index="3" name="knots" type="Array" />
+			<description>
+				Cox-de Boor basis functions for the span [param k_param], returning [param order] weights.
+			</description>
+		</method>
+		<method name="generate_uniform_knots" qualifiers="static">
+			<return type="Array" />
+			<param index="0" name="num_control_points" type="int" />
+			<param index="1" name="order" type="int" />
+			<description>
+				Clamped uniform knot vector for [param num_control_points] points of [param order].
+			</description>
+		</method>
+		<method name="build_bezier_curve" qualifiers="static">
+			<return type="Curve3D" />
+			<param index="0" name="curve" type="Dictionary" />
+			<description>
+				Bezier curve: every third control point is on the curve, the two in between are its handles. Falls back to a poly curve when there are not enough points.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;output&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="MIN_NURBS_SAMPLES" value="50">
+			Number of samples used for the shortest NURBS curves.
+		</constant>
+		<constant name="NURBS_SAMPLES_PER_POINT" value="10">
+			NURBS samples generated per control point, when that is more than [constant MIN_NURBS_SAMPLES].
+		</constant>
+		<constant name="BEZIER_STRIDE" value="3">
+			Positions per Bezier segment in Houdini's flat control point list: one on-curve point followed by two off-curve handles.
+		</constant>
+	</constants>
+</class>

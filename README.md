@@ -112,6 +112,21 @@ If the build task fails, update `.vscode/tasks.json`:
 
 **Output**: Built library appears in `demo/addons/hego/bin/`
 
+### Documentation
+
+The class reference is generated, and the site is built from `docs/`:
+
+```bash
+scripts/generate_gdscript_docs.sh   # after changing a GDScript class's ## comments
+scripts/generate_docs.sh            # rewrites docs/classes from the class reference XML
+python -m sphinx -W -b html docs docs/_build/html
+```
+
+`generate_gdscript_docs.sh` needs Godot (set `GODOT` to pick the binary) and writes
+`demo/addons/hego/doc_classes_gdscript/`, which is committed so the site builds without it.
+A class with no place in the tree fails `generate_docs.sh`; add it to a group in
+`scripts/class_tree.py`.
+
 ## Get Help
 
 Join the 💬[Discord](https://discord.gg/bAw7Pv8ETG) where other users or contributors can help you.

@@ -37,3 +37,18 @@ suppress_warnings = ["misc.highlighting_failure"]
 
 # Keep class reference output from make_rst discoverable.
 sys.path.insert(0, os.path.abspath("."))
+
+
+def setup(app):
+    """Teach Sphinx the one directive make_rst.py emits that is Godot's own.
+
+    Godot's documentation site styles classref_note differently from a plain note; here
+    there is nothing to style it against, and what it says is a note either way.
+    """
+    from docutils import nodes
+    from docutils.parsers.rst.directives.admonitions import BaseAdmonition
+
+    class ClassrefNote(BaseAdmonition):
+        node_class = nodes.note
+
+    app.add_directive("classref_note", ClassrefNote)

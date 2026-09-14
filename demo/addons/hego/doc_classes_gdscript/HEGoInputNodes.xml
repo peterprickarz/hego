@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoInputNodes" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Turns the Godot nodes wired into a [HEGoNode3D] into HEGo input nodes.
+	</brief_description>
+	<description>
+		Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, and a Terrain3D becomes a heightfield input. The node path of the source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="sync" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="existing_node" type="Variant" />
+			<param index="2" name="input_node_path" type="Variant" />
+			<param index="3" name="settings" type="Dictionary" />
+			<description>
+				Creates or updates the input node for the Godot node at [param input_node_path].  Pass the previous input node as [param existing_node] to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is [param existing_node] itself when it was reused.  [param settings] is the per-input settings dictionary from the input stash. It is carried through the stash for future per-input options and is not read yet.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;input&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="NODE_PATH_ATTRIB" value="&quot;_hego_node_path&quot;">
+			Attributes attached to every input.
+		</constant>
+		<constant name="RESOURCE_PATH_ATTRIB" value="&quot;_hego_resource_path&quot;">
+		</constant>
+		<constant name="SURFACE_MATERIAL_ATTRIB_PREFIX" value="&quot;_hego_surface_override_material_&quot;">
+		</constant>
+		<constant name="NO_MATERIAL" value="&quot;empty&quot;">
+			Value used for a surface that has no override material.
+		</constant>
+		<constant name="CURVE_SAMPLE_LENGTH" value="1.0">
+			Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
+		</constant>
+	</constants>
+</class>

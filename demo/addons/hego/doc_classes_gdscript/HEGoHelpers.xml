@@ -1,0 +1,132 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoHelpers" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		The tedious parts of driving an HDA, for a node that writes its own [code]cook()[/code].
+	</brief_description>
+	<description>
+		This is not a layer over Houdini Engine. A script holds its own [HEGoAssetNode] and calls it directly; these are the handful of things that are either fiddly to repeat or subtle enough to get wrong silently. 
+[codeblock]
+@tool
+extends MeshInstance3D
+
+var hego := HEGoHelpers.new(self)
+@export var parm_stash: PackedByteArray
+@export var input_stash: Array
+
+func cook() -&gt; void:
+    var fence := hego.asset("Sop/my_fence")
+    if not await hego.instantiate(fence, parm_stash):
+        return
+    await hego.sync_inputs(fence)
+    if await hego.task(fence.cook()) == null:
+        return
+
+    var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(fence))
+    mesh = meshes.values()[0] if not meshes.is_empty() else null
+    parm_stash = await hego.save_parameters(fence)
+[/codeblock]
+ Everything the HDA does is still an ordinary call on [HEGoAssetNode], in the order the script writes it.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="task">
+			<return type="Variant" />
+			<param index="0" name="task" type="HEGoTask" />
+			<description>
+				Waits for [param task] and returns its result, or [code]null[/code] if it failed.  [code]null[/code] is not a general failure signal: a task that legitimately did nothing also completes with null, which is what HEGo returns for work it could skip. It does mean failure after [code]cook()[/code], which returns 0 when it succeeds and fails its task when Houdini rejects it.
+			</description>
+		</method>
+		<method name="asset">
+			<return type="HEGoAssetNode" />
+			<param index="0" name="operator_name" type="String" />
+			<param index="1" name="label" type="String" default="&quot;&quot;" />
+			<description>
+				The asset node for [param operator_name], created on first use and reused afterwards.  Reusing it is what keeps the Houdini node id valid between cooks. [param label] names it for the bottom panel and defaults to the operator without its table.
+			</description>
+		</method>
+		<method name="instantiate">
+			<return type="bool" />
+			<param index="0" name="asset" type="HEGoAssetNode" />
+			<param index="1" name="stashed_parameters" type="PackedByteArray" default="PackedByteArray()" />
+			<description>
+				Makes [param asset] exist in Houdini. False when it could not be created.  Pushes the owner's transform when it is spatial, and restores [param stashed_parameters] only when this call is what created the Houdini node. That condition is the subtle part: restoring on every cook would undo whatever the user has since changed in the panel.  Returns false on a license failure, which Houdini reports by completing successfully with an id of -1 rather than by failing. An unknown operator name is not caught here, because Houdini hands back a valid id for one; the cook is what rejects it.
+			</description>
+		</method>
+		<method name="save_parameters">
+			<return type="PackedByteArray" />
+			<param index="0" name="asset" type="HEGoAssetNode" />
+			<description>
+				The asset's current parameters, as a blob to store on the node so they survive a session restart and a scene reload. Empty when they could not be read.
+			</description>
+		</method>
+		<method name="sync_inputs">
+			<return type="void" />
+			<param index="0" name="asset" type="HEGoAssetNode" />
+			<param index="1" name="skip_indices" type="Array" default="[]" />
+			<description>
+				Feeds [param asset] the Godot nodes stored in the owner's input stash.  Every HDA input goes through a merge node, because one Houdini input can combine several Godot nodes, and the input nodes are kept between cooks so unchanged geometry is not re-sent. [param skip_indices] leaves inputs alone that something else fills, which is how an input fed by another HDA survives.
+			</description>
+		</method>
+		<method name="set_input">
+			<return type="void" />
+			<param index="0" name="index" type="int" />
+			<param index="1" name="sources" type="Variant" />
+			<description>
+				Points HDA input [param index] at [param sources], which may be a [Node], a [NodePath], a path string, or an array of any of those.  Writes to the same stash the panel's Inputs pane writes to, so an exported property and the panel agree rather than fighting.
+			</description>
+		</method>
+		<method name="show_in_panel">
+			<return type="void" />
+			<param index="0" name="labels" type="Array" />
+			<description>
+				Shows only [param labels] in the bottom panel, in that order.  The default is every asset this node has made, in creation order. A tool with several stages usually wants to say which of them a user should see, and put the one they are working on first. Pass an empty array to go back to showing all of them.
+			</description>
+		</method>
+		<method name="highlight">
+			<return type="void" />
+			<param index="0" name="label" type="String" />
+			<description>
+				Makes the panel open [param label]'s section and scroll to it on the next rebuild.  A recook rebuilds the panel, so a tool that moves the user on to its next stage can point them at it rather than leaving them to find it. Pass an empty string to highlight nothing.
+			</description>
+		</method>
+		<method name="panel_assets">
+			<return type="Array" />
+			<description>
+				The assets the bottom panel should show, in order, as the panel wants them.  Return this straight from a node's [code]hego_get_panel_assets()[/code]. Entries are [code]{ "label", "asset", "highlight" }[/code]; a label in [member panel_labels] that names no asset is skipped.
+			</description>
+		</method>
+		<method name="output_context">
+			<return type="HEGoOutputContext" />
+			<param index="0" name="asset" type="HEGoAssetNode" />
+			<description>
+				Fetches what [param asset]'s cook produced and wraps it for the output handlers.  Needed by anything in the output library: [method HEGoMeshOutput.fetch_meshes], [method HEGoMultiMeshOutput.setup_multimesh], and a handler's own [code]handle(context)[/code].
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="owner_node" type="Node" setter="" getter="">
+			The node these assets belong to.
+		</member>
+		<member name="assets" type="Dictionary" setter="" getter="" default="{}">
+			Every asset this node has made, keyed by label, in creation order. The bottom panel reads this to know what to show and what to call each section.
+		</member>
+		<member name="panel_labels" type="Array" setter="" getter="" default="[]">
+			Labels the bottom panel shows, in the order it shows them. Empty means every asset, in creation order. Set it with [method show_in_panel].
+		</member>
+		<member name="highlighted_label" type="String" setter="" getter="" default="&quot;&quot;">
+			Label of the asset the panel opens and scrolls to after a rebuild, or empty for none. Set it with [method highlight].
+		</member>
+	</members>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;cook&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="DEFAULT_OPERATOR_TABLE" value="&quot;Sop&quot;">
+			Operator table assumed when an operator name does not name one.
+		</constant>
+		<constant name="UNINSTANTIATED_NODE_ID" value="-1">
+			Node id of an asset that does not exist in Houdini yet.
+		</constant>
+	</constants>
+</class>

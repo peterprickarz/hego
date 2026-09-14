@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoPointUtil" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Point attribute maths shared by every handler that scatters something.
+	</brief_description>
+	<description>
+		Multimesh instancing, object spawning and Terrain3D instancing all turn the same four point attributes into the same orientation. Each carried its own copy of that maths, with a comment promising to keep it in step with the others. It lives here instead, so they stay in step by construction.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="basis_from_point" qualifiers="static">
+			<return type="Basis" />
+			<param index="0" name="points" type="Dictionary" />
+			<param index="1" name="index" type="int" />
+			<description>
+				Orientation and scale for point [param index], from its N, up, scale and pscale.  An N and up that are collinear leave no frame to build, so such a point keeps an unrotated basis. That is reported by [method is_orientation_collinear] rather than from here, so a caller can count the points it happened to and say so once instead of once per point.
+			</description>
+		</method>
+		<method name="transform_from_point" qualifiers="static">
+			<return type="Transform3D" />
+			<param index="0" name="points" type="Dictionary" />
+			<param index="1" name="index" type="int" />
+			<param index="2" name="position" type="Vector3" />
+			<description>
+				The transform for point [param index], oriented by [method basis_from_point] and placed at [param position].
+			</description>
+		</method>
+		<method name="is_orientation_collinear" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="points" type="Dictionary" />
+			<param index="1" name="index" type="int" />
+			<description>
+				Whether point [param index] carries an N and up that are collinear, which leaves no frame to build and gives the point an unrotated basis.
+			</description>
+		</method>
+		<method name="has_any_color" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="points" type="Dictionary" />
+			<description>
+				Whether these points carry a usable Cd attribute at all, so a caller can skip setting up per-instance colour when nothing would use it.
+			</description>
+		</method>
+		<method name="read_color" qualifiers="static">
+			<return type="Color" />
+			<param index="0" name="points" type="Dictionary" />
+			<param index="1" name="index" type="int" />
+			<description>
+				Reads Cd for point [param index], accepting both [Color] and [Vector3] and defaulting to white. Houdini hands colour back as either depending on how the attribute was created.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="ORIENTATION_ATTRIBS" value="[&quot;N&quot;, &quot;up&quot;, &quot;pscale&quot;, &quot;scale&quot;]">
+			Attributes [method basis_from_point] reads. A point missing any of them falls back to the defaults below, so loading them is optional but everything ends up unrotated.
+		</constant>
+		<constant name="COLOR_ATTRIB" value="&quot;Cd&quot;">
+			Attribute [method read_color] reads. Handlers that tint their output add this to [constant ORIENTATION_ATTRIBS]; object spawning does not, because it does not tint.
+		</constant>
+		<constant name="DEFAULT_NORMAL" value="Vector3(0, 0, 1)">
+			Direction a point faces when it carries no N.
+		</constant>
+		<constant name="DEFAULT_UP" value="Vector3(0, 1, 0)">
+			Direction treated as up when a point carries no up.
+		</constant>
+	</constants>
+</class>
