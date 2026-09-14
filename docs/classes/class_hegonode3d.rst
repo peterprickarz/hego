@@ -19,7 +19,7 @@ Brings a Houdini Digital Asset into a Godot scene.
 Description
 -----------
 
-Pick an HDA with **Select HDA**, set its parameters in the HEGo bottom panel, and recook. Cooking instantiates the HDA in the running Houdini session, feeds it the nodes wired up as inputs, cooks it, and turns the result into Godot nodes under a child called ``Outputs``.  This node handles the great majority of cases. When you want one that does something it does not - its own attributes, its own output nodes, several HDAs chained together - write your own and use :ref:`HEGoHelpers<class_HEGoHelpers>`, which is what this node uses. Read :ref:`cook()<class_HEGoNode3D_method_cook>` below first: it is the worked example, and there is nothing in it a script of your own cannot do.
+Pick an HDA with **Select HDA**, set its parameters in the HEGo bottom panel, and recook. Cooking instantiates the HDA in the running Houdini session, feeds it the nodes wired up as inputs, cooks it, and turns the result into Godot nodes under a child called ``Outputs``.  This node handles the great majority of cases. When you want one that does something it does not - its own attributes, its own output nodes, several HDAs chained together - write your own and use :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`, which is what this node uses. Read :ref:`cook()<class_HEGoNode3D_method_cook>` below first: it is the worked example, and there is nothing in it a script of your own cannot do.
 
 .. rst-class:: classref-reftable-group
 
@@ -29,17 +29,17 @@ Properties
 .. table::
    :widths: auto
 
-   +---------------------------------------+-----------------------------------------------------------------+-----------------------------+
-   | ``Variant``                           | :ref:`select_hda_btn<class_HEGoNode3D_property_select_hda_btn>` | ``_show_select_hda_dialog`` |
-   +---------------------------------------+-----------------------------------------------------------------+-----------------------------+
-   | ``String``                            | :ref:`asset_name<class_HEGoNode3D_property_asset_name>`         |                             |
-   +---------------------------------------+-----------------------------------------------------------------+-----------------------------+
-   | ``PackedByteArray``                   | :ref:`parm_stash<class_HEGoNode3D_property_parm_stash>`         |                             |
-   +---------------------------------------+-----------------------------------------------------------------+-----------------------------+
-   | ``Array``                             | :ref:`input_stash<class_HEGoNode3D_property_input_stash>`       |                             |
-   +---------------------------------------+-----------------------------------------------------------------+-----------------------------+
-   | :ref:`HEGoHelpers<class_HEGoHelpers>` | :ref:`hego<class_HEGoNode3D_property_hego>`                     | ``new(...)``                |
-   +---------------------------------------+-----------------------------------------------------------------+-----------------------------+
+   +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
+   | ``Variant``                                 | :ref:`select_hda_btn<class_HEGoNode3D_property_select_hda_btn>` | ``_show_select_hda_dialog`` |
+   +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
+   | ``String``                                  | :ref:`asset_name<class_HEGoNode3D_property_asset_name>`         |                             |
+   +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
+   | ``PackedByteArray``                         | :ref:`parm_stash<class_HEGoNode3D_property_parm_stash>`         |                             |
+   +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
+   | ``Array``                                   | :ref:`input_stash<class_HEGoNode3D_property_input_stash>`       |                             |
+   +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
+   | :ref:`HEGoAssetAgent<class_HEGoAssetAgent>` | :ref:`agent<class_HEGoNode3D_property_agent>`                   | ``new(...)``                |
+   +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
 
 .. rst-class:: classref-reftable-group
 
@@ -149,13 +149,13 @@ References to the Godot nodes wired into the HDA's inputs, one entry per input.
 
 ----
 
-.. _class_HEGoNode3D_property_hego:
+.. _class_HEGoNode3D_property_agent:
 
 .. rst-class:: classref-property
 
-:ref:`HEGoHelpers<class_HEGoHelpers>` **hego** = ``new(...)`` :ref:`🔗<class_HEGoNode3D_property_hego>`
+:ref:`HEGoAssetAgent<class_HEGoAssetAgent>` **agent** = ``new(...)`` :ref:`🔗<class_HEGoNode3D_property_agent>`
 
-The tedious parts of driving an HDA. Everything it does is an ordinary call on :ref:`HEGoAssetNode<class_HEGoAssetNode>`; see :ref:`HEGoHelpers<class_HEGoHelpers>`.
+The tedious parts of driving an HDA. Everything it does is an ordinary call on :ref:`HEGoAssetNode<class_HEGoAssetNode>`; see :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`.
 
 .. rst-class:: classref-section-separator
 

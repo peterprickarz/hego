@@ -11,7 +11,7 @@ inputs, cooks it and builds Godot nodes from whatever comes back.
 Write your own node when you want something it does not do: your own attributes, your own
 output nodes, exported properties instead of panel widgets, or several HDAs chained together.
 A custom node is an ordinary ``@tool`` script with a ``cook()`` that calls
-:ref:`HEGoAssetNode<class_HEGoAssetNode>` directly. :ref:`HEGoHelpers<class_HEGoHelpers>`
+:ref:`HEGoAssetNode<class_HEGoAssetNode>` directly. :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`
 supplies the parts that are tedious to repeat, and stays out of the way of everything else.
 
 Nothing in ``HEGoNode3D`` is privileged. It uses the same helper, the same output handlers
@@ -36,26 +36,26 @@ The shape of a custom node
     ## References to the Godot nodes wired into the HDA's inputs.
     @export var input_stash: Array
 
-    var hego := HEGoHelpers.new(self)
+    var agent := HEGoAssetAgent.new(self)
 
     func cook() -> void:
-        var fence := hego.asset(ASSET_NAME, ASSET_LABEL)
-        if not await hego.instantiate(fence, parm_stash):
+        var fence := agent.asset(ASSET_NAME, ASSET_LABEL)
+        if not await agent.instantiate(fence, parm_stash):
             return
 
-        await hego.sync_inputs(fence)
+        await agent.sync_inputs(fence)
 
-        if await hego.task(fence.cook()) == null:
+        if await agent.task(fence.cook()) == null:
             return
 
-        var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(fence))
+        var meshes := await HEGoMeshOutput.fetch_meshes(await agent.output_context(fence))
         mesh = meshes.values()[0] if not meshes.is_empty() else null
 
-        parm_stash = await hego.save_parameters(fence)
+        parm_stash = await agent.save_parameters(fence)
 
     # ── Bottom panel interface ──────────────────────────────────────────────
     func hego_use_bottom_panel() -> bool: return true
-    func hego_get_asset_node() -> HEGoAssetNode: return hego.assets.get(ASSET_LABEL)
+    func hego_get_asset_node() -> HEGoAssetNode: return agent.assets.get(ASSET_LABEL)
     func hego_get_asset_name() -> String: return ASSET_NAME
     func hego_set_parm_stash(preset: PackedByteArray) -> void: parm_stash = preset
     func hego_get_input_stash() -> Array: return input_stash
@@ -64,52 +64,52 @@ The shape of a custom node
 That is the whole pattern. Everything the HDA does is a call on the asset node, in the order
 you write it.
 
-``HEGoHelpers``
----------------
+``HEGoAssetAgent``
+------------------
 
-One per node, constructed with the node itself: ``var hego := HEGoHelpers.new(self)``.
+One per node, constructed with the node itself: ``var agent := HEGoAssetAgent.new(self)``.
 Every call below is on that object, and every one of them is awaited.
 
 .. list-table::
    :widths: 46 54
 
-   * - ``hego.task(task)``
+   * - ``agent.task(task)``
      - Awaits a :ref:`HEGoTask<class_HEGoTask>` and returns its result, or ``null`` if it
        failed. Every method on an asset node hands back one of these, so this is what most
        lines of a ``cook()`` are wrapped in
-   * - ``hego.asset(operator_name, label := "")``
+   * - ``agent.asset(operator_name, label := "")``
      - The :ref:`HEGoAssetNode<class_HEGoAssetNode>` for an operator, created on first use and
        reused afterwards. Reusing it is what keeps the Houdini node id valid between cooks.
        The label names it in the panel and defaults to the operator without its table
-   * - ``hego.instantiate(asset, stashed_parameters := PackedByteArray())``
+   * - ``agent.instantiate(asset, stashed_parameters := PackedByteArray())``
      - Makes the HDA exist in Houdini, pushes this node's transform, and restores the stashed
        parameters **only** on the cook that created it. ``false`` when it could not be created
-   * - ``hego.save_parameters(asset)``
+   * - ``agent.save_parameters(asset)``
      - The HDA's current parameters as a blob to store on the node
-   * - ``hego.sync_inputs(asset, skip_indices := [])``
+   * - ``agent.sync_inputs(asset, skip_indices := [])``
      - Feeds the HDA the Godot nodes in the input stash, one merge node per HDA input, reusing
        the input nodes between cooks. ``skip_indices`` holds the HDA input indices to leave
        alone, for inputs something else fills
-   * - ``hego.set_input(index, sources)``
+   * - ``agent.set_input(index, sources)``
      - Points an HDA input at a node, a ``NodePath``, a path string, or an array of those,
        writing to the same stash the panel's Inputs pane uses
-   * - ``hego.output_context(asset)``
+   * - ``agent.output_context(asset)``
      - Fetches what the cook produced and wraps it for the output library
-   * - ``hego.assets``
+   * - ``agent.assets``
      - Every asset this node has made, keyed by label, in creation order
-   * - ``hego.show_in_panel(labels)``
+   * - ``agent.show_in_panel(labels)``
      - Which HDAs the panel shows, in that order. The default is all of them
-   * - ``hego.highlight(label)``
+   * - ``agent.highlight(label)``
      - The HDA the panel should open and scroll to on its next rebuild
 
 Two things are worth knowing about beforehand.
 
-``await hego.task(...) == null`` is **not** a general failure check. A task that legitimately
+``await agent.task(...) == null`` is **not** a general failure check. A task that legitimately
 did nothing also completes with ``null`` — that is what HEGo returns for work it could skip.
 It *is* a failure check after :ref:`cook()<class_HEGoAssetNode_method_cook>`, because a
 successful cook returns ``0`` and a cook Houdini rejects fails its task.
 
-``hego.instantiate(asset)`` restores the stash only when it is the call that created the
+``agent.instantiate(asset)`` restores the stash only when it is the call that created the
 Houdini node — not to be confused with
 :ref:`asset.instantiate()<class_HEGoBaseNode_method_instantiate>`, the task it wraps, which
 restores nothing. Restoring on every cook would undo whatever the user has since changed in
@@ -160,40 +160,40 @@ the last stage is cooked, because cooking it makes Houdini pull everything upstr
 .. code-block:: gdscript
 
     func cook() -> void:
-        var base := hego.asset("Sop/my_base", "base")
-        var detail := hego.asset("Sop/my_detail", "detail")
+        var base := agent.asset("Sop/my_base", "base")
+        var detail := agent.asset("Sop/my_detail", "detail")
 
-        hego.show_in_panel(["detail", "base"])
+        agent.show_in_panel(["detail", "base"])
 
-        if not await hego.instantiate(base, base_parm_stash):
+        if not await agent.instantiate(base, base_parm_stash):
             return
-        if not await hego.instantiate(detail, detail_parm_stash):
+        if not await agent.instantiate(detail, detail_parm_stash):
             return
 
-        await hego.task(detail.connect_input(base, 0))
+        await agent.task(detail.connect_input(base, 0))
 
         # Everything except the chained input still comes from the stash.
-        await hego.sync_inputs(detail, [0])
+        await agent.sync_inputs(detail, [0])
 
-        if await hego.task(detail.cook()) == null:
+        if await agent.task(detail.cook()) == null:
             return
         ...
 
     func hego_get_panel_assets() -> Array:
-        return hego.panel_assets()
+        return agent.panel_assets()
 
 Implementing ``hego_get_panel_assets()`` is the whole of what a multi-HDA node does
 differently. The panel then shows one collapsible section per HDA, titled with its label, in
-the order ``hego.show_in_panel()`` gave. ``hego.highlight(label)`` marks one to be opened and scrolled
+the order ``agent.show_in_panel()`` gave. ``agent.highlight(label)`` marks one to be opened and scrolled
 to; the panel notices within a quarter of a second, so a tool that moves the user on to its
 next stage can point them at it from its own code.
 
 Three things to watch for, none of which will raise an error:
 
 - **The chained input must be skipped.** Without that input's index in the
-  ``skip_indices`` argument of ``hego.sync_inputs()``, the next cook replaces the chain with
+  ``skip_indices`` argument of ``agent.sync_inputs()``, the next cook replaces the chain with
   an empty merge node and the downstream HDA cooks nothing.
-- **Every stage carries the node's transform.** ``hego.instantiate()`` does this, so call it
+- **Every stage carries the node's transform.** ``agent.instantiate()`` does this, so call it
   for the upstream stages too; leaving one at the origin moves everything downstream by
   however far the node is from it.
 - **The input rows belong to the node, not to one HDA.** There is one input stash, and the
@@ -208,7 +208,7 @@ Using the output library
 
 The classes :doc:`HEGoNode3D builds its output with <node3d_modules>` are all callable
 directly, and take a :ref:`HEGoOutputContext<class_HEGoOutputContext>` — what
-``hego.output_context(asset)`` returns.
+``agent.output_context(asset)`` returns.
 
 .. list-table::
    :widths: 46 54
@@ -234,7 +234,7 @@ directly, and take a :ref:`HEGoOutputContext<class_HEGoOutputContext>` — what
 A node that wants the standard output entirely can run the handlers itself, which is all
 ``HEGoNode3D`` does::
 
-    var context := await hego.output_context(asset)
+    var context := await agent.output_context(asset)
     for handler in [HEGoMeshOutput, HEGoMultiMeshOutput, HEGoCurveOutput]:
         if handler.should_handle(context.summary):
             await handler.handle(context)

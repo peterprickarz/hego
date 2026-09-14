@@ -54,7 +54,7 @@ Writing a node
 The node HEGo ships, the helper a node of your own holds, and what the two of them pass around. See :doc:`/api/custom_nodes`.
 
 - :ref:`HEGoNode3D<class_HEGoNode3D>`
-- :ref:`HEGoHelpers<class_HEGoHelpers>`
+- :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`
 - :ref:`HEGoOutputContext<class_HEGoOutputContext>`
 - :ref:`HEGoNodeUtil<class_HEGoNodeUtil>`
 - :ref:`HEGoInputNodes<class_HEGoInputNodes>`

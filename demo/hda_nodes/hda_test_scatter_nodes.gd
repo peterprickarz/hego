@@ -46,7 +46,7 @@ const MULTIMESH_NAME := "scattered_grass"
 ## The HDA's parameters as a blob, so they survive a session restart and a scene reload.
 @export var parm_stash: PackedByteArray
 
-var hego := HEGoHelpers.new(self)
+var agent := HEGoAssetAgent.new(self)
 
 ## Where the helper reads and writes input references. Not exported, because the two input
 ## arrays above are what this node is driven by; every cook rewrites these rows from them.
@@ -55,24 +55,24 @@ var input_stash: Array = []
 
 ## Cooks the HDA and rebuilds the multimesh of scattered instances under Outputs/.
 func cook() -> void:
-	var scatter := hego.asset(ASSET_NAME, ASSET_LABEL)
-	if not await hego.instantiate(scatter, parm_stash):
+	var scatter := agent.asset(ASSET_NAME, ASSET_LABEL)
+	if not await agent.instantiate(scatter, parm_stash):
 		return
 
-	hego.set_input(0, input_nodes)
-	hego.set_input(1, dist_input_nodes)
-	await hego.sync_inputs(scatter)
+	agent.set_input(0, input_nodes)
+	agent.set_input(1, dist_input_nodes)
+	await agent.sync_inputs(scatter)
 
 	# Pushed after instantiate(), which is where a stashed preset would have been restored,
 	# so these properties are what the HDA ends up cooking with.
-	await hego.task(scatter.set_parm(PARM_DENSITY_BIAS, density_bias))
-	await hego.task(scatter.set_parm(PARM_MIN_SCALE, min_scale))
-	await hego.task(scatter.set_parm(PARM_MAX_SCALE, max_scale))
-	await hego.task(scatter.set_parm(PARM_SPIKE_DENSITY, spike_density))
-	await hego.task(scatter.set_parm(PARM_NORMAL_ALIGNED, int(normal_aligned)))
+	await agent.task(scatter.set_parm(PARM_DENSITY_BIAS, density_bias))
+	await agent.task(scatter.set_parm(PARM_MIN_SCALE, min_scale))
+	await agent.task(scatter.set_parm(PARM_MAX_SCALE, max_scale))
+	await agent.task(scatter.set_parm(PARM_SPIKE_DENSITY, spike_density))
+	await agent.task(scatter.set_parm(PARM_NORMAL_ALIGNED, int(normal_aligned)))
 
 	# A cook Houdini rejects fails its task, so null is the whole check.
-	if await hego.task(scatter.cook()) == null:
+	if await agent.task(scatter.cook()) == null:
 		return
 
 	# Cleared only now the cook has succeeded, so a failure leaves the last result visible.
@@ -80,7 +80,7 @@ func cook() -> void:
 	if outputs_node:
 		outputs_node.free()
 
-	var context := await hego.output_context(scatter)
+	var context := await agent.output_context(scatter)
 	var points := await _fetch_points(scatter)
 	if points.is_empty():
 		return
@@ -93,17 +93,17 @@ func cook() -> void:
 		shader_material.shader = load(INSTANCE_SHADER)
 		multimesh_instance.material_override = shader_material
 
-	parm_stash = await hego.save_parameters(scatter)
+	parm_stash = await agent.save_parameters(scatter)
 
 
 ## Every point of the cook, with the attributes an instance transform is built from.
 func _fetch_points(scatter: HEGoAssetNode) -> Dictionary:
-	var output: HEGoGeoOutput = await hego.task(scatter.get_geo_output())
+	var output: HEGoGeoOutput = await agent.task(scatter.get_geo_output())
 	if output == null or not output.is_valid():
 		return {}
 
 	var attribs := PackedStringArray(HEGoPointUtil.ORIENTATION_ATTRIBS + [HEGoPointUtil.COLOR_ATTRIB])
-	await hego.task(output.load_attributes(attribs))
+	await agent.task(output.load_attributes(attribs))
 	return output.select_all().get_points(attribs)
 
 
@@ -118,7 +118,7 @@ func hego_use_bottom_panel() -> bool:
 
 ## The asset node the bottom panel reads parameters from, or null before the first cook.
 func hego_get_asset_node() -> HEGoAssetNode:
-	return hego.assets.get(ASSET_LABEL)
+	return agent.assets.get(ASSET_LABEL)
 
 
 ## The HDA this node cooks, which is what the panel's preset list is keyed by.

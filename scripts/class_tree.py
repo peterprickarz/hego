@@ -80,7 +80,7 @@ GROUPS = [
         "pass around. See :doc:`/api/custom_nodes`.",
         [
             "HEGoNode3D",
-            "HEGoHelpers",
+            "HEGoAssetAgent",
             "HEGoOutputContext",
             "HEGoNodeUtil",
             "HEGoInputNodes",

@@ -65,7 +65,7 @@ Cooking From Code
 
     func regenerate(seed_value: int) -> void:
         var asset_node := hego_node.hego_get_asset_node()
-        await hego_node.hego.task(asset_node.set_parm("seed", seed_value))
+        await hego_node.agent.task(asset_node.set_parm("seed", seed_value))
         await hego_node.cook()
         # Outputs now exist under hego_node/Outputs
 

@@ -1,36 +1,39 @@
 @tool
-class_name HEGoHelpers
+class_name HEGoAssetAgent
 extends RefCounted
 
-## The tedious parts of driving an HDA, for a node that writes its own [code]cook()[/code].
+## Holds the HDAs one Godot node owns, and does the fiddly parts of driving them.
 ##
-## This is not a layer over Houdini Engine. A script holds its own [HEGoAssetNode] and calls
-## it directly; these are the handful of things that are either fiddly to repeat or subtle
-## enough to get wrong silently.
+## Using one is optional. Every method below is a short sequence of ordinary
+## [HEGoAssetNode] calls that a node can make itself, and the manual form of each is in the
+## documentation; the agent exists because a few of those sequences are tedious to repeat
+## and two are easy to get silently wrong. What it holds is the point of holding it: the
+## assets by label, and the merge and input nodes behind each HDA input, all of which have
+## to survive from one cook to the next for the Houdini node ids to stay valid.
 ##
 ## [codeblock]
 ## @tool
 ## extends MeshInstance3D
 ##
-## var hego := HEGoHelpers.new(self)
+## var agent := HEGoAssetAgent.new(self)
 ## @export var parm_stash: PackedByteArray
 ## @export var input_stash: Array
 ##
 ## func cook() -> void:
-##     var fence := hego.asset("Sop/my_fence")
-##     if not await hego.instantiate(fence, parm_stash):
+##     var fence := agent.asset("Sop/my_fence")
+##     if not await agent.instantiate(fence, parm_stash):
 ##         return
-##     await hego.sync_inputs(fence)
-##     if await hego.task(fence.cook()) == null:
+##     await agent.sync_inputs(fence)
+##     if await agent.task(fence.cook()) == null:
 ##         return
 ##
-##     var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(fence))
+##     var meshes := await HEGoMeshOutput.fetch_meshes(await agent.output_context(fence))
 ##     mesh = meshes.values()[0] if not meshes.is_empty() else null
-##     parm_stash = await hego.save_parameters(fence)
+##     parm_stash = await agent.save_parameters(fence)
 ## [/codeblock]
 ##
 ## Everything the HDA does is still an ordinary call on [HEGoAssetNode], in the order the
-## script writes it.
+## script writes it. The agent never stands between the two.
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "cook"

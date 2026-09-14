@@ -50,11 +50,11 @@ class PickableNode extends StubNode:
 
 ## A node that puts several HDAs in the panel and says which of them to show, in what order.
 class MultiAssetNode extends Node3D:
-	var hego := HEGoHelpers.new(self)
+	var agent := HEGoAssetAgent.new(self)
 	var input_stash: Array
 
 	func hego_use_bottom_panel() -> bool: return true
-	func hego_get_panel_assets() -> Array: return hego.panel_assets()
+	func hego_get_panel_assets() -> Array: return agent.panel_assets()
 	func hego_get_input_stash() -> Array: return input_stash
 	func hego_set_input_stash(rows: Array) -> void: input_stash = rows
 
@@ -118,23 +118,23 @@ func _initialize() -> void:
 	var multi := MultiAssetNode.new()
 	root.add_child(multi)
 	await process_frame
-	multi.hego.asset("Sop/base", "base")
-	multi.hego.asset("Sop/detail", "detail")
+	multi.agent.asset("Sop/base", "base")
+	multi.agent.asset("Sop/detail", "detail")
 
-	var entries: Array = multi.hego.panel_assets()
+	var entries: Array = multi.agent.panel_assets()
 	check(entries.size() == 2, "both HDAs are offered to the panel")
 	check(entries[0]["label"] == "base", "in creation order by default")
 
-	multi.hego.show_in_panel(["detail", "base"])
-	entries = multi.hego.panel_assets()
+	multi.agent.show_in_panel(["detail", "base"])
+	entries = multi.agent.panel_assets()
 	check(entries[0]["label"] == "detail", "and in the order the node asked for")
 
-	multi.hego.show_in_panel(["detail", "nothing_by_that_name"])
-	check(multi.hego.panel_assets().size() == 1, "a label naming no asset is skipped, not an error")
+	multi.agent.show_in_panel(["detail", "nothing_by_that_name"])
+	check(multi.agent.panel_assets().size() == 1, "a label naming no asset is skipped, not an error")
 
-	multi.hego.show_in_panel([])
-	multi.hego.highlight("detail")
-	entries = multi.hego.panel_assets()
+	multi.agent.show_in_panel([])
+	multi.agent.highlight("detail")
+	entries = multi.agent.panel_assets()
 	check(entries.size() == 2, "an empty list goes back to showing all of them")
 	check(entries[1]["highlight"], "the highlighted one is marked")
 	check(not entries[0]["highlight"], "and only that one")

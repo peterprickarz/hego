@@ -39,7 +39,7 @@ one to see how an output type is built. Writing a node of your own around them i
        building it needs
    * - :ref:`HEGoPointUtil<class_HEGoPointUtil>`
      - Orientation, scale and colour attributes to a ``Transform3D`` or a ``Color``
-   * - :ref:`HEGoHelpers<class_HEGoHelpers>`
+   * - :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`
      - The tedious parts of driving an HDA, for a node writing its own ``cook()``. See
        :doc:`custom_nodes`
    * - :ref:`HEGoTerrain3DUtil<class_HEGoTerrain3DUtil>`
@@ -64,7 +64,7 @@ produced anything it cares about; and ``handle(context)``, which does the work.
 handler that wants it and times them all.
 
 ``context`` is the :ref:`HEGoOutputContext<class_HEGoOutputContext>` that
-``hego.output_context(asset)`` builds, and is a handler's only argument. It carries the three
+``agent.output_context(asset)`` builds, and is a handler's only argument. It carries the three
 things a handler needs from the cook — ``context.host``, the node the output goes under;
 ``context.asset``, the HDA that produced it; and ``context.summary`` — along with the scene
 plumbing every handler would otherwise repeat:

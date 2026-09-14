@@ -4,7 +4,7 @@
 		Brings a Houdini Digital Asset into a Godot scene.
 	</brief_description>
 	<description>
-		Pick an HDA with [b]Select HDA[/b], set its parameters in the HEGo bottom panel, and recook. Cooking instantiates the HDA in the running Houdini session, feeds it the nodes wired up as inputs, cooks it, and turns the result into Godot nodes under a child called [code]Outputs[/code].  This node handles the great majority of cases. When you want one that does something it does not - its own attributes, its own output nodes, several HDAs chained together - write your own and use [HEGoHelpers], which is what this node uses. Read [method cook] below first: it is the worked example, and there is nothing in it a script of your own cannot do.
+		Pick an HDA with [b]Select HDA[/b], set its parameters in the HEGo bottom panel, and recook. Cooking instantiates the HDA in the running Houdini session, feeds it the nodes wired up as inputs, cooks it, and turns the result into Godot nodes under a child called [code]Outputs[/code].  This node handles the great majority of cases. When you want one that does something it does not - its own attributes, its own output nodes, several HDAs chained together - write your own and use [HEGoAssetAgent], which is what this node uses. Read [method cook] below first: it is the worked example, and there is nothing in it a script of your own cannot do.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -80,8 +80,8 @@
 		<member name="input_stash" type="Array" setter="" getter="">
 			References to the Godot nodes wired into the HDA's inputs, one entry per input.
 		</member>
-		<member name="hego" type="HEGoHelpers" setter="" getter="" default="new(...)">
-			The tedious parts of driving an HDA. Everything it does is an ordinary call on [HEGoAssetNode]; see [HEGoHelpers].
+		<member name="agent" type="HEGoAssetAgent" setter="" getter="" default="new(...)">
+			The tedious parts of driving an HDA. Everything it does is an ordinary call on [HEGoAssetNode]; see [HEGoAssetAgent].
 		</member>
 	</members>
 	<constants>

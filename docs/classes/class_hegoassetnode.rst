@@ -27,12 +27,12 @@ Call :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNode_method_instantiate>` af
 
 
 
-All methods that interact with Houdini Engine return an :ref:`HEGoTask<class_HEGoTask>`. Await the task to get the result, through the node's :ref:`HEGoHelpers<class_HEGoHelpers>`, called ``hego`` in every example here:
+All methods that interact with Houdini Engine return an :ref:`HEGoTask<class_HEGoTask>`. Await the task to get the result, through the node's :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`, called ``hego`` in every example here:
 
 ::
 
     var task = asset_node.cook()
-    var result = await hego.task(task)
+    var result = await agent.task(task)
 
 
 
@@ -231,7 +231,7 @@ Pass ``preload_attribs`` to have those point attributes loaded while the task ru
 
 ::
 
-    var output = await hego.task(asset_node.get_geo_output(["N", "up", "hego_spawn"]))
+    var output = await agent.task(asset_node.get_geo_output(["N", "up", "hego_spawn"]))
     for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path").values():
         var points = group.get_points(["N", "up"])
 
@@ -311,7 +311,7 @@ Submits a task returning a :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>`: the co
 
 ::
 
-    var output = await hego.task(asset_node.get_surface_output(["N", "uv"], ["hego_material"]))
+    var output = await agent.task(asset_node.get_surface_output(["N", "uv"], ["hego_material"]))
     for material in output.split_by("hego_material"):
         var surface = by_material[material].get_surface()
 

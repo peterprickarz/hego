@@ -4,9 +4,9 @@
 A cooked node's surfaces, read and split from code.
 </brief_description>
 <description>
-Returned by [method HEGoAssetNode.get_surface_output], and the surface counterpart of [HEGoGeoOutput]: where that one selects points, this selects primitives and turns a group of them into a Godot surface array ([code]hego[/code] below being the node's [HEGoHelpers]).
+Returned by [method HEGoAssetNode.get_surface_output], and the surface counterpart of [HEGoGeoOutput]: where that one selects points, this selects primitives and turns a group of them into a Godot surface array ([code]hego[/code] below being the node's [HEGoAssetAgent]).
 [codeblock]
-var output = await hego.task(asset_node.get_surface_output(["N", "uv"], ["hego_mesh_instance", "hego_material"]))
+var output = await agent.task(asset_node.get_surface_output(["N", "uv"], ["hego_mesh_instance", "hego_material"]))
 
 var by_instance = output.split_by("hego_mesh_instance")
 for instance_name in by_instance:

@@ -8,10 +8,10 @@ Use this class to instantiate an HDA by operator name, set parameters, cook, and
 
 Call [method HEGoBaseNode.instantiate] after assigning [member op_name]. Most data-access methods require a valid instantiated node; when called before instantiation they log an error and return a failed task.
 
-All methods that interact with Houdini Engine return an [HEGoTask]. Await the task to get the result, through the node's [HEGoHelpers], called [code]hego[/code] in every example here:
+All methods that interact with Houdini Engine return an [HEGoTask]. Await the task to get the result, through the node's [HEGoAssetAgent], called [code]hego[/code] in every example here:
 [codeblock]
 var task = asset_node.cook()
-var result = await hego.task(task)
+var result = await agent.task(task)
 [/codeblock]
 
 [method fetch_points] expects a resource compatible with [code]HEGoFetchPointsConfig[/code]. [method fetch_surfaces] expects a resource compatible with [code]HEGoFetchSurfacesConfig[/code].
@@ -75,7 +75,7 @@ Submits a task returning a [HEGoGeoOutput]: the cooked output, read and split fr
 
 Pass [code]preload_attribs[/code] to have those point attributes loaded while the task runs, so no further await is needed before querying:
 [codeblock]
-var output = await hego.task(asset_node.get_geo_output(["N", "up", "hego_spawn"]))
+var output = await agent.task(asset_node.get_geo_output(["N", "up", "hego_spawn"]))
 for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path").values():
     var points = group.get_points(["N", "up"])
 [/codeblock]
@@ -119,7 +119,7 @@ Submits a task returning a [HEGoGeoSurfaces]: the cooked surfaces, read and spli
 
 [code]point_attribs[/code] names which of [code]N[/code], [code]Cd[/code], [code]uv[/code], [code]uv2[/code] and [code]tangents[/code] to read; [code]P[/code] always comes along. [code]preload_attribs[/code] are primitive attributes, loaded while the task runs so the queries afterwards need no further await:
 [codeblock]
-var output = await hego.task(asset_node.get_surface_output(["N", "uv"], ["hego_material"]))
+var output = await agent.task(asset_node.get_surface_output(["N", "uv"], ["hego_material"]))
 for material in output.split_by("hego_material"):
     var surface = by_material[material].get_surface()
 [/codeblock]

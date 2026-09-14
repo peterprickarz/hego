@@ -19,12 +19,12 @@ A cooked node's output, read and split from code.
 Description
 -----------
 
-Returned by :ref:`HEGoAssetNode.get_geo_output()<class_HEGoAssetNode_method_get_geo_output>`. Where a fetch config describes the wanted attributes and splits ahead of time in a resource, this describes them in code, at the point of use (\ ``hego`` being the node's :ref:`HEGoHelpers<class_HEGoHelpers>`):
+Returned by :ref:`HEGoAssetNode.get_geo_output()<class_HEGoAssetNode_method_get_geo_output>`. Where a fetch config describes the wanted attributes and splits ahead of time in a resource, this describes them in code, at the point of use (\ ``hego`` being the node's :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`):
 
 ::
 
-    var output = await hego.task(asset_node.get_geo_output())
-    await hego.task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
+    var output = await agent.task(asset_node.get_geo_output())
+    await agent.task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
 
     var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
     for node_path in groups:

@@ -24,7 +24,7 @@ var action_print_layers: Callable = func(): print_heightfield_layers()
 ## Waits for [param task] and returns its result, or null if it failed.
 ##
 ## This is a bench for the raw heightfield calls rather than a node that cooks an HDA, so
-## it does not use [HEGoHelpers]; it just borrows the one thing every script needs.
+## it does not use [HEGoAssetAgent]; it just borrows the one thing every script needs.
 func _await(task: HEGoTask) -> Variant:
 	return await HEGoNodeUtil.await_task(self, task)
 

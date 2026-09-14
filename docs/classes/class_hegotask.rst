@@ -27,11 +27,11 @@ Poll :ref:`get_status()<class_HEGoTask_method_get_status>` to determine whether 
 
 
 
-Do not poll it yourself. :ref:`HEGoHelpers.task()<class_HEGoHelpers_method_task>` does the wait for a node holding a :ref:`HEGoHelpers<class_HEGoHelpers>`, and :ref:`HEGoNodeUtil.await_task()<class_HEGoNodeUtil_method_await_task>` is the same wait as a static call; both return the result, or ``null`` if the task failed:
+Do not poll it yourself. :ref:`HEGoAssetAgent.task()<class_HEGoAssetAgent_method_task>` does the wait for a node holding a :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`, and :ref:`HEGoNodeUtil.await_task()<class_HEGoNodeUtil_method_await_task>` is the same wait as a static call; both return the result, or ``null`` if the task failed:
 
 ::
 
-    var result = await hego.task(asset_node.cook())
+    var result = await agent.task(asset_node.cook())
 
 Either of them is this, and nothing more:
 

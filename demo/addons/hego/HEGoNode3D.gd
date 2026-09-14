@@ -12,7 +12,7 @@ class_name HEGoNode3D
 ##
 ## This node handles the great majority of cases. When you want one that does something it
 ## does not - its own attributes, its own output nodes, several HDAs chained together -
-## write your own and use [HEGoHelpers], which is what this node uses. Read
+## write your own and use [HEGoAssetAgent], which is what this node uses. Read
 ## [method cook] below first: it is the worked example, and there is nothing in it a script
 ## of your own cannot do.
 
@@ -29,8 +29,8 @@ class_name HEGoNode3D
 const LOG_CATEGORY := "cook"
 
 ## The tedious parts of driving an HDA. Everything it does is an ordinary call on
-## [HEGoAssetNode]; see [HEGoHelpers].
-var hego := HEGoHelpers.new(self)
+## [HEGoAssetNode]; see [HEGoAssetAgent].
+var agent := HEGoAssetAgent.new(self)
 
 
 # ─────────────────────────────────────────────
@@ -44,24 +44,24 @@ func cook() -> void:
 		return
 
 	var timings := HEGoCookTimings.new()
-	var asset := hego.asset(asset_name)
+	var asset := agent.asset(asset_name)
 
 	timings.begin_phase()
-	if not await hego.instantiate(asset, parm_stash):
+	if not await agent.instantiate(asset, parm_stash):
 		HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 		return
 	timings.end_phase("instantiation")
 
 	timings.begin_phase()
-	await hego.sync_inputs(asset)
+	await agent.sync_inputs(asset)
 	timings.end_phase("input_setup")
 
 	timings.begin_phase()
-	parm_stash = await hego.save_parameters(asset)
+	parm_stash = await agent.save_parameters(asset)
 	timings.end_phase("parm_stash")
 
 	timings.begin_phase()
-	var cook_result = await hego.task(asset.cook())
+	var cook_result = await agent.task(asset.cook())
 	timings.end_phase("cook")
 	# A cook Houdini rejects fails its task, so null covers both a cook that could not run
 	# and one that ran and came back with fatal errors.
@@ -79,7 +79,7 @@ func cook() -> void:
 	# than asking Houdini for attributes that are not there. An unreadable summary means they
 	# all run, which costs time rather than output.
 	timings.begin_phase()
-	var context := await hego.output_context(asset)
+	var context := await agent.output_context(asset)
 	timings.end_phase("output_summary")
 
 	var skipped := PackedStringArray()
@@ -133,7 +133,7 @@ func hego_use_bottom_panel() -> bool:
 
 ## The asset node the bottom panel reads parameters from, or null before the first cook.
 func hego_get_asset_node() -> HEGoAssetNode:
-	var existing: Array = hego.assets.values()
+	var existing: Array = agent.assets.values()
 	return existing[0] if not existing.is_empty() else null
 
 
@@ -219,9 +219,9 @@ func _on_asset_selected(selected_asset: String) -> void:
 ## Forgets everything tied to the previous HDA: the Houdini node, its parameters, its inputs
 ## and its output nodes.
 func _clear_hda_data() -> void:
-	for existing in hego.assets.values():
+	for existing in agent.assets.values():
 		existing.reset_node_id()
-	hego.assets.clear()
+	agent.assets.clear()
 
 	parm_stash = PackedByteArray()
 	input_stash.clear()

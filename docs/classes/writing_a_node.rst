@@ -11,8 +11,8 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
      - Description
    * - :ref:`HEGoNode3D<class_HEGoNode3D>`
      - Brings a Houdini Digital Asset into a Godot scene.
-   * - :ref:`HEGoHelpers<class_HEGoHelpers>`
-     - The tedious parts of driving an HDA, for a node that writes its own ``cook()``.
+   * - :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`
+     - Holds the HDAs one Godot node owns, and does the fiddly parts of driving them.
    * - :ref:`HEGoOutputContext<class_HEGoOutputContext>`
      - Everything one output handler is given to work with.
    * - :ref:`HEGoNodeUtil<class_HEGoNodeUtil>`
@@ -27,7 +27,7 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
    :hidden:
 
    class_hegonode3d
-   class_hegohelpers
+   class_hegoassetagent
    class_hegooutputcontext
    class_hegonodeutil
    class_hegoinputnodes

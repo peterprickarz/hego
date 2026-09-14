@@ -5,14 +5,14 @@ Overview
 --------
 
 Read a cook's output in code, at the point of use. ``hego`` here is the node's
-:ref:`HEGoHelpers<class_HEGoHelpers>` and ``asset_node`` the
+:ref:`HEGoAssetAgent<class_HEGoAssetAgent>` and ``asset_node`` the
 :ref:`HEGoAssetNode<class_HEGoAssetNode>` that cooked; :doc:`custom_nodes` is where both
 come from.
 
 .. code-block:: gdscript
 
-    var output = await hego.task(asset_node.get_geo_output())
-    await hego.task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
+    var output = await agent.task(asset_node.get_geo_output())
+    await agent.task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
 
     var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
     for node_path in groups:
@@ -68,8 +68,8 @@ splitting on ``hego_node_path`` becomes:
 
 .. code-block:: gdscript
 
-    var output = await hego.task(asset_node.get_geo_output())
-    await hego.task(output.load_attributes(["N", "pscale", "hego_spawn", "hego_node_path"]))
+    var output = await agent.task(asset_node.get_geo_output())
+    await agent.task(output.load_attributes(["N", "pscale", "hego_spawn", "hego_node_path"]))
 
     var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
     for node_path in groups:
@@ -102,7 +102,7 @@ You can also preload while fetching the output, which saves an await:
 
 .. code-block:: gdscript
 
-    var output = await hego.task(asset_node.get_geo_output(["N", "up", "pscale"]))
+    var output = await agent.task(asset_node.get_geo_output(["N", "up", "pscale"]))
 
 Discovering what an HDA produced
 --------------------------------
@@ -116,7 +116,7 @@ whatever the HDA happens to carry instead of naming everything up front:
         print(name, " is present on this output")
 
     if output.has_attribute("Cd"):
-        await hego.task(output.load_attributes(["Cd"]))
+        await agent.task(output.load_attributes(["Cd"]))
 
 Reference
 ---------
@@ -172,7 +172,7 @@ what the cook produced:
 
 .. code-block:: gdscript
 
-    var summary = await hego.task(asset_node.get_output_summary())
+    var summary = await agent.task(asset_node.get_output_summary())
     # {
     #     "has_mesh": true, "has_points": false, "has_curves": false, "has_volumes": false,
     #     "point_attributes": [...], "prim_attributes": [...],

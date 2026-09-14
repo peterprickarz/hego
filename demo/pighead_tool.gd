@@ -10,7 +10,7 @@ class_name HDAPigHead
 ## is implemented, the bottom panel leaves out its asset picker but still shows this node's
 ## parameters and its Recook button.
 ##
-## Everything here is an ordinary call on [HEGoAssetNode]; [HEGoHelpers] only supplies the
+## Everything here is an ordinary call on [HEGoAssetNode]; [HEGoAssetAgent] only supplies the
 ## parts that are tedious to repeat.
 
 ## The asset definition name in Houdini.
@@ -23,25 +23,25 @@ const ASSET_LABEL := "pighead"
 ## The HDA's parameters as a blob, so they survive a session restart and a scene reload.
 @export var parm_stash: PackedByteArray
 
-var hego := HEGoHelpers.new(self)
+var agent := HEGoAssetAgent.new(self)
 
 
 ## Cooks the HDA and puts the mesh it produced on this node.
 func cook() -> void:
-	var pighead := hego.asset(ASSET_NAME, ASSET_LABEL)
-	if not await hego.instantiate(pighead, parm_stash):
+	var pighead := agent.asset(ASSET_NAME, ASSET_LABEL)
+	if not await agent.instantiate(pighead, parm_stash):
 		return
 
 	# A cook Houdini rejects fails its task, so null is the whole check.
-	if await hego.task(pighead.cook()) == null:
+	if await agent.task(pighead.cook()) == null:
 		return
 
 	# This HDA writes a hego_lod primitive attribute, which fetch_meshes turns into Godot
 	# LODs on the mesh it builds. One mesh instance, so take the first.
-	var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(pighead))
+	var meshes := await HEGoMeshOutput.fetch_meshes(await agent.output_context(pighead))
 	mesh = meshes.values()[0] if not meshes.is_empty() else null
 
-	parm_stash = await hego.save_parameters(pighead)
+	parm_stash = await agent.save_parameters(pighead)
 
 
 # ─────────────────────────────────────────────
@@ -55,7 +55,7 @@ func hego_use_bottom_panel() -> bool:
 
 ## The asset node the bottom panel reads parameters from, or null before the first cook.
 func hego_get_asset_node() -> HEGoAssetNode:
-	return hego.assets.get(ASSET_LABEL)
+	return agent.assets.get(ASSET_LABEL)
 
 
 ## The HDA this node cooks, which is what the panel's preset list is keyed by.

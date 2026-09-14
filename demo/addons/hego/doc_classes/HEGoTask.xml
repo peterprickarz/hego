@@ -8,9 +8,9 @@ All HEGo node methods that call Houdini Engine return an [HEGoTask] instead of b
 
 Poll [method get_status] to determine whether the task is still running. Once the status reaches [constant COMPLETED], the result is available via [method get_result]. If the status is [constant FAILED], [method get_error_message] describes what went wrong.
 
-Do not poll it yourself. [method HEGoHelpers.task] does the wait for a node holding a [HEGoHelpers], and [method HEGoNodeUtil.await_task] is the same wait as a static call; both return the result, or [code]null[/code] if the task failed:
+Do not poll it yourself. [method HEGoAssetAgent.task] does the wait for a node holding a [HEGoAssetAgent], and [method HEGoNodeUtil.await_task] is the same wait as a static call; both return the result, or [code]null[/code] if the task failed:
 [codeblock]
-var result = await hego.task(asset_node.cook())
+var result = await agent.task(asset_node.cook())
 [/codeblock]
 Either of them is this, and nothing more:
 [codeblock]

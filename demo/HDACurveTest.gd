@@ -7,7 +7,7 @@ class_name HDACurveTest
 ##
 ## Unlike [HEGoNode3D], this node's input is an exported property rather than a row in the
 ## bottom panel's Inputs pane, so it wires the curve up itself. That is what the raw input
-## classes are for: [HEGoHelpers] handles the HDA, and anything the script wants to control
+## classes are for: [HEGoAssetAgent] handles the HDA, and anything the script wants to control
 ## it keeps.
 
 ## The asset definition name in Houdini.
@@ -25,7 +25,7 @@ const CURVE_SAMPLE_LENGTH := 2.0
 ## The HDA's parameters as a blob, so they survive a session restart and a scene reload.
 @export var parm_stash: PackedByteArray
 
-var hego := HEGoHelpers.new(self)
+var agent := HEGoAssetAgent.new(self)
 
 ## The Houdini node the curve is sent through, kept so a recook reuses it.
 var curve_input: HEGoCurveInputNode
@@ -33,25 +33,25 @@ var curve_input: HEGoCurveInputNode
 
 ## Sends the curve to Houdini, cooks the HDA and puts the mesh it produced on this node.
 func cook() -> void:
-	var fence := hego.asset(ASSET_NAME, ASSET_LABEL)
-	if not await hego.instantiate(fence, parm_stash):
+	var fence := agent.asset(ASSET_NAME, ASSET_LABEL)
+	if not await agent.instantiate(fence, parm_stash):
 		return
 
 	if input_node is Path3D:
 		if curve_input == null:
 			curve_input = HEGoCurveInputNode.new()
-		await hego.task(curve_input.instantiate())
-		await hego.task(curve_input.set_curve_from_path_3d(input_node, CURVE_SAMPLE_LENGTH))
-		await hego.task(fence.connect_input(curve_input, 0))
+		await agent.task(curve_input.instantiate())
+		await agent.task(curve_input.set_curve_from_path_3d(input_node, CURVE_SAMPLE_LENGTH))
+		await agent.task(fence.connect_input(curve_input, 0))
 
 	# A cook Houdini rejects fails its task, so null is the whole check.
-	if await hego.task(fence.cook()) == null:
+	if await agent.task(fence.cook()) == null:
 		return
 
-	var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(fence))
+	var meshes := await HEGoMeshOutput.fetch_meshes(await agent.output_context(fence))
 	mesh = meshes.values()[0] if not meshes.is_empty() else null
 
-	parm_stash = await hego.save_parameters(fence)
+	parm_stash = await agent.save_parameters(fence)
 
 
 # ─────────────────────────────────────────────
@@ -65,7 +65,7 @@ func hego_use_bottom_panel() -> bool:
 
 ## The asset node the bottom panel reads parameters from, or null before the first cook.
 func hego_get_asset_node() -> HEGoAssetNode:
-	return hego.assets.get(ASSET_LABEL)
+	return agent.assets.get(ASSET_LABEL)
 
 
 ## The HDA this node cooks, which is what the panel's preset list is keyed by.

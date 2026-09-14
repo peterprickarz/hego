@@ -6,7 +6,7 @@ class_name HDAScifiPanelGenerator
 ## A custom HEGo node that panels whatever meshes it is given.
 ##
 ## Its inputs come from an exported array rather than from the bottom panel's Inputs pane,
-## so [method cook] pushes them into the input stash itself and lets [HEGoHelpers] build the
+## so [method cook] pushes them into the input stash itself and lets [HEGoAssetAgent] build the
 ## merge chain. The HDA tags its output with material names of its own rather than with
 ## resource paths, so this node maps them to materials instead of using
 ## [method HEGoMeshOutput.fetch_meshes], which expects the path convention.
@@ -34,7 +34,7 @@ const MATERIALS := {
 ## The HDA's parameters as a blob, so they survive a session restart and a scene reload.
 @export var parm_stash: PackedByteArray
 
-var hego := HEGoHelpers.new(self)
+var agent := HEGoAssetAgent.new(self)
 
 ## Where the helper reads and writes input references. Not exported, because input_nodes is
 ## what this node is driven by; the panel's Inputs pane shows these rows but every cook
@@ -44,21 +44,21 @@ var input_stash: Array = []
 
 ## Sends the input meshes to Houdini, cooks the HDA and puts the panelled mesh on this node.
 func cook() -> void:
-	var panels := hego.asset(ASSET_NAME, ASSET_LABEL)
-	if not await hego.instantiate(panels, parm_stash):
+	var panels := agent.asset(ASSET_NAME, ASSET_LABEL)
+	if not await agent.instantiate(panels, parm_stash):
 		return
 
 	# One input taking several meshes: set_input records them all and sync_inputs wires them
 	# through a merge node, reusing the Houdini input nodes it made last cook.
-	hego.set_input(0, input_nodes)
-	await hego.sync_inputs(panels)
+	agent.set_input(0, input_nodes)
+	await agent.sync_inputs(panels)
 
 	# A cook Houdini rejects fails its task, so null is the whole check.
-	if await hego.task(panels.cook()) == null:
+	if await agent.task(panels.cook()) == null:
 		return
 
-	mesh = await _build_mesh(await hego.output_context(panels))
-	parm_stash = await hego.save_parameters(panels)
+	mesh = await _build_mesh(await agent.output_context(panels))
+	parm_stash = await agent.save_parameters(panels)
 
 
 ## One surface per material name the HDA tagged its geometry with.
@@ -87,7 +87,7 @@ func hego_use_bottom_panel() -> bool:
 
 ## The asset node the bottom panel reads parameters from, or null before the first cook.
 func hego_get_asset_node() -> HEGoAssetNode:
-	return hego.assets.get(ASSET_LABEL)
+	return agent.assets.get(ASSET_LABEL)
 
 
 ## The HDA this node cooks, which is what the panel's preset list is keyed by.

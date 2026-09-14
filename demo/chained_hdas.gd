@@ -11,7 +11,7 @@ class_name ChainedHDAs
 ## upstream by itself.
 ##
 ## The two things worth copying here are the skip list handed to
-## [method HEGoHelpers.sync_inputs], which keeps the input stash from overwriting the chained
+## [method HEGoAssetAgent.sync_inputs], which keeps the input stash from overwriting the chained
 ## input with a merge node, and the stage buttons: a tool with several stages can put its own
 ## switcher in the inspector and point the bottom panel at whichever stage the user is
 ## working on.
@@ -32,8 +32,8 @@ const INSTANCED_MESH := "res://models/test_grass_subnet1.res"
 const MULTIMESH_NAME := "scattered_grass"
 
 @export_tool_button("Cook", "Bake") var action_cook = func(): cook()
-@export_tool_button("Edit base", "Edit") var action_edit_base = func(): hego.highlight(BASE_LABEL)
-@export_tool_button("Edit scatter", "Edit") var action_edit_scatter = func(): hego.highlight(SCATTER_LABEL)
+@export_tool_button("Edit base", "Edit") var action_edit_base = func(): agent.highlight(BASE_LABEL)
+@export_tool_button("Edit scatter", "Edit") var action_edit_scatter = func(): agent.highlight(SCATTER_LABEL)
 
 ## Each stage keeps its own parameters. One blob per HDA, because a preset belongs to the
 ## HDA it was read from and there is nothing sensible to do with another one's.
@@ -42,36 +42,36 @@ const MULTIMESH_NAME := "scattered_grass"
 ## References to the Godot nodes wired into the scatter stage's remaining inputs.
 @export var input_stash: Array
 
-var hego := HEGoHelpers.new(self)
+var agent := HEGoAssetAgent.new(self)
 
 
 ## Cooks the chain and rebuilds the multimesh of scattered instances under Outputs/.
 func cook() -> void:
-	var base := hego.asset(BASE_ASSET, BASE_LABEL)
-	var scatter := hego.asset(SCATTER_ASSET, SCATTER_LABEL)
+	var base := agent.asset(BASE_ASSET, BASE_LABEL)
+	var scatter := agent.asset(SCATTER_ASSET, SCATTER_LABEL)
 
 	# The scatter stage goes first in the panel because it is the one being tuned, and
 	# because the panel shows the input rows of the first stage listed - which are this
 	# node's inputs, and it is the scatter that is fed them.
-	hego.show_in_panel([SCATTER_LABEL, BASE_LABEL])
+	agent.show_in_panel([SCATTER_LABEL, BASE_LABEL])
 
-	if not await hego.instantiate(base, base_parm_stash):
+	if not await agent.instantiate(base, base_parm_stash):
 		return
-	if not await hego.instantiate(scatter, scatter_parm_stash):
+	if not await agent.instantiate(scatter, scatter_parm_stash):
 		return
 
 	# The chain itself. Both stages carry this node's transform, which instantiate() does:
 	# leaving an upstream stage at the origin moves everything downstream of it by however
 	# far this node is from the origin.
-	await hego.task(scatter.connect_input(base, CHAINED_INPUT))
+	await agent.task(scatter.connect_input(base, CHAINED_INPUT))
 
 	# Everything except the chained input comes from the stash as usual. Without the skip the
 	# next cook would replace the chain with an empty merge node and the scatter would have
 	# nothing to scatter over.
-	await hego.sync_inputs(scatter, [CHAINED_INPUT])
+	await agent.sync_inputs(scatter, [CHAINED_INPUT])
 
 	# Only the last stage is cooked. Houdini cooks base because scatter asks it for geometry.
-	if await hego.task(scatter.cook()) == null:
+	if await agent.task(scatter.cook()) == null:
 		return
 
 	# Cleared only now the cook has succeeded, so a failure leaves the last result visible.
@@ -79,23 +79,23 @@ func cook() -> void:
 	if outputs_node:
 		outputs_node.free()
 
-	var context := await hego.output_context(scatter)
+	var context := await agent.output_context(scatter)
 	var points := await _fetch_points(scatter)
 	if not points.is_empty():
 		HEGoMultiMeshOutput.setup_multimesh(context, load(INSTANCED_MESH), MULTIMESH_NAME, points)
 
-	base_parm_stash = await hego.save_parameters(base)
-	scatter_parm_stash = await hego.save_parameters(scatter)
+	base_parm_stash = await agent.save_parameters(base)
+	scatter_parm_stash = await agent.save_parameters(scatter)
 
 
 ## Every point of the cook, with the attributes an instance transform is built from.
 func _fetch_points(scatter: HEGoAssetNode) -> Dictionary:
-	var output: HEGoGeoOutput = await hego.task(scatter.get_geo_output())
+	var output: HEGoGeoOutput = await agent.task(scatter.get_geo_output())
 	if output == null or not output.is_valid():
 		return {}
 
 	var attribs := PackedStringArray(HEGoPointUtil.ORIENTATION_ATTRIBS + [HEGoPointUtil.COLOR_ATTRIB])
-	await hego.task(output.load_attributes(attribs))
+	await agent.task(output.load_attributes(attribs))
 	return output.select_all().get_points(attribs)
 
 
@@ -114,7 +114,7 @@ func hego_use_bottom_panel() -> bool:
 ## Answering this instead of hego_get_asset_node() is the whole of what a multi-HDA node has
 ## to do differently.
 func hego_get_panel_assets() -> Array:
-	return hego.panel_assets()
+	return agent.panel_assets()
 
 
 ## The stored input references. Input rows belong to this node rather than to one HDA, and

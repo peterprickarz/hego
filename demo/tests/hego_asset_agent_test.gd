@@ -1,4 +1,4 @@
-## Covers HEGoHelpers, the small object a node writing its own cook() leans on.
+## Covers HEGoAssetAgent, the small object a node writing its own cook() leans on.
 ##
 ## Everything here works without a Houdini session: creating an HEGoAssetNode is cheap and
 ## its id stays -1 until something instantiates it, which is exactly the state these checks
@@ -27,26 +27,26 @@ func _initialize() -> void:
 	var node := StubNode.new()
 	root.add_child(node)
 	await process_frame
-	var hego := HEGoHelpers.new(node)
+	var agent := HEGoAssetAgent.new(node)
 
 	# --- assets are created once and reused ---------------------------------
-	var first := hego.asset("Sop/hego_fence")
-	var again := hego.asset("Sop/hego_fence")
+	var first := agent.asset("Sop/hego_fence")
+	var again := agent.asset("Sop/hego_fence")
 	check(first == again, "asking twice returns the same asset node")
 	check(first.op_name == "Sop/hego_fence", "the operator name is kept verbatim")
-	check(hego.assets.size() == 1, "and only one is recorded")
-	check(hego.assets.has("hego_fence"), "labelled by the operator without its table")
+	check(agent.assets.size() == 1, "and only one is recorded")
+	check(agent.assets.has("hego_fence"), "labelled by the operator without its table")
 
-	var labelled := hego.asset("Sop/other", "detail")
-	check(hego.assets.has("detail"), "an explicit label wins")
-	check(hego.assets.size() == 2, "a second asset is recorded alongside the first")
+	var labelled := agent.asset("Sop/other", "detail")
+	check(agent.assets.has("detail"), "an explicit label wins")
+	check(agent.assets.size() == 2, "a second asset is recorded alongside the first")
 	check(labelled != first, "and is a different node")
 
 	# --- a bare operator name gets the default table ------------------------
-	check(hego.asset("my_tool").op_name == "Sop/my_tool", "a name without a table gets Sop/")
+	check(agent.asset("my_tool").op_name == "Sop/my_tool", "a name without a table gets Sop/")
 
 	# --- pointing a label at a different HDA must not reuse the old node -----
-	var reused := hego.asset("Sop/changed", "detail")
+	var reused := agent.asset("Sop/changed", "detail")
 	check(reused == labelled, "the same label keeps the same object")
 	check(reused.op_name == "Sop/changed", "but its operator is updated")
 	check(reused.get_id() == -1, "and its Houdini node is forgotten, so the next cook makes the right one")
@@ -55,7 +55,7 @@ func _initialize() -> void:
 	var fresh := StubNode.new()
 	root.add_child(fresh)
 	await process_frame
-	var inputs := HEGoHelpers.new(fresh)
+	var inputs := HEGoAssetAgent.new(fresh)
 
 	inputs.set_input(0, "SomePath")
 	check(fresh.input_stash.size() == 1, "setting input 0 makes one row")

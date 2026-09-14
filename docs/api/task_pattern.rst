@@ -24,23 +24,23 @@ Awaiting a Task
 ---------------
 
 A task is awaited by polling its status once per frame.
-:ref:`HEGoHelpers<class_HEGoHelpers>` carries that as ``task()``, so a node holding one
+:ref:`HEGoAssetAgent<class_HEGoAssetAgent>` carries that as ``task()``, so a node holding one
 writes:
 
 .. code-block:: gdscript
 
-    var hego := HEGoHelpers.new(self)
+    var agent := HEGoAssetAgent.new(self)
 
     # Instantiate an HDA
-    var asset := hego.asset("Sop/my_hda")
-    await hego.instantiate(asset)
+    var asset := agent.asset("Sop/my_hda")
+    await agent.instantiate(asset)
 
     # Set parameters and cook
-    await hego.task(asset.set_parm("height", 5.0))
-    await hego.task(asset.cook())
+    await agent.task(asset.set_parm("height", 5.0))
+    await agent.task(asset.cook())
 
     # Fetch output
-    var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(asset))
+    var meshes := await HEGoMeshOutput.fetch_meshes(await agent.output_context(asset))
 
 See :doc:`custom_nodes` for what else the helper does. If you would rather not hold one,
 ``HEGoNodeUtil.await_task(host, task)`` is the same wait as a static call, and this is all
@@ -64,7 +64,7 @@ error description. Awaiting it gives ``null``, so callers can check for that:
 
 .. code-block:: gdscript
 
-    if await hego.task(asset.cook()) == null:
+    if await agent.task(asset.cook()) == null:
         print("Cook failed, check the error log")
         return
 
@@ -103,4 +103,4 @@ in between, they queue up and run in order:
     var t3 = asset.cook()
 
     # Wait only for the last one -- the earlier ones will have finished by then
-    await hego.task(t3)
+    await agent.task(t3)
