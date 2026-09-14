@@ -32,10 +32,8 @@ func cook() -> void:
 	if not await hego.instantiate(pighead, parm_stash):
 		return
 
-	# A null result means the task failed. A result of -1 means Houdini rejected the cook
-	# while the task itself completed, which a null check alone misses.
-	var cook_result = await hego.task(pighead.cook())
-	if cook_result == null or int(cook_result) != 0:
+	# A cook Houdini rejects fails its task, so null is the whole check.
+	if await hego.task(pighead.cook()) == null:
 		return
 
 	# This HDA writes a hego_lod primitive attribute, which fetch_meshes turns into Godot

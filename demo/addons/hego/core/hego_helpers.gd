@@ -68,8 +68,9 @@ func _init(p_owner_node: Node) -> void:
 ## Waits for [param task] and returns its result, or [code]null[/code] if it failed.
 ##
 ## [code]null[/code] is not a general failure signal: a task that legitimately did nothing
-## also completes with null, which is what HEGo returns for work it could skip. It reads as a
-## failure check after [code]cook()[/code] because a successful cook returns 0.
+## also completes with null, which is what HEGo returns for work it could skip. It does mean
+## failure after [code]cook()[/code], which returns 0 when it succeeds and fails its task
+## when Houdini rejects it.
 func task(task: HEGoTask) -> Variant:
 	return await HEGoNodeUtil.await_task(owner_node, task)
 

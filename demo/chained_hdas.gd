@@ -71,8 +71,7 @@ func cook() -> void:
 	await hego.sync_inputs(scatter, [CHAINED_INPUT])
 
 	# Only the last stage is cooked. Houdini cooks base because scatter asks it for geometry.
-	var cook_result = await hego.task(scatter.cook())
-	if cook_result == null or int(cook_result) != 0:
+	if await hego.task(scatter.cook()) == null:
 		return
 
 	# Cleared only now the cook has succeeded, so a failure leaves the last result visible.

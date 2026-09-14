@@ -62,10 +62,9 @@ func cook() -> void:
 	timings.begin_phase()
 	var cook_result = await hego.task(asset.cook())
 	timings.end_phase("cook")
-	# A null result means the task failed. A result of -1 means Houdini rejected the cook
-	# outright while the task still completed, which a null check alone misses and which
-	# would otherwise let the handlers run over the previous cook's geometry.
-	if cook_result == null or int(cook_result) != 0:
+	# A cook Houdini rejects fails its task, so null covers both a cook that could not run
+	# and one that ran and came back with fatal errors.
+	if cook_result == null:
 		HEGoLog.get_singleton().error(LOG_CATEGORY, "Cook failed, leaving the previous output in place")
 		HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 		return

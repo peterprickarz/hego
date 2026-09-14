@@ -24,7 +24,9 @@ var result = await _await_task(task)
 <description>
 Submits a cook task for this asset node.
 
-Returns an [HEGoTask] that completes when cooking is finished. The task result is [code]null[/code].
+Returns an [HEGoTask] that completes with [code]0[/code] once the cook has finished, and that [b]fails[/b] when Houdini refuses to start the cook or the cook comes back with fatal errors. Awaiting it therefore gives [code]null[/code] on either kind of failure, which is what a script should check before reading the output.
+
+A cook that finishes with non-fatal errors succeeds: Houdini reports those as warnings and the geometry is still usable.
 </description>
 </method>
 <method name="fetch_curves">

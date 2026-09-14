@@ -137,7 +137,11 @@ Submits a cook task for this asset node.
 
 
 
-Returns an :ref:`HEGoTask<class_HEGoTask>` that completes when cooking is finished. The task result is ``null``.
+Returns an :ref:`HEGoTask<class_HEGoTask>` that completes with ``0`` once the cook has finished, and that **fails** when Houdini refuses to start the cook or the cook comes back with fatal errors. Awaiting it therefore gives ``null`` on either kind of failure, which is what a script should check before reading the output.
+
+
+
+A cook that finishes with non-fatal errors succeeds: Houdini reports those as warnings and the geometry is still usable.
 
 .. rst-class:: classref-item-separator
 

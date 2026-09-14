@@ -44,10 +44,8 @@ func cook() -> void:
 		await hego.task(curve_input.set_curve_from_path_3d(input_node, CURVE_SAMPLE_LENGTH))
 		await hego.task(fence.connect_input(curve_input, 0))
 
-	# A null result means the task failed. A result of -1 means Houdini rejected the cook
-	# while the task itself completed, which a null check alone misses.
-	var cook_result = await hego.task(fence.cook())
-	if cook_result == null or int(cook_result) != 0:
+	# A cook Houdini rejects fails its task, so null is the whole check.
+	if await hego.task(fence.cook()) == null:
 		return
 
 	var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(fence))

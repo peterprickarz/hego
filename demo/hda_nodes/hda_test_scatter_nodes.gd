@@ -71,10 +71,8 @@ func cook() -> void:
 	await hego.task(scatter.set_parm(PARM_SPIKE_DENSITY, spike_density))
 	await hego.task(scatter.set_parm(PARM_NORMAL_ALIGNED, int(normal_aligned)))
 
-	# A null result means the task failed. A result of -1 means Houdini rejected the cook
-	# while the task itself completed, which a null check alone misses.
-	var cook_result = await hego.task(scatter.cook())
-	if cook_result == null or int(cook_result) != 0:
+	# A cook Houdini rejects fails its task, so null is the whole check.
+	if await hego.task(scatter.cook()) == null:
 		return
 
 	# Cleared only now the cook has succeeded, so a failure leaves the last result visible.

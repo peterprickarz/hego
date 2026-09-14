@@ -18,8 +18,10 @@
 #include "util/hego_enums.h"
 #include "util/task/task_helpers.h"
 
+using HEGo::Util::Task::fail;
 using HEGo::Util::Task::make_failed;
 using HEGo::Util::Task::submit;
+using HEGo::Util::Task::submit_failable;
 
 namespace HEGo
 {
@@ -183,16 +185,26 @@ godot::Ref<HEGoTask> HEGoAssetNode::cook()
 
 	HAPI_NodeId nid = node_id;
 
-	return submit("Cook", nid, [nid](HEGoSessionManager *mgr) -> godot::Variant {
+	// A cook Houdini rejects fails its task rather than completing with -1. The -1 was only
+	// visible to a caller that knew to look for it, so a script doing the obvious null check
+	// on the result ran its output handlers over the previous cook's geometry.
+	return submit_failable("Cook", nid, [nid](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
 		if (HoudiniApi::CookNode(mgr->get_session(), nid, mgr->get_cook_options()) != HAPI_RESULT_SUCCESS)
 		{
 			HEGo::Util::Log::error(HEGo::Util::Log::Category::NODE, "Failed to cook node.");
-			return -1;
+			fail(task, "Houdini refused to start the cook.");
+			return godot::Variant();
 		}
-		// wait_for_cook is what reports whether the cook actually produced anything.
-		// Discarding it made every cook look successful, so a failure fell through to the
-		// output handlers, which then failed one by one over the previous cook's geometry.
-		return mgr->wait_for_cook(nid) ? 0 : -1;
+
+		// wait_for_cook is what reports whether the cook actually produced anything. It
+		// separates a cook that failed outright from one that finished with errors, which is
+		// a warning and still usable output.
+		if (!mgr->wait_for_cook(nid))
+		{
+			fail(task, "The cook finished with fatal errors.");
+			return godot::Variant();
+		}
+		return 0;
 	});
 }
 

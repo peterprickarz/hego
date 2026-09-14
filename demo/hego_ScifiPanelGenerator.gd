@@ -53,10 +53,8 @@ func cook() -> void:
 	hego.set_input(0, input_nodes)
 	await hego.sync_inputs(panels)
 
-	# A null result means the task failed. A result of -1 means Houdini rejected the cook
-	# while the task itself completed, which a null check alone misses.
-	var cook_result = await hego.task(panels.cook())
-	if cook_result == null or int(cook_result) != 0:
+	# A cook Houdini rejects fails its task, so null is the whole check.
+	if await hego.task(panels.cook()) == null:
 		return
 
 	mesh = await _build_mesh(await hego.output_context(panels))
