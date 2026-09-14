@@ -48,6 +48,14 @@ var owner_node: Node
 ## this to know what to show and what to call each section.
 var assets: Dictionary = {}
 
+## Labels the bottom panel shows, in the order it shows them. Empty means every asset, in
+## creation order. Set it with [method show_in_panel].
+var panel_labels: Array = []
+
+## Label of the asset the panel opens and scrolls to after a rebuild, or empty for none.
+## Set it with [method highlight].
+var highlighted_label: String = ""
+
 # Live merge and input nodes per asset, so an input node is reused across cooks rather than
 # rebuilt. Keyed by label, then by HDA input index.
 var _input_nodes: Dictionary = {}
@@ -176,6 +184,42 @@ func set_input(index: int, sources: Variant) -> void:
 
 	if owner_node.has_method("hego_set_input_stash"):
 		owner_node.hego_set_input_stash(rows)
+
+
+## Shows only [param labels] in the bottom panel, in that order.
+##
+## The default is every asset this node has made, in creation order. A tool with several
+## stages usually wants to say which of them a user should see, and put the one they are
+## working on first. Pass an empty array to go back to showing all of them.
+func show_in_panel(labels: Array) -> void:
+	panel_labels = labels.duplicate()
+
+
+## Makes the panel open [param label]'s section and scroll to it on the next rebuild.
+##
+## A recook rebuilds the panel, so a tool that moves the user on to its next stage can point
+## them at it rather than leaving them to find it. Pass an empty string to highlight nothing.
+func highlight(label: String) -> void:
+	highlighted_label = label
+
+
+## The assets the bottom panel should show, in order, as the panel wants them.
+##
+## Return this straight from a node's [code]hego_get_panel_assets()[/code]. Entries are
+## [code]{ "label", "asset", "highlight" }[/code]; a label in [member panel_labels] that names
+## no asset is skipped.
+func panel_assets() -> Array:
+	var labels := panel_labels if not panel_labels.is_empty() else assets.keys()
+	var entries := []
+	for label in labels:
+		if not assets.has(label):
+			continue
+		entries.append({
+			"label": label,
+			"asset": assets[label],
+			"highlight": label == highlighted_label,
+		})
+	return entries
 
 
 ## Fetches what [param asset]'s cook produced and wraps it for the output handlers.

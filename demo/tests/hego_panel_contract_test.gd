@@ -48,6 +48,17 @@ class PickableNode extends StubNode:
 	func hego_set_asset_name(name: String) -> void: chosen = name
 
 
+## A node that puts several HDAs in the panel and says which of them to show, in what order.
+class MultiAssetNode extends Node3D:
+	var hego := HEGoHelpers.new(self)
+	var input_stash: Array
+
+	func hego_use_bottom_panel() -> bool: return true
+	func hego_get_panel_assets() -> Array: return hego.panel_assets()
+	func hego_get_input_stash() -> Array: return input_stash
+	func hego_set_input_stash(rows: Array) -> void: input_stash = rows
+
+
 func _initialize() -> void:
 	var panel = preload("res://addons/hego/hego_control.tscn").instantiate()
 	root.add_child(panel)
@@ -100,6 +111,55 @@ func _initialize() -> void:
 	await tab.recook()
 	check(not busy.cooked, "Recook is refused while a cook is already running")
 	tab._cooking = false
+
+	# --- several HDAs, ordered and highlighted by the node --------------------
+	# The ordering itself is the helper's job, and it needs no session: an asset node exists
+	# as an object long before Houdini has one.
+	var multi := MultiAssetNode.new()
+	root.add_child(multi)
+	await process_frame
+	multi.hego.asset("Sop/base", "base")
+	multi.hego.asset("Sop/detail", "detail")
+
+	var entries: Array = multi.hego.panel_assets()
+	check(entries.size() == 2, "both HDAs are offered to the panel")
+	check(entries[0]["label"] == "base", "in creation order by default")
+
+	multi.hego.show_in_panel(["detail", "base"])
+	entries = multi.hego.panel_assets()
+	check(entries[0]["label"] == "detail", "and in the order the node asked for")
+
+	multi.hego.show_in_panel(["detail", "nothing_by_that_name"])
+	check(multi.hego.panel_assets().size() == 1, "a label naming no asset is skipped, not an error")
+
+	multi.hego.show_in_panel([])
+	multi.hego.highlight("detail")
+	entries = multi.hego.panel_assets()
+	check(entries.size() == 2, "an empty list goes back to showing all of them")
+	check(entries[1]["highlight"], "the highlighted one is marked")
+	check(not entries[0]["highlight"], "and only that one")
+
+	# --- the panel waits for the HDAs to exist --------------------------------
+	# Every asset above is still uninstantiated. Building parameter widgets for one would
+	# queue work on a session that is not running, and the panel would wait on it forever.
+	await tab.set_selected_node(multi)
+	check(tab._panel_assets().is_empty(), "an HDA that Houdini does not have yet is not shown")
+	check(tab.parm_vbox.get_child_count() == 1, "so the node gets the hint label")
+
+	# The highlight is read off the node rather than off that list, so a script asking for one
+	# before the first cook is not lost.
+	tab._last_highlight = ""
+	check(tab._requested_highlight() == "detail", "the highlight request is seen anyway")
+	await tab._poll_highlight()
+	check(tab._last_highlight == "detail", "and the panel picks it up on its own timer")
+
+	# --- a node offering neither method is still safe -------------------------
+	var plain := Node3D.new()
+	root.add_child(plain)
+	await process_frame
+	await tab.set_selected_node(plain)
+	check(tab._panel_assets().is_empty(), "a node with no assets lists none")
+	check(tab._requested_highlight() == "", "and asks for no highlight")
 
 	print("")
 	print("failures: ", failures)
