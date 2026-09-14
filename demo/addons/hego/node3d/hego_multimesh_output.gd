@@ -40,10 +40,10 @@ static func should_handle(summary: Dictionary) -> bool:
 
 
 ## Fetches the instancing points of the cook and builds the multimeshes.
-static func handle(ctx: HEGoOutputContext) -> void:
+static func handle(context: HEGoOutputContext) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Multimesh Output")
 
-	var selection := await ctx.select_points(INSTANCING_FILTER_ATTRIB,
+	var selection := await context.select_points(INSTANCING_FILTER_ATTRIB,
 		PackedStringArray(point_attribs() + [OUTPUT_NAME_ATTRIB, MESH_RESOURCE_ATTRIB]))
 	if selection == null:
 		return
@@ -67,12 +67,12 @@ static func handle(ctx: HEGoOutputContext) -> void:
 			# meshes coming out of the same output do not collide.
 			var mesh_file_name: String = str(resource_path).get_file().get_basename()
 			var point_dict: Dictionary = by_mesh[resource_path].get_points(PackedStringArray(point_attribs()))
-			setup_multimesh(ctx, mesh_resource, output_name + "_" + mesh_file_name, point_dict)
+			setup_multimesh(context, mesh_resource, output_name + "_" + mesh_file_name, point_dict)
 
 
 ## Creates a [MultiMeshInstance3D] named [param multimesh_name] under [code]Outputs/[/code]
 ## and fills it with one instance per point in [param point_dict].
-static func setup_multimesh(ctx: HEGoOutputContext, mesh_resource: Mesh, multimesh_name: String, point_dict: Dictionary) -> void:
+static func setup_multimesh(context: HEGoOutputContext, mesh_resource: Mesh, multimesh_name: String, point_dict: Dictionary) -> void:
 	if not point_dict.has("P") or not point_dict["P"] is Array:
 		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Multimesh output %s has no P attribute, skipping." % multimesh_name)
 		return
@@ -82,7 +82,7 @@ static func setup_multimesh(ctx: HEGoOutputContext, mesh_resource: Mesh, multime
 	if point_count == 0:
 		return
 
-	var multimesh_instance := ctx.place(multimesh_name, DEFAULT_MULTIMESH_NAME, MultiMeshInstance3D.new) as MultiMeshInstance3D
+	var multimesh_instance := context.place(multimesh_name, DEFAULT_MULTIMESH_NAME, MultiMeshInstance3D.new) as MultiMeshInstance3D
 
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D

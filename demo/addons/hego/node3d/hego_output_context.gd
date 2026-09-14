@@ -30,11 +30,11 @@ var summary: Dictionary
 
 ## Builds a context for [param host_node]'s cook of [param asset_node].
 static func create(host_node: Node, asset_node: HEGoAssetNode, cook_summary: Dictionary) -> HEGoOutputContext:
-	var ctx := HEGoOutputContext.new()
-	ctx.host = host_node
-	ctx.asset = asset_node
-	ctx.summary = cook_summary
-	return ctx
+	var context := HEGoOutputContext.new()
+	context.host = host_node
+	context.asset = asset_node
+	context.summary = cook_summary
+	return context
 
 
 ## Waits for [param task] and returns its result, or [code]null[/code] if it failed.

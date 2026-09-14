@@ -113,10 +113,10 @@ static func unique_child_name(parent: Node, base_name: String) -> String:
 ## The fetch results store attributes as [code]{ "name": ..., "value": ... }[/code]
 ## dictionaries under a key such as [code]prim_attribs[/code] or [code]attrs[/code].
 ## Returns [code]null[/code] when the list or the attribute is missing.
-static func get_attrib_value(dict: Dictionary, dict_key: String, attr_name: String) -> Variant:
-	if not dict.has(dict_key) or not dict[dict_key] is Array:
+static func get_attrib_value(fetch_result: Dictionary, list_key: String, attr_name: String) -> Variant:
+	if not fetch_result.has(list_key) or not fetch_result[list_key] is Array:
 		return null
-	for attr_pair in dict[dict_key]:
+	for attr_pair in fetch_result[list_key]:
 		if attr_pair is Dictionary and attr_pair.get("name", "") == attr_name:
 			return attr_pair.get("value", null)
 	return null

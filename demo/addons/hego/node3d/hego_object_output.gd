@@ -49,10 +49,10 @@ static func should_handle(summary: Dictionary) -> bool:
 
 
 ## Fetches the cook's output points and spawns a node for each.
-static func handle(ctx: HEGoOutputContext) -> void:
+static func handle(context: HEGoOutputContext) -> void:
 	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Handling Object Spawn Output")
 
-	var selection := await ctx.select_points(SPAWN_FILTER_ATTRIB, PackedStringArray(point_attribs()))
+	var selection := await context.select_points(SPAWN_FILTER_ATTRIB, PackedStringArray(point_attribs()))
 	if selection == null:
 		HEGoLog.get_singleton().debug(LOG_CATEGORY, "No points to process")
 		return
@@ -79,7 +79,7 @@ static func handle(ctx: HEGoOutputContext) -> void:
 		# unique: every point gets its own node, so names are suffixed rather than reused.
 		# The transform and the HDA's overrides go through configure, so they are in place
 		# before the node enters the tree and its _ready() can read them.
-		ctx.place(node_path, "Object_" + str(i),
+		context.place(node_path, "Object_" + str(i),
 			func(): return _spawn_node(points, i, scene_cache),
 			true,
 			func(node: Node):

@@ -86,10 +86,10 @@ static func build_nurbs_curve(curve: Dictionary) -> Curve3D:
 		return build_linear_curve(curve)
 
 	var degree := order - 1
-	var last_idx := positions.size()
+	var last_index := positions.size()
 
 	var u_min := float(knots[degree])
-	var u_max := float(knots[last_idx])
+	var u_max := float(knots[last_index])
 
 	var num_samples: int = max(MIN_NURBS_SAMPLES, positions.size() * NURBS_SAMPLES_PER_POINT)
 	for sample in range(num_samples):
@@ -105,29 +105,29 @@ static func build_nurbs_curve(curve: Dictionary) -> Curve3D:
 ## Evaluates the B-spline defined by [param positions] and [param knots] at [param t_param].
 static func evaluate_spline_at_t(t_param: float, positions: Array, knots: Array, order: int) -> Vector3:
 	var degree := order - 1
-	var last_idx := positions.size()
+	var last_index := positions.size()
 
 	var u_min := float(knots[degree])
-	var u_max := float(knots[last_idx])
+	var u_max := float(knots[last_index])
 	t_param = clamp(t_param, u_min, u_max)
 
 	# Find the knot span t_param falls into; the basis functions are non-zero only there.
 	var k := degree
-	for i in range(degree, last_idx):
+	for i in range(degree, last_index):
 		if t_param >= knots[i] and t_param < knots[i + 1]:
 			k = i
 			break
 	if t_param == u_max:
-		k = last_idx - 1
+		k = last_index - 1
 
 	var basis := compute_basis_functions(k, t_param, order, knots)
 
 	# The point is the weighted sum of the control points of this span.
 	var result := Vector3.ZERO
 	for i in range(order):
-		var control_point_idx := k - order + 1 + i
-		if control_point_idx >= 0 and control_point_idx < positions.size():
-			result += basis[i] * positions[control_point_idx]
+		var control_point_index := k - order + 1 + i
+		if control_point_index >= 0 and control_point_index < positions.size():
+			result += basis[i] * positions[control_point_index]
 	return result
 
 
@@ -136,7 +136,7 @@ static func compute_basis_functions(k_param: int, t_param: float, order: int, kn
 	var basis_values := []
 	var left_distances := []
 	var right_distances := []
-	for idx in range(order):
+	for index in range(order):
 		basis_values.append(0.0)
 		left_distances.append(0.0)
 		right_distances.append(0.0)
@@ -147,10 +147,10 @@ static func compute_basis_functions(k_param: int, t_param: float, order: int, kn
 		left_distances[degree_level] = t_param - float(knots[k_param + 1 - degree_level])
 		right_distances[degree_level] = float(knots[k_param + degree_level]) - t_param
 		var saved_basis := 0.0
-		for basis_idx in range(degree_level):
-			var basis_ratio: float = basis_values[basis_idx] / (right_distances[basis_idx + 1] + left_distances[degree_level - basis_idx])
-			basis_values[basis_idx] = saved_basis + right_distances[basis_idx + 1] * basis_ratio
-			saved_basis = left_distances[degree_level - basis_idx] * basis_ratio
+		for basis_index in range(degree_level):
+			var basis_ratio: float = basis_values[basis_index] / (right_distances[basis_index + 1] + left_distances[degree_level - basis_index])
+			basis_values[basis_index] = saved_basis + right_distances[basis_index + 1] * basis_ratio
+			saved_basis = left_distances[degree_level - basis_index] * basis_ratio
 		basis_values[degree_level] = saved_basis
 
 	return basis_values
@@ -182,18 +182,18 @@ static func build_bezier_curve(curve: Dictionary) -> Curve3D:
 	@warning_ignore("integer_division")
 	var num_points := (positions.size() + 2) / BEZIER_STRIDE
 
-	for idx in range(num_points):
-		var pos_idx := BEZIER_STRIDE * idx
-		var point_position: Vector3 = positions[pos_idx]
+	for index in range(num_points):
+		var position_index := BEZIER_STRIDE * index
+		var point_position: Vector3 = positions[position_index]
 		var in_vec := Vector3()
 		var out_vec := Vector3()
 
 		# Houdini control point positions are in global space so we need
 		# to convert them to be relative to the current point's position
-		if idx > 0:
-			in_vec = positions[pos_idx - 1] - point_position
-		if pos_idx + 1 < positions.size():
-			out_vec = positions[pos_idx + 1] - point_position
+		if index > 0:
+			in_vec = positions[position_index - 1] - point_position
+		if position_index + 1 < positions.size():
+			out_vec = positions[position_index + 1] - point_position
 
 		curve_out.add_point(point_position, in_vec, out_vec)
 

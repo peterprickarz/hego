@@ -25,8 +25,8 @@ static func should_handle(summary: Dictionary) -> bool:
 
 
 ## Fetches the cooked curves and builds the Path3D output.
-static func handle(ctx: HEGoOutputContext) -> void:
-	var curves: Variant = await ctx.await_task(ctx.asset.fetch_curves([NODE_PATH_ATTRIB], []))
+static func handle(context: HEGoOutputContext) -> void:
+	var curves: Variant = await context.await_task(context.asset.fetch_curves([NODE_PATH_ATTRIB], []))
 	if not curves is Array:
 		return
 
@@ -40,5 +40,5 @@ static func handle(ctx: HEGoOutputContext) -> void:
 		# place() reuses a Path3D already at this location, so anything following the path
 		# keeps its reference. In practice nothing is there to reuse yet, because a cook
 		# frees the whole Outputs subtree before the handlers run.
-		var path_node := ctx.place(str(node_path), "Curve3D_" + str(i), Path3D.new) as Path3D
+		var path_node := context.place(str(node_path), "Curve3D_" + str(i), Path3D.new) as Path3D
 		path_node.curve = HEGoCurveBuilder.build(curve)

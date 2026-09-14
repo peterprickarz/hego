@@ -78,9 +78,9 @@ static func should_handle(summary: Dictionary) -> bool:
 ##
 ## Nothing here touches the scene, so a node that wants to place the result itself can use
 ## this and [method build_array_mesh] instead of [method handle].
-static func fetch_surface_groups(ctx: HEGoOutputContext) -> Dictionary:
-	var output: HEGoGeoSurfaces = await ctx.await_task(
-		ctx.asset.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
+static func fetch_surface_groups(context: HEGoOutputContext) -> Dictionary:
+	var output: HEGoGeoSurfaces = await context.await_task(
+		context.asset.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
 	if output == null or not output.is_valid():
 		return {}
 
@@ -102,8 +102,8 @@ static func fetch_surface_groups(ctx: HEGoOutputContext) -> Dictionary:
 ## Returns [code]{ mesh_instance_key: ArrayMesh }[/code]. This is the half of
 ## [method handle] a custom node usually wants: it builds the meshes and leaves where they
 ## go, and whether they are saved as resources, to the caller.
-static func fetch_meshes(ctx: HEGoOutputContext) -> Dictionary:
-	var groups := await fetch_surface_groups(ctx)
+static func fetch_meshes(context: HEGoOutputContext) -> Dictionary:
+	var groups := await fetch_surface_groups(context)
 	var meshes := {}
 	for mesh_instance_key in groups:
 		meshes[mesh_instance_key] = build_array_mesh(groups[mesh_instance_key])
@@ -111,7 +111,7 @@ static func fetch_meshes(ctx: HEGoOutputContext) -> Dictionary:
 
 
 ## Fetches the cook's surfaces and builds the mesh output.
-static func handle(ctx: HEGoOutputContext) -> void:
+static func handle(context: HEGoOutputContext) -> void:
 	var output_start_usec := Time.get_ticks_usec()
 	var mesh_instance_count := 0
 	var surface_count := 0
@@ -119,7 +119,7 @@ static func handle(ctx: HEGoOutputContext) -> void:
 	var collision_generation_count := 0
 
 	var fetch_start_usec := Time.get_ticks_usec()
-	var groups := await fetch_surface_groups(ctx)
+	var groups := await fetch_surface_groups(context)
 	var fetch_surfaces_msec := HEGoCookTimings.elapsed_msec(fetch_start_usec)
 	if groups.is_empty():
 		# Either the fetch failed, in which case it has already reported why, or the cook
@@ -131,7 +131,7 @@ static func handle(ctx: HEGoOutputContext) -> void:
 		mesh_instance_count += 1
 		var surfaces: Dictionary = groups[mesh_instance_key]
 
-		var arr_mesh := build_array_mesh(surfaces)
+		var array_mesh := build_array_mesh(surfaces)
 		surface_count += surfaces.size()
 
 		# The output-wide settings are detail attributes, so they are identical on
@@ -147,7 +147,7 @@ static func handle(ctx: HEGoOutputContext) -> void:
 
 		if storage_mode > STORAGE_MODE_INSTANCE:
 			resource_save_count += 1
-			var save_result := save_mesh_resource(arr_mesh, str(resource_save_path))
+			var save_result := save_mesh_resource(array_mesh, str(resource_save_path))
 			if save_result["ok"]:
 				HEGoLog.get_singleton().debug(LOG_CATEGORY, "Successfully saved mesh to " + str(resource_save_path))
 			else:
@@ -159,7 +159,7 @@ static func handle(ctx: HEGoOutputContext) -> void:
 		if storage_mode == STORAGE_MODE_RESOURCE:
 			continue
 
-		var mesh_instance := _spawn_mesh_instance(ctx, mesh_instance_key, arr_mesh, storage_mode, resource_save_path)
+		var mesh_instance := _spawn_mesh_instance(context, mesh_instance_key, array_mesh, storage_mode, resource_save_path)
 		if _generate_collision(mesh_instance, first_surface):
 			collision_generation_count += 1
 
@@ -185,7 +185,7 @@ static func handle(ctx: HEGoOutputContext) -> void:
 ## Builds one [ArrayMesh] from a { material path: surface data } dictionary,
 ## adding a surface per material and wiring up LODs and materials.
 static func build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
-	var arr_mesh := ArrayMesh.new()
+	var array_mesh := ArrayMesh.new()
 	var surface_id := 0
 	for material_key in surfaces:
 		var surface: Dictionary = surfaces[material_key]
@@ -201,33 +201,33 @@ static func build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
 			var lod_dict := _group_indices_by_lod_distance(hego_lod_array, surface_array[Mesh.ARRAY_INDEX])
 			surface_array[Mesh.ARRAY_INDEX] = lod_dict[0.0]
 			lod_dict.erase(0.0)
-			arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], lod_dict)
+			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], lod_dict)
 		else:
-			arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array)
+			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array)
 
 		if material_key != null:
 			var material: Resource = load(material_key)
 			if material is Material:
-				arr_mesh.surface_set_material(surface_id, material)
+				array_mesh.surface_set_material(surface_id, material)
 		surface_id += 1
-	return arr_mesh
+	return array_mesh
 
 
 ## Adds the mesh to the scene at the path the HDA asked for and returns the instance.
-static func _spawn_mesh_instance(ctx: HEGoOutputContext, mesh_instance_key: Variant, arr_mesh: ArrayMesh, storage_mode: int, resource_save_path: Variant) -> MeshInstance3D:
+static func _spawn_mesh_instance(context: HEGoOutputContext, mesh_instance_key: Variant, array_mesh: ArrayMesh, storage_mode: int, resource_save_path: Variant) -> MeshInstance3D:
 	var node_path := DEFAULT_MESH_NODE_NAME
 	if mesh_instance_key != null:
 		node_path = str(mesh_instance_key)
 
-	var mesh_instance := ctx.place(node_path, DEFAULT_MESH_NODE_NAME, MeshInstance3D.new) as MeshInstance3D
+	var mesh_instance := context.place(node_path, DEFAULT_MESH_NODE_NAME, MeshInstance3D.new) as MeshInstance3D
 
 	if storage_mode == STORAGE_MODE_INSTANCE:
-		mesh_instance.mesh = arr_mesh
+		mesh_instance.mesh = array_mesh
 	else:
 		# Instance the resource that was just written, so the scene references the
 		# saved file rather than an identical in-memory copy of it.
 		var saved_mesh := load_mesh_resource_fresh(str(resource_save_path))
-		mesh_instance.mesh = saved_mesh if saved_mesh != null else arr_mesh
+		mesh_instance.mesh = saved_mesh if saved_mesh != null else array_mesh
 	return mesh_instance
 
 
@@ -351,19 +351,19 @@ static func save_mesh_resource(mesh: ArrayMesh, save_path: String) -> Dictionary
 ## identity, and everything already pointing at it sees the update.
 static func copy_array_mesh_contents(target_mesh: ArrayMesh, source_mesh: ArrayMesh) -> void:
 	target_mesh.clear_surfaces()
-	for surface_idx in range(source_mesh.get_surface_count()):
-		var primitive_type := source_mesh.surface_get_primitive_type(surface_idx)
-		var arrays := source_mesh.surface_get_arrays(surface_idx)
+	for surface_index in range(source_mesh.get_surface_count()):
+		var primitive_type := source_mesh.surface_get_primitive_type(surface_index)
+		var arrays := source_mesh.surface_get_arrays(surface_index)
 		var blend_shape_arrays := []
 		if source_mesh.has_method("surface_get_blend_shape_arrays"):
-			blend_shape_arrays = source_mesh.surface_get_blend_shape_arrays(surface_idx)
+			blend_shape_arrays = source_mesh.surface_get_blend_shape_arrays(surface_index)
 		var lods := {}
 		if source_mesh.has_method("surface_get_lods"):
-			lods = source_mesh.surface_get_lods(surface_idx)
+			lods = source_mesh.surface_get_lods(surface_index)
 		target_mesh.add_surface_from_arrays(primitive_type, arrays, blend_shape_arrays, lods)
-		var surface_material := source_mesh.surface_get_material(surface_idx)
+		var surface_material := source_mesh.surface_get_material(surface_index)
 		if surface_material != null:
-			target_mesh.surface_set_material(surface_idx, surface_material)
+			target_mesh.surface_set_material(surface_index, surface_material)
 
 
 ## Loads a saved mesh bypassing the resource cache, so the instance in the scene

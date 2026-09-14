@@ -60,12 +60,12 @@ static func should_handle(summary: Dictionary) -> bool:
 
 
 ## Fetches the cook's instancing points and populates the terrains.
-static func handle(ctx: HEGoOutputContext) -> void:
+static func handle(context: HEGoOutputContext) -> void:
 	if not HEGoTerrain3DUtil.is_available():
 		return
 
 	var wanted := point_attribs() + MESH_ASSET_ATTRIBS.keys()
-	var selection := await ctx.select_points(INSTANCING_FILTER_ATTRIB,
+	var selection := await context.select_points(INSTANCING_FILTER_ATTRIB,
 		PackedStringArray(wanted + [TERRAIN_PATH_ATTRIB, SCENE_PATH_ATTRIB]))
 	if selection == null:
 		return
@@ -85,12 +85,12 @@ static func handle(ctx: HEGoOutputContext) -> void:
 		for scene_path_value in by_scene:
 			per_scene_points[scene_path_value] = by_scene[scene_path_value].get_points(PackedStringArray(wanted))
 
-		_populate_terrain(ctx, terrain_path, per_scene_points)
+		_populate_terrain(context, terrain_path, per_scene_points)
 
 
 ## Fills one terrain's instancer with every scene in [param per_scene_points].
-static func _populate_terrain(ctx: HEGoOutputContext, terrain_path: String, per_scene_points: Dictionary) -> void:
-	var terrain := HEGoTerrain3DUtil.find_node_from_path(ctx.host, terrain_path)
+static func _populate_terrain(context: HEGoOutputContext, terrain_path: String, per_scene_points: Dictionary) -> void:
+	var terrain := HEGoTerrain3DUtil.find_node_from_path(context.host, terrain_path)
 	if terrain == null:
 		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D node %s was not found, skipping instancer output." % terrain_path)
 		return
