@@ -3,72 +3,110 @@
 extends MeshInstance3D
 class_name HDAScifiPanelGenerator
 
-const ASSET_NAME: String = "Sop/hego_scifipanelgenerator"
+## A custom HEGo node that panels whatever meshes it is given.
+##
+## Its inputs come from an exported array rather than from the bottom panel's Inputs pane,
+## so [method cook] pushes them into the input stash itself and lets [HEGoHelpers] build the
+## merge chain. The HDA tags its output with material names of its own rather than with
+## resource paths, so this node maps them to materials instead of using
+## [method HEGoMeshOutput.fetch_meshes], which expects the path convention.
 
-@export_tool_button("Cook", "Bake")
-var action_cook = func(): cook() # button to trigger cook function
+## The asset definition name in Houdini.
+const ASSET_NAME := "Sop/hego_scifipanelgenerator"
 
-# array of nodes to support inputting multiple MeshInstance3D objects
+## Name this script gives the HDA, used to look it back up and to label it in the panel.
+const ASSET_LABEL := "scifi_panels"
+
+## What this HDA's hego_material attribute values mean. An output surface tagged with a
+## name that is not here is left without a material.
+const MATERIALS := {
+	"Main": "res://materials/m_main.tres",
+	"DarkGrey": "res://materials/m_dark_grey.tres",
+	"Accent": "res://materials/m_accent.tres",
+	"DarkAccent": "res://materials/m_dark_accent.tres",
+	"Black": "res://materials/m_black.tres",
+	"default": "res://materials/m_default.tres",
+}
+
+@export_tool_button("Cook", "Bake") var action_cook = func(): cook()
+## The meshes to panel. They are merged into the HDA's first input.
 @export var input_nodes: Array[MeshInstance3D] = []
+## The HDA's parameters as a blob, so they survive a session restart and a scene reload.
+@export var parm_stash: PackedByteArray
 
-var hego_asset_node: HEGoAssetNode
-var hego_merge_node: HEGoMergeNode
-# create an array of input nodes to keep track of multiple input meshes
-var hego_input_nodes: Array[HEGoInputNode]
+var hego := HEGoHelpers.new(self)
 
-func _await_task(task: HEGoTask) -> Variant:
-	while task.get_status() < HEGoTask.COMPLETED:
-		await get_tree().process_frame
-	if task.get_status() == HEGoTask.FAILED:
-		push_error("Task failed: " + task.get_error_message())
-		return null
-	return task.get_result()
+## Where the helper reads and writes input references. Not exported, because input_nodes is
+## what this node is driven by; the panel's Inputs pane shows these rows but every cook
+## overwrites them from input_nodes.
+var input_stash: Array = []
 
 
-func cook():
-	# Ensure valid AssetNode object
-	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
-	hego_asset_node.op_name = ASSET_NAME
-	await _await_task(hego_asset_node.instantiate())
-	await _await_task(hego_asset_node.set_transform(global_transform))
-	# Ensure valid MergeNode object
-	if not hego_merge_node: hego_merge_node = HEGoMergeNode.new()
-	await _await_task(hego_merge_node.instantiate())
-	# Ensure array of InputNodes contains valid InputNode objects
-	if hego_input_nodes.size() > input_nodes.size():
-		hego_input_nodes.resize(input_nodes.size())
-	for i in range(input_nodes.size()):
-		if (hego_input_nodes.size() < i + 1):
-			hego_input_nodes.append(HEGoInputNode.new())
-		await _await_task(hego_input_nodes[i].instantiate())
-		await _await_task(hego_input_nodes[i].set_geo_from_mesh_instance_3d(input_nodes[i]))
-	# Connect inputs function takes an array of InputNode objects
-	await _await_task(hego_merge_node.connect_inputs(hego_input_nodes))
-	# Connect MergeNode to AssetNode and set parameters
-	await _await_task(hego_asset_node.connect_input(hego_merge_node, 0))
+## Sends the input meshes to Houdini, cooks the HDA and puts the panelled mesh on this node.
+func cook() -> void:
+	var panels := hego.asset(ASSET_NAME, ASSET_LABEL)
+	if not await hego.instantiate(panels, parm_stash):
+		return
 
-	var res = load("res://hego/surface_configs/fetch_surfaces_split_by_mat.tres")
-	var dict = await _await_task(hego_asset_node.fetch_surfaces(res))
-	var arr_mesh = ArrayMesh.new()
-	
-	var m_accent = load("res://materials/m_accent.tres")
-	var m_default = load("res://materials/m_default.tres")
-	var m_dark_grey = load("res://materials/m_dark_grey.tres")
-	var m_dark_accent = load("res://materials/m_dark_accent.tres")
-	var m_black = load("res://materials/m_black.tres")
-	var m_main = load("res://materials/m_main.tres")
-	
-	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["Main"]["surface_array"])
-	arr_mesh.surface_set_material(0, m_main)
-	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["DarkGrey"]["surface_array"])
-	arr_mesh.surface_set_material(1, m_dark_grey)
-	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["Accent"]["surface_array"])
-	arr_mesh.surface_set_material(2, m_accent)
-	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["DarkAccent"]["surface_array"])
-	arr_mesh.surface_set_material(3, m_dark_accent)
-	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["Black"]["surface_array"])
-	arr_mesh.surface_set_material(4, m_black)
-	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, dict["default"]["surface_array"])
-	arr_mesh.surface_set_material(5, m_default)
-	
-	self.mesh = arr_mesh
+	# One input taking several meshes: set_input records them all and sync_inputs wires them
+	# through a merge node, reusing the Houdini input nodes it made last cook.
+	hego.set_input(0, input_nodes)
+	await hego.sync_inputs(panels)
+
+	# A null result means the task failed. A result of -1 means Houdini rejected the cook
+	# while the task itself completed, which a null check alone misses.
+	var cook_result = await hego.task(panels.cook())
+	if cook_result == null or int(cook_result) != 0:
+		return
+
+	mesh = await _build_mesh(await hego.output_context(panels))
+	parm_stash = await hego.save_parameters(panels)
+
+
+## One surface per material name the HDA tagged its geometry with.
+func _build_mesh(context: HEGoOutputContext) -> ArrayMesh:
+	var groups := await HEGoMeshOutput.fetch_surface_groups(context)
+	var array_mesh := ArrayMesh.new()
+	for mesh_instance_key in groups:
+		var surfaces: Dictionary = groups[mesh_instance_key]
+		for material_key in surfaces:
+			array_mesh.add_surface_from_arrays(
+				Mesh.PRIMITIVE_TRIANGLES, surfaces[material_key]["surface_array"])
+			if MATERIALS.has(material_key):
+				array_mesh.surface_set_material(
+					array_mesh.get_surface_count() - 1, load(MATERIALS[material_key]))
+	return array_mesh
+
+
+# ─────────────────────────────────────────────
+# Bottom panel interface
+# ─────────────────────────────────────────────
+
+## Tells the plugin this node can be edited from the HEGo bottom panel.
+func hego_use_bottom_panel() -> bool:
+	return true
+
+
+## The asset node the bottom panel reads parameters from, or null before the first cook.
+func hego_get_asset_node() -> HEGoAssetNode:
+	return hego.assets.get(ASSET_LABEL)
+
+
+## The HDA this node cooks, which is what the panel's preset list is keyed by.
+func hego_get_asset_name() -> String:
+	return ASSET_NAME
+
+
+## Stores a parameter preset so it survives session restarts and scene reloads.
+func hego_set_parm_stash(preset: PackedByteArray) -> void:
+	parm_stash = preset
+
+
+## The stored input references, which [method cook] rewrites from input_nodes.
+func hego_get_input_stash() -> Array:
+	return input_stash
+
+
+## Stores input references. The helper writes here when [method cook] pushes input_nodes in.
+func hego_set_input_stash(input_array: Array) -> void:
+	input_stash = input_array
