@@ -3,69 +3,68 @@
 extends MeshInstance3D
 class_name HDAPigHead
 
-const ASSET_NAME: String = "Sop/hego_testpighead_tool"
+## A custom HEGo node in a dozen lines: cook one HDA, put its mesh on itself.
+##
+## The HDA is fixed in the script rather than picked in the editor, which is the usual shape
+## for a tool built around one specific asset. Because no [code]hego_set_asset_name()[/code]
+## is implemented, the bottom panel leaves out its asset picker but still shows this node's
+## parameters and its Recook button.
+##
+## Everything here is an ordinary call on [HEGoAssetNode]; [HEGoHelpers] only supplies the
+## parts that are tedious to repeat.
+
+## The asset definition name in Houdini.
+const ASSET_NAME := "Sop/hego_testpighead_tool"
+
+## Name this script gives the HDA, used to look it back up and to label it in the panel.
+const ASSET_LABEL := "pighead"
+
+@export_tool_button("Cook", "Bake") var action_cook = func(): cook()
+## The HDA's parameters as a blob, so they survive a session restart and a scene reload.
+@export var parm_stash: PackedByteArray
+
+var hego := HEGoHelpers.new(self)
 
 
-@export_tool_button("Cook", "Bake")
-var action_cook = func(): cook() # button to trigger cook function
+## Cooks the HDA and puts the mesh it produced on this node.
+func cook() -> void:
+	var pighead := hego.asset(ASSET_NAME, ASSET_LABEL)
+	if not await hego.instantiate(pighead, parm_stash):
+		return
 
-var hego_asset_node: HEGoAssetNode
+	# A null result means the task failed. A result of -1 means Houdini rejected the cook
+	# while the task itself completed, which a null check alone misses.
+	var cook_result = await hego.task(pighead.cook())
+	if cook_result == null or int(cook_result) != 0:
+		return
 
-func _await_task(task: HEGoTask) -> Variant:
-	while task.get_status() < HEGoTask.COMPLETED:
-		await get_tree().process_frame
-	if task.get_status() == HEGoTask.FAILED:
-		push_error("Task failed: " + task.get_error_message())
-		return null
-	return task.get_result()
+	# This HDA writes a hego_lod primitive attribute, which fetch_meshes turns into Godot
+	# LODs on the mesh it builds. One mesh instance, so take the first.
+	var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(pighead))
+	mesh = meshes.values()[0] if not meshes.is_empty() else null
+
+	parm_stash = await hego.save_parameters(pighead)
 
 
-func cook():
-	# Ensure valid AssetNode object
-	if not hego_asset_node: hego_asset_node = HEGoAssetNode.new()
-	hego_asset_node.op_name = ASSET_NAME
-	await _await_task(hego_asset_node.instantiate())
-	await _await_task(hego_asset_node.set_transform(global_transform))
-	# Fetch and set cook result of AssetNode
-	var res = load("res://hego/surface_configs/fetch_surfaces_split_by_lod.tres")
-	var dict = await _await_task(hego_asset_node.fetch_surfaces(res))
-	
-	# create array mesh var and a corresponding array set to null everywhere
-	var arr_mesh = ArrayMesh.new()
-	var surface_array = []
-	surface_array.resize(Mesh.ARRAY_MAX)
-	for i in surface_array.size():
-		surface_array[i] = null
-	
-	# get the surface array with LOD attribute value of 0 and treat as main mesh
-	var lod_0_indices = dict[.0]["surface_array"][12]
-	"""
-	create lods dictionary as needed for add_surface_from_array function
-	the keys of the dictionary are relative to the distance at which they will be shown
-	we need to put all the vertices into one surface array, and adjust the indices for
-	this offset
-	"""
-	var index_offset = 0
-	var lods = {}
-	var dict_keys = dict.keys()
-	for key in dict.keys():
-		var lod_array: Array = dict[key]["surface_array"]
-		for i in range(lod_array[12].size()):
-			lod_array[12][i] += index_offset
-		for i in range(lod_array.size()):
-			if surface_array[i] == null:
-				surface_array[i] = lod_array[i]
-			else:
-				surface_array[i] += lod_array[i]
-		
-		index_offset += lod_array[0].size()
-		if key != 0:
-			lods[key] = lod_array[12]
-	# finally, assign lod 0 indices to the surface array and add the surface
-	surface_array[12] = lod_0_indices
-	arr_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], lods)
-	# assign mesh
-	self.mesh = arr_mesh
+# ─────────────────────────────────────────────
+# Bottom panel interface
+# ─────────────────────────────────────────────
 
-func _ready():
-	set_meta("hego_asset_node", 1)
+## Tells the plugin this node can be edited from the HEGo bottom panel.
+func hego_use_bottom_panel() -> bool:
+	return true
+
+
+## The asset node the bottom panel reads parameters from, or null before the first cook.
+func hego_get_asset_node() -> HEGoAssetNode:
+	return hego.assets.get(ASSET_LABEL)
+
+
+## The HDA this node cooks, which is what the panel's preset list is keyed by.
+func hego_get_asset_name() -> String:
+	return ASSET_NAME
+
+
+## Stores a parameter preset so it survives session restarts and scene reloads.
+func hego_set_parm_stash(preset: PackedByteArray) -> void:
+	parm_stash = preset
