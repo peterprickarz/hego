@@ -58,7 +58,7 @@
 			</description>
 		</method>
 		<method name="select_points">
-			<return type="HEGoGeoSelection" />
+			<return type="HEGoPointSelection" />
 			<param index="0" name="filter_attrib" type="String" />
 			<param index="1" name="attribs" type="PackedStringArray" />
 			<description>

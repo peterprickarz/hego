@@ -22,7 +22,7 @@ namespace
 /// attributes produces a dictionary of dictionaries, and assembles the wanted
 /// attributes at the leaves.
 godot::Variant split_recursive(
-		const godot::Ref<HEGoGeoSelection> &selection, const godot::PackedStringArray &split_attribs, int depth, const godot::PackedStringArray &read_attribs)
+		const godot::Ref<HEGoPointSelection> &selection, const godot::PackedStringArray &split_attribs, int depth, const godot::PackedStringArray &read_attribs)
 {
 	if (depth >= split_attribs.size())
 	{
@@ -34,7 +34,7 @@ godot::Variant split_recursive(
 	const godot::Array keys = groups.keys();
 	for (int i = 0; i < keys.size(); ++i)
 	{
-		const godot::Ref<HEGoGeoSelection> group = groups[keys[i]];
+		const godot::Ref<HEGoPointSelection> group = groups[keys[i]];
 		result[keys[i]] = split_recursive(group, split_attribs, depth + 1, read_attribs);
 	}
 	return result;
@@ -56,7 +56,7 @@ godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node
 		return godot::Dictionary();
 	}
 
-	godot::Ref<HEGoGeoOutput> output;
+	godot::Ref<HEGoPointOutput> output;
 	output.instantiate();
 	output->setup(cache, node_id);
 	if (!output->is_valid())
@@ -67,7 +67,7 @@ godot::Dictionary fetch_points(HEGoSessionManager *session_mgr, HAPI_NodeId node
 
 	// The filter decides whether there is anything to return, so read those
 	// attributes first and skip the rest when nothing passes.
-	godot::Ref<HEGoGeoSelection> selection = output->select_all();
+	godot::Ref<HEGoPointSelection> selection = output->select_all();
 	for (int i = 0; i < filter_attribs.size(); i++)
 	{
 		output->load_attributes_now(godot::PackedStringArray({filter_attribs[i]}));

@@ -45,21 +45,21 @@ Methods
 .. table::
    :widths: auto
 
-   +---------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoOutputContext<class_HEGoOutputContext>` | :ref:`create<class_HEGoOutputContext_method_create>`\ (\ host_node\: ``Node``, asset_node\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, cook_summary\: ``Dictionary``\ ) |static|                      |
-   +---------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Variant``                                       | :ref:`await_task<class_HEGoOutputContext_method_await_task>`\ (\ task\: :ref:`HEGoTask<class_HEGoTask>`\ )                                                                                            |
-   +---------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Node3D``                                        | :ref:`outputs_root<class_HEGoOutputContext_method_outputs_root>`\ (\ )                                                                                                                                |
-   +---------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Node``                                          | :ref:`ensure_parent<class_HEGoOutputContext_method_ensure_parent>`\ (\ root\: ``Node``, path_parts\: ``PackedStringArray``\ )                                                                         |
-   +---------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|                                            | :ref:`own<class_HEGoOutputContext_method_own>`\ (\ node\: ``Node``\ )                                                                                                                                 |
-   +---------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Node``                                          | :ref:`place<class_HEGoOutputContext_method_place>`\ (\ node_path\: ``String``, default_name\: ``String``, factory\: ``Callable``, unique\: ``bool`` = false, configure\: ``Callable`` = Callable()\ ) |
-   +---------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoGeoSelection<class_HEGoGeoSelection>`   | :ref:`select_points<class_HEGoOutputContext_method_select_points>`\ (\ filter_attrib\: ``String``, attribs\: ``PackedStringArray``\ )                                                                 |
-   +---------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoOutputContext<class_HEGoOutputContext>`   | :ref:`create<class_HEGoOutputContext_method_create>`\ (\ host_node\: ``Node``, asset_node\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, cook_summary\: ``Dictionary``\ ) |static|                      |
+   +-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Variant``                                         | :ref:`await_task<class_HEGoOutputContext_method_await_task>`\ (\ task\: :ref:`HEGoTask<class_HEGoTask>`\ )                                                                                            |
+   +-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Node3D``                                          | :ref:`outputs_root<class_HEGoOutputContext_method_outputs_root>`\ (\ )                                                                                                                                |
+   +-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Node``                                            | :ref:`ensure_parent<class_HEGoOutputContext_method_ensure_parent>`\ (\ root\: ``Node``, path_parts\: ``PackedStringArray``\ )                                                                         |
+   +-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|                                              | :ref:`own<class_HEGoOutputContext_method_own>`\ (\ node\: ``Node``\ )                                                                                                                                 |
+   +-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Node``                                            | :ref:`place<class_HEGoOutputContext_method_place>`\ (\ node_path\: ``String``, default_name\: ``String``, factory\: ``Callable``, unique\: ``bool`` = false, configure\: ``Callable`` = Callable()\ ) |
+   +-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoPointSelection<class_HEGoPointSelection>` | :ref:`select_points<class_HEGoOutputContext_method_select_points>`\ (\ filter_attrib\: ``String``, attribs\: ``PackedStringArray``\ )                                                                 |
+   +-----------------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -187,7 +187,7 @@ Creates the node that ``node_path`` names under this cook's output root, and ret
 
 .. rst-class:: classref-method
 
-:ref:`HEGoGeoSelection<class_HEGoGeoSelection>` **select_points**\ (\ filter_attrib\: ``String``, attribs\: ``PackedStringArray``\ ) :ref:`🔗<class_HEGoOutputContext_method_select_points>`
+:ref:`HEGoPointSelection<class_HEGoPointSelection>` **select_points**\ (\ filter_attrib\: ``String``, attribs\: ``PackedStringArray``\ ) :ref:`🔗<class_HEGoOutputContext_method_select_points>`
 
 Fetches this cook's points, loads ``attribs``, and returns the ones whose ``filter_attrib`` is 1.  Returns ``null`` when the fetch failed, the output is unusable, or nothing matched, so a handler can bail on one check rather than the four this replaces. ``filter_attrib`` is loaded whether or not ``attribs`` names it.
 

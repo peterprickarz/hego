@@ -11,7 +11,7 @@ come from.
 
 .. code-block:: gdscript
 
-    var output = await agent.task(asset_node.get_geo_output())
+    var output = await agent.task(asset_node.get_point_output())
     await agent.task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
 
     var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
@@ -20,10 +20,10 @@ come from.
         # points == { "P": [...], "N": [...], "up": [...], "pscale": [...] }
 
 Both entry points are on the asset node. Points go through
-:ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>`, which returns a
-:ref:`HEGoGeoOutput<class_HEGoGeoOutput>`; surfaces go through
+:ref:`get_point_output()<class_HEGoAssetNode_method_get_point_output>`, which returns a
+:ref:`HEGoPointOutput<class_HEGoPointOutput>`; surfaces go through
 :ref:`get_surface_output()<class_HEGoAssetNode_method_get_surface_output>`, which returns a
-:ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>` selecting primitives rather than points. Every built-in handler uses this API, which is why their
+:ref:`HEGoSurfaceOutput<class_HEGoSurfaceOutput>` selecting primitives rather than points. Every built-in handler uses this API, which is why their
 attribute lists live in the handler scripts rather than in a resource beside them.
 
 .. warning::
@@ -68,7 +68,7 @@ splitting on ``hego_node_path`` becomes:
 
 .. code-block:: gdscript
 
-    var output = await agent.task(asset_node.get_geo_output())
+    var output = await agent.task(asset_node.get_point_output())
     await agent.task(output.load_attributes(["N", "pscale", "hego_spawn", "hego_node_path"]))
 
     var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
@@ -90,7 +90,7 @@ invalidates itself when the node cooks again.
 Loading attributes
 ------------------
 
-:ref:`load_attributes()<class_HEGoGeoOutput_method_load_attributes>` is the only call on
+:ref:`load_attributes()<class_HEGoPointOutput_method_load_attributes>` is the only call on
 the output that talks to Houdini, so it returns a :doc:`task <task_pattern>`. Everything after it is in-memory work and returns
 immediately. Attributes another output already read are served from the cache
 without a round trip.
@@ -102,7 +102,7 @@ You can also preload while fetching the output, which saves an await:
 
 .. code-block:: gdscript
 
-    var output = await agent.task(asset_node.get_geo_output(["N", "up", "pscale"]))
+    var output = await agent.task(asset_node.get_point_output(["N", "up", "pscale"]))
 
 Discovering what an HDA produced
 --------------------------------
@@ -121,7 +121,7 @@ whatever the HDA happens to carry instead of naming everything up front:
 Reference
 ---------
 
-:ref:`HEGoGeoOutput<class_HEGoGeoOutput>`
+:ref:`HEGoPointOutput<class_HEGoPointOutput>`
 
 .. list-table::
    :widths: 45 55
@@ -143,7 +143,7 @@ Reference
    * - ``select_all()`` / ``filter_by(name, value)`` / ``split_by(name)``
      - Selections over the points.
 
-:ref:`HEGoGeoSelection<class_HEGoGeoSelection>`
+:ref:`HEGoPointSelection<class_HEGoPointSelection>`
 
 .. list-table::
    :widths: 45 55
@@ -159,7 +159,7 @@ Reference
    * - ``get_points(names)``
      - ``{ name: values }`` for this selection, always including ``P``.
 
-``owner`` is one of ``HEGoGeoOutput.OWNER_VERTEX``, ``OWNER_POINT`` (the default),
+``owner`` is one of ``HEGoPointOutput.OWNER_VERTEX``, ``OWNER_POINT`` (the default),
 ``OWNER_PRIM`` or ``OWNER_DETAIL``.
 
 Skipping handlers that have nothing to do

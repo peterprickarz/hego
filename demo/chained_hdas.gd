@@ -90,7 +90,7 @@ func cook() -> void:
 
 ## Every point of the cook, with the attributes an instance transform is built from.
 func _fetch_points(scatter: HEGoAssetNode) -> Dictionary:
-	var output: HEGoGeoOutput = await agent.task(scatter.get_geo_output())
+	var output: HEGoPointOutput = await agent.task(scatter.get_point_output())
 	if output == null or not output.is_valid():
 		return {}
 

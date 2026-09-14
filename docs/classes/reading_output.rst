@@ -9,20 +9,20 @@ Points and surfaces as they sit in C++, filtered and split without being copied 
 
    * - Class
      - Description
-   * - :ref:`HEGoGeoOutput<class_HEGoGeoOutput>`
+   * - :ref:`HEGoPointOutput<class_HEGoPointOutput>`
      - A cooked node's output, read and split from code.
-   * - :ref:`HEGoGeoSelection<class_HEGoGeoSelection>`
-     - A set of points of a :ref:`HEGoGeoOutput<class_HEGoGeoOutput>`.
-   * - :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>`
+   * - :ref:`HEGoPointSelection<class_HEGoPointSelection>`
+     - A set of points of a :ref:`HEGoPointOutput<class_HEGoPointOutput>`.
+   * - :ref:`HEGoSurfaceOutput<class_HEGoSurfaceOutput>`
      - A cooked node's surfaces, read and split from code.
-   * - :ref:`HEGoGeoPrimSelection<class_HEGoGeoPrimSelection>`
-     - A set of primitives of a :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>`.
+   * - :ref:`HEGoSurfaceSelection<class_HEGoSurfaceSelection>`
+     - A set of primitives of a :ref:`HEGoSurfaceOutput<class_HEGoSurfaceOutput>`.
 
 .. toctree::
    :maxdepth: 1
    :hidden:
 
-   class_hegogeooutput
-   class_hegogeoselection
-   class_hegogeosurfaces
-   class_hegogeoprimselection
+   class_hegopointoutput
+   class_hegopointselection
+   class_hegosurfaceoutput
+   class_hegosurfaceselection

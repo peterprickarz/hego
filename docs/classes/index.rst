@@ -43,10 +43,10 @@ Reading a cook's output
 
 Points and surfaces as they sit in C++, filtered and split without being copied into Godot until asked for. See :doc:`/api/geo_output`.
 
-- :ref:`HEGoGeoOutput<class_HEGoGeoOutput>`
-- :ref:`HEGoGeoSelection<class_HEGoGeoSelection>`
-- :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>`
-- :ref:`HEGoGeoPrimSelection<class_HEGoGeoPrimSelection>`
+- :ref:`HEGoPointOutput<class_HEGoPointOutput>`
+- :ref:`HEGoPointSelection<class_HEGoPointSelection>`
+- :ref:`HEGoSurfaceOutput<class_HEGoSurfaceOutput>`
+- :ref:`HEGoSurfaceSelection<class_HEGoSurfaceSelection>`
 
 Writing a node
 --------------

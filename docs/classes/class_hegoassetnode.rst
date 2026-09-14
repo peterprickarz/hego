@@ -67,7 +67,7 @@ Methods
    +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_output_summary<class_HEGoAssetNode_method_get_output_summary>`\ (\ )                                                                                                                             |
    +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_geo_output<class_HEGoAssetNode_method_get_geo_output>`\ (\ preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ )                                                                      |
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_point_output<class_HEGoAssetNode_method_get_point_output>`\ (\ preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ )                                                                  |
    +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_points<class_HEGoAssetNode_method_fetch_points>`\ (\ fetch_point_config\: ``Resource``\ )                                                                                                      |
    +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -217,13 +217,13 @@ Costs only the attribute name lookups, which are cached per cook like every othe
 
 ----
 
-.. _class_HEGoAssetNode_method_get_geo_output:
+.. _class_HEGoAssetNode_method_get_point_output:
 
 .. rst-class:: classref-method
 
-:ref:`HEGoTask<class_HEGoTask>` **get_geo_output**\ (\ preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ ) :ref:`🔗<class_HEGoAssetNode_method_get_geo_output>`
+:ref:`HEGoTask<class_HEGoTask>` **get_point_output**\ (\ preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ ) :ref:`🔗<class_HEGoAssetNode_method_get_point_output>`
 
-Submits a task returning a :ref:`HEGoGeoOutput<class_HEGoGeoOutput>`: the cooked output, read and split from code rather than through a fetch configuration.
+Submits a task returning a :ref:`HEGoPointOutput<class_HEGoPointOutput>`: the cooked output, read and split from code rather than through a fetch configuration.
 
 
 
@@ -231,7 +231,7 @@ Pass ``preload_attribs`` to have those point attributes loaded while the task ru
 
 ::
 
-    var output = await agent.task(asset_node.get_geo_output(["N", "up", "hego_spawn"]))
+    var output = await agent.task(asset_node.get_point_output(["N", "up", "hego_spawn"]))
     for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path").values():
         var points = group.get_points(["N", "up"])
 
@@ -249,13 +249,13 @@ Attribute values are cached per cook and shared with :ref:`fetch_points()<class_
 
 :ref:`HEGoTask<class_HEGoTask>` **fetch_points**\ (\ fetch_point_config\: ``Resource``\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_points>`
 
-**Deprecated:** Use :ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>` instead. Fetch configs are kept only so existing projects can move across.
+**Deprecated:** Use :ref:`get_point_output()<class_HEGoAssetNode_method_get_point_output>` instead. Fetch configs are kept only so existing projects can move across.
 
 Submits a task to fetch point data using a point-fetch configuration resource.
 
 
 
-\ **Deprecated.** :ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>` does the same thing from code, decides at runtime, and keeps the attribute names next to the code that reads them. Both share one implementation and one per-cook cache, so results are identical.
+\ **Deprecated.** :ref:`get_point_output()<class_HEGoAssetNode_method_get_point_output>` does the same thing from code, decides at runtime, and keeps the attribute names next to the code that reads them. Both share one implementation and one per-cook cache, so results are identical.
 
 
 
@@ -303,7 +303,7 @@ Returns an empty dictionary when no points pass filters, when no mesh part exist
 
 :ref:`HEGoTask<class_HEGoTask>` **get_surface_output**\ (\ point_attribs\: ``PackedStringArray`` = PackedStringArray(), preload_attribs\: ``PackedStringArray`` = PackedStringArray()\ ) :ref:`🔗<class_HEGoAssetNode_method_get_surface_output>`
 
-Submits a task returning a :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>`: the cooked surfaces, read and split from code rather than through a fetch configuration.
+Submits a task returning a :ref:`HEGoSurfaceOutput<class_HEGoSurfaceOutput>`: the cooked surfaces, read and split from code rather than through a fetch configuration.
 
 
 
@@ -317,7 +317,7 @@ Submits a task returning a :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>`: the co
 
 
 
-Attribute values are cached per cook and shared with :ref:`fetch_surfaces()<class_HEGoAssetNode_method_fetch_surfaces>` and :ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>`.
+Attribute values are cached per cook and shared with :ref:`fetch_surfaces()<class_HEGoAssetNode_method_fetch_surfaces>` and :ref:`get_point_output()<class_HEGoAssetNode_method_get_point_output>`.
 
 .. rst-class:: classref-item-separator
 

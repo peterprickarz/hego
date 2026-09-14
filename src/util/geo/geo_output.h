@@ -15,14 +15,14 @@
 namespace HEGo
 {
 
-class HEGoGeoSelection;
+class HEGoPointSelection;
 
 /// A cooked node's output, queried from GDScript.
 ///
 /// Where the fetch configs describe the wanted attributes and splits ahead of time in
 /// a resource, this describes them in code, at the point of use:
 /// [codeblock]
-/// var output = await _await_task(asset_node.get_geo_output())
+/// var output = await _await_task(asset_node.get_point_output())
 /// await _await_task(output.load_attributes(["N", "up", "pscale", "hego_spawn"]))
 ///
 /// for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path"):
@@ -35,9 +35,9 @@ class HEGoGeoSelection;
 ///
 /// Attribute values are shared with every other output of the same cook, so asking
 /// for P here after the mesh output already read it costs nothing.
-class HEGoGeoOutput : public godot::RefCounted
+class HEGoPointOutput : public godot::RefCounted
 {
-	GDCLASS(HEGoGeoOutput, godot::RefCounted)
+	GDCLASS(HEGoPointOutput, godot::RefCounted)
 
 public:
 	/// Who an attribute belongs to, mirroring HAPI_AttributeOwner.
@@ -49,9 +49,9 @@ public:
 		OWNER_DETAIL = HAPI_ATTROWNER_DETAIL,
 	};
 
-	HEGoGeoOutput() = default;
+	HEGoPointOutput() = default;
 
-	/// Built by HEGoAssetNode::get_geo_output(); not meant to be constructed by hand.
+	/// Built by HEGoAssetNode::get_point_output(); not meant to be constructed by hand.
 	void setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id);
 
 	/// Whether this output has geometry with loose points to query.
@@ -86,10 +86,10 @@ public:
 	godot::Array get_attribute(const godot::String &name, int owner = OWNER_POINT) const;
 
 	/// Every point, as a selection to filter and split further.
-	godot::Ref<HEGoGeoSelection> select_all();
+	godot::Ref<HEGoPointSelection> select_all();
 
 	/// The points whose [param name] attribute equals [param value].
-	godot::Ref<HEGoGeoSelection> filter_by(const godot::String &name, const godot::Variant &value);
+	godot::Ref<HEGoPointSelection> filter_by(const godot::String &name, const godot::Variant &value);
 
 	/// The points grouped by the value of [param name], as { value: selection }.
 	godot::Dictionary split_by(const godot::String &name);
@@ -98,24 +98,24 @@ protected:
 	static void _bind_methods();
 
 private:
-	friend class HEGoGeoSelection;
+	friend class HEGoPointSelection;
 
 	std::shared_ptr<HEGo::Util::Geo::GeoCache> my_cache;
 	HAPI_NodeId my_node_id = -1;
 };
 
-/// A set of points of a [HEGoGeoOutput], as an index list.
+/// A set of points of a [HEGoPointOutput], as an index list.
 ///
 /// Filtering and splitting produce new selections without copying any attribute
 /// data; only get_points() assembles values, and only for the points it holds.
-class HEGoGeoSelection : public godot::RefCounted
+class HEGoPointSelection : public godot::RefCounted
 {
-	GDCLASS(HEGoGeoSelection, godot::RefCounted)
+	GDCLASS(HEGoPointSelection, godot::RefCounted)
 
 public:
-	HEGoGeoSelection() = default;
+	HEGoPointSelection() = default;
 
-	void setup(const godot::Ref<HEGoGeoOutput> &output, const std::vector<int> &indices);
+	void setup(const godot::Ref<HEGoPointOutput> &output, const std::vector<int> &indices);
 
 	/// How many points this selection holds.
 	int size() const;
@@ -124,7 +124,7 @@ public:
 	godot::PackedInt32Array get_indices() const;
 
 	/// The subset whose [param name] attribute equals [param value].
-	godot::Ref<HEGoGeoSelection> filter_by(const godot::String &name, const godot::Variant &value);
+	godot::Ref<HEGoPointSelection> filter_by(const godot::String &name, const godot::Variant &value);
 
 	/// This selection grouped by the value of [param name], as { value: selection }.
 	/// Points the attribute is not set on land under a null key, and an attribute the
@@ -139,15 +139,15 @@ protected:
 	static void _bind_methods();
 
 private:
-	godot::Ref<HEGoGeoOutput> my_output;
+	godot::Ref<HEGoPointOutput> my_output;
 	std::vector<int> my_indices;
 };
 
-class HEGoGeoPrimSelection;
+class HEGoSurfaceSelection;
 
 /// A cooked node's surface output, queried from GDScript.
 ///
-/// The surface counterpart of [HEGoGeoOutput]: where that one selects points, this
+/// The surface counterpart of [HEGoPointOutput]: where that one selects points, this
 /// selects primitives and turns a group of them into a Godot surface array.
 /// [codeblock]
 /// var surfaces = await _await_task(asset_node.get_surface_output(["N", "uv"]))
@@ -162,12 +162,12 @@ class HEGoGeoPrimSelection;
 /// The mesh data - the vertex list and the point attributes - is read once for the
 /// whole part; each group only compacts the points its own primitives use, and only
 /// when get_surface() is called.
-class HEGoGeoSurfaces : public godot::RefCounted
+class HEGoSurfaceOutput : public godot::RefCounted
 {
-	GDCLASS(HEGoGeoSurfaces, godot::RefCounted)
+	GDCLASS(HEGoSurfaceOutput, godot::RefCounted)
 
 public:
-	HEGoGeoSurfaces() = default;
+	HEGoSurfaceOutput() = default;
 
 	/// Built by HEGoAssetNode::get_surface_output(); not meant to be constructed by hand.
 	/// Reads the primitive and vertex lists plus the named point attributes, so it
@@ -196,10 +196,10 @@ public:
 	godot::Array get_attribute(const godot::String &name) const;
 
 	/// Every primitive, as a selection to filter and split further.
-	godot::Ref<HEGoGeoPrimSelection> select_all();
+	godot::Ref<HEGoSurfaceSelection> select_all();
 
 	/// The primitives whose [param name] attribute equals [param value].
-	godot::Ref<HEGoGeoPrimSelection> filter_by(const godot::String &name, const godot::Variant &value);
+	godot::Ref<HEGoSurfaceSelection> filter_by(const godot::String &name, const godot::Variant &value);
 
 	/// The primitives grouped by the value of [param name], as { value: selection }.
 	godot::Dictionary split_by(const godot::String &name);
@@ -208,7 +208,7 @@ protected:
 	static void _bind_methods();
 
 private:
-	friend class HEGoGeoPrimSelection;
+	friend class HEGoSurfaceSelection;
 
 	std::shared_ptr<HEGo::Util::Geo::GeoCache> my_cache;
 	HAPI_NodeId my_node_id = -1;
@@ -221,18 +221,18 @@ private:
 	godot::Dictionary my_point_attrs;
 };
 
-/// A set of primitives of a [HEGoGeoSurfaces].
+/// A set of primitives of a [HEGoSurfaceOutput].
 ///
-/// Like [HEGoGeoSelection], a selection is a list of indices: filtering and
+/// Like [HEGoPointSelection], a selection is a list of indices: filtering and
 /// splitting cost nothing but the indices, and only get_surface() assembles data.
-class HEGoGeoPrimSelection : public godot::RefCounted
+class HEGoSurfaceSelection : public godot::RefCounted
 {
-	GDCLASS(HEGoGeoPrimSelection, godot::RefCounted)
+	GDCLASS(HEGoSurfaceSelection, godot::RefCounted)
 
 public:
-	HEGoGeoPrimSelection() = default;
+	HEGoSurfaceSelection() = default;
 
-	void setup(const godot::Ref<HEGoGeoSurfaces> &surfaces, const std::vector<int> &indices);
+	void setup(const godot::Ref<HEGoSurfaceOutput> &surfaces, const std::vector<int> &indices);
 
 	/// How many primitives this selection holds.
 	int size() const;
@@ -241,7 +241,7 @@ public:
 	godot::PackedInt32Array get_indices() const;
 
 	/// The subset whose [param name] attribute equals [param value].
-	godot::Ref<HEGoGeoPrimSelection> filter_by(const godot::String &name, const godot::Variant &value);
+	godot::Ref<HEGoSurfaceSelection> filter_by(const godot::String &name, const godot::Variant &value);
 
 	/// This selection grouped by the value of [param name], as { value: selection }.
 	godot::Dictionary split_by(const godot::String &name);
@@ -255,12 +255,12 @@ protected:
 	static void _bind_methods();
 
 private:
-	godot::Ref<HEGoGeoSurfaces> my_surfaces;
+	godot::Ref<HEGoSurfaceOutput> my_surfaces;
 	std::vector<int> my_indices;
 };
 
 } // namespace HEGo
 
-VARIANT_ENUM_CAST(HEGo::HEGoGeoOutput::Owner);
+VARIANT_ENUM_CAST(HEGo::HEGoPointOutput::Owner);
 
 #endif // HEGO_GEO_OUTPUT_H

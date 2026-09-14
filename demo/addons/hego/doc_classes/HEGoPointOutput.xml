@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="HEGoGeoOutput" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<class name="HEGoPointOutput" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 <brief_description>
 A cooked node's output, read and split from code.
 </brief_description>
 <description>
-Returned by [method HEGoAssetNode.get_geo_output]. Where a fetch config describes the wanted attributes and splits ahead of time in a resource, this describes them in code, at the point of use ([code]hego[/code] being the node's [HEGoAssetAgent]):
+Returned by [method HEGoAssetNode.get_point_output]. Where a fetch config describes the wanted attributes and splits ahead of time in a resource, this describes them in code, at the point of use ([code]hego[/code] being the node's [HEGoAssetAgent]):
 [codeblock]
-var output = await agent.task(asset_node.get_geo_output())
+var output = await agent.task(asset_node.get_point_output())
 await agent.task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
 
 var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
@@ -14,7 +14,7 @@ for node_path in groups:
     var points = groups[node_path].get_points(["N", "up", "pscale"])
 [/codeblock]
 
-The geometry itself never leaves C++. A [HEGoGeoSelection] is a list of point indices; filtering and splitting produce new selections without copying attribute values, and only [method HEGoGeoSelection.get_points] assembles data to hand over.
+The geometry itself never leaves C++. A [HEGoPointSelection] is a list of point indices; filtering and splitting produce new selections without copying attribute values, and only [method HEGoPointSelection.get_points] assembles data to hand over.
 
 Attribute values are cached per cook and shared with [method HEGoAssetNode.fetch_points] and [method HEGoAssetNode.fetch_surfaces], so reading the same attribute from two outputs only reaches Houdini once. The cache invalidates itself when the node cooks again.
 
@@ -78,13 +78,13 @@ Returns an empty array, with a warning, for an attribute that exists but was nev
 </description>
 </method>
 <method name="select_all">
-<return type="HEGoGeoSelection" />
+<return type="HEGoPointSelection" />
 <description>
 Every point, as a selection to filter and split further.
 </description>
 </method>
 <method name="filter_by">
-<return type="HEGoGeoSelection" />
+<return type="HEGoPointSelection" />
 <param index="0" name="name" type="String" />
 <param index="1" name="value" type="Variant" />
 <description>
@@ -95,7 +95,7 @@ The points whose [code]name[/code] attribute equals [code]value[/code]. Shorthan
 <return type="Dictionary" />
 <param index="0" name="name" type="String" />
 <description>
-The points grouped by the value of [code]name[/code], as [code]{ value: HEGoGeoSelection }[/code]. Shorthand for [code]select_all().split_by(...)[/code].
+The points grouped by the value of [code]name[/code], as [code]{ value: HEGoPointSelection }[/code]. Shorthand for [code]select_all().split_by(...)[/code].
 </description>
 </method>
 </methods>

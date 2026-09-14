@@ -17,10 +17,10 @@ Both are on the asset node, and both return an object that still lives in C++:
 .. list-table::
    :widths: 46 54
 
-   * - ``asset.get_geo_output(preload_attribs := [])``
-     - :ref:`HEGoGeoOutput<class_HEGoGeoOutput>` — the cook's **points**
+   * - ``asset.get_point_output(preload_attribs := [])``
+     - :ref:`HEGoPointOutput<class_HEGoPointOutput>` — the cook's **points**
    * - ``asset.get_surface_output(point_attribs := [], preload_attribs := [])``
-     - :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>` — the cook's **primitives**
+     - :ref:`HEGoSurfaceOutput<class_HEGoSurfaceOutput>` — the cook's **primitives**
 
 Use points for scattering, spawning and anything per-position; use surfaces for anything that
 becomes a mesh. Both return a :doc:`task </api/task_pattern>`, and both take attribute names
@@ -44,13 +44,13 @@ matching one value. Both are chainable, and neither copies anything.
 
 .. code-block:: gdscript
 
-    var points: HEGoGeoOutput = await agent.task(asset.get_geo_output())
+    var points: HEGoPointOutput = await agent.task(asset.get_point_output())
     await agent.task(points.load_attributes(["my_kind", "my_region", "keep", "N", "up", "pscale"]))
 
     # One group per value of the HDA's own "my_kind" attribute.
     var by_kind := points.split_by("my_kind")
     for kind in by_kind:
-        var selection: HEGoGeoSelection = by_kind[kind]
+        var selection: HEGoPointSelection = by_kind[kind]
         var group := selection.get_points(["N", "up", "pscale"])
         # group == { "P": [...], "N": [...], "up": [...], "pscale": [...] }
 
@@ -64,7 +64,7 @@ Chained, which is the shape most custom nodes end up with:
     var wanted := points.filter_by("keep", 1)      # only the points the HDA flagged
     var by_region := wanted.split_by("my_region")  # then grouped by another attribute
     for region in by_region:
-        var selection: HEGoGeoSelection = by_region[region]
+        var selection: HEGoPointSelection = by_region[region]
         var group := selection.get_points(["N", "up", "pscale"])
 
         var holder := context.place(str(region), "region", Node3D.new) as Node3D
@@ -97,13 +97,13 @@ group for a Godot surface.
 
     # point_attribs are baked into the surface arrays; preload_attribs are the primitive
     # attributes you intend to split or read by.
-    var surfaces: HEGoGeoSurfaces = await agent.task(
+    var surfaces: HEGoSurfaceOutput = await agent.task(
         asset.get_surface_output(["N", "uv"], ["my_part"]))
 
     var mesh := ArrayMesh.new()
     var by_part := surfaces.split_by("my_part")
     for part in by_part:
-        var selection: HEGoGeoPrimSelection = by_part[part]
+        var selection: HEGoSurfaceSelection = by_part[part]
         var surface := selection.get_surface(["my_part"])
         mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface["surface_array"])
 
@@ -132,9 +132,9 @@ instead of naming everything up front:
     if surfaces.has_attribute("my_part"):
         await agent.task(surfaces.load_attributes(["my_part"]))
 
-On the point side these take an owner — ``HEGoGeoOutput.OWNER_POINT`` (the default),
+On the point side these take an owner — ``HEGoPointOutput.OWNER_POINT`` (the default),
 ``OWNER_VERTEX``, ``OWNER_PRIM`` or ``OWNER_DETAIL``. On
-:ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>` they are primitive attributes and take none.
+:ref:`HEGoSurfaceOutput<class_HEGoSurfaceOutput>` they are primitive attributes and take none.
 
 :ref:`get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` answers the coarser
 question — whether the cook produced a mesh, points, curves or volumes, and which attribute

@@ -39,7 +39,7 @@ public:
 	// The cooked output, for reading and splitting it from GDScript in code rather
 	// than through a fetch config. Optionally loads attributes up front, so a handler
 	// can do its whole job with one await.
-	godot::Ref<HEGoTask> get_geo_output(godot::PackedStringArray preload_attribs = godot::PackedStringArray());
+	godot::Ref<HEGoTask> get_point_output(godot::PackedStringArray preload_attribs = godot::PackedStringArray());
 
 	// What the last cook actually produced, so a handler that has nothing to do can
 	// be skipped without probing for its attributes. Returns a dictionary with

@@ -114,8 +114,8 @@ func place(node_path: String, default_name: String, factory: Callable, unique :=
 ## Returns [code]null[/code] when the fetch failed, the output is unusable, or nothing
 ## matched, so a handler can bail on one check rather than the four this replaces.
 ## [param filter_attrib] is loaded whether or not [param attribs] names it.
-func select_points(filter_attrib: String, attribs: PackedStringArray) -> HEGoGeoSelection:
-	var output: HEGoGeoOutput = await await_task(asset.get_geo_output())
+func select_points(filter_attrib: String, attribs: PackedStringArray) -> HEGoPointSelection:
+	var output: HEGoPointOutput = await await_task(asset.get_point_output())
 	if output == null or not output.is_valid():
 		return null
 

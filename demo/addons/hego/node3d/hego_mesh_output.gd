@@ -79,7 +79,7 @@ static func should_handle(summary: Dictionary) -> bool:
 ## Nothing here touches the scene, so a node that wants to place the result itself can use
 ## this and [method build_array_mesh] instead of [method handle].
 static func fetch_surface_groups(context: HEGoOutputContext) -> Dictionary:
-	var output: HEGoGeoSurfaces = await context.await_task(
+	var output: HEGoSurfaceOutput = await context.await_task(
 		context.asset.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
 	if output == null or not output.is_valid():
 		return {}

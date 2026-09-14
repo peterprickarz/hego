@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoFetchPointsConfig" inherits="Resource" deprecated="Use HEGoAssetNode.get_geo_output() instead. Fetch configs are kept" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoFetchPointsConfig" inherits="Resource" deprecated="Use HEGoAssetNode.get_point_output() instead. Fetch configs are kept" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 	<brief_description>
 		Attributes, filters and splits for a point fetch, saved as a resource.
 	</brief_description>
@@ -10,7 +10,7 @@
 	</tutorials>
 	<members>
 		<member name="read_attribs" type="PackedStringArray" setter="" getter="">
-			Attribute names to read from the cook, as [method HEGoGeoOutput.load_attributes] takes them.
+			Attribute names to read from the cook, as [method HEGoPointOutput.load_attributes] takes them.
 		</member>
 		<member name="filter_attribs" type="PackedStringArray" setter="" getter="">
 			Attribute names to filter the points on, one per entry of [member filter_attrib_values].

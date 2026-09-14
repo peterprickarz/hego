@@ -1,13 +1,13 @@
 ## Attributes, filters and splits for a point fetch, saved as a resource.
 ##
-## @deprecated: Use HEGoAssetNode.get_geo_output() instead. Fetch configs are kept
+## @deprecated: Use HEGoAssetNode.get_point_output() instead. Fetch configs are kept
 ## only so existing projects can move across, and will be removed. The code API
 ## takes the same arguments, shares the same implementation and cache, and can
 ## decide what to read at runtime.
 extends Resource
 class_name HEGoFetchPointsConfig
 
-## Attribute names to read from the cook, as [method HEGoGeoOutput.load_attributes] takes them.
+## Attribute names to read from the cook, as [method HEGoPointOutput.load_attributes] takes them.
 @export var read_attribs : PackedStringArray
 ## Attribute names to filter the points on, one per entry of [member filter_attrib_values].
 @export var filter_attribs : PackedStringArray

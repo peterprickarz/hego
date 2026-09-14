@@ -36,10 +36,10 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 	memnew(HEGo::Util::Log::HEGoLog);
 	HEGo::Util::Log::HEGoLog::get_singleton()->configure();
 
-	ClassDB::register_class<HEGo::HEGoGeoOutput>();
-	ClassDB::register_class<HEGo::HEGoGeoSelection>();
-	ClassDB::register_class<HEGo::HEGoGeoSurfaces>();
-	ClassDB::register_class<HEGo::HEGoGeoPrimSelection>();
+	ClassDB::register_class<HEGo::HEGoPointOutput>();
+	ClassDB::register_class<HEGo::HEGoPointSelection>();
+	ClassDB::register_class<HEGo::HEGoSurfaceOutput>();
+	ClassDB::register_class<HEGo::HEGoSurfaceSelection>();
 
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);

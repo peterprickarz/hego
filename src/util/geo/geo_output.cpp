@@ -13,10 +13,10 @@ HAPI_AttributeOwner to_hapi_owner(int owner)
 {
 	switch (owner)
 	{
-		case HEGoGeoOutput::OWNER_VERTEX:
-		case HEGoGeoOutput::OWNER_POINT:
-		case HEGoGeoOutput::OWNER_PRIM:
-		case HEGoGeoOutput::OWNER_DETAIL:
+		case HEGoPointOutput::OWNER_VERTEX:
+		case HEGoPointOutput::OWNER_POINT:
+		case HEGoPointOutput::OWNER_PRIM:
+		case HEGoPointOutput::OWNER_DETAIL:
 			return static_cast<HAPI_AttributeOwner>(owner);
 		default:
 			return HAPI_ATTROWNER_POINT;
@@ -25,18 +25,18 @@ HAPI_AttributeOwner to_hapi_owner(int owner)
 } // namespace
 
 // ─────────────────────────────────────────────
-// HEGoGeoOutput
+// HEGoPointOutput
 // ─────────────────────────────────────────────
 
-void HEGoGeoOutput::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id)
+void HEGoPointOutput::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id)
 {
 	my_cache = cache;
 	my_node_id = node_id;
 }
 
-bool HEGoGeoOutput::is_valid() const { return my_cache != nullptr && my_cache->points_part() != nullptr; }
+bool HEGoPointOutput::is_valid() const { return my_cache != nullptr && my_cache->points_part() != nullptr; }
 
-int HEGoGeoOutput::get_point_count() const
+int HEGoPointOutput::get_point_count() const
 {
 	if (!is_valid())
 	{
@@ -45,7 +45,7 @@ int HEGoGeoOutput::get_point_count() const
 	return my_cache->points_part()->pointCount;
 }
 
-godot::PackedStringArray HEGoGeoOutput::get_attribute_names(int owner) const
+godot::PackedStringArray HEGoPointOutput::get_attribute_names(int owner) const
 {
 	if (!is_valid())
 	{
@@ -54,9 +54,9 @@ godot::PackedStringArray HEGoGeoOutput::get_attribute_names(int owner) const
 	return my_cache->attribute_names(*my_cache->points_part(), to_hapi_owner(owner));
 }
 
-bool HEGoGeoOutput::has_attribute(const godot::String &name, int owner) const { return get_attribute_names(owner).has(name); }
+bool HEGoPointOutput::has_attribute(const godot::String &name, int owner) const { return get_attribute_names(owner).has(name); }
 
-godot::PackedStringArray HEGoGeoOutput::get_attribute_names_with_prefix(const godot::String &prefix, int owner) const
+godot::PackedStringArray HEGoPointOutput::get_attribute_names_with_prefix(const godot::String &prefix, int owner) const
 {
 	const godot::PackedStringArray names = get_attribute_names(owner);
 	godot::PackedStringArray matching;
@@ -70,7 +70,7 @@ godot::PackedStringArray HEGoGeoOutput::get_attribute_names_with_prefix(const go
 	return matching;
 }
 
-godot::Ref<HEGoTask> HEGoGeoOutput::load_attributes(const godot::PackedStringArray &names, int owner)
+godot::Ref<HEGoTask> HEGoPointOutput::load_attributes(const godot::PackedStringArray &names, int owner)
 {
 	if (!is_valid())
 	{
@@ -98,7 +98,7 @@ godot::Ref<HEGoTask> HEGoGeoOutput::load_attributes(const godot::PackedStringArr
 			});
 }
 
-void HEGoGeoOutput::load_attributes_now(const godot::PackedStringArray &names, int owner)
+void HEGoPointOutput::load_attributes_now(const godot::PackedStringArray &names, int owner)
 {
 	if (!is_valid())
 	{
@@ -111,7 +111,7 @@ void HEGoGeoOutput::load_attributes_now(const godot::PackedStringArray &names, i
 	}
 }
 
-godot::Array HEGoGeoOutput::get_attribute(const godot::String &name, int owner) const
+godot::Array HEGoPointOutput::get_attribute(const godot::String &name, int owner) const
 {
 	if (!is_valid())
 	{
@@ -126,7 +126,7 @@ godot::Array HEGoGeoOutput::get_attribute(const godot::String &name, int owner) 
 	return my_cache->attribute(*my_cache->points_part(), to_hapi_owner(owner), name);
 }
 
-godot::Ref<HEGoGeoSelection> HEGoGeoOutput::select_all()
+godot::Ref<HEGoPointSelection> HEGoPointOutput::select_all()
 {
 	std::vector<int> indices;
 	const int count = get_point_count();
@@ -136,29 +136,29 @@ godot::Ref<HEGoGeoSelection> HEGoGeoOutput::select_all()
 		indices.push_back(i);
 	}
 
-	godot::Ref<HEGoGeoSelection> selection;
+	godot::Ref<HEGoPointSelection> selection;
 	selection.instantiate();
-	selection->setup(godot::Ref<HEGoGeoOutput>(this), indices);
+	selection->setup(godot::Ref<HEGoPointOutput>(this), indices);
 	return selection;
 }
 
-godot::Ref<HEGoGeoSelection> HEGoGeoOutput::filter_by(const godot::String &name, const godot::Variant &value) { return select_all()->filter_by(name, value); }
+godot::Ref<HEGoPointSelection> HEGoPointOutput::filter_by(const godot::String &name, const godot::Variant &value) { return select_all()->filter_by(name, value); }
 
-godot::Dictionary HEGoGeoOutput::split_by(const godot::String &name) { return select_all()->split_by(name); }
+godot::Dictionary HEGoPointOutput::split_by(const godot::String &name) { return select_all()->split_by(name); }
 
-void HEGoGeoOutput::_bind_methods()
+void HEGoPointOutput::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("is_valid"), &HEGoGeoOutput::is_valid);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_point_count"), &HEGoGeoOutput::get_point_count);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute_names", "owner"), &HEGoGeoOutput::get_attribute_names, DEFVAL(OWNER_POINT));
-	godot::ClassDB::bind_method(godot::D_METHOD("has_attribute", "name", "owner"), &HEGoGeoOutput::has_attribute, DEFVAL(OWNER_POINT));
-	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute_names_with_prefix", "prefix", "owner"), &HEGoGeoOutput::get_attribute_names_with_prefix,
+	godot::ClassDB::bind_method(godot::D_METHOD("is_valid"), &HEGoPointOutput::is_valid);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_point_count"), &HEGoPointOutput::get_point_count);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute_names", "owner"), &HEGoPointOutput::get_attribute_names, DEFVAL(OWNER_POINT));
+	godot::ClassDB::bind_method(godot::D_METHOD("has_attribute", "name", "owner"), &HEGoPointOutput::has_attribute, DEFVAL(OWNER_POINT));
+	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute_names_with_prefix", "prefix", "owner"), &HEGoPointOutput::get_attribute_names_with_prefix,
 			DEFVAL(OWNER_POINT));
-	godot::ClassDB::bind_method(godot::D_METHOD("load_attributes", "names", "owner"), &HEGoGeoOutput::load_attributes, DEFVAL(OWNER_POINT));
-	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute", "name", "owner"), &HEGoGeoOutput::get_attribute, DEFVAL(OWNER_POINT));
-	godot::ClassDB::bind_method(godot::D_METHOD("select_all"), &HEGoGeoOutput::select_all);
-	godot::ClassDB::bind_method(godot::D_METHOD("filter_by", "name", "value"), &HEGoGeoOutput::filter_by);
-	godot::ClassDB::bind_method(godot::D_METHOD("split_by", "name"), &HEGoGeoOutput::split_by);
+	godot::ClassDB::bind_method(godot::D_METHOD("load_attributes", "names", "owner"), &HEGoPointOutput::load_attributes, DEFVAL(OWNER_POINT));
+	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute", "name", "owner"), &HEGoPointOutput::get_attribute, DEFVAL(OWNER_POINT));
+	godot::ClassDB::bind_method(godot::D_METHOD("select_all"), &HEGoPointOutput::select_all);
+	godot::ClassDB::bind_method(godot::D_METHOD("filter_by", "name", "value"), &HEGoPointOutput::filter_by);
+	godot::ClassDB::bind_method(godot::D_METHOD("split_by", "name"), &HEGoPointOutput::split_by);
 
 	BIND_ENUM_CONSTANT(OWNER_VERTEX);
 	BIND_ENUM_CONSTANT(OWNER_POINT);
@@ -167,18 +167,18 @@ void HEGoGeoOutput::_bind_methods()
 }
 
 // ─────────────────────────────────────────────
-// HEGoGeoSelection
+// HEGoPointSelection
 // ─────────────────────────────────────────────
 
-void HEGoGeoSelection::setup(const godot::Ref<HEGoGeoOutput> &output, const std::vector<int> &indices)
+void HEGoPointSelection::setup(const godot::Ref<HEGoPointOutput> &output, const std::vector<int> &indices)
 {
 	my_output = output;
 	my_indices = indices;
 }
 
-int HEGoGeoSelection::size() const { return static_cast<int>(my_indices.size()); }
+int HEGoPointSelection::size() const { return static_cast<int>(my_indices.size()); }
 
-godot::PackedInt32Array HEGoGeoSelection::get_indices() const
+godot::PackedInt32Array HEGoPointSelection::get_indices() const
 {
 	godot::PackedInt32Array indices;
 	indices.resize(static_cast<int>(my_indices.size()));
@@ -189,9 +189,9 @@ godot::PackedInt32Array HEGoGeoSelection::get_indices() const
 	return indices;
 }
 
-godot::Ref<HEGoGeoSelection> HEGoGeoSelection::filter_by(const godot::String &name, const godot::Variant &value)
+godot::Ref<HEGoPointSelection> HEGoPointSelection::filter_by(const godot::String &name, const godot::Variant &value)
 {
-	godot::Ref<HEGoGeoSelection> selection;
+	godot::Ref<HEGoPointSelection> selection;
 	selection.instantiate();
 
 	if (my_output.is_null())
@@ -199,7 +199,7 @@ godot::Ref<HEGoGeoSelection> HEGoGeoSelection::filter_by(const godot::String &na
 		return selection;
 	}
 
-	const godot::Array values = my_output->get_attribute(name, HEGoGeoOutput::OWNER_POINT);
+	const godot::Array values = my_output->get_attribute(name, HEGoPointOutput::OWNER_POINT);
 	if (values.is_empty())
 	{
 		HEGo::Util::Log::warning(HEGo::Util::Log::Category::OUTPUT,
@@ -220,7 +220,7 @@ godot::Ref<HEGoGeoSelection> HEGoGeoSelection::filter_by(const godot::String &na
 	return selection;
 }
 
-godot::Dictionary HEGoGeoSelection::split_by(const godot::String &name)
+godot::Dictionary HEGoPointSelection::split_by(const godot::String &name)
 {
 	godot::Dictionary groups;
 	if (my_output.is_null())
@@ -232,15 +232,15 @@ godot::Dictionary HEGoGeoSelection::split_by(const godot::String &name)
 	// points simply form one unnamed group, which is what the handlers expect when
 	// they see a null key. Not having loaded an attribute that does exist is a
 	// mistake worth saying out loud.
-	const godot::Array values = my_output->get_attribute(name, HEGoGeoOutput::OWNER_POINT);
+	const godot::Array values = my_output->get_attribute(name, HEGoPointOutput::OWNER_POINT);
 	if (values.is_empty())
 	{
-		if (my_output->has_attribute(name, HEGoGeoOutput::OWNER_POINT))
+		if (my_output->has_attribute(name, HEGoPointOutput::OWNER_POINT))
 		{
 			HEGo::Util::Log::warning(HEGo::Util::Log::Category::OUTPUT,
 					godot::String("Cannot split by '") + name + "': it was not loaded. Call load_attributes([\"" + name + "\"]) first.");
 		}
-		groups[godot::Variant()] = godot::Ref<HEGoGeoSelection>(this);
+		groups[godot::Variant()] = godot::Ref<HEGoPointSelection>(this);
 		return groups;
 	}
 
@@ -270,7 +270,7 @@ godot::Dictionary HEGoGeoSelection::split_by(const godot::String &name)
 			indices.push_back(group_indices[j]);
 		}
 
-		godot::Ref<HEGoGeoSelection> selection;
+		godot::Ref<HEGoPointSelection> selection;
 		selection.instantiate();
 		selection->setup(my_output, indices);
 		groups[keys[i]] = selection;
@@ -279,7 +279,7 @@ godot::Dictionary HEGoGeoSelection::split_by(const godot::String &name)
 	return groups;
 }
 
-godot::Dictionary HEGoGeoSelection::get_points(const godot::PackedStringArray &names)
+godot::Dictionary HEGoPointSelection::get_points(const godot::PackedStringArray &names)
 {
 	godot::Dictionary points;
 	if (my_output.is_null())
@@ -296,7 +296,7 @@ godot::Dictionary HEGoGeoSelection::get_points(const godot::PackedStringArray &n
 	for (int n = 0; n < wanted.size(); ++n)
 	{
 		const godot::String name = wanted[n];
-		const godot::Array values = my_output->get_attribute(name, HEGoGeoOutput::OWNER_POINT);
+		const godot::Array values = my_output->get_attribute(name, HEGoPointOutput::OWNER_POINT);
 		if (values.is_empty())
 		{
 			continue;
@@ -315,21 +315,21 @@ godot::Dictionary HEGoGeoSelection::get_points(const godot::PackedStringArray &n
 	return points;
 }
 
-void HEGoGeoSelection::_bind_methods()
+void HEGoPointSelection::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("size"), &HEGoGeoSelection::size);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_indices"), &HEGoGeoSelection::get_indices);
-	godot::ClassDB::bind_method(godot::D_METHOD("filter_by", "name", "value"), &HEGoGeoSelection::filter_by);
-	godot::ClassDB::bind_method(godot::D_METHOD("split_by", "name"), &HEGoGeoSelection::split_by);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_points", "names"), &HEGoGeoSelection::get_points, DEFVAL(godot::PackedStringArray()));
+	godot::ClassDB::bind_method(godot::D_METHOD("size"), &HEGoPointSelection::size);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_indices"), &HEGoPointSelection::get_indices);
+	godot::ClassDB::bind_method(godot::D_METHOD("filter_by", "name", "value"), &HEGoPointSelection::filter_by);
+	godot::ClassDB::bind_method(godot::D_METHOD("split_by", "name"), &HEGoPointSelection::split_by);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_points", "names"), &HEGoPointSelection::get_points, DEFVAL(godot::PackedStringArray()));
 }
 
 
 // ─────────────────────────────────────────────
-// HEGoGeoSurfaces
+// HEGoSurfaceOutput
 // ─────────────────────────────────────────────
 
-bool HEGoGeoSurfaces::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &point_attribs)
+bool HEGoSurfaceOutput::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &point_attribs)
 {
 	my_cache = cache;
 	my_node_id = node_id;
@@ -337,11 +337,11 @@ bool HEGoGeoSurfaces::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &ca
 	return my_valid;
 }
 
-bool HEGoGeoSurfaces::is_valid() const { return my_valid; }
+bool HEGoSurfaceOutput::is_valid() const { return my_valid; }
 
-int HEGoGeoSurfaces::get_primitive_count() const { return my_valid ? my_prims.size() : 0; }
+int HEGoSurfaceOutput::get_primitive_count() const { return my_valid ? my_prims.size() : 0; }
 
-godot::PackedStringArray HEGoGeoSurfaces::get_attribute_names() const
+godot::PackedStringArray HEGoSurfaceOutput::get_attribute_names() const
 {
 	if (!my_valid)
 	{
@@ -350,9 +350,9 @@ godot::PackedStringArray HEGoGeoSurfaces::get_attribute_names() const
 	return my_cache->attribute_names(my_part, HAPI_ATTROWNER_PRIM);
 }
 
-bool HEGoGeoSurfaces::has_attribute(const godot::String &name) const { return get_attribute_names().has(name); }
+bool HEGoSurfaceOutput::has_attribute(const godot::String &name) const { return get_attribute_names().has(name); }
 
-godot::PackedStringArray HEGoGeoSurfaces::get_attribute_names_with_prefix(const godot::String &prefix) const
+godot::PackedStringArray HEGoSurfaceOutput::get_attribute_names_with_prefix(const godot::String &prefix) const
 {
 	const godot::PackedStringArray names = get_attribute_names();
 	godot::PackedStringArray matching;
@@ -366,7 +366,7 @@ godot::PackedStringArray HEGoGeoSurfaces::get_attribute_names_with_prefix(const 
 	return matching;
 }
 
-godot::Ref<HEGoTask> HEGoGeoSurfaces::load_attributes(const godot::PackedStringArray &names)
+godot::Ref<HEGoTask> HEGoSurfaceOutput::load_attributes(const godot::PackedStringArray &names)
 {
 	if (!my_valid)
 	{
@@ -387,7 +387,7 @@ godot::Ref<HEGoTask> HEGoGeoSurfaces::load_attributes(const godot::PackedStringA
 			});
 }
 
-godot::Array HEGoGeoSurfaces::get_attribute(const godot::String &name) const
+godot::Array HEGoSurfaceOutput::get_attribute(const godot::String &name) const
 {
 	if (!my_valid || !has_attribute(name))
 	{
@@ -396,7 +396,7 @@ godot::Array HEGoGeoSurfaces::get_attribute(const godot::String &name) const
 	return my_cache->attribute(my_part, HAPI_ATTROWNER_PRIM, name);
 }
 
-godot::Ref<HEGoGeoPrimSelection> HEGoGeoSurfaces::select_all()
+godot::Ref<HEGoSurfaceSelection> HEGoSurfaceOutput::select_all()
 {
 	std::vector<int> indices;
 	const int count = get_primitive_count();
@@ -406,46 +406,46 @@ godot::Ref<HEGoGeoPrimSelection> HEGoGeoSurfaces::select_all()
 		indices.push_back(i);
 	}
 
-	godot::Ref<HEGoGeoPrimSelection> selection;
+	godot::Ref<HEGoSurfaceSelection> selection;
 	selection.instantiate();
-	selection->setup(godot::Ref<HEGoGeoSurfaces>(this), indices);
+	selection->setup(godot::Ref<HEGoSurfaceOutput>(this), indices);
 	return selection;
 }
 
-godot::Ref<HEGoGeoPrimSelection> HEGoGeoSurfaces::filter_by(const godot::String &name, const godot::Variant &value)
+godot::Ref<HEGoSurfaceSelection> HEGoSurfaceOutput::filter_by(const godot::String &name, const godot::Variant &value)
 {
 	return select_all()->filter_by(name, value);
 }
 
-godot::Dictionary HEGoGeoSurfaces::split_by(const godot::String &name) { return select_all()->split_by(name); }
+godot::Dictionary HEGoSurfaceOutput::split_by(const godot::String &name) { return select_all()->split_by(name); }
 
-void HEGoGeoSurfaces::_bind_methods()
+void HEGoSurfaceOutput::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("is_valid"), &HEGoGeoSurfaces::is_valid);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_primitive_count"), &HEGoGeoSurfaces::get_primitive_count);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute_names"), &HEGoGeoSurfaces::get_attribute_names);
-	godot::ClassDB::bind_method(godot::D_METHOD("has_attribute", "name"), &HEGoGeoSurfaces::has_attribute);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute_names_with_prefix", "prefix"), &HEGoGeoSurfaces::get_attribute_names_with_prefix);
-	godot::ClassDB::bind_method(godot::D_METHOD("load_attributes", "names"), &HEGoGeoSurfaces::load_attributes);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute", "name"), &HEGoGeoSurfaces::get_attribute);
-	godot::ClassDB::bind_method(godot::D_METHOD("select_all"), &HEGoGeoSurfaces::select_all);
-	godot::ClassDB::bind_method(godot::D_METHOD("filter_by", "name", "value"), &HEGoGeoSurfaces::filter_by);
-	godot::ClassDB::bind_method(godot::D_METHOD("split_by", "name"), &HEGoGeoSurfaces::split_by);
+	godot::ClassDB::bind_method(godot::D_METHOD("is_valid"), &HEGoSurfaceOutput::is_valid);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_primitive_count"), &HEGoSurfaceOutput::get_primitive_count);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute_names"), &HEGoSurfaceOutput::get_attribute_names);
+	godot::ClassDB::bind_method(godot::D_METHOD("has_attribute", "name"), &HEGoSurfaceOutput::has_attribute);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute_names_with_prefix", "prefix"), &HEGoSurfaceOutput::get_attribute_names_with_prefix);
+	godot::ClassDB::bind_method(godot::D_METHOD("load_attributes", "names"), &HEGoSurfaceOutput::load_attributes);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_attribute", "name"), &HEGoSurfaceOutput::get_attribute);
+	godot::ClassDB::bind_method(godot::D_METHOD("select_all"), &HEGoSurfaceOutput::select_all);
+	godot::ClassDB::bind_method(godot::D_METHOD("filter_by", "name", "value"), &HEGoSurfaceOutput::filter_by);
+	godot::ClassDB::bind_method(godot::D_METHOD("split_by", "name"), &HEGoSurfaceOutput::split_by);
 }
 
 // ─────────────────────────────────────────────
-// HEGoGeoPrimSelection
+// HEGoSurfaceSelection
 // ─────────────────────────────────────────────
 
-void HEGoGeoPrimSelection::setup(const godot::Ref<HEGoGeoSurfaces> &surfaces, const std::vector<int> &indices)
+void HEGoSurfaceSelection::setup(const godot::Ref<HEGoSurfaceOutput> &surfaces, const std::vector<int> &indices)
 {
 	my_surfaces = surfaces;
 	my_indices = indices;
 }
 
-int HEGoGeoPrimSelection::size() const { return static_cast<int>(my_indices.size()); }
+int HEGoSurfaceSelection::size() const { return static_cast<int>(my_indices.size()); }
 
-godot::PackedInt32Array HEGoGeoPrimSelection::get_indices() const
+godot::PackedInt32Array HEGoSurfaceSelection::get_indices() const
 {
 	godot::PackedInt32Array indices;
 	indices.resize(static_cast<int>(my_indices.size()));
@@ -456,9 +456,9 @@ godot::PackedInt32Array HEGoGeoPrimSelection::get_indices() const
 	return indices;
 }
 
-godot::Ref<HEGoGeoPrimSelection> HEGoGeoPrimSelection::filter_by(const godot::String &name, const godot::Variant &value)
+godot::Ref<HEGoSurfaceSelection> HEGoSurfaceSelection::filter_by(const godot::String &name, const godot::Variant &value)
 {
-	godot::Ref<HEGoGeoPrimSelection> selection;
+	godot::Ref<HEGoSurfaceSelection> selection;
 	selection.instantiate();
 	if (my_surfaces.is_null())
 	{
@@ -486,7 +486,7 @@ godot::Ref<HEGoGeoPrimSelection> HEGoGeoPrimSelection::filter_by(const godot::St
 	return selection;
 }
 
-godot::Dictionary HEGoGeoPrimSelection::split_by(const godot::String &name)
+godot::Dictionary HEGoSurfaceSelection::split_by(const godot::String &name)
 {
 	godot::Dictionary groups;
 	if (my_surfaces.is_null())
@@ -504,7 +504,7 @@ godot::Dictionary HEGoGeoPrimSelection::split_by(const godot::String &name)
 			HEGo::Util::Log::warning(
 					HEGo::Util::Log::Category::OUTPUT, godot::String("Cannot split surfaces by '") + name + "': it was not loaded.");
 		}
-		groups[godot::Variant()] = godot::Ref<HEGoGeoPrimSelection>(this);
+		groups[godot::Variant()] = godot::Ref<HEGoSurfaceSelection>(this);
 		return groups;
 	}
 
@@ -532,7 +532,7 @@ godot::Dictionary HEGoGeoPrimSelection::split_by(const godot::String &name)
 			indices.push_back(group_indices[j]);
 		}
 
-		godot::Ref<HEGoGeoPrimSelection> selection;
+		godot::Ref<HEGoSurfaceSelection> selection;
 		selection.instantiate();
 		selection->setup(my_surfaces, indices);
 		groups[keys[i]] = selection;
@@ -541,7 +541,7 @@ godot::Dictionary HEGoGeoPrimSelection::split_by(const godot::String &name)
 	return groups;
 }
 
-godot::Dictionary HEGoGeoPrimSelection::get_surface(const godot::PackedStringArray &read_attribs)
+godot::Dictionary HEGoSurfaceSelection::get_surface(const godot::PackedStringArray &read_attribs)
 {
 	godot::Dictionary surface;
 	if (my_surfaces.is_null() || !my_surfaces->is_valid() || my_indices.empty())
@@ -588,13 +588,13 @@ godot::Dictionary HEGoGeoPrimSelection::get_surface(const godot::PackedStringArr
 	return surface;
 }
 
-void HEGoGeoPrimSelection::_bind_methods()
+void HEGoSurfaceSelection::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("size"), &HEGoGeoPrimSelection::size);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_indices"), &HEGoGeoPrimSelection::get_indices);
-	godot::ClassDB::bind_method(godot::D_METHOD("filter_by", "name", "value"), &HEGoGeoPrimSelection::filter_by);
-	godot::ClassDB::bind_method(godot::D_METHOD("split_by", "name"), &HEGoGeoPrimSelection::split_by);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_surface", "read_attribs"), &HEGoGeoPrimSelection::get_surface, DEFVAL(godot::PackedStringArray()));
+	godot::ClassDB::bind_method(godot::D_METHOD("size"), &HEGoSurfaceSelection::size);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_indices"), &HEGoSurfaceSelection::get_indices);
+	godot::ClassDB::bind_method(godot::D_METHOD("filter_by", "name", "value"), &HEGoSurfaceSelection::filter_by);
+	godot::ClassDB::bind_method(godot::D_METHOD("split_by", "name"), &HEGoSurfaceSelection::split_by);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_surface", "read_attribs"), &HEGoSurfaceSelection::get_surface, DEFVAL(godot::PackedStringArray()));
 }
 
 } // namespace HEGo

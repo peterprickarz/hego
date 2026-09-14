@@ -67,15 +67,15 @@ The result is a [Dictionary] with [code]has_mesh[/code], [code]has_points[/code]
 Costs only the attribute name lookups, which are cached per cook like every other read.
 </description>
 </method>
-<method name="get_geo_output">
+<method name="get_point_output">
 <return type="HEGoTask" />
 <param index="0" name="preload_attribs" type="PackedStringArray" default="PackedStringArray()" />
 <description>
-Submits a task returning a [HEGoGeoOutput]: the cooked output, read and split from code rather than through a fetch configuration.
+Submits a task returning a [HEGoPointOutput]: the cooked output, read and split from code rather than through a fetch configuration.
 
 Pass [code]preload_attribs[/code] to have those point attributes loaded while the task runs, so no further await is needed before querying:
 [codeblock]
-var output = await agent.task(asset_node.get_geo_output(["N", "up", "hego_spawn"]))
+var output = await agent.task(asset_node.get_point_output(["N", "up", "hego_spawn"]))
 for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path").values():
     var points = group.get_points(["N", "up"])
 [/codeblock]
@@ -83,13 +83,13 @@ for group in output.filter_by("hego_spawn", 1).split_by("hego_node_path").values
 Attribute values are cached per cook and shared with [method fetch_points] and [method fetch_surfaces], so reading the same attribute twice only reaches Houdini once.
 </description>
 </method>
-<method name="fetch_points" deprecated="Use [method get_geo_output] instead. Fetch configs are kept only so existing projects can move across.">
+<method name="fetch_points" deprecated="Use [method get_point_output] instead. Fetch configs are kept only so existing projects can move across.">
 <return type="HEGoTask" />
 <param index="0" name="fetch_point_config" type="Resource" />
 <description>
 Submits a task to fetch point data using a point-fetch configuration resource.
 
-[b]Deprecated.[/b] [method get_geo_output] does the same thing from code, decides at runtime, and keeps the attribute names next to the code that reads them. Both share one implementation and one per-cook cache, so results are identical.
+[b]Deprecated.[/b] [method get_point_output] does the same thing from code, decides at runtime, and keeps the attribute names next to the code that reads them. Both share one implementation and one per-cook cache, so results are identical.
 
 Config fields are interpreted as follows:
 [code]filter_attribs[/code] and [code]filter_attrib_values[/code]: paired by index; a point is kept only if all [code]point_attr == filter_value[/code] checks pass.
@@ -115,7 +115,7 @@ Returns an empty dictionary when no points pass filters, when no mesh part exist
 <param index="0" name="point_attribs" type="PackedStringArray" default="PackedStringArray()" />
 <param index="1" name="preload_attribs" type="PackedStringArray" default="PackedStringArray()" />
 <description>
-Submits a task returning a [HEGoGeoSurfaces]: the cooked surfaces, read and split from code rather than through a fetch configuration.
+Submits a task returning a [HEGoSurfaceOutput]: the cooked surfaces, read and split from code rather than through a fetch configuration.
 
 [code]point_attribs[/code] names which of [code]N[/code], [code]Cd[/code], [code]uv[/code], [code]uv2[/code] and [code]tangents[/code] to read; [code]P[/code] always comes along. [code]preload_attribs[/code] are primitive attributes, loaded while the task runs so the queries afterwards need no further await:
 [codeblock]
@@ -124,7 +124,7 @@ for material in output.split_by("hego_material"):
     var surface = by_material[material].get_surface()
 [/codeblock]
 
-Attribute values are cached per cook and shared with [method fetch_surfaces] and [method get_geo_output].
+Attribute values are cached per cook and shared with [method fetch_surfaces] and [method get_point_output].
 </description>
 </method>
 <method name="fetch_surfaces" deprecated="Use [method get_surface_output] instead. Fetch configs are kept only so existing projects can move across.">

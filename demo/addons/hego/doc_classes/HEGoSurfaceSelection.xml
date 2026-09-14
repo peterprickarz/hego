@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="HEGoGeoPrimSelection" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<class name="HEGoSurfaceSelection" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 <brief_description>
-A set of primitives of a [HEGoGeoSurfaces].
+A set of primitives of a [HEGoSurfaceOutput].
 </brief_description>
 <description>
 A selection is a list of primitive indices, not a copy of the geometry. Filtering and splitting build new selections without touching any geometry; only [method get_surface] assembles anything, and only for the primitives the selection holds.
@@ -13,7 +13,7 @@ for material in by_material:
     var surface = by_material[material].get_surface(["hego_lod", "hego_col_type"])
 [/codeblock]
 
-Obtained from [method HEGoGeoSurfaces.select_all], [method HEGoGeoSurfaces.filter_by] or [method HEGoGeoSurfaces.split_by].
+Obtained from [method HEGoSurfaceOutput.select_all], [method HEGoSurfaceOutput.filter_by] or [method HEGoSurfaceOutput.split_by].
 </description>
 <tutorials>
 <link title="Reading Output in Code">https://hego.readthedocs.io/en/latest/api/geo_output.html</link>
@@ -28,11 +28,11 @@ How many primitives this selection holds.
 <method name="get_indices" qualifiers="const">
 <return type="PackedInt32Array" />
 <description>
-The primitive indices, for callers that want to index into [method HEGoGeoSurfaces.get_attribute] themselves.
+The primitive indices, for callers that want to index into [method HEGoSurfaceOutput.get_attribute] themselves.
 </description>
 </method>
 <method name="filter_by">
-<return type="HEGoGeoPrimSelection" />
+<return type="HEGoSurfaceSelection" />
 <param index="0" name="name" type="String" />
 <param index="1" name="value" type="Variant" />
 <description>
@@ -43,7 +43,7 @@ The subset whose [code]name[/code] attribute equals [code]value[/code]. Returns 
 <return type="Dictionary" />
 <param index="0" name="name" type="String" />
 <description>
-This selection grouped by the value of [code]name[/code], as [code]{ value: HEGoGeoPrimSelection }[/code].
+This selection grouped by the value of [code]name[/code], as [code]{ value: HEGoSurfaceSelection }[/code].
 
 Primitives the attribute is not set on land under a [code]null[/code] key, and an attribute the HDA does not have at all yields a single [code]null[/code] group holding everything, so a handler can fall back to a default name rather than losing the geometry.
 </description>

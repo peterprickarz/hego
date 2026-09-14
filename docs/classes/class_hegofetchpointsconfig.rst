@@ -10,7 +10,7 @@
 HEGoFetchPointsConfig
 =====================
 
-**Deprecated:** Use HEGoAssetNode.get_geo_output() instead. Fetch configs are kept
+**Deprecated:** Use HEGoAssetNode.get_point_output() instead. Fetch configs are kept
 
 **Inherits:** ``Resource``
 
@@ -56,7 +56,7 @@ Property Descriptions
 
 ``PackedStringArray`` **read_attribs** :ref:`🔗<class_HEGoFetchPointsConfig_property_read_attribs>`
 
-Attribute names to read from the cook, as :ref:`HEGoGeoOutput.load_attributes()<class_HEGoGeoOutput_method_load_attributes>` takes them.
+Attribute names to read from the cook, as :ref:`HEGoPointOutput.load_attributes()<class_HEGoPointOutput_method_load_attributes>` takes them.
 
 
 

@@ -208,7 +208,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::cook()
 	});
 }
 
-godot::Ref<HEGoTask> HEGoAssetNode::get_geo_output(godot::PackedStringArray preload_attribs)
+godot::Ref<HEGoTask> HEGoAssetNode::get_point_output(godot::PackedStringArray preload_attribs)
 {
 	if (get_id() < 0)
 	{
@@ -226,7 +226,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::get_geo_output(godot::PackedStringArray prel
 					return godot::Variant();
 				}
 
-				godot::Ref<HEGoGeoOutput> output;
+				godot::Ref<HEGoPointOutput> output;
 				output.instantiate();
 				output->setup(cache, nid);
 
@@ -344,7 +344,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray 
 					return godot::Variant();
 				}
 
-				godot::Ref<HEGoGeoSurfaces> surfaces;
+				godot::Ref<HEGoSurfaceOutput> surfaces;
 				surfaces.instantiate();
 				// Reads the primitive and vertex lists here, on the worker thread, so
 				// the queries the caller makes afterwards are pure in-memory work.
@@ -434,7 +434,7 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_op_name", "name"), &HEGoAssetNode::set_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_op_name"), &HEGoAssetNode::get_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("cook"), &HEGoAssetNode::cook);
-	godot::ClassDB::bind_method(godot::D_METHOD("get_geo_output", "preload_attribs"), &HEGoAssetNode::get_geo_output, DEFVAL(godot::PackedStringArray()));
+	godot::ClassDB::bind_method(godot::D_METHOD("get_point_output", "preload_attribs"), &HEGoAssetNode::get_point_output, DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_points", "fetch_point_config"), &HEGoAssetNode::fetch_points);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_output_summary"), &HEGoAssetNode::get_output_summary);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_surface_output", "point_attribs", "preload_attribs"), &HEGoAssetNode::get_surface_output,

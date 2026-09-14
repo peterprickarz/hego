@@ -67,10 +67,10 @@ GROUPS = [
         "Points and surfaces as they sit in C++, filtered and split without being copied "
         "into Godot until asked for. See :doc:`/api/geo_output`.",
         [
-            "HEGoGeoOutput",
-            "HEGoGeoSelection",
-            "HEGoGeoSurfaces",
-            "HEGoGeoPrimSelection",
+            "HEGoPointOutput",
+            "HEGoPointSelection",
+            "HEGoSurfaceOutput",
+            "HEGoSurfaceSelection",
         ],
     ),
     (
