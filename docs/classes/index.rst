@@ -51,7 +51,7 @@ Points and surfaces as they sit in C++, filtered and split without being copied 
 Writing a node
 --------------
 
-The node HEGo ships, the helper a node of your own holds, and what the two of them pass around. See :doc:`/api/custom_nodes`.
+The node HEGo ships, the helper a node of your own holds, and what the two of them pass around. See :doc:`/api/custom_nodes/index`.
 
 - :ref:`HEGoNode3D<class_HEGoNode3D>`
 - :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`

@@ -8,7 +8,7 @@ Overview
 in modules under ``addons/hego/node3d/``. Each is a plain GDScript class of static
 functions, so you can call them from your own scripts, replace one of them, or read
 one to see how an output type is built. Writing a node of your own around them is
-:doc:`custom_nodes`.
+:doc:`custom_nodes/index`.
 
 .. list-table::
    :widths: 32 68
@@ -41,7 +41,7 @@ one to see how an output type is built. Writing a node of your own around them i
      - Orientation, scale and colour attributes to a ``Transform3D`` or a ``Color``
    * - :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`
      - The tedious parts of driving an HDA, for a node writing its own ``cook()``. See
-       :doc:`custom_nodes`
+       :doc:`custom_nodes/index`
    * - :ref:`HEGoTerrain3DUtil<class_HEGoTerrain3DUtil>`
      - Terrain3D helpers shared by input, output and instancing
    * - :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`

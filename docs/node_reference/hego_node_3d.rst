@@ -76,7 +76,7 @@ result yourself rather than letting the handlers build nodes, see
 For a node that does something ``HEGoNode3D`` does not -- its own attributes, its own output
 nodes, several HDAs chained together -- write your own rather than subclassing this one. It is
 an ordinary script over the same helper and the same output library; see
-:doc:`Writing Your Own Node </api/custom_nodes>`.
+:doc:`Writing Your Own Node </api/custom_nodes/index>`.
 
 Inputs
 ------

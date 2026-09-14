@@ -42,9 +42,9 @@ writes:
     # Fetch output
     var meshes := await HEGoMeshOutput.fetch_meshes(await agent.output_context(asset))
 
-See :doc:`custom_nodes` for what else the helper does. If you would rather not hold one,
-``HEGoNodeUtil.await_task(host, task)`` is the same wait as a static call, and this is all
-either of them is:
+See :doc:`custom_nodes/asset_agent` for what else the agent does. If you would rather not
+hold one, ``HEGoNodeUtil.await_task(host, task)`` is the same wait as a static call, and this
+is all either of them is:
 
 .. code-block:: gdscript
 

@@ -1,7 +1,7 @@
 Writing a node
 ==============
 
-The node HEGo ships, the helper a node of your own holds, and what the two of them pass around. See :doc:`/api/custom_nodes`.
+The node HEGo ships, the helper a node of your own holds, and what the two of them pass around. See :doc:`/api/custom_nodes/index`.
 
 .. list-table::
    :widths: 34 66

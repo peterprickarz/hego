@@ -6,7 +6,7 @@ Overview
 
 Read a cook's output in code, at the point of use. ``hego`` here is the node's
 :ref:`HEGoAssetAgent<class_HEGoAssetAgent>` and ``asset_node`` the
-:ref:`HEGoAssetNode<class_HEGoAssetNode>` that cooked; :doc:`custom_nodes` is where both
+:ref:`HEGoAssetNode<class_HEGoAssetNode>` that cooked; :doc:`custom_nodes/index` is where both
 come from.
 
 .. code-block:: gdscript

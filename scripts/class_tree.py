@@ -77,7 +77,7 @@ GROUPS = [
         "writing_a_node",
         "Writing a node",
         "The node HEGo ships, the helper a node of your own holds, and what the two of them "
-        "pass around. See :doc:`/api/custom_nodes`.",
+        "pass around. See :doc:`/api/custom_nodes/index`.",
         [
             "HEGoNode3D",
             "HEGoAssetAgent",

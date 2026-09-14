@@ -5,7 +5,8 @@ Scripting HEGo
 none of it is privileged: it is a GDScript file calling the same API a script of your own
 can call. These pages are that API.
 
-Read :doc:`custom_nodes` first. It is the whole shape of a node that drives an HDA itself,
+Read :doc:`custom_nodes/index` first. It is the whole shape of a node that drives an HDA
+itself, written out twice — once by hand, once with the convenience object that shortens it —
 and the rest of this section fills in the parts of it:
 
 - :doc:`task_pattern` -- why every call into Houdini returns a task, and how to wait for one.
@@ -18,7 +19,7 @@ Each class is documented individually in the :doc:`/classes/index`.
 .. toctree::
    :maxdepth: 1
 
-   custom_nodes
+   custom_nodes/index
    task_pattern
    geo_output
    node3d_modules
