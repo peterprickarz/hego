@@ -24,7 +24,7 @@ extends RefCounted
 ##     if await hego.task(fence.cook()) == null:
 ##         return
 ##
-##     var meshes := await HEGoMeshOutput.fetch_meshes(hego.output_context(fence))
+##     var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(fence))
 ##     mesh = meshes.values()[0] if not meshes.is_empty() else null
 ##     parm_stash = await hego.save_parameters(fence)
 ## [/codeblock]

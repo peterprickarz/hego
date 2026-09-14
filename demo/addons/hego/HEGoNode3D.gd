@@ -16,6 +16,7 @@ class_name HEGoNode3D
 ## [method cook] below first: it is the worked example, and there is nothing in it a script
 ## of your own cannot do.
 
+## Opens the HDA picker. The chosen operator is written to [member asset_name].
 @export_tool_button('Select HDA', "FileDialog") var select_hda_btn = _show_select_hda_dialog
 ## The asset definition name in Houdini, e.g. Sop/my_tool
 @export var asset_name: String
