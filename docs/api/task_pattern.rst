@@ -23,7 +23,27 @@ This keeps the Godot editor and game loop responsive while Houdini Engine does i
 Awaiting a Task
 ---------------
 
-The recommended pattern is a small helper function that polls the task status once per frame:
+A task is awaited by polling its status once per frame. ``HEGoHelpers`` carries that as
+``task()``, so a node holding one writes:
+
+.. code-block:: gdscript
+
+    var hego := HEGoHelpers.new(self)
+
+    # Instantiate an HDA
+    var asset := hego.asset("Sop/my_hda")
+    await hego.instantiate(asset)
+
+    # Set parameters and cook
+    await hego.task(asset.set_parm("height", 5.0))
+    await hego.task(asset.cook())
+
+    # Fetch output
+    var meshes := await HEGoMeshOutput.fetch_meshes(await hego.output_context(asset))
+
+See :doc:`custom_nodes` for what else the helper does. If you would rather not hold one,
+``HEGoNodeUtil.await_task(host, task)`` is the same wait as a static call, and this is all
+either of them is:
 
 .. code-block:: gdscript
 
@@ -35,35 +55,23 @@ The recommended pattern is a small helper function that polls the task status on
             return null
         return task.get_result()
 
-Every HEGo demo script includes this helper. Use it like this:
-
-.. code-block:: gdscript
-
-    # Instantiate an HDA
-    var asset = HEGoAssetNode.new()
-    asset.op_name = "Sop/my_hda"
-    await _await_task(asset.instantiate())
-
-    # Set parameters and cook
-    await _await_task(asset.set_parm("height", 5.0))
-    await _await_task(asset.cook())
-
-    # Fetch output
-    var surfaces = await _await_task(asset.fetch_surfaces(my_config))
-
 Error Handling
 --------------
 
 When a task fails, ``get_status()`` returns ``HEGoTask.FAILED`` and ``get_error_message()`` contains the
-error description. The ``_await_task`` helper shown above returns ``null`` on failure, so callers can
-check for that:
+error description. Awaiting it gives ``null``, so callers can check for that:
 
 .. code-block:: gdscript
 
-    var result = await _await_task(asset.cook())
-    if result == null:
+    if await hego.task(asset.cook()) == null:
         print("Cook failed, check the error log")
         return
+
+``null`` is not a general failure signal, though. A task that legitimately did nothing also
+completes with ``null`` -- that is what HEGo returns for work it could skip, such as sending a
+curve that has not changed since the last cook. It *is* a failure check after ``cook()``,
+which returns ``0`` when it succeeds and fails its task when Houdini rejects the cook or the
+cook comes back with fatal errors.
 
 Task Queue Inspection
 ---------------------
@@ -94,4 +102,4 @@ in between, they queue up and run in order:
     var t3 = asset.cook()
 
     # Wait only for the last one -- the earlier ones will have finished by then
-    await _await_task(t3)
+    await hego.task(t3)

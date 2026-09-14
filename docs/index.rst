@@ -21,6 +21,7 @@ Welcome to the HEGo documentation site.
    :caption: API Reference
 
    api/task_pattern
+   api/custom_nodes
    api/geo_output
    api/node3d_modules
    api/logging

@@ -63,13 +63,18 @@ Cooking From Code
 
     func regenerate(seed_value: int) -> void:
         var asset_node := hego_node.hego_get_asset_node()
-        await _await_task(asset_node.set_parm("seed", seed_value))
+        await hego_node.hego.task(asset_node.set_parm("seed", seed_value))
         await hego_node.cook()
         # Outputs now exist under hego_node/Outputs
 
 This is the same entry point the bottom panel's **Recook** button uses. For reading the
 result yourself rather than letting the handlers build nodes, see
 :doc:`Reading Output in Code </api/geo_output>`.
+
+For a node that does something ``HEGoNode3D`` does not -- its own attributes, its own output
+nodes, several HDAs chained together -- write your own rather than subclassing this one. It is
+an ordinary script over the same helper and the same output library; see
+:doc:`Writing Your Own Node </api/custom_nodes>`.
 
 Inputs
 ------

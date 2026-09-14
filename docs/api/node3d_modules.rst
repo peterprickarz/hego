@@ -7,7 +7,8 @@ Overview
 :doc:`HEGoNode3D </node_reference/hego_node_3d>` orchestrates a cook; the work lives
 in modules under ``addons/hego/node3d/``. Each is a plain GDScript class of static
 functions, so you can call them from your own scripts, replace one of them, or read
-one to see how an output type is built.
+one to see how an output type is built. Writing a node of your own around them is
+:doc:`custom_nodes`.
 
 .. list-table::
    :widths: 32 68
@@ -33,6 +34,14 @@ one to see how an output type is built.
      - Applying ``hego_custom_properties`` to a spawned object
    * - ``HEGoInputNodes``
      - Turning a Godot node into the right HEGo input node
+   * - ``HEGoOutputContext``
+     - What one handler is given: the host node, the HDA, the cook summary, and the node
+       building it needs
+   * - ``HEGoPointUtil``
+     - Orientation, scale and colour attributes to a ``Transform3D`` or a ``Color``
+   * - ``HEGoHelpers``
+     - The tedious parts of driving an HDA, for a node writing its own ``cook()``. See
+       :doc:`custom_nodes`
    * - ``HEGoTerrain3DUtil``
      - Terrain3D helpers shared by input, output and instancing
    * - ``HEGoTerrain3DOutput``
@@ -42,11 +51,39 @@ one to see how an output type is built.
    * - ``HEGoTerrain3DInput``
      - An existing Terrain3D to heightfield layers for Houdini
 
-Every output handler exposes the same two entry points: ``should_handle(summary)``,
-which decides from :ref:`get_output_summary()<class_HEGoAssetNode_method_get_output_summary>`
-whether the cook produced anything it cares about, and ``handle(host)``, which does
-the work. :doc:`HEGoNode3D </node_reference/hego_node_3d>` asks for the summary once, then calls
-each handler that wants it and times them all.
+Every output handler exposes the same three entry points: ``output_phase()``, the name it is
+timed under; ``should_handle(summary)``, which decides from
+:ref:`get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` whether the cook
+produced anything it cares about; and ``handle(context)``, which does the work.
+:doc:`HEGoNode3D </node_reference/hego_node_3d>` asks for the summary once, then calls each
+handler that wants it and times them all.
+
+``context`` is a ``HEGoOutputContext``, which is what a handler is given instead of the host
+node. It carries ``host``, ``asset`` and ``summary``, and the node building every handler was
+repeating:
+
+.. list-table::
+   :widths: 46 54
+
+   * - ``await_task(task)``
+     - Waits for a task and returns its result, or ``null``
+   * - ``outputs_root()``
+     - The ``Outputs`` node, created if missing
+   * - ``place(node_path, default_name, factory, unique := false, configure := Callable())``
+     - A node under ``Outputs/``, created, named, parented and owned. Reuses one already there
+       of the right class and replaces one of the wrong class, so a handler that runs twice
+       does not orphan what it built the first time
+   * - ``ensure_parent(root, path_parts)``
+     - The intermediate ``Node3D``\ s of a path, returning the deepest
+   * - ``own(node)``
+     - Makes a spawned node part of the saved scene, in the editor only
+   * - ``select_points(filter_attrib, attribs)``
+     - The cook's points with ``attribs`` loaded, filtered to the ones flagged, or ``null``
+       when there are none
+
+Handlers used to reach into the host node for a member literally named ``hego_asset_node``,
+which meant any node reusing one had to declare a member by that name whether or not it
+suited it. The context names what they actually need instead.
 
 Writing your own output handler
 -------------------------------
@@ -67,26 +104,21 @@ The shape to copy, in a script of your own:
         return HEGoNodeUtil.output_has(summary, "has_points") \
             and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", FILTER_ATTRIB)
 
-    static func handle(host: Node) -> void:
-        var output = await HEGoNodeUtil.await_task(host, host.hego_asset_node.get_geo_output())
-        if output == null or not output.is_valid():
+    static func output_phase() -> String:
+        return "my_scatter_output"
+
+    static func handle(context: HEGoOutputContext) -> void:
+        var selection = await context.select_points(FILTER_ATTRIB, PackedStringArray(POINT_ATTRIBS))
+        if selection == null:
             return
 
-        await HEGoNodeUtil.await_task(host,
-            output.load_attributes(PackedStringArray(POINT_ATTRIBS + [FILTER_ATTRIB])))
-
-        var groups = output.filter_by(FILTER_ATTRIB, 1).split_by("my_group")
+        var groups = selection.split_by("my_group")
         for group_name in groups:
             var points = groups[group_name].get_points(PackedStringArray(POINT_ATTRIBS))
-            var parent = HEGoNodeUtil.ensure_parent_path(
-                host, HEGoNodeUtil.ensure_outputs_root(host), PackedStringArray([str(group_name)]))
-
             for i in range(points["P"].size()):
-                var node := Node3D.new()
-                node.name = HEGoNodeUtil.unique_child_name(parent, "scatter")
+                var node := context.place(str(group_name) + "/scatter", "scatter",
+                    Node3D.new, true) as Node3D
                 node.position = points["P"][i]
-                parent.add_child(node)
-                HEGoNodeUtil.set_editor_owner(host, node)
 
 Four things matter here:
 
@@ -96,8 +128,9 @@ Four things matter here:
 - **Say when you have nothing to do.** ``should_handle()`` keeps a cook from paying
   for a handler the HDA never feeds. ``HEGoNodeUtil.output_has()`` and
   ``output_has_attribute()`` follow the rule that anything unknown means run.
-- **Own the nodes you create.** ``set_editor_owner()`` is what makes them survive a
-  scene save in the editor; a node without an owner silently disappears.
+- **Own the nodes you create.** ``context.place()`` does this for you; if you parent a node
+  yourself, ``context.own()`` is what makes it survive a scene save in the editor. A node
+  without an owner silently disappears.
 - **Log through** :ref:`HEGoLog<class_HEGoLog>` so your messages show up in the
   session panel next to HEGo's. See :doc:`logging`.
 
@@ -120,7 +153,7 @@ Shared helpers
      - ``base_name``, or ``base_name_001`` and so on if taken
    * - ``set_editor_owner(host, node)``
      - Makes a spawned node part of the saved scene, in the editor only
-   * - ``get_attrib_value(dict, dict_key, attr_name)``
+   * - ``get_attrib_value(fetch_result, list_key, attr_name)``
      - Reads a named attribute out of a HAPI attribute list
    * - ``get_point_attrib(points, key, index, fallback)``
      - Element ``index`` of an attribute array, with a fallback for missing data
@@ -169,12 +202,15 @@ change here.
 Reusable pieces of the output handlers
 --------------------------------------
 
-Most handlers are just ``handle()``, but two expose parts worth calling directly:
+Most handlers are just ``handle()``, but some expose parts worth calling directly:
 
 - ``HEGoMeshOutput.save_mesh_resource(mesh, path)`` writes an ``ArrayMesh`` to disk,
   overwriting an existing one in place so scenes referencing it pick up the new
   geometry, and reports what went wrong rather than throwing.
-- ``HEGoMultiMeshOutput.setup_multimesh(host, mesh, name, points)`` builds one
+- ``HEGoMeshOutput.fetch_meshes(context)`` returns ``{ mesh instance name: ArrayMesh }``
+  with LODs and materials applied and nothing added to the scene, which is usually what a
+  custom node wants; ``fetch_surface_groups(context)`` is the layer under it.
+- ``HEGoMultiMeshOutput.setup_multimesh(context, mesh, name, points)`` builds one
   ``MultiMeshInstance3D`` from a point dictionary, if you want multimesh output
   without the fetch around it.
 - ``HEGoInputNodes.sync(host, existing, path, settings)`` turns the Godot node at
