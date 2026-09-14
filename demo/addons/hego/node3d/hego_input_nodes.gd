@@ -20,8 +20,8 @@ const SURFACE_MATERIAL_ATTRIB_PREFIX := "_hego_surface_override_material_"
 ## Value used for a surface that has no override material.
 const NO_MATERIAL := "empty"
 
-## Curve input mode used for Path3D inputs.
-const CURVE_INPUT_MODE := 1
+## Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
+const CURVE_SAMPLE_LENGTH := 1.0
 
 
 ## Creates or updates the input node for the Godot node at [param input_node_path].
@@ -47,7 +47,7 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 	if input is Path3D:
 		var curve_node: HEGoCurveInputNode = existing_node if existing_node is HEGoCurveInputNode else HEGoCurveInputNode.new()
 		await HEGoNodeUtil.await_task(host, curve_node.instantiate())
-		await HEGoNodeUtil.await_task(host, curve_node.set_curve_from_path_3d(input, CURVE_INPUT_MODE))
+		await HEGoNodeUtil.await_task(host, curve_node.set_curve_from_path_3d(input, CURVE_SAMPLE_LENGTH))
 		return curve_node
 
 	if input is MeshInstance3D:
