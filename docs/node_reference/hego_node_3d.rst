@@ -6,6 +6,8 @@ Overview
 
 ``HEGoNode3D`` is the default node you will use to bring an HDA into Godot.
 This page focuses on ``HEGoNode3D`` data exchange, split into Inputs and Outputs.
+Its properties and methods are listed in :ref:`the class reference<class_HEGoNode3D>`,
+and what it does with them is :doc:`/api/node3d_modules`.
 
 ``HEGoNode3D`` supports:
 

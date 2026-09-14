@@ -1,7 +1,12 @@
 HEGo Documentation
 ==================
 
-Welcome to the HEGo documentation site.
+HEGo brings Houdini Digital Assets into Godot: a Houdini session runs alongside the editor,
+your HDAs cook there, and what they produce becomes ordinary Godot nodes in your scene.
+
+Start with :doc:`about/getting_started`, then :doc:`node_reference/hego_node_3d`, which is
+the node most projects only ever need. Everything under :doc:`api/index` is for when you
+want to drive Houdini from a script of your own.
 
 .. toctree::
    :maxdepth: 1
@@ -11,29 +16,19 @@ Welcome to the HEGo documentation site.
    about/getting_started
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Node Reference
+   :maxdepth: 2
+   :caption: Using HEGo
 
    node_reference/hego_node_3d
 
 .. toctree::
    :maxdepth: 2
-   :caption: API Reference
+   :caption: Scripting
 
-   api/task_pattern
-   api/custom_nodes
-   api/geo_output
-   api/node3d_modules
-   api/logging
-   classes/class_hegoapi
-   classes/class_hegoassetnode
-   classes/class_hegocurveinputnode
-   classes/class_hegogeooutput
-   classes/class_hegogeoprimselection
-   classes/class_hegogeoselection
-   classes/class_hegogeosurfaces
-   classes/class_hegoheightfieldinputnode
-   classes/class_hegoinputnode
-   classes/class_hegolog
-   classes/class_hegomergenode
-   classes/class_hegotask
+   api/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
+   classes/index

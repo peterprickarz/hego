@@ -23,8 +23,9 @@ attribute lists live in the handler scripts rather than in a resource beside the
 
 .. warning::
 
-   The fetch configs - ``HEGoFetchPointsConfig``, ``HEGoFetchSurfacesConfig`` and the
-   ``.tres`` files under ``point_filters/`` and ``surface_filters/`` - are
+   The fetch configs - :ref:`HEGoFetchPointsConfig<class_HEGoFetchPointsConfig>`,
+   :ref:`HEGoFetchSurfacesConfig<class_HEGoFetchSurfacesConfig>` and the ``.tres`` files
+   under ``point_filters/`` and ``surface_filters/`` - are
    **deprecated**. They still work, and will keep working long enough for existing
    projects to move across, but they will be removed. **Use this API for anything
    new**, and port existing code when convenient.
@@ -114,7 +115,7 @@ whatever the HDA happens to carry instead of naming everything up front:
 Reference
 ---------
 
-``HEGoGeoOutput``
+:ref:`HEGoGeoOutput<class_HEGoGeoOutput>`
 
 .. list-table::
    :widths: 45 55
@@ -130,13 +131,13 @@ Reference
    * - ``has_attribute(name, owner)``
      - Whether an attribute exists.
    * - ``load_attributes(names, owner)``
-     - Reads attributes from Houdini. Returns a ``HEGoTask``.
+     - Reads attributes from Houdini. Returns a :ref:`HEGoTask<class_HEGoTask>`.
    * - ``get_attribute(name, owner)``
      - The values of a loaded attribute.
    * - ``select_all()`` / ``filter_by(name, value)`` / ``split_by(name)``
      - Selections over the points.
 
-``HEGoGeoSelection``
+:ref:`HEGoGeoSelection<class_HEGoGeoSelection>`
 
 .. list-table::
    :widths: 45 55

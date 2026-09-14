@@ -5,7 +5,8 @@ Overview
 --------
 
 Everything HEGo logs, from C++ and from GDScript alike, goes through one logger:
-``HEGoLog``. Each entry carries a level, a category and a timestamp, and ends up in
+:ref:`HEGoLog<class_HEGoLog>`. Each entry carries a level, a category and a timestamp, and
+ends up in
 
 - an in-memory buffer the **HEGo bottom panel** reads (the Session tab's log view),
 - the **Godot output**, if the entry is at or above the output level,

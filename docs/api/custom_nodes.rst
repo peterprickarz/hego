@@ -11,8 +11,8 @@ inputs, cooks it and builds Godot nodes from whatever comes back.
 Write your own node when you want something it does not do: your own attributes, your own
 output nodes, exported properties instead of panel widgets, or several HDAs chained together.
 A custom node is an ordinary ``@tool`` script with a ``cook()`` that calls
-:ref:`HEGoAssetNode<class_HEGoAssetNode>` directly. ``HEGoHelpers`` supplies the parts that
-are tedious to repeat, and stays out of the way of everything else.
+:ref:`HEGoAssetNode<class_HEGoAssetNode>` directly. :ref:`HEGoHelpers<class_HEGoHelpers>`
+supplies the parts that are tedious to repeat, and stays out of the way of everything else.
 
 Nothing in ``HEGoNode3D`` is privileged. It uses the same helper, the same output handlers
 and the same panel interface as a script of your own, so reading its ``cook()`` is a fair
@@ -199,8 +199,9 @@ there is nothing sensible to do with another one's.
 Using the output library
 ------------------------
 
-The classes :doc:`HEGoNode3D <node3d_modules>` builds its output with are all callable
-directly, and take a ``HEGoOutputContext`` — what ``hego.output_context(asset)`` returns.
+The classes :doc:`HEGoNode3D builds its output with <node3d_modules>` are all callable
+directly, and take a :ref:`HEGoOutputContext<class_HEGoOutputContext>` — what
+``hego.output_context(asset)`` returns.
 
 .. list-table::
    :widths: 46 54

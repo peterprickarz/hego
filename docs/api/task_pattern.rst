@@ -23,8 +23,9 @@ This keeps the Godot editor and game loop responsive while Houdini Engine does i
 Awaiting a Task
 ---------------
 
-A task is awaited by polling its status once per frame. ``HEGoHelpers`` carries that as
-``task()``, so a node holding one writes:
+A task is awaited by polling its status once per frame.
+:ref:`HEGoHelpers<class_HEGoHelpers>` carries that as ``task()``, so a node holding one
+writes:
 
 .. code-block:: gdscript
 

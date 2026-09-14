@@ -16,40 +16,45 @@ one to see how an output type is built. Writing a node of your own around them i
 
    * - Class
      - Responsibility
-   * - ``HEGoNodeUtil``
+   * - :ref:`HEGoNodeUtil<class_HEGoNodeUtil>`
      - Awaiting tasks, building the ``Outputs/`` hierarchy, reading attribute dictionaries
-   * - ``HEGoCookTimings``
+   * - :ref:`HEGoCookTimings<class_HEGoCookTimings>`
      - Per-phase timings of one cook
-   * - ``HEGoMeshOutput``
+   * - :ref:`HEGoMeshOutput<class_HEGoMeshOutput>`
      - Surfaces to ``MeshInstance3D``, resource saving, collision generation
-   * - ``HEGoMultiMeshOutput``
+   * - :ref:`HEGoMultiMeshOutput<class_HEGoMultiMeshOutput>`
      - Points to ``MultiMeshInstance3D``
-   * - ``HEGoObjectOutput``
+   * - :ref:`HEGoObjectOutput<class_HEGoObjectOutput>`
      - Points to spawned nodes and packed scenes
-   * - ``HEGoCurveOutput``
+   * - :ref:`HEGoCurveOutput<class_HEGoCurveOutput>`
      - Curves to ``Path3D``
-   * - ``HEGoCurveBuilder``
+   * - :ref:`HEGoCurveBuilder<class_HEGoCurveBuilder>`
      - Poly, NURBS and Bezier ``Curve3D`` construction, no scene access
-   * - ``HEGoPropertyUtil``
+   * - :ref:`HEGoPropertyUtil<class_HEGoPropertyUtil>`
      - Applying ``hego_custom_properties`` to a spawned object
-   * - ``HEGoInputNodes``
+   * - :ref:`HEGoInputNodes<class_HEGoInputNodes>`
      - Turning a Godot node into the right HEGo input node
-   * - ``HEGoOutputContext``
+   * - :ref:`HEGoOutputContext<class_HEGoOutputContext>`
      - What one handler is given: the host node, the HDA, the cook summary, and the node
        building it needs
-   * - ``HEGoPointUtil``
+   * - :ref:`HEGoPointUtil<class_HEGoPointUtil>`
      - Orientation, scale and colour attributes to a ``Transform3D`` or a ``Color``
-   * - ``HEGoHelpers``
+   * - :ref:`HEGoHelpers<class_HEGoHelpers>`
      - The tedious parts of driving an HDA, for a node writing its own ``cook()``. See
        :doc:`custom_nodes`
-   * - ``HEGoTerrain3DUtil``
+   * - :ref:`HEGoTerrain3DUtil<class_HEGoTerrain3DUtil>`
      - Terrain3D helpers shared by input, output and instancing
-   * - ``HEGoTerrain3DOutput``
+   * - :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
      - Heightfield layers to a Terrain3D node
-   * - ``HEGoTerrain3DInstancer``
+   * - :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`
      - Points to Terrain3D instancer transforms
-   * - ``HEGoTerrain3DInput``
+   * - :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
      - An existing Terrain3D to heightfield layers for Houdini
+
+Each has a page of its own in the class reference, under
+:doc:`/classes/writing_a_node`, :doc:`/classes/output_handlers` and
+:doc:`/classes/terrain3d`; what follows here is what they are for and how they fit
+together.
 
 Every output handler exposes the same three entry points: ``output_phase()``, the name it is
 timed under; ``should_handle(summary)``, which decides from
@@ -136,6 +141,9 @@ Four things matter here:
 
 Shared helpers
 --------------
+
+The tables below are a map, not a signature list; the class reference carries the
+full ones.
 
 ``HEGoNodeUtil``
 ~~~~~~~~~~~~~~~~
