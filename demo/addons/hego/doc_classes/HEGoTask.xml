@@ -8,21 +8,18 @@ All HEGo node methods that call Houdini Engine return an [HEGoTask] instead of b
 
 Poll [method get_status] to determine whether the task is still running. Once the status reaches [constant COMPLETED], the result is available via [method get_result]. If the status is [constant FAILED], [method get_error_message] describes what went wrong.
 
-Recommended GDScript helper for awaiting a task:
+Do not poll it yourself. [method HEGoHelpers.task] does the wait for a node holding a [HEGoHelpers], and [method HEGoNodeUtil.await_task] is the same wait as a static call; both return the result, or [code]null[/code] if the task failed:
 [codeblock]
-func _await_task(task: HEGoTask) -> Variant:
-    while task.get_status() &lt; HEGoTask.COMPLETED:
-        await get_tree().process_frame
-    if task.get_status() == HEGoTask.FAILED:
-        push_error("Task failed: " + task.get_error_message())
-        return null
-    return task.get_result()
+var result = await hego.task(asset_node.cook())
 [/codeblock]
-
-Usage example:
+Either of them is this, and nothing more:
 [codeblock]
-var task = asset_node.cook()
-var result = await _await_task(task)
+while task.get_status() &lt; HEGoTask.COMPLETED:
+    await get_tree().process_frame
+if task.get_status() == HEGoTask.FAILED:
+    push_error("Task failed: " + task.get_error_message())
+    return null
+return task.get_result()
 [/codeblock]
 
 See also [method HEGoAPI.get_current_task], [method HEGoAPI.get_pending_tasks], and [method HEGoAPI.get_completed_task_history] for inspecting the scheduler queue.
@@ -44,7 +41,7 @@ A task transitions from [constant PENDING] to [constant RUNNING] when the schedu
 <description>
 Returns the result produced by the task.
 
-Only meaningful after [method get_status] returns [constant COMPLETED]. The type depends on the originating method. For example, [method HEGoAssetNode.get_parms_dict] produces a [Dictionary], while [method HEGoAssetNode.cook] produces [code]null[/code].
+Only meaningful after [method get_status] returns [constant COMPLETED]. The type depends on the originating method. For example, [method HEGoAssetNode.get_parms_dict] produces a [Dictionary], while [method HEGoAssetNode.cook] produces [code]0[/code]. A task that had nothing to do also produces [code]null[/code], so [code]null[/code] means failure only where the method documents a result for success.
 </description>
 </method>
 <method name="get_error_message" qualifiers="const">

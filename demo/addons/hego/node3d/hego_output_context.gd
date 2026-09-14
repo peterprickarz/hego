@@ -4,11 +4,10 @@ extends RefCounted
 
 ## Everything one output handler is given to work with.
 ##
-## Handlers used to take the host node and reach into it for a member literally named
-## [code]hego_asset_node[/code]. That coupled every handler to a naming convention: a node
-## wanting to reuse one had to declare a member by that name whether or not the name suited
-## it, and nothing said so anywhere except the handler's own source. They take this instead,
-## which names what they actually need.
+## A handler needs three things from the cook - the node the output belongs under, the HDA
+## that produced it, and what that cook produced - and the scene plumbing every one of them
+## would otherwise repeat. This carries all of it, so a handler's only argument names
+## exactly what it may use, and any node can call one by building a context for it.
 
 ## The node this cook belongs to.
 ##
@@ -24,7 +23,7 @@ var asset: HEGoAssetNode
 ## What the cook produced, as [method HEGoAssetNode.get_output_summary] reported it.
 ##
 ## This is the same dictionary the handler's [code]should_handle()[/code] was asked about,
-## so a handler no longer has to work out again what it was selected for.
+## so [method handle] can read what it was selected for rather than working it out again.
 var summary: Dictionary
 
 

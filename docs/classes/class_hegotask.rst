@@ -27,26 +27,22 @@ Poll :ref:`get_status()<class_HEGoTask_method_get_status>` to determine whether 
 
 
 
-Recommended GDScript helper for awaiting a task:
+Do not poll it yourself. :ref:`HEGoHelpers.task()<class_HEGoHelpers_method_task>` does the wait for a node holding a :ref:`HEGoHelpers<class_HEGoHelpers>`, and :ref:`HEGoNodeUtil.await_task()<class_HEGoNodeUtil_method_await_task>` is the same wait as a static call; both return the result, or ``null`` if the task failed:
 
 ::
 
-    func _await_task(task: HEGoTask) -> Variant:
-        while task.get_status() < HEGoTask.COMPLETED:
-            await get_tree().process_frame
-        if task.get_status() == HEGoTask.FAILED:
-            push_error("Task failed: " + task.get_error_message())
-            return null
-        return task.get_result()
+    var result = await hego.task(asset_node.cook())
 
-
-
-Usage example:
+Either of them is this, and nothing more:
 
 ::
 
-    var task = asset_node.cook()
-    var result = await _await_task(task)
+    while task.get_status() < HEGoTask.COMPLETED:
+        await get_tree().process_frame
+    if task.get_status() == HEGoTask.FAILED:
+        push_error("Task failed: " + task.get_error_message())
+        return null
+    return task.get_result()
 
 
 
@@ -156,7 +152,7 @@ Returns the result produced by the task.
 
 
 
-Only meaningful after :ref:`get_status()<class_HEGoTask_method_get_status>` returns :ref:`COMPLETED<class_HEGoTask_constant_COMPLETED>`. The type depends on the originating method. For example, :ref:`HEGoAssetNode.get_parms_dict()<class_HEGoAssetNode_method_get_parms_dict>` produces a ``Dictionary``, while :ref:`HEGoAssetNode.cook()<class_HEGoAssetNode_method_cook>` produces ``null``.
+Only meaningful after :ref:`get_status()<class_HEGoTask_method_get_status>` returns :ref:`COMPLETED<class_HEGoTask_constant_COMPLETED>`. The type depends on the originating method. For example, :ref:`HEGoAssetNode.get_parms_dict()<class_HEGoAssetNode_method_get_parms_dict>` produces a ``Dictionary``, while :ref:`HEGoAssetNode.cook()<class_HEGoAssetNode_method_cook>` produces ``0``. A task that had nothing to do also produces ``null``, so ``null`` means failure only where the method documents a result for success.
 
 .. rst-class:: classref-item-separator
 

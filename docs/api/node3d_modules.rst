@@ -63,32 +63,30 @@ produced anything it cares about; and ``handle(context)``, which does the work.
 :doc:`HEGoNode3D </node_reference/hego_node_3d>` asks for the summary once, then calls each
 handler that wants it and times them all.
 
-``context`` is a ``HEGoOutputContext``, which is what a handler is given instead of the host
-node. It carries ``host``, ``asset`` and ``summary``, and the node building every handler was
-repeating:
+``context`` is the :ref:`HEGoOutputContext<class_HEGoOutputContext>` that
+``hego.output_context(asset)`` builds, and is a handler's only argument. It carries the three
+things a handler needs from the cook — ``context.host``, the node the output goes under;
+``context.asset``, the HDA that produced it; and ``context.summary`` — along with the scene
+plumbing every handler would otherwise repeat:
 
 .. list-table::
    :widths: 46 54
 
-   * - ``await_task(task)``
+   * - ``context.await_task(task)``
      - Waits for a task and returns its result, or ``null``
-   * - ``outputs_root()``
+   * - ``context.outputs_root()``
      - The ``Outputs`` node, created if missing
-   * - ``place(node_path, default_name, factory, unique := false, configure := Callable())``
+   * - ``context.place(node_path, default_name, factory, unique := false, configure := Callable())``
      - A node under ``Outputs/``, created, named, parented and owned. Reuses one already there
        of the right class and replaces one of the wrong class, so a handler that runs twice
        does not orphan what it built the first time
-   * - ``ensure_parent(root, path_parts)``
+   * - ``context.ensure_parent(root, path_parts)``
      - The intermediate ``Node3D``\ s of a path, returning the deepest
-   * - ``own(node)``
+   * - ``context.own(node)``
      - Makes a spawned node part of the saved scene, in the editor only
-   * - ``select_points(filter_attrib, attribs)``
+   * - ``context.select_points(filter_attrib, attribs)``
      - The cook's points with ``attribs`` loaded, filtered to the ones flagged, or ``null``
        when there are none
-
-Handlers used to reach into the host node for a member literally named ``hego_asset_node``,
-which meant any node reusing one had to declare a member by that name whether or not it
-suited it. The context names what they actually need instead.
 
 Writing your own output handler
 -------------------------------

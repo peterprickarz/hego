@@ -5,9 +5,10 @@ extends RefCounted
 ## Point attribute maths shared by every handler that scatters something.
 ##
 ## Multimesh instancing, object spawning and Terrain3D instancing all turn the same four
-## point attributes into the same orientation. Each carried its own copy of that maths,
-## with a comment promising to keep it in step with the others. It lives here instead, so
-## they stay in step by construction.
+## point attributes - [code]N[/code], [code]up[/code], [code]pscale[/code] and
+## [code]scale[/code] - into the same orientation. Having it in one place is what keeps an
+## HDA's points landing identically whichever of the three reads them, and is where to
+## look when they do not.
 
 ## Attributes [method basis_from_point] reads. A point missing any of them falls back to
 ## the defaults below, so loading them is optional but everything ends up unrotated.

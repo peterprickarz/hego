@@ -68,8 +68,9 @@ The panel polls the buffer with a cursor, so it only ever appends what is new:
     for entry in entries:
         print("%s [%s] %s" % [entry["time"], entry["category"], entry["message"]])
 
-``save_to_file(path)`` writes the whole buffer as text, which is what the Session
-tab's **Save log...** button uses when you need to attach a log to a bug report.
+:ref:`HEGoLog.save_to_file()<class_HEGoLog_method_save_to_file>` writes the whole buffer
+as text, which is what the Session tab's **Save log...** button uses when you need to
+attach a log to a bug report.
 
 Project settings
 ----------------

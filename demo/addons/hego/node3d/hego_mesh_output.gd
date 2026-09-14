@@ -166,9 +166,8 @@ static func handle(context: HEGoOutputContext) -> void:
 	var gds_processing_msec := HEGoCookTimings.elapsed_msec(processing_start_usec)
 	HEGoLog.get_singleton().debug(
 		LOG_CATEGORY,
-		# fetch_and_group covers the HAPI round trip and assembling the surface arrays, which
-		# fetch_surface_groups now does together; the rest is mesh building, saving and
-		# collision. The first field used to be named fetch_surfaces and measured less.
+		# fetch_and_group covers the HAPI round trip and assembling the surface arrays, both
+		# of which fetch_surface_groups does; the rest is mesh building, saving and collision.
 		"Mesh output breakdown: fetch_and_group=%.3f ms, gdscript_processing=%.3f ms, total=%.3f ms, mesh_instances=%d, surfaces=%d, saves=%d, collision_generations=%d"
 		% [
 			fetch_surfaces_msec,

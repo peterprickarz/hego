@@ -4,21 +4,26 @@ Reading Output in Code
 Overview
 --------
 
-Read a cook's output in code, at the point of use:
+Read a cook's output in code, at the point of use. ``hego`` here is the node's
+:ref:`HEGoHelpers<class_HEGoHelpers>` and ``asset_node`` the
+:ref:`HEGoAssetNode<class_HEGoAssetNode>` that cooked; :doc:`custom_nodes` is where both
+come from.
 
 .. code-block:: gdscript
 
-    var output = await _await_task(asset_node.get_geo_output())
-    await _await_task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
+    var output = await hego.task(asset_node.get_geo_output())
+    await hego.task(output.load_attributes(["N", "up", "pscale", "hego_spawn", "hego_node_path"]))
 
     var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
     for node_path in groups:
         var points = groups[node_path].get_points(["N", "up", "pscale"])
         # points == { "P": [...], "N": [...], "up": [...], "pscale": [...] }
 
-Points go through ``get_geo_output()``; surfaces go through ``get_surface_output()``,
-which returns a :ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>` selecting primitives
-rather than points. Every built-in handler uses this API, which is why their
+Both entry points are on the asset node. Points go through
+:ref:`get_geo_output()<class_HEGoAssetNode_method_get_geo_output>`, which returns a
+:ref:`HEGoGeoOutput<class_HEGoGeoOutput>`; surfaces go through
+:ref:`get_surface_output()<class_HEGoAssetNode_method_get_surface_output>`, which returns a
+:ref:`HEGoGeoSurfaces<class_HEGoGeoSurfaces>` selecting primitives rather than points. Every built-in handler uses this API, which is why their
 attribute lists live in the handler scripts rather than in a resource beside them.
 
 .. warning::
@@ -31,8 +36,9 @@ attribute lists live in the handler scripts rather than in a resource beside the
    new**, and port existing code when convenient.
 
    Nothing is lost in the move. A fetch config is a saved set of arguments for this
-   same API: ``fetch_points()`` builds an output, applies the config's filters and
-   splits through it, and assembles the leaves with ``get_points()``. One
+   same API: :ref:`fetch_points()<class_HEGoAssetNode_method_fetch_points>` builds an
+   output, applies the config's filters and splits through it, and assembles the leaves
+   with ``get_points()``. One
    implementation underneath both, one cache, same results - the difference is that
    the code path can decide anything at runtime and keeps the attribute names next to
    the code that reads them.
@@ -62,8 +68,8 @@ splitting on ``hego_node_path`` becomes:
 
 .. code-block:: gdscript
 
-    var output = await _await_task(asset_node.get_geo_output())
-    await _await_task(output.load_attributes(["N", "pscale", "hego_spawn", "hego_node_path"]))
+    var output = await hego.task(asset_node.get_geo_output())
+    await hego.task(output.load_attributes(["N", "pscale", "hego_spawn", "hego_node_path"]))
 
     var groups = output.filter_by("hego_spawn", 1).split_by("hego_node_path")
     for node_path in groups:
@@ -84,8 +90,8 @@ invalidates itself when the node cooks again.
 Loading attributes
 ------------------
 
-``load_attributes()`` is the only call that talks to Houdini, so it returns a
-:doc:`task <task_pattern>`. Everything after it is in-memory work and returns
+:ref:`load_attributes()<class_HEGoGeoOutput_method_load_attributes>` is the only call on
+the output that talks to Houdini, so it returns a :doc:`task <task_pattern>`. Everything after it is in-memory work and returns
 immediately. Attributes another output already read are served from the cache
 without a round trip.
 
@@ -96,7 +102,7 @@ You can also preload while fetching the output, which saves an await:
 
 .. code-block:: gdscript
 
-    var output = await _await_task(asset_node.get_geo_output(["N", "up", "pscale"]))
+    var output = await hego.task(asset_node.get_geo_output(["N", "up", "pscale"]))
 
 Discovering what an HDA produced
 --------------------------------
@@ -110,7 +116,7 @@ whatever the HDA happens to carry instead of naming everything up front:
         print(name, " is present on this output")
 
     if output.has_attribute("Cd"):
-        await _await_task(output.load_attributes(["Cd"]))
+        await hego.task(output.load_attributes(["Cd"]))
 
 Reference
 ---------
@@ -160,12 +166,13 @@ Skipping handlers that have nothing to do
 -----------------------------------------
 
 A cook runs every output handler, and most HDAs feed one or two of them. Rather
-than have each handler ask Houdini for attributes that are not there,
-``get_output_summary()`` answers once what the cook produced:
+than have each handler ask Houdini for attributes that are not there, the asset node's
+:ref:`get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` answers once
+what the cook produced:
 
 .. code-block:: gdscript
 
-    var summary = await _await_task(asset_node.get_output_summary())
+    var summary = await hego.task(asset_node.get_output_summary())
     # {
     #     "has_mesh": true, "has_points": false, "has_curves": false, "has_volumes": false,
     #     "point_attributes": [...], "prim_attributes": [...],

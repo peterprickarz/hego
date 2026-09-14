@@ -19,7 +19,7 @@ Everything one output handler is given to work with.
 Description
 -----------
 
-Handlers used to take the host node and reach into it for a member literally named ``hego_asset_node``. That coupled every handler to a naming convention: a node wanting to reuse one had to declare a member by that name whether or not the name suited it, and nothing said so anywhere except the handler's own source. They take this instead, which names what they actually need.
+A handler needs three things from the cook - the node the output belongs under, the HDA that produced it, and what that cook produced - and the scene plumbing every one of them would otherwise repeat. This carries all of it, so a handler's only argument names exactly what it may use, and any node can call one by building a context for it.
 
 .. rst-class:: classref-reftable-group
 
@@ -100,7 +100,7 @@ The Houdini node whose cook this is.
 
 ``Dictionary`` **summary** :ref:`🔗<class_HEGoOutputContext_property_summary>`
 
-What the cook produced, as :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` reported it.  This is the same dictionary the handler's ``should_handle()`` was asked about, so a handler no longer has to work out again what it was selected for.
+What the cook produced, as :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` reported it.  This is the same dictionary the handler's ``should_handle()`` was asked about, so ``handle()`` can read what it was selected for rather than working it out again.
 
 .. rst-class:: classref-section-separator
 

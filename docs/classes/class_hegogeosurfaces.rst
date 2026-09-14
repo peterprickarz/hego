@@ -19,11 +19,11 @@ A cooked node's surfaces, read and split from code.
 Description
 -----------
 
-Returned by :ref:`HEGoAssetNode.get_surface_output()<class_HEGoAssetNode_method_get_surface_output>`, and the surface counterpart of :ref:`HEGoGeoOutput<class_HEGoGeoOutput>`: where that one selects points, this selects primitives and turns a group of them into a Godot surface array.
+Returned by :ref:`HEGoAssetNode.get_surface_output()<class_HEGoAssetNode_method_get_surface_output>`, and the surface counterpart of :ref:`HEGoGeoOutput<class_HEGoGeoOutput>`: where that one selects points, this selects primitives and turns a group of them into a Godot surface array (\ ``hego`` below being the node's :ref:`HEGoHelpers<class_HEGoHelpers>`).
 
 ::
 
-    var output = await _await_task(asset_node.get_surface_output(["N", "uv"], ["hego_mesh_instance", "hego_material"]))
+    var output = await hego.task(asset_node.get_surface_output(["N", "uv"], ["hego_mesh_instance", "hego_material"]))
 
     var by_instance = output.split_by("hego_mesh_instance")
     for instance_name in by_instance:

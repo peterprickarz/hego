@@ -68,47 +68,52 @@ you write it.
 ---------------
 
 One per node, constructed with the node itself: ``var hego := HEGoHelpers.new(self)``.
+Every call below is on that object, and every one of them is awaited.
 
 .. list-table::
    :widths: 46 54
 
-   * - ``task(task)``
+   * - ``hego.task(task)``
      - Awaits a :ref:`HEGoTask<class_HEGoTask>` and returns its result, or ``null`` if it
-       failed. This is the ``_await_task`` helper every script used to carry
-   * - ``asset(operator_name, label := "")``
+       failed. Every method on an asset node hands back one of these, so this is what most
+       lines of a ``cook()`` are wrapped in
+   * - ``hego.asset(operator_name, label := "")``
      - The :ref:`HEGoAssetNode<class_HEGoAssetNode>` for an operator, created on first use and
        reused afterwards. Reusing it is what keeps the Houdini node id valid between cooks.
        The label names it in the panel and defaults to the operator without its table
-   * - ``instantiate(asset, stashed_parameters := PackedByteArray())``
+   * - ``hego.instantiate(asset, stashed_parameters := PackedByteArray())``
      - Makes the HDA exist in Houdini, pushes this node's transform, and restores the stashed
        parameters **only** on the cook that created it. ``false`` when it could not be created
-   * - ``save_parameters(asset)``
+   * - ``hego.save_parameters(asset)``
      - The HDA's current parameters as a blob to store on the node
-   * - ``sync_inputs(asset, skip_indices := [])``
+   * - ``hego.sync_inputs(asset, skip_indices := [])``
      - Feeds the HDA the Godot nodes in the input stash, one merge node per HDA input, reusing
-       the input nodes between cooks. ``skip_indices`` leaves an input alone that something
-       else fills
-   * - ``set_input(index, sources)``
+       the input nodes between cooks. ``skip_indices`` holds the HDA input indices to leave
+       alone, for inputs something else fills
+   * - ``hego.set_input(index, sources)``
      - Points an HDA input at a node, a ``NodePath``, a path string, or an array of those,
        writing to the same stash the panel's Inputs pane uses
-   * - ``output_context(asset)``
+   * - ``hego.output_context(asset)``
      - Fetches what the cook produced and wraps it for the output library
-   * - ``assets``
+   * - ``hego.assets``
      - Every asset this node has made, keyed by label, in creation order
-   * - ``show_in_panel(labels)``
+   * - ``hego.show_in_panel(labels)``
      - Which HDAs the panel shows, in that order. The default is all of them
-   * - ``highlight(label)``
+   * - ``hego.highlight(label)``
      - The HDA the panel should open and scroll to on its next rebuild
 
 Two things are worth knowing about beforehand.
 
-``task() == null`` is **not** a general failure check. A task that legitimately did nothing
-also completes with ``null`` — that is what HEGo returns for work it could skip. It is a
-failure check after ``cook()``, because a successful cook returns ``0`` and a cook Houdini
-rejects fails its task.
+``await hego.task(...) == null`` is **not** a general failure check. A task that legitimately
+did nothing also completes with ``null`` — that is what HEGo returns for work it could skip.
+It *is* a failure check after :ref:`cook()<class_HEGoAssetNode_method_cook>`, because a
+successful cook returns ``0`` and a cook Houdini rejects fails its task.
 
-``instantiate()`` restores the stash only when it is the call that created the Houdini node.
-Restoring on every cook would undo whatever the user has since changed in the panel.
+``hego.instantiate(asset)`` restores the stash only when it is the call that created the
+Houdini node — not to be confused with
+:ref:`asset.instantiate()<class_HEGoBaseNode_method_instantiate>`, the task it wraps, which
+restores nothing. Restoring on every cook would undo whatever the user has since changed in
+the panel.
 
 The bottom panel interface
 --------------------------
@@ -179,16 +184,18 @@ the last stage is cooked, because cooking it makes Houdini pull everything upstr
 
 Implementing ``hego_get_panel_assets()`` is the whole of what a multi-HDA node does
 differently. The panel then shows one collapsible section per HDA, titled with its label, in
-the order ``show_in_panel()`` gave. ``highlight(label)`` marks one to be opened and scrolled
+the order ``hego.show_in_panel()`` gave. ``hego.highlight(label)`` marks one to be opened and scrolled
 to; the panel notices within a quarter of a second, so a tool that moves the user on to its
 next stage can point them at it from its own code.
 
 Three things to watch for, none of which will raise an error:
 
-- **The chained input must be skipped.** Without the ``skip_indices`` entry the next cook
-  replaces the chain with an empty merge node and the downstream HDA cooks nothing.
-- **Every stage carries the node's transform.** ``instantiate()`` does this; leaving an
-  upstream stage at the origin moves everything downstream by however far the node is from it.
+- **The chained input must be skipped.** Without that input's index in the
+  ``skip_indices`` argument of ``hego.sync_inputs()``, the next cook replaces the chain with
+  an empty merge node and the downstream HDA cooks nothing.
+- **Every stage carries the node's transform.** ``hego.instantiate()`` does this, so call it
+  for the upstream stages too; leaving one at the origin moves everything downstream by
+  however far the node is from it.
 - **The input rows belong to the node, not to one HDA.** There is one input stash, and the
   panel shows it against the first HDA you list — so list the stage that takes the inputs
   first.
