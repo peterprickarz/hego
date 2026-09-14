@@ -45,6 +45,32 @@ agent adds is the panel's view of the stages:
             {"label": "base", "asset": _base, "highlight": false},
         ]
 
+Taking a specific output
+------------------------
+
+An HDA with more than one output node offers each of them separately, and
+``connect_input()`` takes which one to read:
+
+.. code-block:: gdscript
+
+    # detail's input 0 reads base's second output.
+    await agent.task(detail.connect_input(base, 0, 1))
+
+The argument is ``connect_input(other_node, input_index, output_index := 0, force := false)``,
+so the two indices sit together: **which input of mine, from which output of yours**. Leaving
+it off takes the first output, which is the only one most assets have.
+
+Feeding two stages from one upstream HDA is then just two calls:
+
+.. code-block:: gdscript
+
+    await agent.task(walls.connect_input(building, 0, 0))   # building's first output
+    await agent.task(roof.connect_input(building, 0, 1))    # and its second
+
+The connection is cached on the source node *and* its output index, so moving an input from
+one output of the same HDA to another is seen as a change rather than skipped as already
+connected.
+
 Implementing ``hego_get_panel_assets()`` is the whole of what a multi-HDA node does
 differently. The panel then shows one collapsible section per HDA, titled with its label, in
 the order the array gives. An entry with ``"highlight": true`` is opened and scrolled to; the

@@ -149,11 +149,6 @@ void connect_to_merge(HEGoSessionManager *session_mgr, HAPI_NodeId merge_node_id
 	}
 }
 
-void connect_merge_to_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id, int input_index, HAPI_NodeId merge_node_id)
-{
-	connect_node_input(session_mgr, target_node_id, input_index, merge_node_id, 0);
-}
-
 HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, const godot::PackedVector3Array &positions, HAPI_NodeId node_id)
 {
 	const HAPI_Session *session = session_mgr->get_session();

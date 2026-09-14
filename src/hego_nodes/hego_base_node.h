@@ -37,19 +37,36 @@ public:
 	static void _bind_methods();
 };
 
+/**
+ * What one input slot is currently wired to.
+ *
+ * Both the source node and which of its outputs, because an HDA can have several and
+ * caching on the node alone would skip a call that moves an input from one to another.
+ */
+struct InputConnection
+{
+	HAPI_NodeId source_node_id = -1;
+	int output_index = 0;
+
+	bool operator==(const InputConnection &other) const
+	{
+		return source_node_id == other.source_node_id && output_index == other.output_index;
+	}
+};
+
 class HEGoInputReceiverNode : public HEGoBaseNode
 {
 	GDCLASS(HEGoInputReceiverNode, HEGoBaseNode)
 
 protected:
-	godot::HashMap<int, HAPI_NodeId> cached_connections;
+	godot::HashMap<int, InputConnection> cached_connections;
 
 public:
 	HEGoInputReceiverNode();
 	~HEGoInputReceiverNode();
 
 	void reset_node_id() override;
-	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index, bool force = false);
+	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index, int output_index = 0, bool force = false);
 
 	static void _bind_methods();
 };
@@ -107,14 +124,14 @@ class HEGoTransformableInputReceiverNode : public HEGoTransformableNode
 	GDCLASS(HEGoTransformableInputReceiverNode, HEGoTransformableNode)
 
 protected:
-	godot::HashMap<int, HAPI_NodeId> cached_connections;
+	godot::HashMap<int, InputConnection> cached_connections;
 
 public:
 	HEGoTransformableInputReceiverNode();
 	~HEGoTransformableInputReceiverNode();
 
 	void reset_node_id() override;
-	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index, bool force = false);
+	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index, int output_index = 0, bool force = false);
 
 	static void _bind_methods();
 };

@@ -45,27 +45,28 @@ void HEGoInputReceiverNode::reset_node_id()
 	cached_connections.clear();
 }
 
-godot::Ref<HEGoTask> HEGoInputReceiverNode::connect_input(const HEGoBaseNode *other_node, int input_index, bool force)
+godot::Ref<HEGoTask> HEGoInputReceiverNode::connect_input(const HEGoBaseNode *other_node, int input_index, int output_index, bool force)
 {
 	HAPI_NodeId target_nid = node_id;
-	HAPI_NodeId source_nid = other_node->get_id();
+	const InputConnection wanted{ other_node->get_id(), output_index };
 
-	if (!force && cached_connections.has(input_index) && cached_connections[input_index] == source_nid)
+	if (!force && cached_connections.has(input_index) && cached_connections[input_index] == wanted)
 	{
 		return make_noop("Connect input (cached)", target_nid);
 	}
 
-	cached_connections[input_index] = source_nid;
+	cached_connections[input_index] = wanted;
 
-	return submit("Connect input", target_nid, [target_nid, input_index, source_nid](HEGoSessionManager *mgr) -> godot::Variant {
-		HEGo::Util::Geo::connect_merge_to_input(mgr, target_nid, input_index, source_nid);
+	return submit("Connect input", target_nid, [target_nid, input_index, wanted](HEGoSessionManager *mgr) -> godot::Variant {
+		HEGo::Util::Geo::connect_node_input(mgr, target_nid, input_index, wanted.source_node_id, wanted.output_index);
 		return 0;
 	});
 }
 
 void HEGoInputReceiverNode::_bind_methods()
 {
-	godot::ClassDB::bind_method(godot::D_METHOD("connect_input", "other_node", "input_index", "force"), &HEGoInputReceiverNode::connect_input, DEFVAL(false));
+	godot::ClassDB::bind_method(godot::D_METHOD("connect_input", "other_node", "input_index", "output_index", "force"), &HEGoInputReceiverNode::connect_input,
+			DEFVAL(0), DEFVAL(false));
 }
 
 // HEGoTransformableNode
@@ -113,20 +114,20 @@ void HEGoTransformableInputReceiverNode::reset_node_id()
 	cached_connections.clear();
 }
 
-godot::Ref<HEGoTask> HEGoTransformableInputReceiverNode::connect_input(const HEGoBaseNode *other_node, int input_index, bool force)
+godot::Ref<HEGoTask> HEGoTransformableInputReceiverNode::connect_input(const HEGoBaseNode *other_node, int input_index, int output_index, bool force)
 {
 	HAPI_NodeId target_nid = node_id;
-	HAPI_NodeId source_nid = other_node->get_id();
+	const InputConnection wanted{ other_node->get_id(), output_index };
 
-	if (!force && cached_connections.has(input_index) && cached_connections[input_index] == source_nid)
+	if (!force && cached_connections.has(input_index) && cached_connections[input_index] == wanted)
 	{
 		return make_noop("Connect input (cached)", target_nid);
 	}
 
-	cached_connections[input_index] = source_nid;
+	cached_connections[input_index] = wanted;
 
-	return submit("Connect input", target_nid, [target_nid, input_index, source_nid](HEGoSessionManager *mgr) -> godot::Variant {
-		HEGo::Util::Geo::connect_merge_to_input(mgr, target_nid, input_index, source_nid);
+	return submit("Connect input", target_nid, [target_nid, input_index, wanted](HEGoSessionManager *mgr) -> godot::Variant {
+		HEGo::Util::Geo::connect_node_input(mgr, target_nid, input_index, wanted.source_node_id, wanted.output_index);
 		return 0;
 	});
 }
@@ -134,7 +135,8 @@ godot::Ref<HEGoTask> HEGoTransformableInputReceiverNode::connect_input(const HEG
 void HEGoTransformableInputReceiverNode::_bind_methods()
 {
 	godot::ClassDB::bind_method(
-			godot::D_METHOD("connect_input", "other_node", "input_index", "force"), &HEGoTransformableInputReceiverNode::connect_input, DEFVAL(false));
+			godot::D_METHOD("connect_input", "other_node", "input_index", "output_index", "force"), &HEGoTransformableInputReceiverNode::connect_input, DEFVAL(0),
+			DEFVAL(false));
 }
 
 // HEGoTransformableNamedNode

@@ -35,9 +35,9 @@ Methods
 .. table::
    :widths: auto
 
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`connect_input<class_HEGoInputReceiverNode_method_connect_input>`\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``, force\: ``bool`` = false\ ) |
-   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`connect_input<class_HEGoInputReceiverNode_method_connect_input>`\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``, output_index\: ``int`` = 0, force\: ``bool`` = false\ ) |
+   +---------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -52,7 +52,7 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-:ref:`HEGoTask<class_HEGoTask>` **connect_input**\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``, force\: ``bool`` = false\ ) :ref:`🔗<class_HEGoInputReceiverNode_method_connect_input>`
+:ref:`HEGoTask<class_HEGoTask>` **connect_input**\ (\ other_node\: :ref:`HEGoBaseNode<class_HEGoBaseNode>`, input_index\: ``int``, output_index\: ``int`` = 0, force\: ``bool`` = false\ ) :ref:`🔗<class_HEGoInputReceiverNode_method_connect_input>`
 
 Submits a task to connect ``other_node`` into this node's ``input_index``.
 
@@ -62,7 +62,11 @@ Both nodes should already be instantiated. If either node id is invalid, downstr
 
 
 
-The connection is cached internally. If the same source node is already connected at the same index the call returns a no-op task unless ``force`` is ``true``.
+\ ``output_index`` selects which of ``other_node``'s outputs to take, for an HDA that has more than one. It defaults to the first, which is the only one most assets have.
+
+
+
+The connection is cached internally, on both the source node and its output index. Repeating a connection that is already in place returns a no-op task unless ``force`` is ``true``; moving an input to a different output of the same node is a change, and is not skipped.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

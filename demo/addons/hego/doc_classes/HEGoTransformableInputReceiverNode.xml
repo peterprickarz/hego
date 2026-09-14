@@ -15,13 +15,16 @@ Useful for operator wrappers that both receive geometry inputs and need transfor
 <return type="HEGoTask" />
 <param index="0" name="other_node" type="HEGoBaseNode" />
 <param index="1" name="input_index" type="int" />
-<param index="2" name="force" type="bool" default="false" />
+<param index="2" name="output_index" type="int" default="0" />
+<param index="3" name="force" type="bool" default="false" />
 <description>
 Submits a task to connect [code]other_node[/code] into the given input slot.
 
 The source and destination nodes are expected to have valid instantiated node ids before connecting.
 
-The connection is cached internally. If the same source node is already connected at the same index the call returns a no-op task unless [code]force[/code] is [code]true[/code].
+[code]output_index[/code] selects which of [code]other_node[/code]'s outputs to take, for an HDA that has more than one. It defaults to the first, which is the only one most assets have.
+
+The connection is cached internally, on both the source node and its output index. Repeating a connection that is already in place returns a no-op task unless [code]force[/code] is [code]true[/code]; moving an input to a different output of the same node is a change, and is not skipped.
 </description>
 </method>
 </methods>
