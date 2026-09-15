@@ -21,20 +21,23 @@ namespace Attribs
  *
  * Expected dictionary format:
  *   {
- *     "name":  String         // attribute name (required)
- *     "type":  String         // "point" or "prim" (required)
- *     "value": Variant        // scalar value applied uniformly (int, float, Vector3, String, ...)
+ *     "name":   String         // attribute name (required)
+ *     "type":   String         // "point" or "prim" (required)
+ *     "value":  Variant        // scalar applied uniformly (int, float, Vector3, String)
+ *     "values": Variant        // per-element array; length must match the owner count
  *   }
  *
- * Currently supports uniform (constant) values across all elements.
- * Per-element varying values can be added in a future version (e.g. via "values": Array).
+ * Provide "value" or "values", not neither. When both are present, "values" is used.
+ *
+ * "values" may be a PackedInt32Array, PackedFloat32Array, PackedStringArray,
+ * PackedVector3Array, or an Array of those same element types.
  *
  * @param session       Active Houdini session
  * @param node_id       The input node ID
  * @param part_id       Usually 0 for simple input geometry
  * @param attr_dict     Godot Dictionary containing the attribute description
  * @param point_count   Total number of points in the geometry
- * @param prim_count    Total number of primitives (faces) in the geometry
+ * @param prim_count    Total number of primitives
  * @return true if the attribute was successfully added and set, false otherwise
  */
 bool add_and_set_attribute(const HAPI_Session *session, HAPI_NodeId node_id, int part_id, const godot::Dictionary &attr_dict, int point_count, int prim_count);
