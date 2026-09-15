@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoHDAPreset" inherits="Resource" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Saved parameter presets for one HDA, as the bottom panel's preset list stores them.
+	</brief_description>
+	<description>
+		One resource per operator, written to [code]res://hego/presets/&lt;operator&gt;.tres[/code]. A preset is the blob [method HEGoAssetNode.get_preset] returns, which is also what a node's [code]parm_stash[/code] holds, so a preset and a stashed parameter set are the same thing saved in two places.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="presets" type="Dictionary" setter="" getter="">
+			Preset name to the parameter blob saved under it.
+		</member>
+	</members>
+</class>

@@ -9,7 +9,7 @@ namespace Geo
 void set_object_transform(HEGoSessionManager *session_mgr, const HAPI_NodeId node_id, const godot::Transform3D &transform)
 {
 	HAPI_TransformEuler houdini_transform = godot_to_houdini_transform(transform);
-	HAPI_NodeId parent_id = HEGoUtil::get_parent_node_id(session_mgr->get_session(), node_id);
+	HAPI_NodeId parent_id = HEGo::Util::Hapi::get_parent_node_id(session_mgr->get_session(), node_id);
 	HOUDINI_CHECK_ERROR(HoudiniApi::SetObjectTransform(session_mgr->get_session(), parent_id, &houdini_transform));
 }
 

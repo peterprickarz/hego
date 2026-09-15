@@ -91,6 +91,24 @@ Mesh output is controlled by primitive attributes:
      - Prim
      - Convex decomposition settings used when ``hego_col_type`` = 1. See below for accepted keys.
 
+Example
+-------
+
+A wrangle over primitives, marking the output as one mesh with a material and a
+trimesh collider:
+
+.. code-block:: c
+
+   // Primitive wrangle on the geometry you want to output
+   s@hego_mesh_instance = "Building";              // one MeshInstance3D named Building
+   s@hego_material = "res://materials/brick.tres"; // one surface per material value
+   i@hego_col_type = 3;                            // 3 = trimesh collision
+
+That produces ``HEGoNode3D/Outputs/Building`` with the brick material applied and a
+collision shape generated from the mesh. Splitting the same geometry across two
+``hego_material`` values gives one mesh with two surfaces; two ``hego_mesh_instance``
+values give two nodes.
+
 Splitting Output into Multiple Meshes
 --------------------------------------
 

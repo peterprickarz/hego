@@ -3,8 +3,9 @@ build
 .venv
 demo/.godot
 *.TMP
-.sconsign.dblite
+.sconsign*.dblite
 docs/_build/
 docs/.tmp_rst/
+docs/.tmp_stub_xml/
 docs/.tools/
 docs/tools/godot-master/

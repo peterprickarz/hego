@@ -5,10 +5,13 @@
 
 #include "hego_nodes/hego_trackable_node.h"
 #include "hego_session_manager.h"
+#include "hego_task.h"
 
+#include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/godot.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 
 namespace HEGo
@@ -29,20 +32,41 @@ public:
 
 	void reset_node_id() override;
 
-	virtual void instantiate();
+	virtual godot::Ref<HEGoTask> instantiate();
 
 	static void _bind_methods();
+};
+
+/**
+ * What one input slot is currently wired to.
+ *
+ * Both the source node and which of its outputs, because an HDA can have several and
+ * caching on the node alone would skip a call that moves an input from one to another.
+ */
+struct InputConnection
+{
+	HAPI_NodeId source_node_id = -1;
+	int output_index = 0;
+
+	bool operator==(const InputConnection &other) const
+	{
+		return source_node_id == other.source_node_id && output_index == other.output_index;
+	}
 };
 
 class HEGoInputReceiverNode : public HEGoBaseNode
 {
 	GDCLASS(HEGoInputReceiverNode, HEGoBaseNode)
 
+protected:
+	godot::HashMap<int, InputConnection> cached_connections;
+
 public:
 	HEGoInputReceiverNode();
 	~HEGoInputReceiverNode();
 
-	void connect_input(const HEGoBaseNode *other_node, int input_index);
+	void reset_node_id() override;
+	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index, int output_index = 0, bool force = false);
 
 	static void _bind_methods();
 };
@@ -51,11 +75,16 @@ class HEGoTransformableNode : public HEGoBaseNode
 {
 	GDCLASS(HEGoTransformableNode, HEGoBaseNode)
 
+protected:
+	godot::Transform3D last_transform;
+	bool has_cached_transform = false;
+
 public:
 	HEGoTransformableNode();
 	~HEGoTransformableNode();
 
-	void set_transform(godot::Transform3D xform);
+	void reset_node_id() override;
+	godot::Ref<HEGoTask> set_transform(godot::Transform3D xform, bool force = false);
 
 	static void _bind_methods();
 };
@@ -94,11 +123,15 @@ class HEGoTransformableInputReceiverNode : public HEGoTransformableNode
 {
 	GDCLASS(HEGoTransformableInputReceiverNode, HEGoTransformableNode)
 
+protected:
+	godot::HashMap<int, InputConnection> cached_connections;
+
 public:
 	HEGoTransformableInputReceiverNode();
 	~HEGoTransformableInputReceiverNode();
 
-	void connect_input(const HEGoBaseNode *other_node, int input_index);
+	void reset_node_id() override;
+	godot::Ref<HEGoTask> connect_input(const HEGoBaseNode *other_node, int input_index, int output_index = 0, bool force = false);
 
 	static void _bind_methods();
 };

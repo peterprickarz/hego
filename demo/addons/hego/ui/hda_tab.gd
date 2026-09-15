@@ -37,9 +37,16 @@ const PARM_UI_SCENES = {
 }
 
 var hego_tool_node: Node
+## The HDA the preset controls act on: the first one the node puts in the panel. A node
+## showing several still has one set of preset buttons, and they belong to the first.
 var hego_asset_node: HEGoAssetNode
 var input_nodes: Array
-var allow_cook: bool = false
+## Whether a cook started from this panel is still running. Recook is disabled meanwhile, so
+## a second cook cannot be fired into a node that is already cooking.
+var _cooking: bool = false
+## Which asset sections the user has open, keyed by label. Kept here rather than on the node
+## because it is the user's choice about this panel, not part of what the node cooks.
+var _open_sections: Dictionary = {}
 var new_preset_name_diag: ConfirmationDialog
 var new_preset_name_line_edit: LineEdit
 
@@ -52,8 +59,26 @@ var new_preset_name_line_edit: LineEdit
 @onready var new_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/NewPresetButton
 @onready var preset_dropdown: OptionButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer/PresetDropdownOptionButton
 @onready var parm_vbox = $HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/Control/ScrollContainer/VBoxContainer
-@onready var input_vbox = $HSplitContainer2/HSplitContainer3/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
+@onready var input_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/Inputs/PanelContainer/VBoxContainer/ScrollContainer/VBoxContainer
+@onready var queued_tasks_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer/QueuedScroll/VBoxContainer
+@onready var finished_tasks_vbox = $HSplitContainer2/HSplitContainer3/HSplitContainer4/TaskQueue/PanelContainer/VBoxContainer/FinishedScroll/VBoxContainer
 @onready var root_control = $"../.."
+
+var _last_pending_count: int = 0
+var _last_current_status: int = -1
+var _last_history_size: int = 0
+## The section the selected node last asked to have highlighted. Watched so that a script
+## calling highlight() partway through a cook moves the panel to that HDA on its own.
+var _last_highlight: String = ""
+
+
+func _await_task(task: HEGoTask) -> Variant:
+	while task.get_status() < HEGoTask.COMPLETED:
+		await get_tree().process_frame
+	if task.get_status() == HEGoTask.FAILED:
+		push_error("[HEGoBottomPanel]: Task failed: " + task.get_error_message())
+		return null
+	return task.get_result()
 
 
 func _elapsed_msec(start_usec: int) -> float:
@@ -75,12 +100,34 @@ func _ready():
 	add_child(new_preset_name_diag)
 	recook_button.button_down.connect(_on_recook_button_pressed)
 	asset_picker_button.pressed.connect(_on_asset_picker_button_pressed)
-	root_control.selected_hego_node_changed.connect(_on_selection_changed)
+	root_control.selected_hego_node_changed.connect(set_selected_node)
 	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
 	new_preset_name_diag.confirmed.connect(_on_preset_dialog_confirmed)
 	load_preset_button.pressed.connect(_on_load_preset_button_pressed)
 	save_preset_button.pressed.connect(_on_save_preset_button_pressed)
 	_set_buttons_disabled(true)
+
+	var task_queue_timer = Timer.new()
+	task_queue_timer.wait_time = 0.25
+	task_queue_timer.autostart = true
+	task_queue_timer.timeout.connect(_update_task_queue)
+	task_queue_timer.timeout.connect(_poll_highlight)
+	add_child(task_queue_timer)
+
+
+## Drops every parameter and input widget on screen.
+##
+## Detached before being freed: queue_free() defers the removal, so the old widgets would
+## otherwise stay in the tree for a frame, still able to take input and still wired to the
+## node that is no longer selected.
+func _clear_widgets():
+	for child in parm_vbox.get_children():
+		parm_vbox.remove_child(child)
+		child.queue_free()
+	for child in input_vbox.get_children():
+		input_vbox.remove_child(child)
+		child.queue_free()
+	input_nodes = []
 
 
 func _set_buttons_disabled(disabled: bool):
@@ -107,60 +154,186 @@ func _on_preset_dialog_confirmed():
 		print("No preset name entered")
 
 
-func update_ui():
-	if allow_cook:
-		_set_buttons_disabled(false)
-	else:
-		return _set_buttons_disabled(true)
+## The HDAs to show, in the order the node asked for, as
+## [code]{ "label", "asset", "highlight" }[/code] entries.
+##
+## A node that cooks several HDAs implements [code]hego_get_panel_assets()[/code] and decides
+## which of them belong in the panel, in what order, and which one the panel should open and
+## scroll to. A node with one HDA implements only [code]hego_get_asset_node()[/code] and is
+## answered here, so it never has to know any of that exists.
+func _panel_assets() -> Array:
+	if hego_tool_node == null:
+		return []
 
-	for child in parm_vbox.get_children():
-		child.queue_free()
-	for child in input_vbox.get_children():
-			child.queue_free()
-	hego_asset_node = hego_tool_node.hego_get_asset_node()
-	if hego_asset_node != null:
-		var parm_dict = hego_asset_node.get_parms_dict()
-		
-		if parm_dict and parm_dict.keys().size() != 0:
-			for key in parm_dict.keys():
-				add_parm_ui(parm_dict[key], parm_vbox)
-				
-		var input_names = hego_asset_node.get_input_names()
-		
-		input_nodes = Array()
-		for i in range(input_names.size()):
-			var input_node = preload("res://addons/hego/ui/input_ui.tscn").instantiate()
-			input_vbox.add_child(input_node)
-			var inputs = PackedStringArray()
-			if hego_tool_node.has_method("hego_get_input_stash"):
-				var input_stash = hego_tool_node.hego_get_input_stash()
-				if input_stash.size() > i:
-					inputs = input_stash[i]["inputs"]
-			input_node.setup(input_names[i], inputs)
-			input_node.inputs_changed.connect(_on_input_changed)
-			input_nodes.append(input_node)
-	else:
+	if hego_tool_node.has_method("hego_get_panel_assets"):
+		var entries = hego_tool_node.hego_get_panel_assets()
+		if entries is Array:
+			var usable := []
+			for entry in entries:
+				if entry is Dictionary and _is_instantiated(entry.get("asset")):
+					usable.append(entry)
+			return usable
+
+	if hego_tool_node.has_method("hego_get_asset_node"):
+		var asset = hego_tool_node.hego_get_asset_node()
+		if _is_instantiated(asset):
+			return [{"label": "", "asset": asset, "highlight": false}]
+
+	return []
+
+
+## Whether [param asset] is an HDA that exists in Houdini.
+##
+## The id rather than the object, because a node that keeps its assets around creates them
+## before it cooks them. Asking one that does not exist yet for its parameters queues work
+## that nothing will ever run, and the panel would wait on it forever.
+func _is_instantiated(asset) -> bool:
+	return asset is HEGoAssetNode and asset.get_id() >= 0
+
+
+## The label the selected node is asking to have highlighted, or empty for none.
+##
+## Read straight off the node rather than from [method _panel_assets], so the request is
+## still seen before the HDAs behind it have been cooked into existence.
+func _requested_highlight() -> String:
+	if hego_tool_node == null or not hego_tool_node.has_method("hego_get_panel_assets"):
+		return ""
+
+	var entries = hego_tool_node.hego_get_panel_assets()
+	if not entries is Array:
+		return ""
+	for entry in entries:
+		if entry is Dictionary and entry.get("highlight", false):
+			return str(entry.get("label", ""))
+	return ""
+
+
+func update_ui():
+	_clear_widgets()
+
+	if hego_tool_node == null:
+		preset_dropdown.clear()
+		preset_dropdown.add_item("No HEGo node selected")
+		preset_dropdown.set_item_disabled(0, true)
+		_set_buttons_disabled(true)
+		return
+
+	_set_buttons_disabled(_cooking)
+	asset_picker_button.visible = _can_pick_asset()
+
+	var entries := _panel_assets()
+	hego_asset_node = entries[0]["asset"] if not entries.is_empty() else null
+
+	if entries.is_empty():
 		var hint_label = Label.new()
 		hint_label.text = "HDA not instantiated. Recook to see parameters!"
 		parm_vbox.add_child(hint_label)
+		update_preset_dropdown()
+		return
+
+	# A single HDA gets no header at all, so the node most people use looks unchanged.
+	var use_sections := entries.size() > 1
+	var highlighted_section: Control = null
+	# Recorded so the highlight poll does not read this rebuild as a fresh request and run
+	# straight into another one.
+	_last_highlight = ""
+
+	for entry in entries:
+		var asset: HEGoAssetNode = entry["asset"]
+		var asset_label := str(entry.get("label", ""))
+		var container: Control = parm_vbox
+
+		if use_sections:
+			var section := HEGoAssetSection.new()
+			parm_vbox.add_child(section)
+			section.setup(asset_label, asset.op_name, _open_sections.get(asset_label, true))
+			section.open_changed.connect(_on_section_open_changed)
+			container = section.get_container()
+			if entry.get("highlight", false):
+				section.open()
+				section.mark_highlighted()
+				highlighted_section = section
+				_last_highlight = asset_label
+
+		var parm_dict = await _await_task(asset.get_parms_dict())
+		if parm_dict and parm_dict.keys().size() != 0:
+			for key in parm_dict.keys():
+				add_parm_ui(parm_dict[key], container, asset)
+
+	# Input rows belong to the node rather than to one HDA - there is a single input stash -
+	# so they are shown against the first HDA the node listed. A node chaining several takes
+	# its inputs on that one and wires the rest together itself.
+	await _build_input_rows(entries[0]["asset"])
+
+	if highlighted_section != null:
+		# One frame, so the sections built above have a real size to scroll to.
+		await get_tree().process_frame
+		if is_instance_valid(highlighted_section):
+			(parm_vbox.get_parent() as ScrollContainer).ensure_control_visible(highlighted_section)
+
 	update_preset_dropdown()
 
 
-func add_parm_ui(parm_dict: Dictionary, parent: Control):
+## Builds one row per input of [param asset], filled from the node's input stash.
+func _build_input_rows(asset: HEGoAssetNode) -> void:
+	var input_names = await _await_task(asset.get_input_names())
+	if not input_names is PackedStringArray:
+		return
+
+	input_nodes = Array()
+	for i in range(input_names.size()):
+		var input_node = preload("res://addons/hego/ui/input_ui.tscn").instantiate()
+		input_vbox.add_child(input_node)
+		var inputs = PackedStringArray()
+		if hego_tool_node.has_method("hego_get_input_stash"):
+			var input_stash = hego_tool_node.hego_get_input_stash()
+			if input_stash.size() > i:
+				inputs = input_stash[i]["inputs"]
+		input_node.setup(input_names[i], inputs)
+		input_node.inputs_changed.connect(_on_input_changed)
+		input_nodes.append(input_node)
+
+
+## Remembers a section the user opened or closed, so the next rebuild leaves it as they left it.
+func _on_section_open_changed(asset_label: String, is_open: bool) -> void:
+	_open_sections[asset_label] = is_open
+
+
+## Rebuilds the panel when the selected node starts asking for a different highlight.
+##
+## A multi-stage tool moving the user on to its next stage calls highlight() from its own
+## code, which this panel has no way of hearing about; the node list it would have to be told
+## through is cheap to read, so it is read on the timer that is already running.
+func _poll_highlight() -> void:
+	if hego_tool_node == null or _cooking:
+		return
+
+	var wanted := _requested_highlight()
+	if wanted == _last_highlight:
+		return
+	_last_highlight = wanted
+	await update_ui()
+
+
+## Builds the widget for one parameter of [param asset] under [param parent].
+##
+## The asset is carried all the way down rather than read off a member, because the panel can
+## be showing several HDAs at once and a widget must write to the one it was built from.
+func add_parm_ui(parm_dict: Dictionary, parent: Control, asset: HEGoAssetNode):
 	var parm_type = parm_dict["type"]
 	
 	# Handle special cases that need custom logic
 	if parm_type == HEGoParmType.FOLDER:
-		_handle_folder_parm(parm_dict, parent)
+		_handle_folder_parm(parm_dict, parent, asset)
 		return
 	elif parm_type == HEGoParmType.MULTIPARM:
-		_handle_multiparm_parm(parm_dict, parent)
+		_handle_multiparm_parm(parm_dict, parent, asset)
 		return
 	
 	# Handle regular parameters using mapping
 	var parm_ui = _create_parm_ui(parm_type, parm_dict.get("size", 1))
 	if parm_ui:
-		_setup_common_parm(parm_ui, parm_dict, parent)
+		_setup_common_parm(parm_ui, parm_dict, parent, asset)
 
 
 func _create_parm_ui(parm_type: int, size: int) -> Control:
@@ -177,28 +350,28 @@ func _create_parm_ui(parm_type: int, size: int) -> Control:
 	return scenes[scene_index].instantiate()
 
 
-func _setup_common_parm(parm_ui: Control, parm_dict: Dictionary, parent: Control):
+func _setup_common_parm(parm_ui: Control, parm_dict: Dictionary, parent: Control, asset: HEGoAssetNode):
 	parent.add_child(parm_ui)
 	parm_ui.setup(parm_dict)
 	if parm_ui.has_signal("value_changed"):
-		parm_ui.value_changed.connect(_on_value_changed)
+		parm_ui.value_changed.connect(_on_value_changed.bind(asset))
 
 
-func _handle_folder_parm(parm_dict: Dictionary, parent: Control):
+func _handle_folder_parm(parm_dict: Dictionary, parent: Control, asset: HEGoAssetNode):
 	var parm_ui = PARM_UI_SCENES[HEGoParmType.FOLDER][0].instantiate()
 	parent.add_child(parm_ui)
 	parm_ui.setup(parm_dict)
 	if parm_ui.has_signal("value_changed"):
-		parm_ui.value_changed.connect(_on_value_changed)
+		parm_ui.value_changed.connect(_on_value_changed.bind(asset))
 	for child in parm_dict["children"]:
-		add_parm_ui(child, parm_ui.get_container())
+		add_parm_ui(child, parm_ui.get_container(), asset)
 
 
-func _handle_multiparm_parm(parm_dict: Dictionary, parent: Control):
+func _handle_multiparm_parm(parm_dict: Dictionary, parent: Control, asset: HEGoAssetNode):
 	var multiparm_ui = PARM_UI_SCENES[HEGoParmType.MULTIPARM][0].instantiate()
 	parent.add_child(multiparm_ui)
 	multiparm_ui.setup(parm_dict)
-	multiparm_ui.instance_count_changed.connect(_on_multiparm_instance_count_changed)
+	multiparm_ui.instance_count_changed.connect(_on_multiparm_instance_count_changed.bind(asset))
 	var multiparm_instance_container = multiparm_ui.get_instance_container()
 	var instance_containers = Array()
 	var instance_start_offset = parm_dict["instance_start_offset"]
@@ -212,57 +385,64 @@ func _handle_multiparm_parm(parm_dict: Dictionary, parent: Control):
 		multiparm_instance_ui.setup(i + instance_start_offset, id, label)
 		var instance_parm_container = multiparm_instance_ui.get_container()
 		instance_containers.append(instance_parm_container)
-		multiparm_instance_ui.insert_instance.connect(_on_insert_multiparm_instance)
-		multiparm_instance_ui.remove_instance.connect(_on_remove_multiparm_instance)
+		multiparm_instance_ui.insert_instance.connect(_on_insert_multiparm_instance.bind(asset))
+		multiparm_instance_ui.remove_instance.connect(_on_remove_multiparm_instance.bind(asset))
 	for instance in parm_dict["instances"]:
 		for instance_parm_dict in instance:
 			var instance_index = instance_parm_dict["instance_num"]
-			add_parm_ui(instance_parm_dict, instance_containers[instance_index])
+			add_parm_ui(instance_parm_dict, instance_containers[instance_index], asset)
 			
 			
-func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary):
-	hego_asset_node.set_parm(parm_dict["name"], value)
-	update_ui()
+func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary, asset: HEGoAssetNode):
+	await _await_task(asset.set_parm(parm_dict["name"], value))
+	await update_ui()
 	
 
-func _on_insert_multiparm_instance(id: int, index: int):
-	hego_asset_node.insert_multiparm_instance(id, index)
-	update_ui()
+func _on_insert_multiparm_instance(id: int, index: int, asset: HEGoAssetNode):
+	await _await_task(asset.insert_multiparm_instance(id, index))
+	await update_ui()
 	
 
-func _on_remove_multiparm_instance(id: int, index: int):
-	hego_asset_node.remove_multiparm_instance(id, index)
-	update_ui()
+func _on_remove_multiparm_instance(id: int, index: int, asset: HEGoAssetNode):
+	await _await_task(asset.remove_multiparm_instance(id, index))
+	await update_ui()
 
 
-func _on_selection_changed(node):
-	# These are the only nodes that can be cooked by the HEGo HDA Tab
-	#var nodes = EditorInterface.get_selection().get_selected_nodes()
-	#if nodes.size() == 0:
-	#	_set_buttons_disabled(true)
-	#	return
-	#var node = nodes[0]
-	allow_cook = node is HEGoNode3D
-	_set_buttons_disabled(false)
+## Points the panel at [param node], or at nothing when it is null.
+##
+## There is deliberately no type check here. The panel used to set
+## allow_cook = node is HEGoNode3D, and update_ui() returned on that before building
+## anything, which made every has_method() guard in this file unreachable: a script could
+## implement the whole documented interface and still get an empty, all-disabled tab.
+func set_selected_node(node):
 	hego_tool_node = node
-	update_ui()
+	hego_asset_node = null
+	await update_ui()
 	
 
-func _on_value_changed(name, value):
-	hego_asset_node.set_parm(name, value)
+func _on_value_changed(name, value, asset: HEGoAssetNode):
+	await _await_task(asset.set_parm(name, value))
 	if auto_recook_toggle.button_pressed:
 		await recook()
 	
 
 func _on_input_changed():
+	# The per-input settings dictionary belongs to the node, not to this panel. Building a
+	# fresh empty one here threw away whatever the node had stored the moment anyone
+	# touched an input row, so read the current stash and carry each entry through.
+	var stashed = []
+	if hego_tool_node and hego_tool_node.has_method("hego_get_input_stash"):
+		stashed = hego_tool_node.hego_get_input_stash()
+
 	var inputs = Array()
-	for input_node in input_nodes:
-		var input_node_inputs = input_node.get_inputs()
-		var input_node_settings = Dictionary()
-		var inputs_dict = Dictionary()
-		inputs_dict["inputs"] = input_node_inputs
-		inputs_dict["settings"] = input_node_settings
-		inputs.append(inputs_dict)
+	for i in range(input_nodes.size()):
+		var settings = {}
+		if i < stashed.size() and stashed[i] is Dictionary:
+			settings = stashed[i].get("settings", {})
+		inputs.append({
+			"inputs": input_nodes[i].get_inputs(),
+			"settings": settings,
+		})
 	if hego_tool_node.has_method("hego_set_input_stash"):
 		hego_tool_node.hego_set_input_stash(inputs)
 	if auto_recook_toggle.button_pressed:
@@ -287,7 +467,7 @@ func _on_recook_button_pressed():
 
 	var preset_index = preset_dropdown.get_selected_id()
 	var ui_start_usec = Time.get_ticks_usec()
-	update_ui()
+	await update_ui()
 	preset_dropdown.select(preset_index)
 	ui_rebuild_msec = _elapsed_msec(ui_start_usec)
 
@@ -295,18 +475,33 @@ func _on_recook_button_pressed():
 		
 		
 func recook():
+	if hego_tool_node == null or _cooking:
+		return
+
+	_cooking = true
+	_set_buttons_disabled(true)
 	if hego_tool_node.has_method("cook"):
 		await hego_tool_node.cook()
+	_cooking = false
+	_set_buttons_disabled(false)
+
+	# Read the parameters back so they survive a scene reload. Guarded because a node whose
+	# cook did not instantiate anything - a missing HDA, or no session - still has no asset
+	# node here, and asking a null for its preset is an error rather than an empty result.
 	if hego_tool_node.has_method("hego_set_parm_stash"):
 		if not hego_asset_node:
-			hego_asset_node = hego_tool_node.hego_get_asset_node()
-		hego_tool_node.hego_set_parm_stash(hego_asset_node.get_preset())
+			var entries := _panel_assets()
+			hego_asset_node = entries[0]["asset"] if not entries.is_empty() else null
+		if hego_asset_node:
+			var preset = await _await_task(hego_asset_node.get_preset())
+			if preset != null:
+				hego_tool_node.hego_set_parm_stash(preset)
 		
 
 func create_preset_file(preset_name: String) -> void:
 	print("[HEGo]: Creating preset")
 	if hego_asset_node and hego_tool_node.has_method("hego_get_asset_name"):
-		var preset = hego_asset_node.get_preset()
+		var preset = await _await_task(hego_asset_node.get_preset())
 		if preset:
 			var res_path = get_preset_res_path()
 			
@@ -344,7 +539,7 @@ func create_preset_file(preset_name: String) -> void:
 			if error == OK:
 				print("[HEGo]: Preset saved successfully")
 				# Update UI to refresh dropdown
-				update_ui()
+				await update_ui()
 				# Select the newly created preset in the dropdown
 				_select_preset_in_dropdown(preset_name)
 			else:
@@ -418,9 +613,9 @@ func _on_load_preset_button_pressed():
 		return
 	
 	# Load and apply the preset
-	hego_asset_node.set_preset(presets_res.presets[preset_name])
+	await _await_task(hego_asset_node.set_preset(presets_res.presets[preset_name]))
 	print("[HEGo]: Loaded preset: ", preset_name)
-	update_ui()
+	await update_ui()
 	
 	# Reselect the loaded preset in the dropdown
 	_select_preset_in_dropdown(preset_name)
@@ -441,7 +636,7 @@ func _on_save_preset_button_pressed():
 	var preset_name = preset_dropdown.get_item_text(selected_index)
 	var res_path = get_preset_res_path()
 	
-	var preset = hego_asset_node.get_preset()
+	var preset = await _await_task(hego_asset_node.get_preset())
 	if not preset:
 		push_error("[HEGo]: Failed to retrieve parms from Houdini - Perhaps the node is not instantiated correctly?")
 		return
@@ -467,7 +662,7 @@ func _on_save_preset_button_pressed():
 		return
 	
 	print("[HEGo]: Preset '", preset_name, "' saved successfully")
-	update_ui()
+	await update_ui()
 	
 	# Reselect the saved preset in the dropdown
 	_select_preset_in_dropdown(preset_name)
@@ -481,8 +676,8 @@ func _select_preset_in_dropdown(preset_name: String) -> void:
 
 # Handle asset picker button press
 func _on_asset_picker_button_pressed():
-	if not hego_tool_node or not hego_tool_node is HEGoNode3D:
-		push_error("[HEGo]: No HEGoNode3D selected. Please select a HEGoNode3D first.")
+	if not _can_pick_asset():
+		push_error("[HEGo]: This node's HDA is fixed and cannot be chosen from the panel.")
 		return
 	
 	# Load the asset picker dialog
@@ -494,16 +689,83 @@ func _on_asset_picker_button_pressed():
 	picker.asset_selected.connect(_on_asset_picked)
 	picker.popup_centered()
 
+## Whether the selected node lets the panel choose its HDA.
+##
+## A node whose operator is written into its script has no use for the picker, and answering
+## this with a method probe rather than a type check is what lets any script say so.
+func _can_pick_asset() -> bool:
+	return hego_tool_node != null and hego_tool_node.has_method("hego_set_asset_name")
+
+
 # Handle asset selection from picker
 func _on_asset_picked(asset_name: String):
-	if hego_tool_node and hego_tool_node is HEGoNode3D:
-		# Clear old HDA data before setting new asset
-		if hego_tool_node.has_method("_clear_hda_data"):
-			hego_tool_node._clear_hda_data()
-		
-		hego_tool_node.asset_name = asset_name
-		print("[HEGo]: Set asset_name to: ", asset_name)
-		
-		# Optionally auto-recook if enabled
-		if auto_recook_toggle.button_pressed:
-			await recook()
+	if not _can_pick_asset():
+		return
+
+	# The node decides what changing its HDA means, including forgetting the old one.
+	hego_tool_node.hego_set_asset_name(asset_name)
+
+	if auto_recook_toggle.button_pressed:
+		await recook()
+
+
+func _update_task_queue():
+	var api = HEGoAPI.get_singleton()
+	if not api:
+		return
+
+	var pending_count = api.get_task_pending_count()
+	var current_task = api.get_current_task()
+	var current_status = current_task.get_status() if current_task else -1
+	var history = api.get_completed_task_history()
+	var history_size = history.size()
+
+	# Dirty check — skip rebuild if nothing changed
+	if pending_count == _last_pending_count and current_status == _last_current_status and history_size == _last_history_size:
+		return
+
+	_last_pending_count = pending_count
+	_last_current_status = current_status
+	_last_history_size = history_size
+
+	# Clear queued section
+	for child in queued_tasks_vbox.get_children():
+		child.queue_free()
+
+	# Clear finished section
+	for child in finished_tasks_vbox.get_children():
+		child.queue_free()
+
+	# Populate queued section: pending tasks in reverse order, then current at bottom
+	var pending = api.get_pending_tasks()
+	for i in range(pending.size() - 1, -1, -1):
+		queued_tasks_vbox.add_child(_create_task_label(pending[i], false))
+
+	if current_task:
+		queued_tasks_vbox.add_child(_create_task_label(current_task, true))
+
+	# Populate finished section: newest at top
+	for i in range(history_size - 1, -1, -1):
+		finished_tasks_vbox.add_child(_create_task_label(history[i], false))
+
+
+func _create_task_label(task: HEGoTask, is_running: bool) -> Label:
+	var label = Label.new()
+	var text = task.get_description()
+	var node_id = task.get_node_id()
+	if node_id >= 0:
+		text += "  (node: %d)" % node_id
+
+	var status = task.get_status()
+	if status == HEGoTask.FAILED:
+		var err = task.get_error_message()
+		if err != "":
+			text += " - " + err
+		label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	elif status == HEGoTask.COMPLETED:
+		label.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+	elif is_running:
+		label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
+
+	label.text = text
+	return label

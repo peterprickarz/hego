@@ -11,7 +11,8 @@ class HEGoTrackableNode : public godot::RefCounted
 	GDCLASS(HEGoTrackableNode, godot::RefCounted)
 
 public:
-	virtual ~HEGoTrackableNode() = default;
+	/// Removes this node from the session manager's registry. See the definition.
+	virtual ~HEGoTrackableNode();
 	virtual void reset_node_id() = 0;
 
 	static void _bind_methods();

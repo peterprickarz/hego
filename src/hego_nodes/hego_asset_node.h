@@ -2,8 +2,10 @@
 #define HEGO_ASSET_NODE_H
 
 #include "hego_nodes/hego_base_node.h"
+#include "hego_task.h"
 
 #include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
@@ -23,24 +25,42 @@ public:
 	HEGoAssetNode();
 	~HEGoAssetNode();
 
-	void instantiate() override;
-	void set_parm(godot::String parm_name, godot::Variant value);
-	void set_preset(godot::PackedByteArray preset);
-	void insert_multiparm_instance(int parm_id, int index);
-	void remove_multiparm_instance(int parm_id, int index);
-	godot::PackedByteArray get_preset();
-	godot::Dictionary get_parms_dict();
-	godot::PackedStringArray get_input_names();
-	godot::Array fetch_output();
-	void cook();
-	int cook_async();
-	godot::Dictionary fetch_points(godot::Ref<godot::Resource> fetch_point_config, bool auto_cook = true);
-	godot::Dictionary fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config, bool auto_cook = true);
-	godot::Array get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray(), bool auto_cook = true);
-	godot::Ref<godot::Image> fetch_heightfield_layer_image(int part_id, bool auto_cook = true);
-	godot::Array fetch_curves(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray(),
-			godot::PackedStringArray read_point_attribs = godot::PackedStringArray(), bool auto_cook = true);
+	// Returns a task — all HAPI work happens on the scheduler thread
+	godot::Ref<HEGoTask> instantiate() override;
+	godot::Ref<HEGoTask> cook();
+	godot::Ref<HEGoTask> set_parm(godot::String parm_name, godot::Variant value);
+	godot::Ref<HEGoTask> set_parms_batch(godot::Dictionary parms);
+	godot::Ref<HEGoTask> set_preset(godot::PackedByteArray preset);
+	godot::Ref<HEGoTask> get_preset();
+	godot::Ref<HEGoTask> insert_multiparm_instance(int parm_id, int index);
+	godot::Ref<HEGoTask> remove_multiparm_instance(int parm_id, int index);
+	godot::Ref<HEGoTask> get_parms_dict();
+	godot::Ref<HEGoTask> get_input_names();
+	// The cooked output, for reading and splitting it from GDScript in code rather
+	// than through a fetch config. Optionally loads attributes up front, so a handler
+	// can do its whole job with one await.
+	godot::Ref<HEGoTask> get_point_output(godot::PackedStringArray preload_attribs = godot::PackedStringArray());
 
+	// What the last cook actually produced, so a handler that has nothing to do can
+	// be skipped without probing for its attributes. Returns a dictionary with
+	// has_mesh, has_points, has_curves, has_volumes, point_attributes and
+	// prim_attributes; empty when the output cannot be read.
+	godot::Ref<HEGoTask> get_output_summary();
+
+	// The cooked surfaces, for reading and splitting them from GDScript in code.
+	// point_attribs names which of N, Cd, uv, uv2 and tangents to read; P always is.
+	// preload_attribs are primitive attributes, loaded while the task runs.
+	godot::Ref<HEGoTask> get_surface_output(
+			godot::PackedStringArray point_attribs = godot::PackedStringArray(), godot::PackedStringArray preload_attribs = godot::PackedStringArray());
+
+	godot::Ref<HEGoTask> fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config);
+	godot::Ref<HEGoTask> fetch_points(godot::Ref<godot::Resource> fetch_point_config);
+	godot::Ref<HEGoTask> get_heightfield_layers(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray());
+	godot::Ref<HEGoTask> fetch_heightfield_layer_image(int part_id);
+	godot::Ref<HEGoTask> fetch_curves(godot::PackedStringArray read_prim_attribs = godot::PackedStringArray(),
+			godot::PackedStringArray read_point_attribs = godot::PackedStringArray());
+
+	// Sync accessors (no HAPI call)
 	void set_op_name(godot::String name);
 	godot::String get_op_name() const;
 

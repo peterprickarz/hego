@@ -2,14 +2,18 @@
 extends LineEdit
 class_name HEGoInputLineEdit
 
+## A field in the panel's Inputs pane that a scene node can be dragged onto.
+##
+## Dropping a node writes its path relative to the edited scene, which is the form the input
+## rows are stored in; typing a path by hand works the same way.
+
+## Emitted when a node was dropped on the field, after [member text] has been rewritten.
 signal input_changed()
 
+## Unused. The dropped path is written straight to [member text], which is what the panel
+## reads back.
 var node_path = ""
 
-# Called when the node is ready
-func _ready():
-	pass
-	# Ensure the LineEdit can receive drop events
 
 func _can_drop_data(position: Vector2, data) -> bool:
 	if data is Dictionary and data.has("nodes") and data["nodes"] is Array and data["nodes"].size() > 0:

@@ -42,7 +42,7 @@ git submodule update --init --recursive
 
 ## Requirements
 
-- **Houdini 21.0.631** - No license needed for building, active commercial(FX,Core or Houdini Engine) license required for runtime
+- **Houdini 22.0.429** - No license needed for building, active commercial(FX,Core or Houdini Engine) license required for runtime
 - **Godot 4.4+** - Stable or newer versions supported  
 
 ## Developer Setup
@@ -69,7 +69,7 @@ git submodule update --init --recursive
 
 3. **Set Houdini environment** (optional)
    ```bash
-   set HFS=C:\Program Files\Side Effects Software\Houdini 20.5.654
+   set HFS=C:\Program Files\Side Effects Software\Houdini 22.0.429
    ```
 
 ### Building
@@ -111,6 +111,21 @@ If the build task fails, update `.vscode/tasks.json`:
 ```
 
 **Output**: Built library appears in `demo/addons/hego/bin/`
+
+### Documentation
+
+The class reference is generated, and the site is built from `docs/`:
+
+```bash
+scripts/generate_gdscript_docs.sh   # after changing a GDScript class's ## comments
+scripts/generate_docs.sh            # rewrites docs/classes from the class reference XML
+python -m sphinx -W -b html docs docs/_build/html
+```
+
+`generate_gdscript_docs.sh` needs Godot (set `GODOT` to pick the binary) and writes
+`demo/addons/hego/doc_classes_gdscript/`, which is committed so the site builds without it.
+A class with no place in the tree fails `generate_docs.sh`; add it to a group in
+`scripts/class_tree.py`.
 
 ## Get Help
 

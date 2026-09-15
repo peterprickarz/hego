@@ -2,6 +2,7 @@
 #define HEGO_MERGE_NODE_H
 
 #include "hego_nodes/hego_base_node.h"
+#include "hego_task.h"
 
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
@@ -12,12 +13,16 @@ class HEGoMergeNode : public HEGoInputReceiverNode
 {
 	GDCLASS(HEGoMergeNode, HEGoInputReceiverNode)
 
+private:
+	godot::PackedInt32Array cached_source_ids;
+
 public:
 	HEGoMergeNode();
 	~HEGoMergeNode();
 
-	void instantiate() override;
-	void connect_inputs(godot::Array inputs);
+	void reset_node_id() override;
+	godot::Ref<HEGoTask> instantiate() override;
+	godot::Ref<HEGoTask> connect_inputs(godot::Array inputs, bool force = false);
 
 	static void _bind_methods();
 };

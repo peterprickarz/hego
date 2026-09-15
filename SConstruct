@@ -2,14 +2,15 @@
 import os
 import sys
 import platform
+import shutil
 
 # ───────────────────────────────────────────────
 # Determine Houdini root (HFS) with sensible defaults
 # ───────────────────────────────────────────────
 default_hfs = {
-    "Windows": r"C:\Program Files\Side Effects Software\Houdini 21.0.631",
-    "Linux":   "/opt/hfs21.0",                    # ← adjusted to match your actual path
-    "Darwin":  "/Applications/Houdini/Houdini21.0.631/Houdini.framework/Versions/Current/Resources"
+    "Windows": r"C:\Program Files\Side Effects Software\Houdini 22.0.429",
+    "Linux":   "/opt/hfs22.0",  # the symlink, so a new production build needs no change
+    "Darwin":  "/Applications/Houdini/Houdini22.0.429/Houdini.framework/Versions/Current/Resources"
 }
 
 sys_name = platform.system()
@@ -26,11 +27,33 @@ print(f"Using HFS = {HFS}")
 HB = os.path.join(HFS, "bin")
 
 # ───────────────────────────────────────────────
+# One build signature database per platform
+#
+# SCons keeps a single .sconsign.dblite for the whole build, and the Linux and Windows
+# builds of this repo share the directory. Alternating them invalidated each other's
+# godot-cpp entries: a rebuild with nothing changed recompiled every one of godot-cpp's
+# ~970 sources while correctly skipping all of HEGo's. Two consecutive builds of the same
+# platform were already incremental, which is what narrows it to the sharing.
+#
+# Must be set before godot-cpp's SConstruct runs, since that is where its targets are
+# defined. The platform is read from the command line rather than from env, which does not
+# exist yet; the fallback matches godot-cpp's own default of building for the host.
+# ───────────────────────────────────────────────
+_target_platform = ARGUMENTS.get("platform", ARGUMENTS.get("p", sys_name.lower()))
+SConsignFile(f".sconsign-{_target_platform}.dblite")
+
+# ───────────────────────────────────────────────
 # Load godot-cpp environment
 # ───────────────────────────────────────────────
 env = SConscript("godot-cpp/SConstruct")
-# Remove static C++ runtime flags (they break Houdini / USD)
-env["LINKFLAGS"] = [f for f in env.get("LINKFLAGS", []) if f not in ["-static-libstdc++", "-static-libgcc"]]
+
+# godot-cpp links libstdc++ and libgcc statically by default. That is what lets a binary
+# load on distributions older than the machine that built it, and it is the same choice
+# the official Godot builds make - they carry no libstdc++ dependency at all. These flags
+# used to be stripped here, out of a concern about clashing with Houdini's own C++ runtime.
+# The concern was real - a static runtime whose symbols are exported does clash, and did
+# crash sessions on sight - but the fix is to keep those symbols private rather than to
+# link dynamically. See --exclude-libs below.
 
 # ───────────────────────────────────────────────
 # Common Houdini-related environment variables
@@ -41,7 +64,7 @@ houdini_vars = {
     "H":   HFS,
     "HH":  os.path.join(HFS, "houdini"),
     "HHC": os.path.join(HFS, "houdini", "config"),
-    "HHP": os.path.join(HFS, "houdini", "python3.11libs"),  # adjust python version if needed
+    "HHP": os.path.join(HFS, "houdini", "python3.13libs"),  # adjust python version if needed
     "HT":  os.path.join(HFS, "toolkit"),
     "HDSO": os.path.join(HFS, "dsolib"),
     "HSB": os.path.join(HFS, "houdini", "sbin"),
@@ -90,16 +113,22 @@ if env["platform"] == "windows":
         env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
 elif env["platform"] == "linux":
-    env["CC"] = "gcc-11"
-    env["CXX"] = "g++-11"
+    # Houdini 22.0 on Linux is built with GCC 14, so prefer gcc-14/g++-14 to match its
+    # toolchain when those binaries are available. Distros that ship a different GCC and
+    # don't provide versioned gcc-14 binaries (e.g. Fedora) fall back to the default gcc/g++.
+    # An explicit CC/CXX in the environment always wins, e.g. `CC=gcc CXX=g++ scons`.
+    env["CC"] = os.environ.get("CC") or ("gcc-14" if shutil.which("gcc-14") else "gcc")
+    env["CXX"] = os.environ.get("CXX") or ("g++-14" if shutil.which("g++-14") else "g++")
     env.Append(CCFLAGS=["-std=c++17", "-fPIC"])
-
-    # Ensure dynamic linking of C++ runtime
-    env["LINKFLAGS"] = [f for f in env.get("LINKFLAGS", []) if f not in ["-static-libstdc++", "-static-libgcc"]]
 
     env.Append(LINKFLAGS=[
         f"-Wl,-rpath,{os.path.join(HFS, 'dsolib')}",
-        "-shared"
+        "-shared",
+        # Keep the statically linked C++ runtime to ourselves. Without this its symbols
+        # are exported from the .so and interpose on the libstdc++ that libHAPIL and
+        # Houdini's own libraries use, which corrupts their stream and locale state and
+        # segfaults inside HAPI_StartThriftNamedPipeServer.
+        "-Wl,--exclude-libs,ALL",
     ])
 
     env.Append(LIBS=["dl", "pthread"])
@@ -112,7 +141,7 @@ elif env["platform"] == "macos" or sys_name == "Darwin":
 # Build machine info (optional, but matches setup script)
 if env["platform"] == "linux":
     env["ENV"]["HOUDINI_BUILD_PLATFORM"] = "Linux"
-    env["ENV"]["HOUDINI_BUILD_COMPILER"] = "11.2.1"  # from your setup script
+    env["ENV"]["HOUDINI_BUILD_COMPILER"] = "14.2.1"  # from Houdini 22.0 houdini_setup_bash
     env["ENV"]["HOUDINI_BUILD_LIBC"] = "glibc 2.28"
 
 
@@ -121,7 +150,11 @@ if env["platform"] == "linux":
 # Source collection
 # ───────────────────────────────────────────────
 src_dir = "src"
-build_dir = "build"
+
+# One object tree per configuration. A shared "build" directory would make every switch
+# between platforms or targets recompile everything, which matters most when building
+# the Linux and Windows binaries of a release back to back.
+build_dir = f"build/{env['platform']}.{env['target']}.{env['arch']}"
 
 VariantDir(build_dir, src_dir, duplicate=0)
 

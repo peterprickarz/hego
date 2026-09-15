@@ -3,6 +3,7 @@
 
 #include "hapi/houdini_api.h"
 #include "hego_nodes/hego_trackable_node.h"
+#include <mutex>
 #include <string>
 
 #define DEFAULT_NAMED_PIPE "hapi"
@@ -23,6 +24,13 @@
 class HEGoSessionManager
 {
 public:
+	// How HEGo connects to Houdini Engine. The New* types start the server
+	// themselves; the Existing* types are reserved for connecting to a server
+	// somebody else started and are not implemented yet.
+	//
+	// InProcess starts a shared memory server, which behaves like an in-process
+	// session (Houdini starts with HEGo and closes with it) without being HAPI's
+	// in-process session type.
 	enum SessionType
 	{
 		InProcess = 1,
@@ -33,12 +41,20 @@ public:
 		ExistingSharedMemory = 6
 	};
 
+	// Whether a value coming from GDScript names a session type HEGo can start.
+	static bool is_supported_session_type(int session_type)
+	{
+		return session_type == InProcess || session_type == NewNamedPipe || session_type == NewTCPSocket;
+	}
+
 	HEGoSessionManager();
 
-	// Creates a new session with specified connection type and data
+	// Creates a new session. connection_data is the pipe or shared memory name, or
+	// the port number for TCP sessions.
 	bool start_session(SessionType session_type = NewNamedPipe, const std::string &connection_data = DEFAULT_NAMED_PIPE);
 
-	// Stop the existing session if valid, and creates a new session
+	// Stop the existing session if valid, and creates a new session of the given
+	// type, reusing the pipe name or port of the session that was stopped.
 	bool restart_session(SessionType session_type, bool use_cooking_thread);
 
 	// Cleanup and shutdown an existing session
@@ -47,8 +63,11 @@ public:
 	// Initializes the HAPI session, should be called after successfully creating a session
 	bool initialize(bool use_cooking_thread);
 
+	// Blocks until the session finishes cooking, polling HAPI for the cook state.
+	// Pass a node id to have that node's cook errors and warnings logged.
 	bool wait_for_cook(HAPI_NodeId node_id = -1);
 
+	// Blocks until the session is idle, without logging any cook result.
 	bool wait_for_ready();
 
 	// Get the HAPI session
@@ -67,12 +86,22 @@ private:
 	void *libHAPIL;
 
 	HAPI_Session my_session;
-	HAPI_CookOptions myCookOptions;
+	HAPI_CookOptions my_cook_options;
 	SessionType my_session_type = InProcess;
 	std::string my_named_pipe = DEFAULT_NAMED_PIPE;
 	int my_tcp_port = DEFAULT_TCP_PORT;
 	std::string my_shared_memory_name;
+
+	// Every node instantiated in the session, so their ids can be reset when it ends.
+	//
+	// Deliberately non-owning: holding a reference would keep every node HEGo ever
+	// created alive for the lifetime of the plugin. Each node removes itself in
+	// ~HEGoTrackableNode instead, which is what keeps these pointers valid.
+	//
+	// Guarded because register_node runs on the task scheduler's worker thread while
+	// stop_session iterates from the main thread.
 	std::vector<HEGo::HEGoTrackableNode *> nodes;
+	std::mutex nodes_mutex;
 };
 
-#endif // HEGO_NODE_MANAGER_H
+#endif // HEGO_SESSION_MANAGER_H

@@ -6,6 +6,8 @@ Overview
 
 ``HEGoNode3D`` is the default node you will use to bring an HDA into Godot.
 This page focuses on ``HEGoNode3D`` data exchange, split into Inputs and Outputs.
+Its properties and methods are listed in :ref:`the class reference<class_HEGoNode3D>`,
+and what it does with them is :doc:`/api/node3d_modules`.
 
 ``HEGoNode3D`` supports:
 
@@ -23,6 +25,58 @@ Usage
 Create a ``HEGoNode3D`` in your scene, open the HEGo bottom panel, assign an HDA, then recook.
 Inputs are converted to Houdini data before cook, and outputs are regenerated after cook based on
 attributes described below.
+
+What a Cook Does
+----------------
+
+Every recook runs the same sequence, and the timing of each step is printed to the
+session log when it finishes:
+
+1. **Instantiate.** The HDA is created in the running session if it is not there yet,
+   and the node's transform is sent across. On the first instantiation the parameters
+   stashed in the scene are restored, which is how a cooked scene survives a session
+   restart.
+2. **Inputs.** Each Godot node wired to an input is converted and connected. See
+   :doc:`Inputs <inputs/index>`.
+3. **Cook.** Houdini does the work.
+4. **Outputs.** The ``Outputs`` child is deleted and rebuilt from the cooked geometry.
+
+.. warning::
+
+   ``Outputs`` is destroyed and recreated on every cook. Anything you parent under it
+   by hand disappears. Put your own nodes beside the ``HEGoNode3D``, not inside its
+   output.
+
+HEGo only runs the output handlers the cook actually fed: an HDA emitting a mesh does
+not pay for the point, curve or terrain paths. Nothing is needed from you for that —
+it is derived from the cooked geometry.
+
+Cooking From Code
+-----------------
+
+``cook()`` is a coroutine, so a script can drive it:
+
+.. code-block:: gdscript
+
+    @tool
+    extends Node3D
+
+    @onready var hego_node: HEGoNode3D = $MyHDA
+
+    func regenerate(seed_value: int) -> void:
+        var asset_node := hego_node.hego_get_asset_node()
+        await hego_node.agent.task(asset_node.set_parm("seed", seed_value))
+        await hego_node.cook()
+        # Outputs now exist under hego_node/Outputs
+
+This is the same entry point the bottom panel's **Recook** button uses. For reading the
+result yourself rather than letting the handlers build nodes, see
+:doc:`Reading Output in Code </api/geo_output>`.
+
+For a node that does something ``HEGoNode3D`` does not -- its own attributes, its own output
+nodes, several HDAs chained together -- write your own rather than subclassing this one. It is
+an ordinary script over the same helper and the same output library; see
+:doc:`Writing Your Own Node </api/custom_nodes/index>`.
 
 Inputs
 ------

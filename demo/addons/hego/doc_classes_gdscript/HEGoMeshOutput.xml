@@ -1,0 +1,117 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoMeshOutput" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Turns the surfaces of a cooked HDA into [MeshInstance3D]s under [code]Outputs/[/code].
+	</brief_description>
+	<description>
+		Per output mesh the HDA decides, through detail attributes, whether the mesh is kept in the scene, saved as an [ArrayMesh] resource, or both, and which collision shape (if any) is generated for it.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="output_phase" qualifiers="static">
+			<return type="String" />
+			<description>
+				Name of the cook phase this handler is timed under.
+			</description>
+		</method>
+		<method name="should_handle" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="summary" type="Dictionary" />
+			<description>
+				Whether the cook produced surfaces worth building.
+			</description>
+		</method>
+		<method name="fetch_surface_groups" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+				Fetches the cook's surfaces and groups them the way the HDA asked for.  Returns [code]{ mesh_instance_key: { material_key: surface } }[/code], keyed by the hego_mesh_instance and hego_material attributes, with a [code]null[/code] key wherever the geometry does not name one. Empty when the fetch failed or produced nothing.  Nothing here touches the scene, so a node that wants to place the result itself can use this and [method build_array_mesh] instead of [method handle].
+			</description>
+		</method>
+		<method name="fetch_meshes" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+				One [ArrayMesh] per mesh instance the HDA asked for, without touching the scene.  Returns [code]{ mesh_instance_key: ArrayMesh }[/code]. This is the half of [method handle] a custom node usually wants: it builds the meshes and leaves where they go, and whether they are saved as resources, to the caller.
+			</description>
+		</method>
+		<method name="handle" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+				Fetches the cook's surfaces and builds the mesh output.
+			</description>
+		</method>
+		<method name="build_array_mesh" qualifiers="static">
+			<return type="ArrayMesh" />
+			<param index="0" name="surfaces" type="Dictionary" />
+			<description>
+				Builds one [ArrayMesh] from a { material path: surface data } dictionary, adding a surface per material and wiring up LODs and materials.
+			</description>
+		</method>
+		<method name="save_mesh_resource" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="mesh" type="ArrayMesh" />
+			<param index="1" name="save_path" type="String" />
+			<description>
+				Writes [param mesh] to [param save_path], overwriting an existing [ArrayMesh] in place so that scenes already referencing it pick up the new geometry.  Returns { ok, error, fallback_to_instance, message }; [code]message[/code] and [code]error[/code] only carry meaning when [code]ok[/code] is false.
+			</description>
+		</method>
+		<method name="copy_array_mesh_contents" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="target_mesh" type="ArrayMesh" />
+			<param index="1" name="source_mesh" type="ArrayMesh" />
+			<description>
+				Replaces the surfaces of [param target_mesh] with those of [param source_mesh].  Used instead of saving a new resource so the existing [ArrayMesh] object keeps its identity, and everything already pointing at it sees the update.
+			</description>
+		</method>
+		<method name="load_mesh_resource_fresh" qualifiers="static">
+			<return type="Mesh" />
+			<param index="0" name="save_path" type="String" />
+			<description>
+				Loads a saved mesh bypassing the resource cache, so the instance in the scene reflects what was just written to disk.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;output&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="POINT_ATTRIBS" value="[&quot;N&quot;, &quot;Cd&quot;, &quot;uv&quot;, &quot;uv2&quot;, &quot;tangents&quot;]">
+			Point attributes read for every surface. P always comes along.
+		</constant>
+		<constant name="MESH_INSTANCE_ATTRIB" value="&quot;hego_mesh_instance&quot;">
+			Primitive attributes the output is grouped by: one mesh per instance name, one surface per material within it.
+		</constant>
+		<constant name="MATERIAL_ATTRIB" value="&quot;hego_material&quot;">
+		</constant>
+		<constant name="SURFACE_ATTRIBS" value="[&quot;hego_lod&quot;, &quot;hego_col_type&quot;, &quot;hego_col_decomp_settings&quot;, &quot;hego_storage_mode&quot;, &quot;hego_resource_save_path&quot;]">
+			Primitive attributes this handler reads off each surface.
+		</constant>
+		<constant name="DEFAULT_MESH_NODE_NAME" value="&quot;hego_output_mesh_inst&quot;">
+			Node name used when an HDA does not name its mesh output.
+		</constant>
+		<constant name="STORAGE_MODE_INSTANCE" value="0">
+			hego_storage_mode: keep the mesh in the scene only.
+		</constant>
+		<constant name="STORAGE_MODE_RESOURCE" value="1">
+			hego_storage_mode: save the mesh as a resource, do not add it to the scene.
+		</constant>
+		<constant name="STORAGE_MODE_RESOURCE_AND_INSTANCE" value="2">
+			hego_storage_mode: save the mesh as a resource and add an instance of it to the scene.
+		</constant>
+		<constant name="COLLISION_NONE" value="0">
+			hego_col_type values.
+		</constant>
+		<constant name="COLLISION_MULTIPLE_CONVEX" value="1">
+		</constant>
+		<constant name="COLLISION_CONVEX" value="2">
+		</constant>
+		<constant name="COLLISION_TRIMESH" value="3">
+		</constant>
+		<constant name="DECOMPOSITION_PROPERTIES" value="[&quot;convex_hull_approximation&quot;, &quot;convex_hull_downsampling&quot;, &quot;max_concavity&quot;, &quot;max_convex_hulls&quot;, &quot;max_num_vertices_per_convex_hull&quot;, &quot;min_volume_per_convex_hull&quot;, &quot;mode&quot;, &quot;normalize_mesh&quot;, &quot;plane_downsampling&quot;, &quot;project_hull_vertices&quot;, &quot;resolution&quot;, &quot;resolution_axes_clipping_bias&quot;, &quot;symmetry_planes_clipping_bias&quot;]">
+			Properties of [MeshConvexDecompositionSettings] an HDA may override through the hego_col_decomp_settings dictionary. Names match the Godot property names.
+		</constant>
+	</constants>
+</class>

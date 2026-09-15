@@ -30,7 +30,7 @@ jobs:
 
       - name: Build HTML documentation
         run: |
-          python -m sphinx -b html docs docs/_build/html
+          python -m sphinx -W -b html docs docs/_build/html
 
       - name: Upload HTML artifact
         uses: actions/upload-artifact@v4

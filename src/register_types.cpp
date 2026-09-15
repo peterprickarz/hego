@@ -1,6 +1,8 @@
 #include "register_types.h"
 
 #include "hego_api.h"
+#include "hego_task.h"
+#include "util/geo/geo_output.h"
 #include "util/log/log.h"
 
 #include "hego_nodes/hego_base_node.h"
@@ -26,11 +28,21 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 		return;
 	}
 
+	ClassDB::register_class<HEGo::HEGoTask>();
+
+	// The log comes first: everything below it, HEGoAPI's constructor included,
+	// logs while starting up.
+	ClassDB::register_class<HEGo::Util::Log::HEGoLog>();
+	memnew(HEGo::Util::Log::HEGoLog);
+	HEGo::Util::Log::HEGoLog::get_singleton()->configure();
+
+	ClassDB::register_class<HEGo::HEGoPointOutput>();
+	ClassDB::register_class<HEGo::HEGoPointSelection>();
+	ClassDB::register_class<HEGo::HEGoSurfaceOutput>();
+	ClassDB::register_class<HEGo::HEGoSurfaceSelection>();
+
 	ClassDB::register_class<HEGo::HEGoAPI>();
 	memnew(HEGo::HEGoAPI);
-
-	ClassDB::register_class<HEGo::Util::Log::HEGoLogManager>();
-	memnew(HEGo::Util::Log::HEGoLogManager);
 
 	GDREGISTER_ABSTRACT_CLASS(HEGo::HEGoTrackableNode);
 	GDREGISTER_VIRTUAL_CLASS(HEGo::HEGoBaseNode);
@@ -56,6 +68,14 @@ void uninitialize_hego_module(ModuleInitializationLevel p_level)
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE)
 	{
 		return;
+	}
+
+	// Closes the log file. The HEGoAPI singleton is deliberately left alone here:
+	// tearing it down stops the session and joins the scheduler thread, which is
+	// handled by the plugin before the extension unloads.
+	if (HEGo::Util::Log::HEGoLog *log = HEGo::Util::Log::HEGoLog::get_singleton())
+	{
+		memdelete(log);
 	}
 }
 

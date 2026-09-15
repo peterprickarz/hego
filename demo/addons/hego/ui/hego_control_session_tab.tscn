@@ -93,11 +93,14 @@ text = "Logs:"
 fit_content = true
 vertical_alignment = 1
 
-[node name="Logs" type="TextEdit" parent="Vbox"]
+[node name="LogToolbar" type="HBoxContainer" parent="Vbox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Logs" type="RichTextLabel" parent="Vbox"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
-text = "Log capture connected.
-"
-editable = false
-wrap_mode = 1
+bbcode_enabled = true
+scroll_following = true
+selection_enabled = true

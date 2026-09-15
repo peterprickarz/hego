@@ -5,19 +5,11 @@ compatibility_minimum = "4.4"
 
 [libraries]
 
-macos.debug = "res://addons/hego/bin/hego.macos.template_debug.framework"
-macos.release = "res://addons/hego/bin/hego.macos.template_release.framework"
-windows.debug.x86_32 = "res://addons/hego/bin/hego.windows.template_debug.x86_32.dll"
-windows.release.x86_32 = "res://addons/hego/bin/hego.windows.template_release.x86_32.dll"
-windows.debug.x86_64 = "res://addons/hego/bin/hego.windows.template_debug.x86_64.dll"
-windows.release.x86_64 = "res://addons/hego/bin/hego.windows.template_release.x86_64.dll"
+; Only the platforms HEGo actually ships a binary for. Listing one without a binary
+; behind it makes an export fail to load the extension at startup, which leaves every
+; HEGo class undefined. Add an entry here in the same commit that adds its binary.
+
 linux.debug.x86_64 = "res://addons/hego/bin/libhego.linux.template_debug.x86_64.so"
 linux.release.x86_64 = "res://addons/hego/bin/libhego.linux.template_release.x86_64.so"
-linux.debug.arm64 = "res://addons/hego/bin/libhego.linux.template_debug.arm64.so"
-linux.release.arm64 = "res://addons/hego/bin/libhego.linux.template_release.arm64.so"
-linux.debug.rv64 = "res://addons/hego/bin/libhego.linux.template_debug.rv64.so"
-linux.release.rv64 = "res://addons/hego/bin/libhego.linux.template_release.rv64.so"
-android.debug.x86_64 = "res://addons/hego/bin/hego.android.template_debug.x86_64.so"
-android.release.x86_64 = "res://addons/hego/bin/hego.android.template_release.x86_64.so"
-android.debug.arm64 = "res://addons/hego/bin/hego.android.template_debug.arm64.so"
-android.release.arm64 = "res://addons/hego/bin/hego.android.template_release.arm64.so"
+windows.debug.x86_64 = "res://addons/hego/bin/hego.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/hego/bin/hego.windows.template_release.x86_64.dll"

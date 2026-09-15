@@ -87,6 +87,17 @@ HAPI_NodeId create_input_from_mesh(
 HAPI_NodeId create_merge_sop(HEGoSessionManager *session_mgr, HAPI_NodeId node_id);
 
 /**
+ * Connect one output of a source node into an input slot on a target node.
+ *
+ * @param session_mgr Active session manager used to access the Houdini session.
+ * @param target_node_id Destination node that receives the connection.
+ * @param input_index Input slot on the destination node to connect.
+ * @param source_node_id Node supplying the geometry.
+ * @param output_index Which of the source node's outputs to take. An HDA can have several.
+ */
+void connect_node_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id, int input_index, HAPI_NodeId source_node_id, int output_index);
+
+/**
  * Disconnect every currently connected input on the target node.
  *
  * @param session_mgr Active session manager used to access the Houdini session.
@@ -107,28 +118,14 @@ void disconnect_node_inputs(HEGoSessionManager *session_mgr, HAPI_NodeId target_
 void connect_to_merge(HEGoSessionManager *session_mgr, HAPI_NodeId merge_node_id, godot::PackedInt32Array sources);
 
 /**
- * Connect the output of a merge node to a specific input slot on a target node.
+ * Populate a Houdini curve input from pre-tessellated positions.
  *
  * @param session_mgr Active session manager used to access the Houdini session.
- * @param target_node_id Destination node that receives the merge output.
- * @param input_index Input slot on the destination node to connect.
- * @param merge_node_id Merge node whose first output is connected.
- */
-void connect_merge_to_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id, int input_index, HAPI_NodeId merge_node_id);
-
-/**
- * Populate a Houdini curve input from a Godot Curve3D.
- *
- * The curve is tessellated to evenly spaced points before the resulting positions
- * are sent to Houdini.
- *
- * @param session_mgr Active session manager used to access the Houdini session.
- * @param curve3d Source curve resource to tessellate and upload.
+ * @param positions Pre-tessellated curve positions to upload.
  * @param node_id Existing curve input node id to reuse.
- * @param target_length Desired segment length used when tessellating the curve.
  * @return The Houdini input node id.
  */
-HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, godot::Ref<godot::Curve3D> curve3d, HAPI_NodeId node_id, float target_length);
+HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, const godot::PackedVector3Array &positions, HAPI_NodeId node_id);
 
 } // namespace Geo
 } // namespace Util

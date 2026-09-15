@@ -5,24 +5,14 @@
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
+#include <vector>
+
 namespace HEGo
 {
 namespace Util
 {
 namespace Parm
 {
-// Helper function to get a string from a string handle
-godot::String get_parm_string(HAPI_Session *session, HAPI_NodeId node_id, HAPI_StringHandle string_handle)
-{
-	int buffer_length;
-	HoudiniApi::GetStringBufLength(session, string_handle, &buffer_length);
-	char *buffer = new char[buffer_length];
-	HoudiniApi::GetString(session, string_handle, buffer, buffer_length);
-	godot::String result = godot::String::utf8(buffer);
-	delete[] buffer;
-	return result;
-}
-
 // Helper function to build a dictionary for a single parameter
 godot::Dictionary build_parm_dict(HAPI_Session *session, HAPI_NodeId node_id, HAPI_ParmInfo *parm_infos, int parm_count, int parm_index)
 {
@@ -34,9 +24,9 @@ godot::Dictionary build_parm_dict(HAPI_Session *session, HAPI_NodeId node_id, HA
 	parm_dict["type"] = static_cast<int>(parm.type);
 	parm_dict["size"] = parm.size;
 	parm_dict["visible"] = !parm.invisible;
-	parm_dict["name"] = get_parm_string(session, node_id, parm.nameSH);
-	parm_dict["label"] = get_parm_string(session, node_id, parm.labelSH);
-	parm_dict["help"] = get_parm_string(session, node_id, parm.helpSH);
+	parm_dict["name"] = HEGo::Util::Hapi::get_godot_string(session, parm.nameSH);
+	parm_dict["label"] = HEGo::Util::Hapi::get_godot_string(session, parm.labelSH);
+	parm_dict["help"] = HEGo::Util::Hapi::get_godot_string(session, parm.helpSH);
 	parm_dict["join_next"] = parm.joinNext;
 	parm_dict["label_none"] = parm.labelNone;
 	parm_dict["has_min"] = parm.hasMin;
@@ -55,11 +45,11 @@ godot::Dictionary build_parm_dict(HAPI_Session *session, HAPI_NodeId node_id, HA
 			HAPI_StringHandle tag_name_handle;
 			if (HoudiniApi::GetParmTagName(session, node_id, parm.id, j, &tag_name_handle) == HAPI_RESULT_SUCCESS)
 			{
-				godot::String tag_name = get_parm_string(session, node_id, tag_name_handle);
+				godot::String tag_name = HEGo::Util::Hapi::get_godot_string(session, tag_name_handle);
 				HAPI_StringHandle tag_value_handle;
 				if (HoudiniApi::GetParmTagValue(session, node_id, parm.id, tag_name.utf8().get_data(), &tag_value_handle) == HAPI_RESULT_SUCCESS)
 				{
-					godot::String tag_value = get_parm_string(session, node_id, tag_value_handle);
+					godot::String tag_value = HEGo::Util::Hapi::get_godot_string(session, tag_value_handle);
 					tags[tag_name] = tag_value;
 				}
 				else
@@ -75,13 +65,12 @@ godot::Dictionary build_parm_dict(HAPI_Session *session, HAPI_NodeId node_id, HA
 	if (parm.type >= HAPI_PARMTYPE_INT_START && parm.type <= HAPI_PARMTYPE_INT_END)
 	{
 		godot::Array values;
-		int *int_values = new int[parm.size];
-		HoudiniApi::GetParmIntValues(session, node_id, int_values, parm.intValuesIndex, parm.size);
+		std::vector<int> int_values(parm.size);
+		HoudiniApi::GetParmIntValues(session, node_id, int_values.data(), parm.intValuesIndex, parm.size);
 		for (int j = 0; j < parm.size; ++j)
 		{
 			values.append(int_values[j]);
 		}
-		delete[] int_values;
 		parm_dict["values"] = values;
 
 		// For multi-parm lists, include instance count and related fields
@@ -95,29 +84,27 @@ godot::Dictionary build_parm_dict(HAPI_Session *session, HAPI_NodeId node_id, HA
 	else if (parm.type >= HAPI_PARMTYPE_FLOAT_START && parm.type <= HAPI_PARMTYPE_FLOAT_END)
 	{
 		godot::Array values;
-		float *float_values = new float[parm.size];
-		HoudiniApi::GetParmFloatValues(session, node_id, float_values, parm.floatValuesIndex, parm.size);
+		std::vector<float> float_values(parm.size);
+		HoudiniApi::GetParmFloatValues(session, node_id, float_values.data(), parm.floatValuesIndex, parm.size);
 		for (int j = 0; j < parm.size; ++j)
 		{
 			values.append(float_values[j]);
 		}
-		delete[] float_values;
 		parm_dict["values"] = values;
 	}
 	else if (parm.type >= HAPI_PARMTYPE_STRING_START && parm.type <= HAPI_PARMTYPE_STRING_END)
 	{
 		godot::Array values;
-		HAPI_StringHandle *string_handles = new HAPI_StringHandle[parm.size];
+		std::vector<HAPI_StringHandle> string_handles(parm.size);
 		// Use evaluate = true to get evaluated strings (e.g., "1" instead of "$F").
 		// Set to false if you want raw strings (e.g., "$F").
-		if (HoudiniApi::GetParmStringValues(session, node_id, true, string_handles, parm.stringValuesIndex, parm.size) == HAPI_RESULT_SUCCESS)
+		if (HoudiniApi::GetParmStringValues(session, node_id, true, string_handles.data(), parm.stringValuesIndex, parm.size) == HAPI_RESULT_SUCCESS)
 		{
 			for (int j = 0; j < parm.size; ++j)
 			{
-				values.append(get_parm_string(session, node_id, string_handles[j]));
+				values.append(HEGo::Util::Hapi::get_godot_string(session, string_handles[j]));
 			}
 		}
-		delete[] string_handles;
 		parm_dict["values"] = values;
 	}
 
@@ -167,16 +154,15 @@ godot::Dictionary build_parm_dict(HAPI_Session *session, HAPI_NodeId node_id, HA
 	if (parm.choiceCount > 0)
 	{
 		godot::Array choices;
-		HAPI_ParmChoiceInfo *choice_infos = new HAPI_ParmChoiceInfo[parm.choiceCount];
-		HoudiniApi::GetParmChoiceLists(session, node_id, choice_infos, parm.choiceIndex, parm.choiceCount);
+		std::vector<HAPI_ParmChoiceInfo> choice_infos(parm.choiceCount);
+		HoudiniApi::GetParmChoiceLists(session, node_id, choice_infos.data(), parm.choiceIndex, parm.choiceCount);
 		for (int j = 0; j < parm.choiceCount; ++j)
 		{
 			godot::Dictionary choice_dict;
-			choice_dict["value"] = get_parm_string(session, node_id, choice_infos[j].valueSH);
-			choice_dict["label"] = get_parm_string(session, node_id, choice_infos[j].labelSH);
+			choice_dict["value"] = HEGo::Util::Hapi::get_godot_string(session, choice_infos[j].valueSH);
+			choice_dict["label"] = HEGo::Util::Hapi::get_godot_string(session, choice_infos[j].labelSH);
 			choices.append(choice_dict);
 		}
-		delete[] choice_infos;
 		parm_dict["choices"] = choices;
 	}
 
@@ -203,10 +189,9 @@ godot::Dictionary get_parm_dict(HEGoSessionManager *session_mgr, HAPI_NodeId nod
 	}
 
 	// Allocate array for parameter info
-	HAPI_ParmInfo *parm_infos = new HAPI_ParmInfo[node_info.parmCount];
-	if (HoudiniApi::GetParameters(session, node_id, parm_infos, 0, node_info.parmCount) != HAPI_RESULT_SUCCESS)
+	std::vector<HAPI_ParmInfo> parm_infos(node_info.parmCount);
+	if (HoudiniApi::GetParameters(session, node_id, parm_infos.data(), 0, node_info.parmCount) != HAPI_RESULT_SUCCESS)
 	{
-		delete[] parm_infos;
 		return result;
 	}
 
@@ -222,14 +207,13 @@ godot::Dictionary get_parm_dict(HEGoSessionManager *session_mgr, HAPI_NodeId nod
 		}
 
 		// Create a dictionary for this parameter
-		godot::Dictionary parm_dict = build_parm_dict(session, node_id, parm_infos, node_info.parmCount, i);
+		godot::Dictionary parm_dict = build_parm_dict(session, node_id, parm_infos.data(), node_info.parmCount, i);
 
 		// Get parameter name using string handle
-		godot::String parm_name = get_parm_string(session, node_id, parm.nameSH);
+		godot::String parm_name = HEGo::Util::Hapi::get_godot_string(session, parm.nameSH);
 		result[parm_name] = parm_dict;
 	}
 
-	delete[] parm_infos;
 	return result;
 }
 

@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoCurveOutput" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Turns the curves of a cooked HDA into [Path3D] nodes under [code]Outputs/[/code].
+	</brief_description>
+	<description>
+		The curve geometry itself is built by [HEGoCurveBuilder]; this only decides where the nodes go and reuses existing ones so anything referencing a path keeps working.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="output_phase" qualifiers="static">
+			<return type="String" />
+			<description>
+				Name of the cook phase this handler is timed under.
+			</description>
+		</method>
+		<method name="should_handle" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="summary" type="Dictionary" />
+			<description>
+				Whether the cook produced curves.
+			</description>
+		</method>
+		<method name="handle" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+				Fetches the cooked curves and builds the Path3D output.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="NODE_PATH_ATTRIB" value="&quot;hego_node_path&quot;">
+			Prim attribute naming the node a curve should end up at.
+		</constant>
+		<constant name="DEFAULT_CURVE_FOLDER" value="&quot;Curves&quot;">
+			Folder generated curves go into when a curve does not name its own path.
+		</constant>
+	</constants>
+</class>

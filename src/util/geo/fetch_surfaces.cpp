@@ -1,6 +1,9 @@
 #include "fetch_surfaces.h"
 
 #include "util/attrib/fetch_attribs.h"
+#include "util/geo/geo_cache.h"
+
+#include <vector>
 #include "util/geo/output.h"
 #include "util/geo/part_selection.h"
 #include "util/hego_util.h"
@@ -66,10 +69,65 @@ godot::Array invert_vector3_array(const godot::Array &values)
 	return inverted;
 }
 
+bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &point_attribs, HAPI_PartInfo &out_part, godot::Array &out_prims,
+		godot::Array &out_vertex_point_indices, godot::Dictionary &out_point_attrs)
+{
+	const HAPI_Session *session = cache.session();
+	const HAPI_GeoInfo &geo_info = cache.geo_info();
+
+	if (!find_part_by_type(session, geo_info, HAPI_PARTTYPE_MESH, out_part))
+	{
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
+		return false;
+	}
+	if (out_part.faceCount <= 0)
+	{
+		return false;
+	}
+
+	std::vector<int> face_counts(out_part.faceCount);
+	HOUDINI_CHECK_ERROR_RETURN(HoudiniApi::GetFaceCounts(session, geo_info.nodeId, out_part.id, face_counts.data(), 0, out_part.faceCount), false);
+	std::vector<int> vertex_point_indices(out_part.vertexCount);
+	HOUDINI_CHECK_ERROR_RETURN(HoudiniApi::GetVertexList(session, geo_info.nodeId, out_part.id, vertex_point_indices.data(), 0, out_part.vertexCount), false);
+
+	out_prims = convert_face_counts_to_array(face_counts);
+
+	out_vertex_point_indices = godot::Array();
+	out_vertex_point_indices.resize(static_cast<int>(vertex_point_indices.size()));
+	for (size_t i = 0; i < vertex_point_indices.size(); i++)
+	{
+		out_vertex_point_indices[static_cast<int>(i)] = vertex_point_indices[i];
+	}
+
+	out_point_attrs = godot::Dictionary();
+	out_point_attrs["P"] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, "P");
+
+	for (int i = 0; i < point_attribs.size(); i++)
+	{
+		const godot::String name = point_attribs[i];
+		if (name == "uv" || name == "uv2")
+		{
+			// Houdini's UV origin is bottom-left, Godot's is top-left.
+			out_point_attrs[name] = flip_uv_v_axis(cache.attribute(out_part, HAPI_ATTROWNER_POINT, name));
+		}
+		else if (name == "tangents")
+		{
+			out_point_attrs["tangentu"] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, "tangentu");
+			out_point_attrs["tangentv"] = invert_vector3_array(cache.attribute(out_part, HAPI_ATTROWNER_POINT, "tangentv"));
+		}
+		else
+		{
+			out_point_attrs[name] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, name);
+		}
+	}
+
+	return true;
+}
+
 godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config, bool auto_cook)
 {
 	HEGo::Util::Log::line();
-	HEGo::Util::Log::message("Fetching Surface Dictionary");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Fetching Surface Dictionary");
 	HAPI_Result session_valid = HoudiniApi::IsSessionValid(session_mgr->get_session());
 	if (session_valid != HAPI_RESULT_SUCCESS)
 	{
@@ -88,29 +146,52 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::Array filter_attrib_values = fetch_surfaces_config->get("filter_attrib_values");
 	godot::PackedStringArray split_attribs = fetch_surfaces_config->get("split_attribs");
 
-	HAPI_GeoInfo mesh_geo_info;
-	if (!get_display_geo_info(session_mgr, node_id, mesh_geo_info, auto_cook))
+	// Shared with every other output of this cook, so attributes several of them
+	// want only cross the connection once.
+	std::shared_ptr<GeoCache> cache = GeoCache::acquire(session_mgr, node_id, auto_cook);
+	if (!cache)
 	{
 		return godot::Dictionary();
 	}
+	const HAPI_GeoInfo &mesh_geo_info = cache->geo_info();
+
 	HAPI_PartInfo mesh_part_info;
 	if (!find_part_by_type(session_mgr->get_session(), mesh_geo_info, HAPI_PARTTYPE_MESH, mesh_part_info))
 	{
-		HEGo::Util::Log::error("Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Requested mesh(HAPI_PARTTYPE_MESH) but no mesh part was found.");
 		return godot::Dictionary();
 	}
-	if (mesh_part_info.faceCount <= 0)
+	godot::PackedStringArray point_attribs;
+	if (normal)
+	{
+		point_attribs.append("N");
+	}
+	if (color)
+	{
+		point_attribs.append("Cd");
+	}
+	if (uv)
+	{
+		point_attribs.append("uv");
+	}
+	if (uv2)
+	{
+		point_attribs.append("uv2");
+	}
+	if (tangents)
+	{
+		point_attribs.append("tangents");
+	}
+
+	HAPI_PartInfo prepared_part;
+	godot::Array prims;
+	godot::Array vt_pt_indices;
+	godot::Dictionary point_attrs;
+	if (!prepare_surface_data(*cache, point_attribs, prepared_part, prims, vt_pt_indices, point_attrs))
 	{
 		return godot::Dictionary();
 	}
-	std::vector<int> face_counts(mesh_part_info.faceCount);
-	HOUDINI_CHECK_ERROR(
-			HoudiniApi::GetFaceCounts(session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, face_counts.data(), 0, mesh_part_info.faceCount));
-	std::vector<int> vertex_point_indices(mesh_part_info.vertexCount);
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetVertexList(
-			session_mgr->get_session(), mesh_geo_info.nodeId, mesh_part_info.id, vertex_point_indices.data(), 0, mesh_part_info.vertexCount));
-
-	godot::Array prims = convert_face_counts_to_array(face_counts);
+	mesh_part_info = prepared_part;
 
 	// get read, split and filter attrs
 	godot::Dictionary read_attribs_dict;
@@ -120,39 +201,6 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::Dictionary seen_prim_attrs;
 	godot::Array unique_prim_attrs;
 
-	godot::Dictionary point_attrs;
-	point_attrs["P"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "P");
-
-	if (normal)
-	{
-		point_attrs["N"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "N");
-	}
-	if (color)
-	{
-		point_attrs["Cd"] = HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "Cd");
-	}
-	if (uv)
-	{
-		point_attrs["uv"] =
-				flip_uv_v_axis(HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv"));
-	}
-	if (uv2)
-	{
-		point_attrs["uv2"] =
-				flip_uv_v_axis(HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "uv2"));
-	}
-	if (tangents)
-	{
-		HEGo::Util::Log::message("getting tangent attrs");
-		point_attrs["tangentu"] =
-				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentu");
-		point_attrs["tangentv"] = invert_vector3_array(
-				HEGo::Util::Attribs::fetch_vector3(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_POINT, "tangentv"));
-	}
-	else
-	{
-		HEGo::Util::Log::message("Getting tangents disabled");
-	}
 	for (int i = 0; i < read_attribs.size(); i++)
 	{
 		godot::String attr_name = read_attribs[i];
@@ -184,8 +232,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	for (int i = 0; i < unique_prim_attrs.size(); i++)
 	{
 		godot::String attr_name = unique_prim_attrs[i];
-		prim_attr_cache[attr_name] =
-				HEGo::Util::Attribs::fetch_by_name(session_mgr->get_session(), mesh_geo_info, mesh_part_info, HAPI_ATTROWNER_PRIM, attr_name.utf8().get_data());
+		prim_attr_cache[attr_name] = cache->attribute(mesh_part_info, HAPI_ATTROWNER_PRIM, attr_name);
 	}
 
 	for (int i = 0; i < read_attribs.size(); i++)
@@ -236,19 +283,14 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 
 	godot::Dictionary split_prim_dictionary = HEGo::Util::Geo::build_nested_dictionary(split_attribs, split_attribs_dict, int_ids, read_attribs_dict, 0);
 
-	godot::Array vt_pt_indices;
-	for (int i = 0; i < vertex_point_indices.size(); i++)
-	{
-		vt_pt_indices.append(vertex_point_indices[i]);
-	}
 	modify_base_entries(split_prim_dictionary, vt_pt_indices, point_attrs, filtered_prims);
-	HEGo::Util::Log::message("Finished fetching surfaces");
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Finished fetching surfaces");
 	HEGo::Util::Log::line();
 	return split_prim_dictionary;
 }
 
 void modify_base_entries(
-		godot::Dictionary &nested_dict, godot::Array &vertex_point_indices, const godot::Dictionary &point_attrs, const godot::Array &filtered_prims)
+		godot::Dictionary &nested_dict, const godot::Array &vertex_point_indices, const godot::Dictionary &point_attrs, const godot::Array &filtered_prims)
 {
 	// Check if we are at the base level by looking for the "ids" key
 	if (nested_dict.has("ids"))
@@ -262,7 +304,11 @@ void modify_base_entries(
 		}
 
 		godot::Dictionary filtered_point_attrs = point_attrs;
-		filter_and_update_dictionary(filtered_point_attrs, id_arr, vertex_point_indices);
+
+		// Each group gets its own mapping and applies it only to its own vertices.
+		// Nothing shared is rewritten, so groups cannot disturb each other even when
+		// they share points, and no group walks the whole mesh's vertex list.
+		const godot::PackedInt32Array index_mapping = filter_and_update_dictionary(filtered_point_attrs, id_arr, vertex_point_indices);
 		godot::Array surface_array;
 		surface_array.resize(godot::Mesh::ARRAY_MAX);
 		surface_array[godot::Mesh::ARRAY_VERTEX] = godot::PackedVector3Array(filtered_point_attrs["P"]);
@@ -321,11 +367,11 @@ void modify_base_entries(
 				int vertex_count = tangentu_attr.size();
 				if (tangentv_attr.size() != vertex_count || normal_attr.size() != vertex_count)
 				{
-					HEGo::Util::Log::error("Tangent arrays and normal array size mismatch!");
+					HEGo::Util::Log::error(HEGo::Util::Log::Category::OUTPUT, "Tangent arrays and normal array size mismatch!");
 				}
 				else
 				{
-					HEGo::Util::Log::message("Calculating tangents");
+					HEGo::Util::Log::debug(HEGo::Util::Log::Category::OUTPUT, "Calculating tangents");
 					godot::PackedFloat32Array tangent_array;
 					tangent_array.resize(vertex_count * 4); // 4 floats per vertex: [tangent.x, tangent.y, tangent.z, bitangent_sign]
 
@@ -362,7 +408,12 @@ void modify_base_entries(
 			int start = id_range.x;
 			for (int j = 0; j < id_range.y; j++)
 			{
-				indices.append(vertex_point_indices[start + j]);
+				const int old_index = vertex_point_indices[start + j];
+				const int new_index = (old_index >= 0 && old_index < index_mapping.size()) ? index_mapping[old_index] : -1;
+				// An unmapped vertex means the point was not marked used, which should
+				// not happen for a group's own vertices; keep the original index rather
+				// than writing a negative one into the mesh.
+				indices.append(new_index >= 0 ? new_index : old_index);
 			}
 		}
 
@@ -389,24 +440,18 @@ void modify_base_entries(
 	}
 }
 
-void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::Array &id_arr, godot::Array &vertex_point_indices)
+godot::PackedInt32Array filter_and_update_dictionary(
+		godot::Dictionary &point_attrs, const godot::Array &id_arr, const godot::Array &vertex_point_indices)
 {
 	// Get the keys from the point_attrs dictionary
 	godot::Array keys = point_attrs.keys();
 	godot::Array first_attr = point_attrs[keys[0]];
+	const int point_count = first_attr.size();
 
-	// Step 1: Mark which indices in point_attrs are being used
-	godot::Array is_index_used;
-	is_index_used.resize(first_attr.size());
+	// Step 1: Mark which points this group's primitives use. Plain bytes rather
+	// than an Array, which would box one Variant per point of the whole mesh.
+	std::vector<bool> is_index_used(point_count, false);
 
-	// Initialize all indices to false (unused)
-	for (int i = 0; i < is_index_used.size(); ++i)
-	{
-		is_index_used[i] = false;
-	}
-
-	// Iterate through id_arr to mark the relevant ranges of
-	// vertex_point_indices as used
 	for (int i = 0; i < id_arr.size(); ++i)
 	{
 		godot::Vector2i range = id_arr[i];
@@ -417,7 +462,7 @@ void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::A
 		{
 			// Mark the vertex_point_indices within this range as used
 			int vertex_index = vertex_point_indices[j];
-			if (vertex_index < is_index_used.size())
+			if (vertex_index >= 0 && vertex_index < point_count)
 			{
 				is_index_used[vertex_index] = true;
 			}
@@ -425,24 +470,14 @@ void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::A
 	}
 
 	// Step 2: Create a mapping from old indices to new indices (compact the
-	// used indices)
-	godot::Array index_mapping; // Maps old indices to new indices
-	index_mapping.resize(vertex_point_indices.size());
+	// used indices). One entry per point, not per vertex.
+	godot::PackedInt32Array index_mapping;
+	index_mapping.resize(point_count);
 
-	// Initialize the mapping with invalid values (-1)
-	for (int i = 0; i < index_mapping.size(); ++i)
-	{
-		index_mapping[i] = -1;
-	}
-
-	// Assign new indices for only the used entries
 	int next_available_index = 0;
-	for (int i = 0; i < is_index_used.size(); ++i)
+	for (int i = 0; i < point_count; ++i)
 	{
-		if (is_index_used[i])
-		{
-			index_mapping[i] = next_available_index++;
-		}
+		index_mapping.set(i, is_index_used[i] ? next_available_index++ : -1);
 	}
 
 	// Step 3: Filter point_attrs arrays based on the used indices
@@ -455,8 +490,9 @@ void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::A
 		godot::Array original_array = point_attrs[key];
 		godot::Array filtered_array;
 
-		// Only append used entries to the filtered array
-		for (int i = 0; i < original_array.size(); ++i)
+		// Only append used entries to the filtered array. The bound keeps a
+		// mismatched attribute length from reading past the used-point flags.
+		for (int i = 0; i < original_array.size() && i < point_count; ++i)
 		{
 			if (is_index_used[i])
 			{
@@ -468,18 +504,11 @@ void filter_and_update_dictionary(godot::Dictionary &point_attrs, const godot::A
 		filtered_point_attrs[key] = filtered_array;
 	}
 
-	// Step 4: Update vertex_point_indices to reflect the new compacted indices
-	for (int i = 0; i < vertex_point_indices.size(); ++i)
-	{
-		int old_index = vertex_point_indices[i];
-		if (old_index < index_mapping.size() && int(index_mapping[old_index]) != -1)
-		{
-			vertex_point_indices[i] = index_mapping[old_index];
-		}
-	}
-
-	// Step 5: Replace the original point_attrs with the filtered version
+	// Step 4: Replace the original point_attrs with the filtered version. The
+	// caller applies the mapping to its own vertices; the shared vertex list is
+	// left alone.
 	point_attrs = filtered_point_attrs;
+	return index_mapping;
 }
 
 } // namespace Geo

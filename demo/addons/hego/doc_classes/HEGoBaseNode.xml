@@ -20,11 +20,13 @@ Returns the Houdini node id, or [code]-1[/code] when not instantiated.
 </description>
 </method>
 <method name="instantiate">
-<return type="void" />
+<return type="HEGoTask" />
 <description>
-Creates the underlying Houdini node.
+Submits a task to create the underlying Houdini node.
 
 This base implementation does nothing. Concrete subclasses override it and usually register themselves with the session manager after successful creation.
+
+Returns an [HEGoTask] that completes when the node has been created.
 </description>
 </method>
 <method name="reset_node_id">

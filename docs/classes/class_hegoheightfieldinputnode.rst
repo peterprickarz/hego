@@ -41,11 +41,11 @@ Methods
 .. table::
    :widths: auto
 
-   +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                      |
-   +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void| | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0\ ) |
-   +--------+------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                                                |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -60,9 +60,9 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-|void| **instantiate**\ (\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_instantiate>`
+:ref:`HEGoTask<class_HEGoTask>` **instantiate**\ (\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_instantiate>`
 
-Creates a Houdini HeightField input network for this wrapper.
+Submits a task to create a Houdini HeightField input network for this wrapper.
 
 
 
@@ -84,9 +84,9 @@ On failure, all stored ids are reset to invalid values and an error is logged.
 
 .. rst-class:: classref-method
 
-|void| **set_layers**\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_set_layers>`
+:ref:`HEGoTask<class_HEGoTask>` **set_layers**\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_set_layers>`
 
-Uploads all supplied layers into a newly created HeightField input node.
+Submits a task to upload all supplied layers into a newly created HeightField input node.
 
 
 
@@ -136,7 +136,7 @@ Resolution and defaults:
 
 - The first valid ``image`` found across all layers sets the heightfield resolution.
 
-- If no valid image exists in any layer, the call logs an error and returns without writing layers.
+- If no valid image exists in any layer, the task fails with an error.
 
 - If ``height`` and/or ``mask`` are missing, they are created as zero-filled layers.
 
@@ -161,6 +161,10 @@ Failure behavior:
 - If no active Houdini session exists, layer upload cannot proceed.
 
 - Any HAPI node creation or write failure logs an error and aborts the current layer build.
+
+
+
+Layer content is hashed internally (including image pixel data). If the layers, voxel size, and height scale are all identical to the previous call a no-op task is returned, unless ``force`` is ``true``. Pass ``force`` when image data may have been modified in-place (for example Terrain3D sculpting).
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

@@ -4,6 +4,7 @@
 #include "util/geo/input.h"
 #include "util/geo/output.h"
 #include "util/geo/transform.h"
+#include "util/hego_util.h"
 #include "util/log/log.h"
 #include "util/node/create_nodes.h"
 #include "util/parm/set_parms.h"
@@ -12,8 +13,16 @@
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <vector>
+
 namespace HEGo
 {
+namespace
+{
+// Project setting holding the Houdini install HEGo talks to.
+const char *HOUDINI_PATH_SETTING = "hego/houdini_installation_path";
+} // namespace
+
 HEGoAPI *HEGoAPI::singleton = nullptr;
 
 HEGoAPI::HEGoAPI() : session_mgr()
@@ -22,9 +31,9 @@ HEGoAPI::HEGoAPI() : session_mgr()
 
 	// Set up Houdini installation path project setting with default
 	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
-	if (!project_settings->has_setting("hego/houdini_installation_path"))
+	if (!project_settings->has_setting(HOUDINI_PATH_SETTING))
 	{
-		project_settings->set_setting("hego/houdini_installation_path", "C:/Program Files/Side Effects Software/Houdini 20.5.654");
+		project_settings->set_setting(HOUDINI_PATH_SETTING, HEGoPlatform::get_default_houdini_path());
 	}
 
 	HEGoPlatform::set_env_vars();
@@ -32,10 +41,12 @@ HEGoAPI::HEGoAPI() : session_mgr()
 
 HEGoAPI::~HEGoAPI()
 {
-	// Ensure session is stopped before destroying
+	// Stop scheduler first — worker thread must exit before session cleanup
+	scheduler.stop();
+
 	if (session_mgr.is_session_active())
 	{
-		HEGo::Util::Log::message(godot::String("HEGoAPI destructor: Stopping active session"));
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, godot::String("HEGoAPI destructor: Stopping active session"));
 		session_mgr.stop_session();
 	}
 
@@ -49,20 +60,35 @@ HEGoAPI *HEGoAPI::get_singleton() { return singleton; }
 
 bool HEGoAPI::start_session(int connection_type, const godot::String &connection_data)
 {
-	HEGoPlatform::initialize_hapi();
+	HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, connection_data);
 
-	HEGo::Util::Log::message(connection_data);
+	// connection_type comes straight from GDScript, so check it names a session
+	// type we can actually start before casting it to the enum.
+	if (!HEGoSessionManager::is_supported_session_type(connection_type))
+	{
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, godot::String("Unsupported session type ") + godot::String::num_int64(connection_type) +
+				". Use HEGoAPI.SESSION_IN_PROCESS, SESSION_NAMED_PIPE or SESSION_TCP_SOCKET.");
+		return false;
+	}
 
-	// Convert Godot connection type to SessionManager enum
 	HEGoSessionManager::SessionType session_type = static_cast<HEGoSessionManager::SessionType>(connection_type);
 
 	// Convert Godot string to std::string
 	std::string connection_data_str = std::string(connection_data.utf8().get_data());
 
-	return session_mgr.start_session(session_type, connection_data_str);
+	bool success = session_mgr.start_session(session_type, connection_data_str);
+	if (success)
+	{
+		scheduler.start(&session_mgr);
+	}
+	return success;
 }
 
-bool HEGoAPI::stop_session() { return session_mgr.stop_session(); }
+bool HEGoAPI::stop_session()
+{
+	scheduler.stop();
+	return session_mgr.stop_session();
+}
 
 bool HEGoAPI::is_session_active() { return session_mgr.is_session_active(); }
 
@@ -71,13 +97,16 @@ HEGoSessionManager *HEGoAPI::get_session_manager() { return &session_mgr; }
 void HEGoAPI::set_houdini_installation_path(const godot::String &path)
 {
 	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
-	project_settings->set_setting("hego/houdini_installation_path", path);
+	project_settings->set_setting(HOUDINI_PATH_SETTING, path);
 }
 
 godot::String HEGoAPI::get_houdini_installation_path() const
 {
-	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
-	return project_settings->get_setting("hego/houdini_installation_path", "C:/Program Files/Side Effects Software/Houdini 20.5.654");
+	// Resolved the same way the loader resolves it, so the setting, $HFS and this
+	// platform's default are consulted in that order. Reading the setting directly
+	// would hand back an empty string when it is set but blank, and an empty prefix
+	// makes every library look built-in in get_hda_libraries().
+	return godot::String(HEGoPlatform::get_houdini_path());
 }
 
 godot::Dictionary HEGoAPI::get_hda_libraries()
@@ -86,7 +115,7 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 
 	if (!session_mgr.is_session_active())
 	{
-		HEGo::Util::Log::error(godot::String("Session is not active. Cannot get HDA libraries."));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, godot::String("Session is not active. Cannot get HDA libraries."));
 		return result;
 	}
 
@@ -97,17 +126,16 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 	res = HoudiniApi::GetLoadedAssetLibraryCount(session_mgr.get_session(), &library_count);
 	if (res != HAPI_RESULT_SUCCESS || library_count == 0)
 	{
-		HEGo::Util::Log::message(godot::String("No asset libraries loaded"));
+		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, godot::String("No asset libraries loaded"));
 		return result;
 	}
 
 	// Get library IDs
-	HAPI_AssetLibraryId *library_ids = new HAPI_AssetLibraryId[library_count];
-	res = HoudiniApi::GetAssetLibraryIds(session_mgr.get_session(), library_ids, 0, library_count);
+	std::vector<HAPI_AssetLibraryId> library_ids(library_count);
+	res = HoudiniApi::GetAssetLibraryIds(session_mgr.get_session(), library_ids.data(), 0, library_count);
 	if (res != HAPI_RESULT_SUCCESS)
 	{
-		delete[] library_ids;
-		HEGo::Util::Log::error(godot::String("Failed to get asset library IDs"));
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::SESSION, godot::String("Failed to get asset library IDs"));
 		return result;
 	}
 
@@ -142,44 +170,31 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 			continue;
 		}
 
+		godot::String full_path = HEGo::Util::Hapi::get_godot_string(session_mgr.get_session(), file_path_handle);
+		if (!full_path.is_empty())
 		{
-			int buffer_length = 0;
-			res = HoudiniApi::GetStringBufLength(session_mgr.get_session(), file_path_handle, &buffer_length);
-			if (res == HAPI_RESULT_SUCCESS && buffer_length > 0)
+			// Filter out built-in Houdini libraries by checking if path starts with any known Houdini directories
+			godot::String normalized_path = full_path.to_lower().replace("\\", "/");
+			bool is_builtin = false;
+			for (int j = 0; j < builtin_paths.size(); j++)
 			{
-				char *buffer = new char[buffer_length];
-				res = HoudiniApi::GetString(session_mgr.get_session(), file_path_handle, buffer, buffer_length);
-				if (res == HAPI_RESULT_SUCCESS)
+				if (normalized_path.begins_with(builtin_paths[j]))
 				{
-					godot::String full_path = godot::String(buffer);
-
-					// Filter out built-in Houdini libraries by checking if path starts with any known Houdini directories
-					godot::String normalized_path = full_path.to_lower().replace("\\", "/");
-					bool is_builtin = false;
-					for (int j = 0; j < builtin_paths.size(); j++)
-					{
-						if (normalized_path.begins_with(builtin_paths[j]))
-						{
-							is_builtin = true;
-							break;
-						}
-					}
-
-					if (is_builtin)
-					{
-						// Skip built-in Houdini libraries
-						delete[] buffer;
-						continue;
-					}
-
-					library_info["file_path"] = full_path;
-
-					// Extract library name from file path
-					godot::String library_name = full_path.get_file().get_basename();
-					library_info["name"] = library_name;
+					is_builtin = true;
+					break;
 				}
-				delete[] buffer;
 			}
+
+			// Skip built-in Houdini libraries
+			if (is_builtin)
+			{
+				continue;
+			}
+
+			library_info["file_path"] = full_path;
+
+			// Extract library name from file path
+			library_info["name"] = full_path.get_file().get_basename();
 		}
 
 		library_info["id"] = library_ids[i];
@@ -193,28 +208,20 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 		godot::PackedStringArray assets;
 		if (res == HAPI_RESULT_SUCCESS && asset_count > 0)
 		{
-			HAPI_StringHandle *asset_name_handles = new HAPI_StringHandle[asset_count];
-			res = HoudiniApi::GetAvailableAssets(session_mgr.get_session(), library_ids[i], asset_name_handles, asset_count);
+			std::vector<HAPI_StringHandle> asset_name_handles(asset_count);
+			res = HoudiniApi::GetAvailableAssets(session_mgr.get_session(), library_ids[i], asset_name_handles.data(), asset_count);
 			if (res == HAPI_RESULT_SUCCESS)
 			{
 				// Convert string handles to actual strings
 				for (int j = 0; j < asset_count; j++)
 				{
-					int buffer_length = 0;
-					res = HoudiniApi::GetStringBufLength(session_mgr.get_session(), asset_name_handles[j], &buffer_length);
-					if (res == HAPI_RESULT_SUCCESS && buffer_length > 0)
+					godot::String asset_name = HEGo::Util::Hapi::get_godot_string(session_mgr.get_session(), asset_name_handles[j]);
+					if (!asset_name.is_empty())
 					{
-						char *buffer = new char[buffer_length];
-						res = HoudiniApi::GetString(session_mgr.get_session(), asset_name_handles[j], buffer, buffer_length);
-						if (res == HAPI_RESULT_SUCCESS)
-						{
-							assets.append(godot::String(buffer));
-						}
-						delete[] buffer;
+						assets.append(asset_name);
 					}
 				}
 			}
-			delete[] asset_name_handles;
 		}
 
 		library_info["assets"] = assets;
@@ -224,16 +231,20 @@ godot::Dictionary HEGoAPI::get_hda_libraries()
 		result[key] = library_info;
 	}
 
-	delete[] library_ids;
 	return result;
 }
 
-int HEGoAPI::poll_cook_state()
-{
-	int status = HAPI_STATE_MAX;
-	HoudiniApi::GetStatus(session_mgr.get_session(), HAPI_STATUS_COOK_STATE, &status);
-	return status;
-}
+godot::Ref<HEGoTask> HEGoAPI::submit_task(godot::Ref<HEGoTask> task) { return scheduler.submit(task); }
+
+int HEGoAPI::get_task_pending_count() { return scheduler.get_pending_count(); }
+
+godot::Ref<HEGoTask> HEGoAPI::get_current_task() { return scheduler.get_current_task(); }
+
+godot::Array HEGoAPI::get_pending_tasks() { return scheduler.get_pending_tasks(); }
+
+godot::Array HEGoAPI::get_completed_task_history() { return scheduler.get_completed_history(); }
+
+void HEGoAPI::clear_completed_task_history() { scheduler.clear_completed_history(); }
 
 void HEGoAPI::_bind_methods()
 {
@@ -243,8 +254,20 @@ void HEGoAPI::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_houdini_installation_path", "path"), &HEGoAPI::set_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_houdini_installation_path"), &HEGoAPI::get_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_hda_libraries"), &HEGoAPI::get_hda_libraries);
-	godot::ClassDB::bind_method(godot::D_METHOD("poll_cook_state"), &HEGoAPI::poll_cook_state);
+
+	// Task scheduler
+	godot::ClassDB::bind_method(godot::D_METHOD("submit_task", "task"), &HEGoAPI::submit_task);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_task_pending_count"), &HEGoAPI::get_task_pending_count);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_current_task"), &HEGoAPI::get_current_task);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_pending_tasks"), &HEGoAPI::get_pending_tasks);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_completed_task_history"), &HEGoAPI::get_completed_task_history);
+	godot::ClassDB::bind_method(godot::D_METHOD("clear_completed_task_history"), &HEGoAPI::clear_completed_task_history);
 
 	godot::ClassDB::bind_static_method("HEGoAPI", godot::D_METHOD("get_singleton"), &HEGoAPI::get_singleton);
+
+	// So GDScript can say HEGoAPI.SESSION_NAMED_PIPE instead of a bare 2.
+	BIND_ENUM_CONSTANT(SESSION_IN_PROCESS);
+	BIND_ENUM_CONSTANT(SESSION_NAMED_PIPE);
+	BIND_ENUM_CONSTANT(SESSION_TCP_SOCKET);
 }
 } // namespace HEGo
