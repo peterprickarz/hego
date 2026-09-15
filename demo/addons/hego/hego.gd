@@ -36,6 +36,18 @@ func _enter_tree():
 	graph_gizmo_plugin.editor = graph_editor
 	graph_editor.gizmo_plugin = graph_gizmo_plugin
 	add_node_3d_gizmo_plugin(graph_gizmo_plugin)
+
+	graph_editor.toolbar = preload("res://addons/hego/graph_input/editor/graph_toolbar.tscn").instantiate()
+	graph_editor.attrib_panel = preload("res://addons/hego/graph_input/editor/graph_attrib_panel.tscn").instantiate()
+	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, graph_editor.toolbar)
+	add_control_to_container(CONTAINER_SPATIAL_EDITOR_BOTTOM, graph_editor.attrib_panel)
+	graph_editor.toolbar.visible = false
+	graph_editor.attrib_panel.visible = false
+	graph_editor.toolbar.mode_changed.connect(graph_editor.on_mode_changed)
+	graph_editor.toolbar.placement_changed.connect(graph_editor.on_placement_changed)
+	graph_editor.toolbar.world_axis_changed.connect(graph_editor.on_world_axis_changed)
+	graph_editor.toolbar.world_offset_changed.connect(graph_editor.on_world_offset_changed)
+	graph_editor.attrib_panel.attrib_changed.connect(graph_editor.on_attrib_changed)
 	
 	# Add HEGo project settings
 	_add_project_settings()
@@ -62,6 +74,13 @@ func _exit_tree():
 	if editor_selection and editor_selection.selection_changed.is_connected(_on_selection_changed):
 		editor_selection.selection_changed.disconnect(_on_selection_changed)
 	
+	if graph_editor:
+		if graph_editor.toolbar:
+			remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, graph_editor.toolbar)
+			graph_editor.toolbar.queue_free()
+		if graph_editor.attrib_panel:
+			remove_control_from_container(CONTAINER_SPATIAL_EDITOR_BOTTOM, graph_editor.attrib_panel)
+			graph_editor.attrib_panel.queue_free()
 	if graph_gizmo_plugin:
 		remove_node_3d_gizmo_plugin(graph_gizmo_plugin)
 		graph_gizmo_plugin = null
@@ -111,6 +130,11 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 	if graph_editor:
 		return graph_editor.handle_input(viewport_camera, event)
 	return AFTER_GUI_INPUT_PASS
+
+
+func _forward_3d_draw_over_viewport(overlay: Control) -> void:
+	if graph_editor:
+		graph_editor.draw_overlay(overlay)
 
 
 func _on_selection_changed():

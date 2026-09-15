@@ -49,6 +49,29 @@ static func closest_connection(mouse: Vector2, projected: PackedVector2Array, co
 	return best
 
 
+## Indices whose projected positions lie inside [param rect].
+static func points_in_rect(rect: Rect2, projected: PackedVector2Array) -> PackedInt32Array:
+	var hits := PackedInt32Array()
+	for i in projected.size():
+		if rect.has_point(projected[i]):
+			hits.append(i)
+	return hits
+
+
+## Connection indices whose projected midpoint lies inside [param rect].
+static func connections_in_rect(rect: Rect2, projected: PackedVector2Array, connections: PackedInt32Array) -> PackedInt32Array:
+	var hits := PackedInt32Array()
+	var count := connections.size() / 2
+	for c in count:
+		var ia: int = connections[c * 2]
+		var ib: int = connections[c * 2 + 1]
+		if ia < 0 or ib < 0 or ia >= projected.size() or ib >= projected.size():
+			continue
+		if rect.has_point((projected[ia] + projected[ib]) * 0.5):
+			hits.append(c)
+	return hits
+
+
 ## Closest point on segment [param a]–[param b] to [param point].
 static func closest_on_segment(a: Vector3, b: Vector3, point: Vector3) -> Vector3:
 	var ab := b - a

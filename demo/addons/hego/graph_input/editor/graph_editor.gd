@@ -12,6 +12,8 @@ const CLICK_PIXELS := 5.0
 
 var plugin: EditorPlugin
 var gizmo_plugin: EditorNode3DGizmoPlugin
+var toolbar: Control
+var attrib_panel: Control
 var graph: HEGoGraphInput3D
 var mode: Mode = Mode.DRAW
 var placement_mode: int = HEGoGraphPlacement.Mode.CAMERA
@@ -28,6 +30,10 @@ var ctrl_held: bool = false
 
 var _press_pos := Vector2.ZERO
 var _pressed := false
+var _press_on_point := false
+var _box_dragging := false
+var _box_start := Vector2.ZERO
+var _box_end := Vector2.ZERO
 
 
 func edit(object: Object) -> void:
@@ -47,8 +53,14 @@ func edit(object: Object) -> void:
 
 
 func set_visible(visible: bool) -> void:
+	if toolbar:
+		toolbar.visible = visible
+	if attrib_panel:
+		attrib_panel.visible = visible
 	if not visible:
 		edit(null)
+	else:
+		_refresh_attrib_panel()
 
 
 func handle_input(camera: Camera3D, event: InputEvent) -> int:
@@ -70,6 +82,12 @@ func handle_input(camera: Camera3D, event: InputEvent) -> int:
 
 	if event is InputEventMouseMotion:
 		_update_hover(camera, event.position)
+		if _pressed and not _press_on_point and event.position.distance_to(_press_pos) > CLICK_PIXELS:
+			_box_dragging = true
+			_box_start = _press_pos
+			_box_end = event.position
+			plugin.update_overlays()
+			return EditorPlugin.AFTER_GUI_INPUT_STOP
 		if ctrl_held and last_point >= 0:
 			preview_cursor = _hit(camera, event.position)
 		else:
@@ -81,14 +99,22 @@ func handle_input(camera: Camera3D, event: InputEvent) -> int:
 		if event.pressed:
 			_press_pos = event.position
 			_pressed = true
+			_box_dragging = false
 			_update_hover(camera, event.position)
+			_press_on_point = hover_point >= 0
 			# Point handles belong to the gizmo, so a press on a point must pass
 			# through or dragging a point never starts.
-			if hover_point >= 0:
+			if _press_on_point:
 				return EditorPlugin.AFTER_GUI_INPUT_PASS
 			return EditorPlugin.AFTER_GUI_INPUT_STOP
 		if _pressed:
 			_pressed = false
+			if _box_dragging:
+				_box_end = event.position
+				_finish_box(camera, event.shift_pressed)
+				_box_dragging = false
+				plugin.update_overlays()
+				return EditorPlugin.AFTER_GUI_INPUT_STOP
 			if event.position.distance_to(_press_pos) <= CLICK_PIXELS:
 				_click(camera, event.position, event.shift_pressed, event.ctrl_pressed)
 				return EditorPlugin.AFTER_GUI_INPUT_STOP
@@ -186,6 +212,7 @@ func _select_points(indices: PackedInt32Array, additive: bool) -> void:
 		else:
 			selected_points.append(index)
 	graph.update_gizmos()
+	_refresh_attrib_panel()
 
 
 func _select_connections(indices: PackedInt32Array, additive: bool) -> void:
@@ -199,6 +226,7 @@ func _select_connections(indices: PackedInt32Array, additive: bool) -> void:
 		else:
 			selected_connections.append(index)
 	graph.update_gizmos()
+	_refresh_attrib_panel()
 
 
 func _clear_selection() -> void:
@@ -206,6 +234,44 @@ func _clear_selection() -> void:
 	selected_connections = PackedInt32Array()
 	if graph:
 		graph.update_gizmos()
+	_refresh_attrib_panel()
+
+
+func draw_overlay(overlay: Control) -> void:
+	if not _box_dragging:
+		return
+	var rect := Rect2(_box_start, _box_end - _box_start).abs()
+	overlay.draw_rect(rect, Color(0.2, 0.55, 1.0, 0.12), true)
+	overlay.draw_rect(rect, Color(0.2, 0.55, 1.0, 0.9), false, 1.0)
+
+
+func _finish_box(camera: Camera3D, additive: bool) -> void:
+	var rect := Rect2(_box_start, _box_end - _box_start).abs()
+	if rect.size.x < 2.0 and rect.size.y < 2.0:
+		return
+	var projected := PackedVector2Array()
+	projected.resize(graph.points.size())
+	for i in graph.points.size():
+		var global_pt: Vector3 = graph.to_global(graph.points[i])
+		if camera.is_position_behind(global_pt):
+			projected[i] = Vector2(-1e6, -1e6)
+		else:
+			projected[i] = camera.unproject_position(global_pt)
+	var pts := HEGoGraphPicking.points_in_rect(rect, projected)
+	var cons := HEGoGraphPicking.connections_in_rect(rect, projected, graph.connections)
+	if not additive:
+		selected_points = PackedInt32Array()
+		selected_connections = PackedInt32Array()
+	for index in pts:
+		if selected_points.find(index) < 0:
+			selected_points.append(index)
+	for index in cons:
+		if selected_connections.find(index) < 0:
+			selected_connections.append(index)
+	if selected_points.size() > 0:
+		last_point = selected_points[selected_points.size() - 1]
+	graph.update_gizmos()
+	_refresh_attrib_panel()
 
 
 func _update_hover(camera: Camera3D, mouse: Vector2) -> void:
@@ -235,6 +301,12 @@ func _update_hover(camera: Camera3D, mouse: Vector2) -> void:
 func _hit(camera: Camera3D, mouse: Vector2) -> Variant:
 	var origin := camera.project_ray_origin(mouse)
 	var direction := camera.project_ray_normal(mouse)
+	if placement_mode == HEGoGraphPlacement.Mode.GEOMETRY:
+		var tree := graph.get_tree()
+		var root: Node = tree.edited_scene_root if tree != null and tree.edited_scene_root != null else graph
+		var geo: Variant = HEGoGraphPlacement.intersect_scene(root, origin, direction, graph)
+		if geo != null:
+			return geo
 	var plane: Plane
 	if placement_mode == HEGoGraphPlacement.Mode.WORLD:
 		plane = HEGoGraphPlacement.world_plane(world_axis, graph.global_position, world_offset)
@@ -270,6 +342,43 @@ func _mutate(action: String, fn: Callable) -> void:
 func _on_graph_changed() -> void:
 	if graph:
 		graph.update_gizmos()
+	_refresh_attrib_panel()
+
+
+func _refresh_attrib_panel() -> void:
+	if attrib_panel and attrib_panel.has_method("rebuild"):
+		attrib_panel.rebuild(graph, selected_points, selected_connections)
+
+
+func on_mode_changed(new_mode: int) -> void:
+	mode = new_mode
+
+
+func on_placement_changed(new_mode: int) -> void:
+	placement_mode = new_mode
+
+
+func on_world_axis_changed(axis: int) -> void:
+	world_axis = axis
+
+
+func on_world_offset_changed(offset: float) -> void:
+	world_offset = offset
+
+
+func on_attrib_changed(owner_kind: int, name: String, value: Variant) -> void:
+	if graph == null:
+		return
+	if owner_kind == 0:
+		var indices := selected_points.duplicate()
+		_mutate("Set graph point attribute", func() -> void:
+			graph.set_point_attrib_on(name, indices, value)
+		)
+	else:
+		var indices := selected_connections.duplicate()
+		_mutate("Set graph connection attribute", func() -> void:
+			graph.set_connection_attrib_on(name, indices, value)
+		)
 
 
 func handle_id_moved(handle_id: int, local_position: Vector3) -> void:

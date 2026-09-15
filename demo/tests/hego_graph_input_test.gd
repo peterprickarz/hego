@@ -170,6 +170,11 @@ func _initialize() -> void:
 	var world_hit: Variant = HEGoGraphPlacement.intersect_ray(Vector3(2, 10, 4), Vector3(0, -1, 0), world)
 	check(world_hit != null and is_equal_approx(world_hit.y, 4.0), "XZ plane offset sits at origin.y + offset")
 	check(HEGoGraphPlacement.intersect_ray(Vector3(0, 0, 0), Vector3(0, 0, -1), cam_plane) == null, "a ray away from the plane misses")
+	var box := Rect2(Vector2(0, 0), Vector2(50, 50))
+	check(HEGoGraphPicking.points_in_rect(box, projected) == PackedInt32Array([0]), "box select keeps the point inside the rect")
+	check(HEGoGraphPicking.connections_in_rect(box, projected, segs).is_empty(), "box select skips a segment whose midpoint is outside")
+	var wide := Rect2(Vector2(0, 0), Vector2(200, 200))
+	check(HEGoGraphPicking.connections_in_rect(wide, projected, segs).size() == 2, "a large box selects both segments")
 
 	var restored := make_graph()
 	restored.add_point(Vector3(1, 2, 3))
