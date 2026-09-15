@@ -85,6 +85,9 @@ GROUPS = [
             "HEGoNodeUtil",
             "HEGoInputNodes",
             "HEGoCookTimings",
+            "HEGoGraphInput3D",
+            "HEGoGraphAttributes",
+            "HEGoGraphAttributeDef",
         ],
     ),
     (
