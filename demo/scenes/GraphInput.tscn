@@ -1,0 +1,49 @@
+[gd_scene load_steps=7 format=3 uid="uid://bqgraphinputdemo"]
+
+[ext_resource type="Script" uid="uid://blnvgo8r28r5p" path="res://addons/hego/HEGoNode3D.gd" id="1_hego"]
+[ext_resource type="Script" path="res://addons/hego/graph_input/hego_graph_input_3d.gd" id="2_graph"]
+[ext_resource type="Script" path="res://addons/hego/graph_input/hego_graph_attributes.gd" id="3_attrs"]
+[ext_resource type="Script" path="res://addons/hego/graph_input/hego_graph_attribute_def.gd" id="4_def"]
+
+[sub_resource type="Resource" id="width_def"]
+script = ExtResource("4_def")
+attribute_name = "width"
+owner = 0
+value_type = 0
+default_float = 0.2
+
+[sub_resource type="Resource" id="kind_def"]
+script = ExtResource("4_def")
+attribute_name = "kind"
+owner = 0
+value_type = 2
+default_string = "fence"
+string_options = PackedStringArray("fence", "wall", "rail")
+
+[sub_resource type="Resource" id="closed_def"]
+script = ExtResource("4_def")
+attribute_name = "closed"
+owner = 1
+value_type = 1
+default_int = 0
+int_as_toggle = true
+
+[node name="GraphInputDemo" type="Node3D"]
+
+[node name="HEGoGraphInput3D" type="Node3D" parent="."]
+script = ExtResource("2_graph")
+points = PackedVector3Array(0, 0, 0, 4, 0, 0, 4, 0, 3, 0, 0, 3, 2, 0, 1.5)
+connections = PackedInt32Array(0, 1, 1, 2, 2, 3, 3, 0, 0, 4, 2, 4)
+
+[node name="HEGoGraphAttributes" type="Node" parent="HEGoGraphInput3D"]
+script = ExtResource("3_attrs")
+attributes = Array[ExtResource("4_def")]([SubResource("width_def"), SubResource("kind_def"), SubResource("closed_def")])
+
+[node name="HEGoNode3D" type="Node3D" parent="."]
+script = ExtResource("1_hego")
+asset_name = "Sop/HEGo_FenceGenerator"
+input_stash = [{
+"inputs": ["HEGoGraphInput3D"],
+"settings": {}
+}]
+metadata/_custom_type_script = "uid://blnvgo8r28r5p"

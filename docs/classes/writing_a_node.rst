@@ -21,6 +21,12 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
      - Turns the Godot nodes wired into a :ref:`HEGoNode3D<class_HEGoNode3D>` into HEGo input nodes.
    * - :ref:`HEGoCookTimings<class_HEGoCookTimings>`
      - Collects the per-phase timings of a ``cook()`` call.
+   * - :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`
+     - A 3D graph of points and connections that can be fed into a :ref:`HEGoNode3D<class_HEGoNode3D>` input.
+   * - :ref:`HEGoGraphAttributes<class_HEGoGraphAttributes>`
+     - Schema for a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`: the attributes its points and connections can carry.
+   * - :ref:`HEGoGraphAttributeDef<class_HEGoGraphAttributeDef>`
+     - One attribute a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` can store on its points or connections.
 
 .. toctree::
    :maxdepth: 1
@@ -32,3 +38,6 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
    class_hegonodeutil
    class_hegoinputnodes
    class_hegocooktimings
+   class_hegographinput3d
+   class_hegographattributes
+   class_hegographattributedef

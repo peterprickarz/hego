@@ -59,6 +59,9 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
 - :ref:`HEGoNodeUtil<class_HEGoNodeUtil>`
 - :ref:`HEGoInputNodes<class_HEGoInputNodes>`
 - :ref:`HEGoCookTimings<class_HEGoCookTimings>`
+- :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`
+- :ref:`HEGoGraphAttributes<class_HEGoGraphAttributes>`
+- :ref:`HEGoGraphAttributeDef<class_HEGoGraphAttributeDef>`
 
 Output handlers
 ---------------

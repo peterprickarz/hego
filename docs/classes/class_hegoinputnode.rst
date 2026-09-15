@@ -12,14 +12,14 @@ HEGoInputNode
 
 **Inherits:** :ref:`HEGoBaseInputNode<class_HEGoBaseInputNode>` **<** :ref:`HEGoTransformableNamedNode<class_HEGoTransformableNamedNode>` **<** :ref:`HEGoTransformableNode<class_HEGoTransformableNode>` **<** :ref:`HEGoBaseNode<class_HEGoBaseNode>` **<** :ref:`HEGoTrackableNode<class_HEGoTrackableNode>` **<** ``RefCounted``
 
-Creates Houdini input geometry from Godot mesh sources.
+Creates Houdini input geometry from Godot meshes or raw point and primitive arrays.
 
 .. rst-class:: classref-introduction-group
 
 Description
 -----------
 
-Use this node to upload mesh topology and attributes from either a ``Mesh`` resource or a ``MeshInstance3D``.
+Use this node to upload mesh topology and attributes from a ``Mesh`` or ``MeshInstance3D``, or to push raw points, polylines and polygons with :ref:`set_geo()<class_HEGoInputNode_method_set_geo>`.
 
 
 
@@ -37,13 +37,15 @@ Methods
 .. table::
    :widths: auto
 
-   +---------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoInputNode_method_instantiate>`\ (\ )                                                                                                                                   |
-   +---------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_geo_from_mesh<class_HEGoInputNode_method_set_geo_from_mesh>`\ (\ mesh\: ``Mesh``, attributes\: ``Array`` = [], force\: ``bool`` = false\ )                                               |
-   +---------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_geo_from_mesh_instance_3d<class_HEGoInputNode_method_set_geo_from_mesh_instance_3d>`\ (\ mesh_instance_3d\: ``MeshInstance3D``, attributes\: ``Array`` = [], force\: ``bool`` = false\ ) |
-   +---------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoInputNode_method_instantiate>`\ (\ )                                                                                                                                                                         |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_geo<class_HEGoInputNode_method_set_geo>`\ (\ points\: ``PackedVector3Array``, prim_type\: ``String``, vertices\: ``PackedInt32Array``, counts\: ``PackedInt32Array``, attributes\: ``Array`` = [], force\: ``bool`` = false\ ) |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_geo_from_mesh<class_HEGoInputNode_method_set_geo_from_mesh>`\ (\ mesh\: ``Mesh``, attributes\: ``Array`` = [], force\: ``bool`` = false\ )                                                                                     |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_geo_from_mesh_instance_3d<class_HEGoInputNode_method_set_geo_from_mesh_instance_3d>`\ (\ mesh_instance_3d\: ``MeshInstance3D``, attributes\: ``Array`` = [], force\: ``bool`` = false\ )                                       |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -69,6 +71,30 @@ If a valid node id already exists, the implementation attempts to reuse or repla
 
 
 After creation, this wrapper is registered with the active session manager.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoInputNode_method_set_geo:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **set_geo**\ (\ points\: ``PackedVector3Array``, prim_type\: ``String``, vertices\: ``PackedInt32Array``, counts\: ``PackedInt32Array``, attributes\: ``Array`` = [], force\: ``bool`` = false\ ) :ref:`🔗<class_HEGoInputNode_method_set_geo>`
+
+Submits a task to upload raw geometry into this Houdini input node.
+
+
+
+\ ``prim_type`` is ``points`` (a point cloud), ``polyline`` (open linear curves, one primitive per count) or ``polygon`` (closed faces). ``vertices`` is the point-index list whose length must equal the sum of ``counts``. Pass empty ``vertices`` and ``counts`` for ``points``.
+
+
+
+\ ``attributes`` is an array of dictionaries: ``{ "name", "type": "point" or "prim", "value" }`` for a uniform value, or ``{ "name", "type", "values" }`` for a per-element array.
+
+
+
+Geometry content is hashed internally. If the arrays and attributes are identical to the previous call the upload is skipped and a no-op task is returned, unless ``force`` is ``true``.
 
 .. rst-class:: classref-item-separator
 

@@ -19,7 +19,7 @@ Turns the Godot nodes wired into a :ref:`HEGoNode3D<class_HEGoNode3D>` into HEGo
 Description
 -----------
 
-Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, and a Terrain3D becomes a heightfield input. The node path of the source is always sent along as ``_hego_node_path`` so an HDA can tell its inputs apart.
+Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` becomes points and polyline primitives, and a Terrain3D becomes a heightfield input. The node path of the source is always sent along as ``_hego_node_path`` so an HDA can tell its inputs apart.
 
 .. rst-class:: classref-reftable-group
 
@@ -66,7 +66,7 @@ Attributes attached to every input.
 
 .. container:: contribute
 
-	There is currently no description for this constant. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
+	There is currently no description for this constant. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/development/documentation/class_reference.html>`__!
 
 
 
@@ -78,7 +78,7 @@ Attributes attached to every input.
 
 .. container:: contribute
 
-	There is currently no description for this constant. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
+	There is currently no description for this constant. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/development/documentation/class_reference.html>`__!
 
 
 

@@ -14,7 +14,7 @@ One Godot object per node in the Houdini session. Everything a cook does is a me
    * - :ref:`HEGoMergeNode<class_HEGoMergeNode>`
      - Wrapper around a Houdini Merge SOP node.
    * - :ref:`HEGoInputNode<class_HEGoInputNode>`
-     - Creates Houdini input geometry from Godot mesh sources.
+     - Creates Houdini input geometry from Godot meshes or raw point and primitive arrays.
    * - :ref:`HEGoCurveInputNode<class_HEGoCurveInputNode>`
      - Creates Houdini curve input geometry from a ``Path3D``.
    * - :ref:`HEGoHeightfieldInputNode<class_HEGoHeightfieldInputNode>`

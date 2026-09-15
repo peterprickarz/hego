@@ -1,0 +1,74 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphPicking" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Screen-space picking for graph points and connections.
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="closest_point" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="mouse" type="Vector2" />
+			<param index="1" name="projected" type="PackedVector2Array" />
+			<param index="2" name="radius" type="float" default="12.0" />
+			<description>
+				Index of the projected point closest to [param mouse] within [param radius], or -1.
+			</description>
+		</method>
+		<method name="distance_to_segment" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="mouse" type="Vector2" />
+			<param index="1" name="a" type="Vector2" />
+			<param index="2" name="b" type="Vector2" />
+			<description>
+				Distance from [param mouse] to the segment [param a]–[param b] in 2D.
+			</description>
+		</method>
+		<method name="closest_connection" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="mouse" type="Vector2" />
+			<param index="1" name="projected" type="PackedVector2Array" />
+			<param index="2" name="connections" type="PackedInt32Array" />
+			<param index="3" name="radius" type="float" default="8.0" />
+			<description>
+				Index of the connection whose projected segment is closest to [param mouse], or -1.
+			</description>
+		</method>
+		<method name="points_in_rect" qualifiers="static">
+			<return type="PackedInt32Array" />
+			<param index="0" name="rect" type="Rect2" />
+			<param index="1" name="projected" type="PackedVector2Array" />
+			<description>
+				Indices whose projected positions lie inside [param rect].
+			</description>
+		</method>
+		<method name="connections_in_rect" qualifiers="static">
+			<return type="PackedInt32Array" />
+			<param index="0" name="rect" type="Rect2" />
+			<param index="1" name="projected" type="PackedVector2Array" />
+			<param index="2" name="connections" type="PackedInt32Array" />
+			<description>
+				Connection indices whose projected midpoint lies inside [param rect].
+			</description>
+		</method>
+		<method name="closest_on_segment" qualifiers="static">
+			<return type="Vector3" />
+			<param index="0" name="a" type="Vector3" />
+			<param index="1" name="b" type="Vector3" />
+			<param index="2" name="point" type="Vector3" />
+			<description>
+				Closest point on segment [param a]–[param b] to [param point].
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="POINT_RADIUS" value="12.0">
+			Pixel radius a click must be within to hit a point.
+		</constant>
+		<constant name="CONNECTION_RADIUS" value="8.0">
+			Pixel radius a click must be within to hit a connection.
+		</constant>
+	</constants>
+</class>

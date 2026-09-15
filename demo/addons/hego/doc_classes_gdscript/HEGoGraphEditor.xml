@@ -1,0 +1,126 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphEditor" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Viewport editing for a selected [HEGoGraphInput3D].
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="edit">
+			<return type="void" />
+			<param index="0" name="object" type="Object" />
+			<description>
+			</description>
+		</method>
+		<method name="set_visible">
+			<return type="void" />
+			<param index="0" name="visible" type="bool" />
+			<description>
+			</description>
+		</method>
+		<method name="handle_input">
+			<return type="int" />
+			<param index="0" name="camera" type="Camera3D" />
+			<param index="1" name="event" type="InputEvent" />
+			<description>
+			</description>
+		</method>
+		<method name="draw_overlay">
+			<return type="void" />
+			<param index="0" name="overlay" type="Control" />
+			<description>
+			</description>
+		</method>
+		<method name="on_mode_changed">
+			<return type="void" />
+			<param index="0" name="new_mode" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="on_placement_changed">
+			<return type="void" />
+			<param index="0" name="new_mode" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="on_world_axis_changed">
+			<return type="void" />
+			<param index="0" name="axis" type="int" />
+			<description>
+			</description>
+		</method>
+		<method name="on_world_offset_changed">
+			<return type="void" />
+			<param index="0" name="offset" type="float" />
+			<description>
+			</description>
+		</method>
+		<method name="on_attrib_changed">
+			<return type="void" />
+			<param index="0" name="owner_kind" type="int" />
+			<param index="1" name="name" type="String" />
+			<param index="2" name="value" type="Variant" />
+			<description>
+			</description>
+		</method>
+		<method name="handle_id_moved">
+			<return type="void" />
+			<param index="0" name="handle_id" type="int" />
+			<param index="1" name="local_position" type="Vector3" />
+			<description>
+			</description>
+		</method>
+		<method name="commit_handle">
+			<return type="void" />
+			<param index="0" name="handle_id" type="int" />
+			<param index="1" name="restore" type="Vector3" />
+			<param index="2" name="cancel" type="bool" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="plugin" type="EditorPlugin" setter="" getter="">
+		</member>
+		<member name="gizmo_plugin" type="EditorNode3DGizmoPlugin" setter="" getter="">
+		</member>
+		<member name="toolbar" type="Control" setter="" getter="">
+		</member>
+		<member name="attrib_panel" type="Control" setter="" getter="">
+		</member>
+		<member name="graph" type="HEGoGraphInput3D" setter="" getter="">
+		</member>
+		<member name="mode" type="int" setter="" getter="" enum="HEGoGraphEditor.Mode" default="1">
+		</member>
+		<member name="placement_mode" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="world_axis" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="world_offset" type="float" setter="" getter="" default="0.0">
+		</member>
+		<member name="selected_points" type="PackedInt32Array" setter="" getter="" default="PackedInt32Array()">
+		</member>
+		<member name="selected_connections" type="PackedInt32Array" setter="" getter="" default="PackedInt32Array()">
+		</member>
+		<member name="last_point" type="int" setter="" getter="" default="-1">
+		</member>
+		<member name="hover_point" type="int" setter="" getter="" default="-1">
+		</member>
+		<member name="hover_connection" type="int" setter="" getter="" default="-1">
+		</member>
+		<member name="preview_cursor" type="Variant" setter="" getter="" default="null">
+		</member>
+		<member name="ctrl_held" type="bool" setter="" getter="" default="false">
+		</member>
+	</members>
+	<constants>
+		<constant name="SELECT" value="0" enum="Mode">
+		</constant>
+		<constant name="DRAW" value="1" enum="Mode">
+		</constant>
+		<constant name="CLICK_PIXELS" value="5.0">
+		</constant>
+	</constants>
+</class>

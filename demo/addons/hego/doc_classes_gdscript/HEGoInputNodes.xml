@@ -4,7 +4,7 @@
 		Turns the Godot nodes wired into a [HEGoNode3D] into HEGo input nodes.
 	</brief_description>
 	<description>
-		Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, and a Terrain3D becomes a heightfield input. The node path of the source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
+		Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, a [HEGoGraphInput3D] becomes points and polyline primitives, and a Terrain3D becomes a heightfield input. The node path of the source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
 	</description>
 	<tutorials>
 	</tutorials>
