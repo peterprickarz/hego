@@ -64,6 +64,19 @@ uint64_t HEGoInputNode::compute_mesh_hash(const godot::Ref<godot::Mesh> &mesh, c
 	return hash;
 }
 
+uint64_t HEGoInputNode::compute_geo_hash(const godot::PackedVector3Array &points, const godot::String &prim_type, const godot::PackedInt32Array &vertices,
+		const godot::PackedInt32Array &counts, const godot::Array &attributes)
+{
+	using namespace HEGo::Util::Hash;
+	uint64_t hash = FNV_OFFSET;
+	hash = hash_packed_vector3(points, hash);
+	hash = hash_string(prim_type, hash);
+	hash = hash_packed_int32(vertices, hash);
+	hash = hash_packed_int32(counts, hash);
+	hash = hash_array(attributes, hash);
+	return hash;
+}
+
 godot::Ref<HEGoTask> HEGoInputNode::instantiate()
 {
 	HAPI_NodeId nid = node_id;
@@ -138,12 +151,38 @@ godot::Ref<HEGoTask> HEGoInputNode::set_geo_from_mesh(godot::Ref<godot::Mesh> me
 	});
 }
 
+godot::Ref<HEGoTask> HEGoInputNode::set_geo(const godot::PackedVector3Array &points, const godot::String &prim_type, const godot::PackedInt32Array &vertices,
+		const godot::PackedInt32Array &counts, const godot::Array &attributes, bool force)
+{
+	const godot::String error = HEGo::Util::Geo::validate_input_arrays(points, prim_type, vertices, counts);
+	if (!error.is_empty())
+	{
+		return make_failed(error, "Set geo");
+	}
+
+	HAPI_NodeId nid = node_id;
+	uint64_t geo_hash = compute_geo_hash(points, prim_type, vertices, counts, attributes);
+	if (!force && geo_hash == last_geo_hash)
+	{
+		return make_noop("Set geo (cached)", nid);
+	}
+
+	last_geo_hash = geo_hash;
+
+	return submit("Set geo", nid, [nid, points, prim_type, vertices, counts, attributes](HEGoSessionManager *mgr) -> godot::Variant {
+		HEGo::Util::Geo::create_input_from_arrays(mgr, points, prim_type, vertices, counts, nid, attributes);
+		return 0;
+	});
+}
+
 void HEGoInputNode::_bind_methods()
 {
 	godot::ClassDB::bind_method(godot::D_METHOD("set_geo_from_mesh_instance_3d", "mesh_instance_3d", "attributes", "force"),
 			&HEGoInputNode::set_geo_from_mesh_instance_3d, DEFVAL(godot::Array()), DEFVAL(false));
 	godot::ClassDB::bind_method(
 			godot::D_METHOD("set_geo_from_mesh", "mesh", "attributes", "force"), &HEGoInputNode::set_geo_from_mesh, DEFVAL(godot::Array()), DEFVAL(false));
+	godot::ClassDB::bind_method(godot::D_METHOD("set_geo", "points", "prim_type", "vertices", "counts", "attributes", "force"), &HEGoInputNode::set_geo,
+			DEFVAL(godot::Array()), DEFVAL(false));
 }
 
 } // namespace HEGo

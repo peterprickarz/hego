@@ -350,6 +350,153 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 	return node_id;
 }
 
+godot::String validate_input_arrays(const godot::PackedVector3Array &points, const godot::String &prim_type, const godot::PackedInt32Array &vertices,
+		const godot::PackedInt32Array &counts)
+{
+	if (prim_type != "points" && prim_type != "polyline" && prim_type != "polygon")
+	{
+		return "Unknown prim_type '" + prim_type + "' (expected points, polyline or polygon)";
+	}
+
+	if (prim_type == "points")
+	{
+		if (vertices.size() != 0 || counts.size() != 0)
+		{
+			return "points prim_type expects empty vertices and counts";
+		}
+		return godot::String();
+	}
+
+	int64_t counted = 0;
+	const int min_verts = prim_type == "polyline" ? 2 : 3;
+	for (int i = 0; i < counts.size(); ++i)
+	{
+		const int n = counts[i];
+		if (n < min_verts)
+		{
+			return "A " + prim_type + " primitive needs at least " + godot::String::num(min_verts) + " vertices, got " + godot::String::num(n);
+		}
+		counted += n;
+	}
+
+	if (counted != vertices.size())
+	{
+		return "vertices length " + godot::String::num(vertices.size()) + " does not match the sum of counts " + godot::String::num_int64(counted);
+	}
+
+	const int npoints = points.size();
+	for (int i = 0; i < vertices.size(); ++i)
+	{
+		const int index = vertices[i];
+		if (index < 0 || index >= npoints)
+		{
+			return "Vertex index " + godot::String::num(index) + " is outside the point range";
+		}
+	}
+
+	return godot::String();
+}
+
+HAPI_NodeId create_input_from_arrays(HEGoSessionManager *session_mgr, const godot::PackedVector3Array &points, const godot::String &prim_type,
+		const godot::PackedInt32Array &vertices, const godot::PackedInt32Array &counts, HAPI_NodeId node_id, const godot::Array &attributes)
+{
+	const godot::String error = validate_input_arrays(points, prim_type, vertices, counts);
+	if (!error.is_empty())
+	{
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::INPUT, error);
+		return -1;
+	}
+
+	const HAPI_Session *session = session_mgr->get_session();
+	const int npoints = points.size();
+	const int nprims = counts.size();
+	const int nverts = vertices.size();
+
+	node_id = HEGo::Util::Node::create_and_cook_input_node(session_mgr, "geo", node_id);
+
+	HAPI_PartInfo part = HoudiniApi::PartInfo_Create();
+	part.pointCount = npoints;
+	part.vertexCount = nverts;
+	part.faceCount = nprims;
+
+	if (prim_type == "polyline")
+	{
+		part.type = HAPI_PARTTYPE_CURVE;
+	}
+	else
+	{
+		part.type = HAPI_PARTTYPE_MESH;
+	}
+
+	HOUDINI_CHECK_ERROR(HoudiniApi::SetPartInfo(session, node_id, 0, &part));
+
+	if (npoints > 0)
+	{
+		std::vector<float> positions(static_cast<size_t>(npoints) * 3);
+		for (int i = 0; i < npoints; ++i)
+		{
+			positions[static_cast<size_t>(i) * 3 + 0] = points[i].x;
+			positions[static_cast<size_t>(i) * 3 + 1] = points[i].y;
+			positions[static_cast<size_t>(i) * 3 + 2] = points[i].z;
+		}
+
+		HAPI_AttributeInfo p_info = HoudiniApi::AttributeInfo_Create();
+		p_info.count = npoints;
+		p_info.tupleSize = 3;
+		p_info.exists = true;
+		p_info.storage = HAPI_STORAGETYPE_FLOAT;
+		p_info.owner = HAPI_ATTROWNER_POINT;
+
+		HOUDINI_CHECK_ERROR(HoudiniApi::AddAttribute(session, node_id, 0, "P", &p_info));
+		HOUDINI_CHECK_ERROR(HoudiniApi::SetAttributeFloatData(session, node_id, 0, "P", &p_info, positions.data(), 0, npoints));
+	}
+
+	std::vector<int> vert_list(static_cast<size_t>(nverts));
+	for (int i = 0; i < nverts; ++i)
+	{
+		vert_list[static_cast<size_t>(i)] = vertices[i];
+	}
+	std::vector<int> prim_counts(static_cast<size_t>(nprims));
+	for (int i = 0; i < nprims; ++i)
+	{
+		prim_counts[static_cast<size_t>(i)] = counts[i];
+	}
+
+	if (prim_type == "polyline")
+	{
+		HAPI_CurveInfo curve = HoudiniApi::CurveInfo_Create();
+		curve.curveType = HAPI_CURVETYPE_LINEAR;
+		curve.curveCount = nprims;
+		curve.vertexCount = nverts;
+		curve.knotCount = 0;
+		curve.isPeriodic = false;
+		curve.isRational = false;
+		curve.order = HAPI_CURVE_ORDER_LINEAR;
+		curve.hasKnots = false;
+		curve.isClosed = false;
+		HOUDINI_CHECK_ERROR(HoudiniApi::SetCurveInfo(session, node_id, 0, &curve));
+		if (nprims > 0)
+		{
+			HOUDINI_CHECK_ERROR(HoudiniApi::SetCurveCounts(session, node_id, 0, prim_counts.data(), 0, nprims));
+		}
+	}
+	else if (nprims > 0)
+	{
+		HOUDINI_CHECK_ERROR(HoudiniApi::SetFaceCounts(session, node_id, 0, prim_counts.data(), 0, nprims));
+	}
+
+	if (nverts > 0)
+	{
+		HOUDINI_CHECK_ERROR(HoudiniApi::SetVertexList(session, node_id, 0, vert_list.data(), 0, nverts));
+	}
+
+	HEGo::Util::Attribs::apply_attributes(session, node_id, 0, attributes, npoints, nprims);
+
+	HOUDINI_CHECK_ERROR(HoudiniApi::CommitGeo(session, node_id));
+
+	return node_id;
+}
+
 } // namespace Geo
 } // namespace Util
 } // namespace HEGo

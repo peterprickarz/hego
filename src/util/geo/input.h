@@ -7,6 +7,8 @@
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/path3d.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
 namespace HEGo
@@ -126,6 +128,28 @@ void connect_to_merge(HEGoSessionManager *session_mgr, HAPI_NodeId merge_node_id
  * @return The Houdini input node id.
  */
 HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, const godot::PackedVector3Array &positions, HAPI_NodeId node_id);
+
+/**
+ * Check that points, prim_type, vertices and counts describe uploadable geometry.
+ *
+ * prim_type is "points", "polyline" or "polygon". vertices length must equal the
+ * sum of counts, every index must land in points, and each polyline / polygon
+ * must have enough vertices. Returns an empty string when the arrays are valid.
+ */
+godot::String validate_input_arrays(const godot::PackedVector3Array &points, const godot::String &prim_type, const godot::PackedInt32Array &vertices,
+		const godot::PackedInt32Array &counts);
+
+/**
+ * Create or update a Houdini input from raw point positions and primitives.
+ *
+ * prim_type selects the part: "points" is a point cloud, "polyline" is open
+ * linear curves (one prim per count), "polygon" is closed mesh faces. Custom
+ * attributes are applied after topology, then the geo is committed.
+ *
+ * @return The Houdini input node id on success, or -1 if the arrays are invalid.
+ */
+HAPI_NodeId create_input_from_arrays(HEGoSessionManager *session_mgr, const godot::PackedVector3Array &points, const godot::String &prim_type,
+		const godot::PackedInt32Array &vertices, const godot::PackedInt32Array &counts, HAPI_NodeId node_id, const godot::Array &attributes = godot::Array());
 
 } // namespace Geo
 } // namespace Util
