@@ -11,7 +11,7 @@ and what it does with them is :doc:`/api/node3d_modules`.
 
 ``HEGoNode3D`` supports:
 
-- Feeding Path3D, HEGoGraphInput3D, MeshInstance3D, CSGShape3D, and Terrain3D into Houdini
+- Feeding Path3D, :doc:`HEGoGraphInput3D <hego_graph_input_3d>`, MeshInstance3D, CSGShape3D, and Terrain3D into Houdini
 - Generating bespoke geo as MeshInstance3D nodes, including LODs and material assignment
 - Instancing meshes via MultiMeshInstance3D nodes
 - Generating Terrain3D terrains from heightfields

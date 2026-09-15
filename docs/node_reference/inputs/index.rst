@@ -2,7 +2,8 @@ Inputs
 ======
 
 These pages describe what ``HEGoNode3D`` sends into Houdini when you connect different Godot
-node types as HDA inputs.
+node types as HDA inputs. Drawing a graph in the viewport is
+:doc:`/node_reference/hego_graph_input_3d`.
 
 .. toctree::
    :maxdepth: 1

@@ -20,6 +20,7 @@ want to drive Houdini from a script of your own.
    :caption: Using HEGo
 
    node_reference/hego_node_3d
+   node_reference/hego_graph_input_3d
 
 .. toctree::
    :maxdepth: 2

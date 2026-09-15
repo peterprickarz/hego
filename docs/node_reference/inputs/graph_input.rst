@@ -1,7 +1,10 @@
 HEGoGraphInput3D Input
 ======================
 
-``HEGoGraphInput3D`` is sent to Houdini as points plus open polyline primitives, one
+How to draw a graph, set attributes and use the viewport is
+:doc:`/node_reference/hego_graph_input_3d`. This page is only what a cook sends.
+
+``HEGoGraphInput3D`` is uploaded as points plus open polyline primitives, one
 polyline per connection. Branches are several polylines sharing a point index.
 
 Input Conversion

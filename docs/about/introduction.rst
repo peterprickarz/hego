@@ -14,7 +14,7 @@ Features
 --------
 
 - **Scriptable API**: built with GDScript integration in mind for maximum flexibility
-- **Multiple node types**: geometry input, curve input, heightfield input, and HDA asset nodes
+- **Multiple node types**: geometry input, curve input, graph input, heightfield input, and HDA asset nodes
 - **Session management**: in-process, TCP, named pipes, and shared memory session types
 - **Bidirectional data flow**: convert between Godot and Houdini geometry formats
 - **Parameter management**: automatic type conversion between Godot Variant and HAPI types
