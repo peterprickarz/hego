@@ -136,6 +136,9 @@ GROUPS = [
 INTERNAL_CLASSES = {
     "HEGoAssetSection": "a section of the bottom panel",
     "HEGoInputLineEdit": "a field in the bottom panel",
+    "HEGoGraphEditor": "viewport editing for HEGoGraphInput3D",
+    "HEGoGraphPicking": "screen-space picking for the graph editor",
+    "HEGoGraphPlacement": "ray-plane hits for the graph editor",
 }
 
 # Methods a class inherits are documented on the class that declares them, and make_rst does

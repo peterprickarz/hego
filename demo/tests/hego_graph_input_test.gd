@@ -153,6 +153,33 @@ func _initialize() -> void:
 		names.append(def.attribute_name)
 	check(names == ["width"], "reserved names are not collected, got %s" % str(names))
 
+	# --- picking and placement, no camera needed --------------------------
+	var projected := PackedVector2Array([Vector2(10, 10), Vector2(100, 10), Vector2(10, 100)])
+	check(HEGoGraphPicking.closest_point(Vector2(12, 11), projected) == 0, "closest_point hits the nearby point")
+	check(HEGoGraphPicking.closest_point(Vector2(500, 500), projected) == -1, "closest_point misses when outside the radius")
+	var segs := PackedInt32Array([0, 1, 1, 2])
+	check(HEGoGraphPicking.closest_connection(Vector2(55, 10), projected, segs) == 0, "closest_connection hits the horizontal segment")
+	check(HEGoGraphPicking.closest_connection(Vector2(500, 500), projected, segs) == -1, "closest_connection misses when outside the radius")
+	var on_seg := HEGoGraphPicking.closest_on_segment(Vector3(0, 0, 0), Vector3(2, 0, 0), Vector3(1, 5, 0))
+	check(on_seg.is_equal_approx(Vector3(1, 0, 0)), "closest_on_segment projects onto the line")
+
+	var cam_plane := HEGoGraphPlacement.camera_plane(Vector3(0, 0, 1), Vector3(0, 0, 5))
+	var cam_hit: Variant = HEGoGraphPlacement.intersect_ray(Vector3(1, 2, 0), Vector3(0, 0, 1), cam_plane)
+	check(cam_hit != null and cam_hit.is_equal_approx(Vector3(1, 2, 5)), "camera plane hit is at the anchor depth")
+	var world := HEGoGraphPlacement.world_plane(HEGoGraphPlacement.Axis.XZ, Vector3(0, 3, 0), 1.0)
+	var world_hit: Variant = HEGoGraphPlacement.intersect_ray(Vector3(2, 10, 4), Vector3(0, -1, 0), world)
+	check(world_hit != null and is_equal_approx(world_hit.y, 4.0), "XZ plane offset sits at origin.y + offset")
+	check(HEGoGraphPlacement.intersect_ray(Vector3(0, 0, 0), Vector3(0, 0, -1), cam_plane) == null, "a ray away from the plane misses")
+
+	var restored := make_graph()
+	restored.add_point(Vector3(1, 2, 3))
+	restored.add_point(Vector3(4, 5, 6))
+	restored.add_connection(0, 1)
+	var snap: Dictionary = restored.capture_state()
+	restored.add_point(Vector3.ZERO)
+	restored.apply_state(snap)
+	check(restored.points.size() == 2 and restored.connection_count() == 1, "apply_state restores topology")
+
 	if failures == 0:
 		print("All graph input tests passed.")
 		quit(0)

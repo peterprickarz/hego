@@ -295,6 +295,29 @@ static func is_reserved_name(name: String) -> bool:
 	return name.is_empty() or name in RESERVED_NAMES or name.begins_with(RESERVED_PREFIX)
 
 
+## A copy of the topology and attribute arrays, for undo.
+func capture_state() -> Dictionary:
+	return {
+		"points": points.duplicate(),
+		"connections": connections.duplicate(),
+		"point_attribs": point_attribs.duplicate(true),
+		"connection_attribs": connection_attribs.duplicate(true),
+	}
+
+
+## Restores a state produced by [method capture_state].
+func apply_state(state: Dictionary) -> void:
+	_syncing = true
+	points = state.get("points", PackedVector3Array())
+	connections = state.get("connections", PackedInt32Array())
+	point_attribs = state.get("point_attribs", {})
+	connection_attribs = state.get("connection_attribs", {})
+	_syncing = false
+	if Engine.is_editor_hint():
+		update_gizmos()
+	graph_changed.emit()
+
+
 func _on_child_entered(child: Node) -> void:
 	if child is HEGoGraphAttributes:
 		if not child.schema_changed.is_connected(sync_schema):

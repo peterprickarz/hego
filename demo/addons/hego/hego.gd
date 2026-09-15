@@ -4,8 +4,11 @@ extends EditorPlugin
 var bottom_panel
 var import_plugin
 var editor_selection: EditorSelection
+var graph_editor: HEGoGraphEditor
+var graph_gizmo_plugin: EditorNode3DGizmoPlugin
 
 const ImportPlugin = preload("hda_import_plugin.gd")
+const GraphGizmoPlugin = preload("res://addons/hego/graph_input/editor/graph_gizmo_plugin.gd")
 
 ## Log level settings, and the dropdown Godot shows for them.
 const LOG_LEVEL_NAMES := "TRACE,DEBUG,INFO,WARNING,ERROR"
@@ -26,6 +29,13 @@ func _enter_tree():
 	
 	import_plugin = ImportPlugin.new()
 	add_import_plugin(import_plugin)
+
+	graph_editor = HEGoGraphEditor.new()
+	graph_editor.plugin = self
+	graph_gizmo_plugin = GraphGizmoPlugin.new()
+	graph_gizmo_plugin.editor = graph_editor
+	graph_editor.gizmo_plugin = graph_gizmo_plugin
+	add_node_3d_gizmo_plugin(graph_gizmo_plugin)
 	
 	# Add HEGo project settings
 	_add_project_settings()
@@ -52,6 +62,11 @@ func _exit_tree():
 	if editor_selection and editor_selection.selection_changed.is_connected(_on_selection_changed):
 		editor_selection.selection_changed.disconnect(_on_selection_changed)
 	
+	if graph_gizmo_plugin:
+		remove_node_3d_gizmo_plugin(graph_gizmo_plugin)
+		graph_gizmo_plugin = null
+	graph_editor = null
+
 	remove_import_plugin(import_plugin)
 	import_plugin = null
 	
@@ -78,6 +93,26 @@ func _cleanup_houdini_session():
 ## It used to be told only about nodes that opted in, so selecting anything else, or nothing,
 ## left it driving the node from before: that node's parameter widgets stayed on screen, and
 ## Recook still cooked it.
+func _handles(object: Object) -> bool:
+	return object is HEGoGraphInput3D
+
+
+func _edit(object: Object) -> void:
+	if graph_editor:
+		graph_editor.edit(object)
+
+
+func _make_visible(visible: bool) -> void:
+	if graph_editor:
+		graph_editor.set_visible(visible)
+
+
+func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
+	if graph_editor:
+		return graph_editor.handle_input(viewport_camera, event)
+	return AFTER_GUI_INPUT_PASS
+
+
 func _on_selection_changed():
 	if not bottom_panel:
 		return
