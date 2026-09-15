@@ -3,20 +3,51 @@ extends EditorNode3DGizmoPlugin
 
 var editor: HEGoGraphEditor
 
-const LINE := Color(0.85, 0.7, 0.25)
-const LINE_SELECTED := Color(1.0, 0.45, 0.15)
-const PREVIEW := Color(0.6, 0.85, 1.0, 0.8)
+const LINE := Color(0.55, 0.55, 0.6)
+const LINE_HOVER := Color(0.45, 0.85, 1.0)
+const LINE_SELECTED := Color(1.0, 0.5, 0.12)
+const POINT := Color(0.92, 0.86, 0.35)
+const POINT_HOVER := Color(1.0, 1.0, 1.0)
+const POINT_SELECTED := Color(1.0, 0.38, 0.08)
+const PREVIEW := Color(0.55, 0.85, 1.0, 0.85)
+const AXIS_X := Color(0.92, 0.22, 0.2)
+const AXIS_Y := Color(0.25, 0.82, 0.3)
+const AXIS_Z := Color(0.25, 0.45, 1.0)
+
+var _sphere: SphereMesh
+var _sphere_selected: SphereMesh
 
 
 func _init() -> void:
-	create_material("lines", LINE)
-	create_material("lines_selected", LINE_SELECTED)
-	create_material("preview", PREVIEW)
-	create_handle_material("handles")
+	create_material("lines", LINE, false, true)
+	create_material("lines_hover", LINE_HOVER, false, true)
+	create_material("lines_selected", LINE_SELECTED, false, true)
+	create_material("preview", PREVIEW, false, true)
+	create_material("point", POINT, false, true)
+	create_material("point_hover", POINT_HOVER, false, true)
+	create_material("point_selected", POINT_SELECTED, false, true)
+	create_material("axis_x", AXIS_X, false, true)
+	create_material("axis_y", AXIS_Y, false, true)
+	create_material("axis_z", AXIS_Z, false, true)
+	_sphere = _make_sphere(0.07)
+	_sphere_selected = _make_sphere(0.11)
+
+
+func _make_sphere(radius: float) -> SphereMesh:
+	var mesh := SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = radius * 2.0
+	mesh.radial_segments = 12
+	mesh.rings = 6
+	return mesh
 
 
 func _get_gizmo_name() -> String:
 	return "HEGoGraphInput3D"
+
+
+func _get_priority() -> int:
+	return 50
 
 
 func _has_gizmo(for_node_3d: Node3D) -> bool:
@@ -31,11 +62,16 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 
 	var selected_conns := PackedInt32Array()
 	var selected_pts := PackedInt32Array()
+	var hover_point := -1
+	var hover_connection := -1
 	if editor and editor.graph == node:
 		selected_conns = editor.selected_connections
 		selected_pts = editor.selected_points
+		hover_point = editor.hover_point
+		hover_connection = editor.hover_connection
 
 	var lines := PackedVector3Array()
+	var hover_lines := PackedVector3Array()
 	var selected_lines := PackedVector3Array()
 	for c in node.connection_count():
 		var a: int = node.connections[c * 2]
@@ -45,13 +81,20 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		if selected_conns.has(c):
 			selected_lines.append(node.points[a])
 			selected_lines.append(node.points[b])
+		elif c == hover_connection:
+			hover_lines.append(node.points[a])
+			hover_lines.append(node.points[b])
 		else:
 			lines.append(node.points[a])
 			lines.append(node.points[b])
 
 	if lines.size() >= 2:
 		gizmo.add_lines(lines, get_material("lines", gizmo), false)
+	if hover_lines.size() >= 2:
+		gizmo.add_lines(hover_lines, get_material("lines_hover", gizmo), false)
 	if selected_lines.size() >= 2:
+		gizmo.add_lines(selected_lines, get_material("lines_selected", gizmo), false)
+		# A second copy so selected edges read thicker than the rest.
 		gizmo.add_lines(selected_lines, get_material("lines_selected", gizmo), false)
 
 	if editor and editor.graph == node and editor.preview_cursor != null and editor.last_point >= 0 and editor.last_point < node.points.size():
@@ -60,58 +103,34 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		preview.append(node.to_local(editor.preview_cursor))
 		gizmo.add_lines(preview, get_material("preview", gizmo), false)
 
-	if node.points.size() > 0:
-		var ids := PackedInt32Array()
-		ids.resize(node.points.size())
-		for i in node.points.size():
-			ids[i] = i
-		gizmo.add_handles(node.points, get_material("handles", gizmo), ids)
+	for i in node.points.size():
+		var selected := selected_pts.has(i)
+		var mat_name := "point_selected" if selected else ("point_hover" if i == hover_point else "point")
+		var mesh := _sphere_selected if selected else _sphere
+		gizmo.add_mesh(mesh, get_material(mat_name, gizmo), Transform3D(Basis(), node.points[i]))
 
-	# Selected points get a second handle pass so they read as highlighted.
 	if selected_pts.size() > 0:
-		var selected_pos := PackedVector3Array()
-		var selected_ids := PackedInt32Array()
+		var origin := Vector3.ZERO
+		var count := 0
 		for i in selected_pts:
 			if i >= 0 and i < node.points.size():
-				selected_pos.append(node.points[i])
-				selected_ids.append(i)
-		if selected_pos.size() > 0:
-			gizmo.add_handles(selected_pos, get_material("handles", gizmo), selected_ids)
+				origin += node.points[i]
+				count += 1
+		if count > 0:
+			origin /= float(count)
+			var axis_len := 0.45
+			if editor:
+				editor.gizmo_origin = origin
+				axis_len = editor.axis_length
+			_add_axis(gizmo, origin, Vector3.RIGHT, axis_len, "axis_x")
+			_add_axis(gizmo, origin, Vector3.UP, axis_len, "axis_y")
+			_add_axis(gizmo, origin, Vector3.BACK, axis_len, "axis_z")
 
 
-func _get_handle_name(_gizmo: EditorNode3DGizmo, handle_id: int, _secondary: bool) -> String:
-	return "Point %d" % handle_id
-
-
-func _get_handle_value(gizmo: EditorNode3DGizmo, handle_id: int, _secondary: bool) -> Variant:
-	var node := gizmo.get_node_3d() as HEGoGraphInput3D
-	if node == null or handle_id < 0 or handle_id >= node.points.size():
-		return Vector3.ZERO
-	return node.points[handle_id]
-
-
-func _set_handle(gizmo: EditorNode3DGizmo, handle_id: int, _secondary: bool, camera: Camera3D, screen_pos: Vector2) -> void:
-	var node := gizmo.get_node_3d() as HEGoGraphInput3D
-	if node == null or handle_id < 0 or handle_id >= node.points.size():
-		return
-	var origin := camera.project_ray_origin(screen_pos)
-	var direction := camera.project_ray_normal(screen_pos)
-	var anchor: Vector3 = node.to_global(node.points[handle_id])
-	var plane := HEGoGraphPlacement.camera_plane(-camera.global_transform.basis.z, anchor)
-	if editor and editor.placement_mode == HEGoGraphPlacement.Mode.WORLD:
-		plane = HEGoGraphPlacement.world_plane(editor.world_axis, node.global_position, editor.world_offset)
-	var hit: Variant = HEGoGraphPlacement.intersect_ray(origin, direction, plane)
-	if hit == null:
-		return
-	node.set_point_position(handle_id, node.to_local(hit))
-	node.update_gizmos()
-
-
-func _commit_handle(gizmo: EditorNode3DGizmo, handle_id: int, _secondary: bool, restore: Variant, cancel: bool) -> void:
-	if editor:
-		editor.commit_handle(handle_id, restore, cancel)
-	else:
-		var node := gizmo.get_node_3d() as HEGoGraphInput3D
-		if node and cancel:
-			node.set_point_position(handle_id, restore)
-			node.update_gizmos()
+func _add_axis(gizmo: EditorNode3DGizmo, origin: Vector3, dir: Vector3, length: float, mat_name: String) -> void:
+	var tip := origin + dir * length
+	var line := PackedVector3Array()
+	line.append(origin)
+	line.append(tip)
+	gizmo.add_lines(line, get_material(mat_name, gizmo), false)
+	gizmo.add_mesh(_sphere, get_material(mat_name, gizmo), Transform3D(Basis(), tip))

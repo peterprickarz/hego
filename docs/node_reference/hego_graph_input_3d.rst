@@ -85,7 +85,8 @@ The toolbar switches **Select** and **Draw**. Draw is the default.
 - Click a point or connection: replace the selection. **Shift** toggles.
 - Drag a box: every point and every connection midpoint whose screen position falls
   inside is selected. **Shift** adds.
-- Drag a point handle: move it in the current placement plane.
+- Selected points turn orange and show an RGB move gizmo. Drag a point to move
+  it in the placement plane, or drag an axis to constrain the move.
 - **Delete** / **Backspace**: selected connections are removed; selected points are
   removed and take their incident connections with them. With nothing selected, Delete
   still deletes the node, as the editor usually does.
