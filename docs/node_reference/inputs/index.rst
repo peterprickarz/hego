@@ -8,5 +8,6 @@ node types as HDA inputs.
    :maxdepth: 1
 
    path3d_input
+   graph_input
    meshinstance3d_csgshape_input
    terrain3d_input
