@@ -59,6 +59,7 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	var hover_point := -1
 	var hover_connection := -1
 	if editor and editor.graph == node:
+		editor.active_gizmo = gizmo
 		selected_conns = editor.selected_connections
 		hover_point = editor.hover_point
 		hover_connection = editor.hover_connection

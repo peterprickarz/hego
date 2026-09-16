@@ -16,6 +16,9 @@ const CLICK_PIXELS := 8.0
 
 var plugin: EditorPlugin
 var gizmo_plugin: EditorNode3DGizmoPlugin
+## Filled by the gizmo plugin on redraw. Node3D.get_gizmos() is empty on a
+## scripted Node3D, so this is how we call set_subgizmo_selection.
+var active_gizmo: EditorNode3DGizmo
 var toolbar: Control
 var attrib_panel: Control
 var graph: HEGoGraphInput3D
@@ -141,32 +144,25 @@ func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 	if event.shift_pressed and empty:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
-	# Ctrl+click in Draw places/connects a point even on top of the move widget.
+	# Continue a polyline: Ctrl+empty always places, even on top of the widget.
 	if mode == Mode.DRAW and event.ctrl_pressed and empty:
-		_own_click = true
-		return EditorPlugin.AFTER_GUI_INPUT_STOP
-	# Gizmo arrows sit in "empty" space. Let the 3D editor keep them in every mode.
-	if empty and _near_selection_gizmo(camera, event.position):
-		_pressed = false
-		return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
-	if mode == Mode.DRAW and empty:
-		_own_click = true
-		return EditorPlugin.AFTER_GUI_INPUT_STOP
-	if mode == Mode.DRAW and hover_connection >= 0:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
 	if mode == Mode.DRAW and event.ctrl_pressed and hover_point >= 0:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	if mode == Mode.DRAW and hover_connection >= 0:
+		_own_click = true
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
 	if hover_connection >= 0:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
-	if mode == Mode.SELECT and empty and not _near_selection_gizmo(camera, event.position):
+	# First point, or an isolated add with nothing selected: Draw on empty.
+	if mode == Mode.DRAW and empty and not _has_point_selection():
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
-
-	# Point click, or a click on the built-in transform widget: CUSTOM lets the
-	# 3D editor pick subgizmos and move them without deselecting the graph node.
+	# Anything else (move arrows, selected point, empty while a point is
+	# selected) goes to the 3D editor so the translate widget can drag.
 	_pressed = false
 	return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 
@@ -310,6 +306,10 @@ func _delete_selection() -> void:
 	last_point = -1
 
 
+func _has_point_selection() -> bool:
+	return selected_points.size() > 0 or _hold_selection >= 0 or last_point >= 0
+
+
 func _select_point_subgizmo(index: int) -> void:
 	if graph == null or index < 0 or index >= graph.points.size():
 		return
@@ -317,16 +317,13 @@ func _select_point_subgizmo(index: int) -> void:
 	selected_points = PackedInt32Array([index])
 	selected_connections = PackedInt32Array()
 	_hold_selection = index
-	if graph.has_method("set_subgizmo_selection"):
-		var gizmos: Array = graph.get_gizmos()
-		if gizmos.is_empty():
-			graph.update_gizmos()
-			gizmos = graph.get_gizmos()
-		for gizmo in gizmos:
-			graph.set_subgizmo_selection(gizmo, index, Transform3D(Basis(), graph.points[index]))
-	# set_subgizmo_selection is deferred in the engine; redraw after it lands.
-	graph.update_gizmos()
-	graph.call_deferred("update_gizmos")
+	if active_gizmo == null:
+		graph.update_gizmos()
+	if active_gizmo and graph.has_method("set_subgizmo_selection"):
+		graph.set_subgizmo_selection(active_gizmo, index, Transform3D(Basis(), graph.points[index]))
+	# Engine applies that call deferred; redraw once it has landed.
+	if graph:
+		graph.call_deferred("update_gizmos")
 	_refresh_attrib_panel()
 
 
@@ -471,24 +468,6 @@ func _on_graph_changed() -> void:
 func _refresh_attrib_panel() -> void:
 	if attrib_panel and attrib_panel.has_method("rebuild"):
 		attrib_panel.rebuild(graph, selected_points, selected_connections)
-
-
-func _near_selection_gizmo(camera: Camera3D, mouse: Vector2) -> bool:
-	if selected_points.is_empty() or graph.points.is_empty():
-		return false
-	var origin := Vector3.ZERO
-	var count := 0
-	for i in selected_points:
-		if i >= 0 and i < graph.points.size():
-			origin += graph.points[i]
-			count += 1
-	if count == 0:
-		return false
-	origin /= float(count)
-	var global_pt: Vector3 = graph.to_global(origin)
-	if camera.is_position_behind(global_pt):
-		return false
-	return camera.unproject_position(global_pt).distance_to(mouse) < 150.0
 
 
 func _spatial_editor() -> Node:
