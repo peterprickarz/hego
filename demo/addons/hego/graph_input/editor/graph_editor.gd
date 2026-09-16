@@ -2,23 +2,17 @@ class_name HEGoGraphEditor
 extends RefCounted
 
 ## Viewport editing for a selected [HEGoGraphInput3D].
+##
+## Point selection and the move/rotate/scale widget are Godot's built-in
+## subgizmos. This object only handles Draw-mode clicks, connection picks,
+## Shift+empty to clear, and the attribute strip.
 
 enum Mode {
 	SELECT,
 	DRAW,
 }
 
-enum DragKind {
-	NONE,
-	BOX,
-	POINTS,
-	AXIS_X,
-	AXIS_Y,
-	AXIS_Z,
-}
-
 const CLICK_PIXELS := 8.0
-const AXIS_PICK_PIXELS := 14.0
 
 var plugin: EditorPlugin
 var gizmo_plugin: EditorNode3DGizmoPlugin
@@ -37,23 +31,19 @@ var hover_point: int = -1
 var hover_connection: int = -1
 var preview_cursor: Variant = null
 var ctrl_held: bool = false
-var gizmo_origin := Vector3.ZERO
-var axis_length := 0.45
 
 var _press_pos := Vector2.ZERO
-var _pressed := false
-var _drag_kind: DragKind = DragKind.NONE
-var _drag_started := false
-var _skip_click := false
-var _undo_before: Dictionary = {}
-var _move_indices := PackedInt32Array()
-var _move_origins := PackedVector3Array()
-var _drag_anchor := Vector3.ZERO
-var _drag_plane := Plane()
 var _pointer := Vector2.ZERO
+var _pressed := false
+var _drag_started := false
+var _own_click := false
+var _box := false
+var _reselecting := false
 
 
 func edit(object: Object) -> void:
+	if _reselecting and object == graph:
+		return
 	_cancel_pointer()
 	if graph != null and graph.graph_changed.is_connected(_on_graph_changed):
 		graph.graph_changed.disconnect(_on_graph_changed)
@@ -71,6 +61,8 @@ func edit(object: Object) -> void:
 
 
 func set_visible(visible: bool) -> void:
+	if _reselecting:
+		return
 	if toolbar:
 		toolbar.visible = visible
 	if attrib_panel:
@@ -81,11 +73,18 @@ func set_visible(visible: bool) -> void:
 		_refresh_attrib_panel()
 
 
+func sync_point_selection(ids: PackedInt32Array) -> void:
+	if _ids_equal(selected_points, ids):
+		return
+	selected_points = ids.duplicate()
+	if selected_points.size() > 0:
+		last_point = selected_points[selected_points.size() - 1]
+	_refresh_attrib_panel()
+
+
 func handle_input(camera: Camera3D, event: InputEvent) -> int:
 	if graph == null or not is_instance_valid(graph):
 		return EditorPlugin.AFTER_GUI_INPUT_PASS
-
-	_update_axis_length(camera)
 
 	if event is InputEventKey and event.pressed and not event.echo:
 		ctrl_held = event.ctrl_pressed
@@ -96,12 +95,6 @@ func handle_input(camera: Camera3D, event: InputEvent) -> int:
 
 	if event is InputEventMouse:
 		ctrl_held = event.ctrl_pressed
-
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and _pressed:
-		_cancel_pointer()
-		graph.update_gizmos()
-		plugin.update_overlays()
-		return EditorPlugin.AFTER_GUI_INPUT_STOP
 
 	if _is_camera_event(event):
 		return EditorPlugin.AFTER_GUI_INPUT_PASS
@@ -121,53 +114,47 @@ func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 	_press_pos = event.position
 	_pointer = event.position
 	_pressed = true
-	_drag_kind = DragKind.NONE
 	_drag_started = false
-	_skip_click = false
+	_own_click = false
+	_box = false
 	_update_hover(camera, event.position)
 
-	var axis := _pick_axis(camera, event.position)
-	if axis != DragKind.NONE:
-		_drag_kind = axis
-		_begin_move(camera, selected_points)
-		_skip_click = true
+	var empty := hover_point < 0 and hover_connection < 0
+	if event.shift_pressed and empty:
+		_own_click = true
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	if mode == Mode.DRAW and empty:
+		_own_click = true
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	if mode == Mode.DRAW and hover_connection >= 0:
+		_own_click = true
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	if mode == Mode.DRAW and event.ctrl_pressed and hover_point >= 0:
+		_own_click = true
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	if hover_connection >= 0:
+		_own_click = true
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	if mode == Mode.SELECT and empty and not _near_selection_gizmo(camera, event.position):
+		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
 
-	if hover_point >= 0:
-		if event.shift_pressed:
-			_select_points(PackedInt32Array([hover_point]), true)
-			last_point = hover_point
-			_skip_click = true
-		else:
-			if selected_points.find(hover_point) < 0:
-				_select_points(PackedInt32Array([hover_point]), false)
-			last_point = hover_point
-			_drag_kind = DragKind.POINTS
-			_begin_move(camera, selected_points)
-			_skip_click = true
-		return EditorPlugin.AFTER_GUI_INPUT_STOP
-
-	return EditorPlugin.AFTER_GUI_INPUT_STOP
+	# Point click, or a click on the built-in transform widget: CUSTOM lets the
+	# 3D editor pick subgizmos and move them without deselecting the graph node.
+	_pressed = false
+	return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 
 
 func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:
 	_pointer = event.position
 	if _pressed and not _drag_started and event.position.distance_to(_press_pos) > CLICK_PIXELS:
 		_drag_started = true
-		if _drag_kind == DragKind.NONE and mode == Mode.SELECT:
-			_drag_kind = DragKind.BOX
-			_undo_before = {}
-		if _drag_kind == DragKind.POINTS or _is_axis(_drag_kind):
-			_undo_before = graph.capture_state()
+		if _own_click and mode == Mode.SELECT:
+			_box = true
 
-	if _pressed and _drag_started:
-		if _drag_kind == DragKind.BOX:
-			plugin.update_overlays()
-			return EditorPlugin.AFTER_GUI_INPUT_STOP
-		if _drag_kind == DragKind.POINTS or _is_axis(_drag_kind):
-			_apply_move(camera, event.position)
-			graph.update_gizmos()
-			return EditorPlugin.AFTER_GUI_INPUT_STOP
+	if _pressed and _drag_started and _box:
+		plugin.update_overlays()
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
 
 	var prev_p := hover_point
 	var prev_c := hover_connection
@@ -179,193 +166,68 @@ func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:
 	preview_cursor = new_preview
 	if hover_point != prev_p or hover_connection != prev_c or preview_changed:
 		graph.update_gizmos()
-	return EditorPlugin.AFTER_GUI_INPUT_STOP if _pressed else EditorPlugin.AFTER_GUI_INPUT_PASS
+	if _pressed and _own_click:
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 
 
 func _on_release(camera: Camera3D, event: InputEventMouseButton) -> int:
 	if not _pressed:
-		return EditorPlugin.AFTER_GUI_INPUT_PASS
+		return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 	_pressed = false
-
-	if _drag_started:
-		if _drag_kind == DragKind.BOX:
-			_finish_box(camera, event.shift_pressed)
-			plugin.update_overlays()
-		elif _drag_kind == DragKind.POINTS or _is_axis(_drag_kind):
-			_commit_move()
-		_drag_kind = DragKind.NONE
+	if _box:
+		_finish_box(camera, event.shift_pressed)
+		_box = false
 		_drag_started = false
+		plugin.update_overlays()
 		graph.update_gizmos()
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
-
-	_drag_kind = DragKind.NONE
-	if _skip_click:
+	if _own_click and not _drag_started:
+		_click(camera, event.position, event.shift_pressed, event.ctrl_pressed)
+		_drag_started = false
+		_own_click = false
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
-	_click(camera, event.position, event.shift_pressed, event.ctrl_pressed)
-	return EditorPlugin.AFTER_GUI_INPUT_STOP
+	_drag_started = false
+	_own_click = false
+	return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 
 
 func _cancel_pointer() -> void:
-	if _pressed and _drag_started and not _undo_before.is_empty() and graph:
-		graph.apply_state(_undo_before)
 	_pressed = false
-	_drag_kind = DragKind.NONE
 	_drag_started = false
-	_skip_click = false
-	_undo_before = {}
+	_own_click = false
+	_box = false
 	if plugin:
 		plugin.update_overlays()
 
 
 func _is_camera_event(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_MIDDLE:
-			return true
-		if event.button_index == MOUSE_BUTTON_RIGHT and not _pressed:
+		if event.button_index == MOUSE_BUTTON_MIDDLE or event.button_index == MOUSE_BUTTON_RIGHT:
 			return true
 		if event.button_index == MOUSE_BUTTON_LEFT and event.alt_pressed:
 			return true
 	if event is InputEventMouseMotion:
-		if event.button_mask & MOUSE_BUTTON_MASK_MIDDLE:
-			return true
-		if event.button_mask & MOUSE_BUTTON_MASK_RIGHT and not _pressed:
+		if event.button_mask & (MOUSE_BUTTON_MASK_MIDDLE | MOUSE_BUTTON_MASK_RIGHT):
 			return true
 		if event.alt_pressed and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
 			return true
 	return false
 
 
-func _is_axis(kind: DragKind) -> bool:
-	return kind == DragKind.AXIS_X or kind == DragKind.AXIS_Y or kind == DragKind.AXIS_Z
-
-
-func _begin_move(camera: Camera3D, indices: PackedInt32Array) -> void:
-	_move_indices = PackedInt32Array()
-	_move_origins = PackedVector3Array()
-	for index in indices:
-		if index >= 0 and index < graph.points.size():
-			_move_indices.append(index)
-			_move_origins.append(graph.points[index])
-	if _move_indices.is_empty():
-		return
-	_drag_anchor = graph.points[_move_indices[0]]
-	if selected_points.size() > 0:
-		var origin := Vector3.ZERO
-		var count := 0
-		for i in selected_points:
-			if i >= 0 and i < graph.points.size():
-				origin += graph.points[i]
-				count += 1
-		if count > 0:
-			gizmo_origin = origin / float(count)
-	_drag_plane = _placement_plane(camera, graph.to_global(_drag_anchor))
-
-
-func _apply_move(camera: Camera3D, mouse: Vector2) -> void:
-	if _move_indices.is_empty():
-		return
-	var delta := Vector3.ZERO
-	if _drag_kind == DragKind.POINTS:
-		var origin := camera.project_ray_origin(mouse)
-		var direction := camera.project_ray_normal(mouse)
-		var hit: Variant = HEGoGraphPlacement.intersect_ray(origin, direction, _drag_plane)
-		if hit == null:
-			return
-		delta = graph.to_local(hit) - _drag_anchor
-	else:
-		var axis := Vector3.RIGHT
-		if _drag_kind == DragKind.AXIS_Y:
-			axis = Vector3.UP
-		elif _drag_kind == DragKind.AXIS_Z:
-			axis = Vector3.BACK
-		var origin_global: Vector3 = graph.to_global(gizmo_origin)
-		var axis_global: Vector3 = (graph.global_transform.basis * axis).normalized()
-		var ray_o := camera.project_ray_origin(mouse)
-		var ray_d := camera.project_ray_normal(mouse)
-		var along := _closest_on_axis(ray_o, ray_d, origin_global, axis_global)
-		var anchor_along := gizmo_origin.dot(axis)
-		var now_along := graph.to_local(along).dot(axis)
-		delta = axis * (now_along - anchor_along)
-
-	var next := graph.points.duplicate()
-	for i in _move_indices.size():
-		next[_move_indices[i]] = _move_origins[i] + delta
-	graph.points = next
-
-
-func _commit_move() -> void:
-	if _undo_before.is_empty():
-		return
-	var after: Dictionary = graph.capture_state()
-	var ur := plugin.get_undo_redo()
-	ur.create_action("Move graph points")
-	ur.add_do_method(graph, "apply_state", after)
-	ur.add_undo_method(graph, "apply_state", _undo_before)
-	ur.commit_action(false)
-	_undo_before = {}
-
-
-func _closest_on_axis(ray_o: Vector3, ray_d: Vector3, axis_o: Vector3, axis_d: Vector3) -> Vector3:
-	# Closest point on the axis line to the mouse ray.
-	var d := ray_d.cross(axis_d)
-	var denom := d.length_squared()
-	if denom < 0.0000001:
-		return axis_o
-	var t := ((axis_o - ray_o).cross(ray_d)).dot(d) / denom
-	return axis_o + axis_d * t
-
-
-func _pick_axis(camera: Camera3D, mouse: Vector2) -> DragKind:
-	if selected_points.is_empty() or graph.points.is_empty():
-		return DragKind.NONE
-	var origin_global: Vector3 = graph.to_global(gizmo_origin)
-	if camera.is_position_behind(origin_global):
-		return DragKind.NONE
-	var tips := {
-		DragKind.AXIS_X: graph.to_global(gizmo_origin + Vector3.RIGHT * axis_length),
-		DragKind.AXIS_Y: graph.to_global(gizmo_origin + Vector3.UP * axis_length),
-		DragKind.AXIS_Z: graph.to_global(gizmo_origin + Vector3.BACK * axis_length),
-	}
-	var best := DragKind.NONE
-	var best_dist := AXIS_PICK_PIXELS
-	for kind in tips:
-		var tip: Vector3 = tips[kind]
-		if camera.is_position_behind(tip):
-			continue
-		var dist := camera.unproject_position(tip).distance_to(mouse)
-		if dist <= best_dist:
-			best_dist = dist
-			best = kind
-	return best
-
-
-func _update_axis_length(camera: Camera3D) -> void:
-	if graph == null or selected_points.is_empty():
-		return
-	var origin := Vector3.ZERO
-	var count := 0
-	for i in selected_points:
-		if i >= 0 and i < graph.points.size():
-			origin += graph.points[i]
-			count += 1
-	if count == 0:
-		return
-	gizmo_origin = origin / float(count)
-	var dist := camera.global_position.distance_to(graph.to_global(gizmo_origin))
-	axis_length = clampf(dist * 0.12, 0.2, 3.0)
-
-
 func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 	_update_hover(camera, mouse)
+
+	# Shift+empty never places a point; it drops the current selection.
+	if hover_point < 0 and hover_connection < 0 and shift:
+		_clear_selection()
+		return
+
 	if hover_point >= 0:
 		if mode == Mode.DRAW and ctrl and last_point >= 0:
 			_mutate("Connect graph points", func() -> void:
 				graph.add_connection(last_point, hover_point)
 			)
-			last_point = hover_point
-			_select_points(PackedInt32Array([hover_point]), false)
-		else:
-			_select_points(PackedInt32Array([hover_point]), shift)
 			last_point = hover_point
 		return
 
@@ -381,15 +243,12 @@ func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 			_mutate("Split graph connection", func() -> void:
 				last_point = graph.split_connection(conn, local)
 			)
-			if last_point >= 0:
-				_select_points(PackedInt32Array([last_point]), false)
 		else:
 			_select_connections(PackedInt32Array([hover_connection]), shift)
 		return
 
 	if mode != Mode.DRAW:
-		if not shift:
-			_clear_selection()
+		_clear_selection()
 		return
 
 	var hit: Variant = _hit(camera, mouse)
@@ -402,8 +261,6 @@ func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 		if connect_from >= 0:
 			graph.add_connection(connect_from, last_point)
 	)
-	if last_point >= 0:
-		_select_points(PackedInt32Array([last_point]), false)
 
 
 func _delete_selection() -> void:
@@ -419,24 +276,8 @@ func _delete_selection() -> void:
 	last_point = -1
 
 
-func _select_points(indices: PackedInt32Array, additive: bool) -> void:
-	if not additive:
-		selected_points = indices.duplicate()
-		selected_connections = PackedInt32Array()
-	else:
-		for index in indices:
-			var found := selected_points.find(index)
-			if found >= 0:
-				selected_points.remove_at(found)
-			else:
-				selected_points.append(index)
-	graph.update_gizmos()
-	_refresh_attrib_panel()
-
-
 func _select_connections(indices: PackedInt32Array, additive: bool) -> void:
 	if not additive:
-		selected_points = PackedInt32Array()
 		selected_connections = indices.duplicate()
 	else:
 		for index in indices:
@@ -455,10 +296,19 @@ func _clear_selection() -> void:
 	if graph:
 		graph.update_gizmos()
 	_refresh_attrib_panel()
+	if graph == null or plugin == null:
+		return
+	# Re-selecting the node drops the 3D editor's subgizmo map so the built-in
+	# transform widget leaves the points.
+	_reselecting = true
+	var selection := EditorInterface.get_selection()
+	selection.clear()
+	selection.add_node(graph)
+	_reselecting = false
 
 
 func draw_overlay(overlay: Control) -> void:
-	if not _pressed or _drag_kind != DragKind.BOX or not _drag_started:
+	if not _pressed or not _box or not _drag_started:
 		return
 	var rect := Rect2(_press_pos, _pointer - _press_pos).abs()
 	overlay.draw_rect(rect, Color(0.2, 0.55, 1.0, 0.12), true)
@@ -480,14 +330,19 @@ func _finish_box(camera: Camera3D, additive: bool) -> void:
 	var pts := HEGoGraphPicking.points_in_rect(rect, projected)
 	var cons := HEGoGraphPicking.connections_in_rect(rect, projected, graph.connections)
 	if not additive:
-		selected_points = PackedInt32Array()
 		selected_connections = PackedInt32Array()
-	for index in pts:
-		if selected_points.find(index) < 0:
-			selected_points.append(index)
 	for index in cons:
 		if selected_connections.find(index) < 0:
 			selected_connections.append(index)
+	# Point box-select is left to Godot subgizmos when CUSTOM/PASS is used.
+	# Our overlay box still records connections; points come from subgizmo frustum
+	# only if the 3D editor ran it. Apply points ourselves so mixed boxes work.
+	if not additive:
+		selected_points = pts
+	else:
+		for index in pts:
+			if selected_points.find(index) < 0:
+				selected_points.append(index)
 	if selected_points.size() > 0:
 		last_point = selected_points[selected_points.size() - 1]
 	graph.update_gizmos()
@@ -532,13 +387,12 @@ func _hit(camera: Camera3D, mouse: Vector2) -> Variant:
 		anchor = graph.to_global(graph.points[last_point])
 	elif selected_points.size() > 0 and selected_points[0] < graph.points.size():
 		anchor = graph.to_global(graph.points[selected_points[0]])
-	return HEGoGraphPlacement.intersect_ray(origin, direction, _placement_plane(camera, anchor))
-
-
-func _placement_plane(camera: Camera3D, anchor: Vector3) -> Plane:
+	var plane: Plane
 	if placement_mode == HEGoGraphPlacement.Mode.WORLD:
-		return HEGoGraphPlacement.world_plane(world_axis, graph.global_position, world_offset)
-	return HEGoGraphPlacement.camera_plane(-camera.global_transform.basis.z, anchor)
+		plane = HEGoGraphPlacement.world_plane(world_axis, graph.global_position, world_offset)
+	else:
+		plane = HEGoGraphPlacement.camera_plane(-camera.global_transform.basis.z, anchor)
+	return HEGoGraphPlacement.intersect_ray(origin, direction, plane)
 
 
 func _ray_point(camera: Camera3D, mouse: Vector2) -> Vector3:
@@ -569,6 +423,33 @@ func _on_graph_changed() -> void:
 func _refresh_attrib_panel() -> void:
 	if attrib_panel and attrib_panel.has_method("rebuild"):
 		attrib_panel.rebuild(graph, selected_points, selected_connections)
+
+
+func _near_selection_gizmo(camera: Camera3D, mouse: Vector2) -> bool:
+	if selected_points.is_empty() or graph.points.is_empty():
+		return false
+	var origin := Vector3.ZERO
+	var count := 0
+	for i in selected_points:
+		if i >= 0 and i < graph.points.size():
+			origin += graph.points[i]
+			count += 1
+	if count == 0:
+		return false
+	origin /= float(count)
+	var global_pt: Vector3 = graph.to_global(origin)
+	if camera.is_position_behind(global_pt):
+		return false
+	return camera.unproject_position(global_pt).distance_to(mouse) < 110.0
+
+
+func _ids_equal(a: PackedInt32Array, b: PackedInt32Array) -> bool:
+	if a.size() != b.size():
+		return false
+	for i in a.size():
+		if a[i] != b[i]:
+			return false
+	return true
 
 
 func on_mode_changed(new_mode: int) -> void:

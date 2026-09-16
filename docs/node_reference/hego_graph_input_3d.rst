@@ -73,7 +73,8 @@ The toolbar switches **Select** and **Draw**. Draw is the default.
 
 **Draw**
 
-- Click empty space: add a point.
+- Click empty space: add a point. **Shift+click** empty space clears the
+  selection instead of placing a point.
 - **Ctrl** while adding: also connect to the previously selected point.
 - **Ctrl+click** an existing point: connect the previous selection to it, then select
   it. That is how you branch.
@@ -82,11 +83,13 @@ The toolbar switches **Select** and **Draw**. Draw is the default.
 
 **Select**
 
-- Click a point or connection: replace the selection. **Shift** toggles.
-- Drag a box: every point and every connection midpoint whose screen position falls
-  inside is selected. **Shift** adds.
-- Selected points turn orange and show an RGB move gizmo. Drag a point to move
-  it in the placement plane, or drag an axis to constrain the move.
+- Click a point: Godot's usual move/rotate/scale widget appears on it. **Shift**
+  toggles extra points into that selection.
+- Click a connection: select the edge (orange).
+- **Shift+click** empty space: clear the selection. A click on empty space
+  without Shift does not add a point.
+- Drag a box away from the transform widget: points and connection midpoints
+  inside the rectangle are selected. **Shift** adds.
 - **Delete** / **Backspace**: selected connections are removed; selected points are
   removed and take their incident connections with them. With nothing selected, Delete
   still deletes the node, as the editor usually does.
