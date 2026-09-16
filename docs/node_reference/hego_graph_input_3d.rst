@@ -73,9 +73,11 @@ The toolbar switches **Select** and **Draw**. Draw is the default.
 
 **Draw**
 
-- Click empty space: add a point. **Shift+click** empty space clears the
-  selection instead of placing a point.
-- **Ctrl** while adding: also connect to the previously selected point.
+- Click empty space: add a point. The new point is selected so the move widget
+  sits on it. **Shift+click** empty space clears the selection instead of placing
+  a point.
+- **Ctrl** while adding: also connect to the previously selected point. The new
+  point is selected, so the next **Ctrl+click** continues the polyline.
 - **Ctrl+click** an existing point: connect the previous selection to it, then select
   it. That is how you branch.
 - Click a connection: split it, inserting a point at the closest spot on the segment.

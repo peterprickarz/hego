@@ -59,14 +59,18 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	var hover_point := -1
 	var hover_connection := -1
 	if editor and editor.graph == node:
-		editor.active_gizmo = gizmo
+		editor.on_gizmo_redraw(gizmo)
 		selected_conns = editor.selected_connections
 		hover_point = editor.hover_point
 		hover_connection = editor.hover_connection
+		# Engine map may still be a frame behind after we create a point.
+		selected_pts = gizmo.get_subgizmo_selection()
 		editor.sync_point_selection(selected_pts)
 		var held := editor.held_point_selection()
 		if held.size() > 0:
 			selected_pts = held
+		elif editor.selected_points.size() > 0:
+			selected_pts = editor.selected_points
 
 	var lines := PackedVector3Array()
 	var hover_lines := PackedVector3Array()
@@ -101,7 +105,7 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		gizmo.add_lines(preview, get_material("preview", gizmo), false)
 
 	for i in node.points.size():
-		var selected := gizmo.is_subgizmo_selected(i)
+		var selected := selected_pts.has(i)
 		var mat_name := "point_selected" if selected else ("point_hover" if i == hover_point else "point")
 		var mesh := _sphere_selected if selected else _sphere
 		gizmo.add_mesh(mesh, get_material(mat_name, gizmo), Transform3D(Basis(), node.points[i]))

@@ -317,14 +317,60 @@ func _select_point_subgizmo(index: int) -> void:
 	selected_points = PackedInt32Array([index])
 	selected_connections = PackedInt32Array()
 	_hold_selection = index
-	if active_gizmo == null:
-		graph.update_gizmos()
-	if active_gizmo and graph.has_method("set_subgizmo_selection"):
-		graph.set_subgizmo_selection(active_gizmo, index, Transform3D(Basis(), graph.points[index]))
-	# Engine applies that call deferred; redraw once it has landed.
+	# Node3D.set_subgizmo_selection is group-deferred, so a redraw from
+	# add_point can restore the previous id before it lands. Talk to
+	# Node3DEditor immediately, then once more next frame if the gizmo
+	# did not exist yet.
+	_push_engine_subgizmo(index)
 	if graph:
-		graph.call_deferred("update_gizmos")
+		graph.update_gizmos()
+		_schedule_subgizmo_retry()
 	_refresh_attrib_panel()
+
+
+func on_gizmo_redraw(gizmo: EditorNode3DGizmo) -> void:
+	active_gizmo = gizmo
+	if _hold_selection >= 0 and not gizmo.is_subgizmo_selected(_hold_selection):
+		_push_engine_subgizmo(_hold_selection)
+
+
+func _push_engine_subgizmo(index: int) -> void:
+	if graph == null or index < 0 or index >= graph.points.size():
+		return
+	var giz: Variant = active_gizmo
+	if giz == null:
+		var gizmos := graph.get_gizmos()
+		if gizmos.size() > 0:
+			giz = gizmos[0]
+			active_gizmo = giz
+	if giz == null:
+		return
+	var xf := Transform3D(Basis(), graph.points[index])
+	var spatial := _spatial_editor()
+	if spatial and spatial.has_method("_set_subgizmo_selection"):
+		spatial.call("_set_subgizmo_selection", graph, giz, index, xf)
+		if spatial.has_method("update_transform_gizmo"):
+			spatial.call("update_transform_gizmo")
+	else:
+		graph.set_subgizmo_selection(giz, index, xf)
+
+
+func _schedule_subgizmo_retry() -> void:
+	if graph == null or not is_instance_valid(graph):
+		return
+	var tree := graph.get_tree()
+	if tree == null:
+		return
+	if tree.process_frame.is_connected(_finish_point_selection):
+		return
+	tree.process_frame.connect(_finish_point_selection, CONNECT_ONE_SHOT)
+
+
+func _finish_point_selection() -> void:
+	if _hold_selection < 0 or graph == null or not is_instance_valid(graph):
+		return
+	_push_engine_subgizmo(_hold_selection)
+	graph.update_gizmos()
 
 
 func _select_connections(indices: PackedInt32Array, additive: bool) -> void:
@@ -346,7 +392,10 @@ func _clear_selection() -> void:
 	selected_connections = PackedInt32Array()
 	_hold_selection = -1
 	if graph:
-		if graph.has_method("clear_subgizmo_selection"):
+		var spatial := _spatial_editor()
+		if spatial and spatial.has_method("_clear_subgizmo_selection"):
+			spatial.call("_clear_subgizmo_selection", graph)
+		else:
 			graph.clear_subgizmo_selection()
 		graph.update_gizmos()
 	_refresh_attrib_panel()
