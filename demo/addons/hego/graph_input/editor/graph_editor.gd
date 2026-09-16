@@ -258,22 +258,25 @@ func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 		return
 
 	if hover_connection >= 0:
-		if mode == Mode.DRAW:
-			var a: int = graph.connections[hover_connection * 2]
-			var b: int = graph.connections[hover_connection * 2 + 1]
-			var split_at := HEGoGraphPicking.closest_on_segment(
-					graph.to_global(graph.points[a]), graph.to_global(graph.points[b]),
-					_ray_point(camera, mouse))
-			var local := graph.to_local(split_at)
-			var conn := hover_connection
-			# Do not assign the new index inside a lambda: GDScript captures
-			# ints by value, so the outer variable would stay -1.
-			var before: Dictionary = graph.capture_state()
-			var new_index := graph.split_connection(conn, local)
-			_commit_state("Split graph connection", before)
-			_select_point_subgizmo(new_index)
-		else:
-			_select_connections(PackedInt32Array([hover_connection]), shift)
+		# Shift+click selects the edge. Plain Draw click still splits.
+		if shift or mode != Mode.DRAW:
+			if mode == Mode.DRAW:
+				_clear_point_selection()
+			_select_connections(PackedInt32Array([hover_connection]), shift and mode == Mode.SELECT)
+			return
+		var a: int = graph.connections[hover_connection * 2]
+		var b: int = graph.connections[hover_connection * 2 + 1]
+		var split_at := HEGoGraphPicking.closest_on_segment(
+				graph.to_global(graph.points[a]), graph.to_global(graph.points[b]),
+				_ray_point(camera, mouse))
+		var local := graph.to_local(split_at)
+		var conn := hover_connection
+		# Do not assign the new index inside a lambda: GDScript captures
+		# ints by value, so the outer variable would stay -1.
+		var before: Dictionary = graph.capture_state()
+		var new_index := graph.split_connection(conn, local)
+		_commit_state("Split graph connection", before)
+		_select_point_subgizmo(new_index)
 		return
 
 	if mode != Mode.DRAW:
@@ -387,16 +390,22 @@ func _select_connections(indices: PackedInt32Array, additive: bool) -> void:
 	_refresh_attrib_panel()
 
 
-func _clear_selection() -> void:
+func _clear_point_selection() -> void:
 	selected_points = PackedInt32Array()
-	selected_connections = PackedInt32Array()
 	_hold_selection = -1
+	if graph == null:
+		return
+	var spatial := _spatial_editor()
+	if spatial and spatial.has_method("_clear_subgizmo_selection"):
+		spatial.call("_clear_subgizmo_selection", graph)
+	else:
+		graph.clear_subgizmo_selection()
+
+
+func _clear_selection() -> void:
+	selected_connections = PackedInt32Array()
+	_clear_point_selection()
 	if graph:
-		var spatial := _spatial_editor()
-		if spatial and spatial.has_method("_clear_subgizmo_selection"):
-			spatial.call("_clear_subgizmo_selection", graph)
-		else:
-			graph.clear_subgizmo_selection()
 		graph.update_gizmos()
 	_refresh_attrib_panel()
 

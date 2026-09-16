@@ -82,6 +82,7 @@ The toolbar switches **Select** and **Draw**. Draw is the default.
   it. That is how you branch.
 - Click a connection: split it, inserting a point at the closest spot on the segment.
   Both new connections inherit the original connection's attributes.
+- **Shift+click** a connection: select the edge instead of splitting it.
 
 **Select**
 
