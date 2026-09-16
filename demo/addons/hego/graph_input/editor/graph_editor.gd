@@ -235,10 +235,11 @@ func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 
 	if hover_point >= 0:
 		if mode == Mode.DRAW and ctrl and last_point >= 0:
+			var to_point := hover_point
 			_mutate("Connect graph points", func() -> void:
-				graph.add_connection(last_point, hover_point)
+				graph.add_connection(last_point, to_point)
 			)
-			last_point = hover_point
+			_select_point_subgizmo(to_point)
 		return
 
 	if hover_connection >= 0:
@@ -250,9 +251,11 @@ func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 					_ray_point(camera, mouse))
 			var local := graph.to_local(split_at)
 			var conn := hover_connection
+			var new_index := -1
 			_mutate("Split graph connection", func() -> void:
-				last_point = graph.split_connection(conn, local)
+				new_index = graph.split_connection(conn, local)
 			)
+			_select_point_subgizmo(new_index)
 		else:
 			_select_connections(PackedInt32Array([hover_connection]), shift)
 		return
@@ -266,11 +269,13 @@ func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 		return
 	var local_hit: Vector3 = graph.to_local(hit)
 	var connect_from := last_point if ctrl else -1
+	var new_index := -1
 	_mutate("Add graph point", func() -> void:
-		last_point = graph.add_point(local_hit)
+		new_index = graph.add_point(local_hit)
 		if connect_from >= 0:
-			graph.add_connection(connect_from, last_point)
+			graph.add_connection(connect_from, new_index)
 	)
+	_select_point_subgizmo(new_index)
 
 
 func _delete_selection() -> void:
@@ -284,6 +289,23 @@ func _delete_selection() -> void:
 	)
 	_clear_selection()
 	last_point = -1
+
+
+func _select_point_subgizmo(index: int) -> void:
+	if graph == null or index < 0 or index >= graph.points.size():
+		return
+	last_point = index
+	selected_points = PackedInt32Array([index])
+	selected_connections = PackedInt32Array()
+	if graph.has_method("clear_subgizmo_selection"):
+		graph.clear_subgizmo_selection()
+	if graph.has_method("set_subgizmo_selection"):
+		for gizmo in graph.get_gizmos():
+			if gizmo is EditorNode3DGizmo:
+				graph.set_subgizmo_selection(gizmo, index, Transform3D(Basis(), graph.points[index]))
+				break
+	graph.update_gizmos()
+	_refresh_attrib_panel()
 
 
 func _select_connections(indices: PackedInt32Array, additive: bool) -> void:
