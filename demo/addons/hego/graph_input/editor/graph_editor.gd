@@ -266,10 +266,11 @@ func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 					_ray_point(camera, mouse))
 			var local := graph.to_local(split_at)
 			var conn := hover_connection
-			var new_index := -1
-			_mutate("Split graph connection", func() -> void:
-				new_index = graph.split_connection(conn, local)
-			)
+			# Do not assign the new index inside a lambda: GDScript captures
+			# ints by value, so the outer variable would stay -1.
+			var before: Dictionary = graph.capture_state()
+			var new_index := graph.split_connection(conn, local)
+			_commit_state("Split graph connection", before)
 			_select_point_subgizmo(new_index)
 		else:
 			_select_connections(PackedInt32Array([hover_connection]), shift)
@@ -284,12 +285,11 @@ func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 		return
 	var local_hit: Vector3 = graph.to_local(hit)
 	var connect_from := last_point if ctrl else -1
-	var new_index := -1
-	_mutate("Add graph point", func() -> void:
-		new_index = graph.add_point(local_hit)
-		if connect_from >= 0:
-			graph.add_connection(connect_from, new_index)
-	)
+	var before: Dictionary = graph.capture_state()
+	var new_index := graph.add_point(local_hit)
+	if connect_from >= 0:
+		graph.add_connection(connect_from, new_index)
+	_commit_state("Add graph point", before)
 	_select_point_subgizmo(new_index)
 
 
@@ -499,6 +499,10 @@ func _ray_point(camera: Camera3D, mouse: Vector2) -> Vector3:
 func _mutate(action: String, fn: Callable) -> void:
 	var before: Dictionary = graph.capture_state()
 	fn.call()
+	_commit_state(action, before)
+
+
+func _commit_state(action: String, before: Dictionary) -> void:
 	var after: Dictionary = graph.capture_state()
 	var ur := plugin.get_undo_redo()
 	ur.create_action(action)
