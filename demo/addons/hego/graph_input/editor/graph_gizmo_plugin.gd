@@ -63,6 +63,9 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		hover_point = editor.hover_point
 		hover_connection = editor.hover_connection
 		editor.sync_point_selection(selected_pts)
+		var held := editor.held_point_selection()
+		if held.size() > 0:
+			selected_pts = held
 
 	var lines := PackedVector3Array()
 	var hover_lines := PackedVector3Array()

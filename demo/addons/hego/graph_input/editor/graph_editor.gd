@@ -40,6 +40,9 @@ var _own_click := false
 var _box := false
 var _reselecting := false
 var _saved_tool_button: Button
+## Index we just selected ourselves; ignore stale gizmo selection until Godot's
+## deferred set_subgizmo_selection lands.
+var _hold_selection := -1
 
 
 func edit(object: Object) -> void:
@@ -52,6 +55,7 @@ func edit(object: Object) -> void:
 	selected_points = PackedInt32Array()
 	selected_connections = PackedInt32Array()
 	last_point = -1
+	_hold_selection = -1
 	hover_point = -1
 	hover_connection = -1
 	preview_cursor = null
@@ -76,7 +80,18 @@ func set_visible(visible: bool) -> void:
 		_refresh_attrib_panel()
 
 
+func held_point_selection() -> PackedInt32Array:
+	if _hold_selection >= 0:
+		return selected_points
+	return PackedInt32Array()
+
+
 func sync_point_selection(ids: PackedInt32Array) -> void:
+	if _hold_selection >= 0:
+		if ids.size() == 1 and ids[0] == _hold_selection:
+			_hold_selection = -1
+		else:
+			return
 	if _ids_equal(selected_points, ids):
 		return
 	selected_points = ids.duplicate()
@@ -124,6 +139,10 @@ func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 
 	var empty := hover_point < 0 and hover_connection < 0
 	if event.shift_pressed and empty:
+		_own_click = true
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	# Ctrl+click in Draw places/connects a point even on top of the move widget.
+	if mode == Mode.DRAW and event.ctrl_pressed and empty:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
 	# Gizmo arrows sit in "empty" space. Let the 3D editor keep them in every mode.
@@ -297,14 +316,17 @@ func _select_point_subgizmo(index: int) -> void:
 	last_point = index
 	selected_points = PackedInt32Array([index])
 	selected_connections = PackedInt32Array()
-	if graph.has_method("clear_subgizmo_selection"):
-		graph.clear_subgizmo_selection()
+	_hold_selection = index
 	if graph.has_method("set_subgizmo_selection"):
-		for gizmo in graph.get_gizmos():
-			if gizmo is EditorNode3DGizmo:
-				graph.set_subgizmo_selection(gizmo, index, Transform3D(Basis(), graph.points[index]))
-				break
+		var gizmos: Array = graph.get_gizmos()
+		if gizmos.is_empty():
+			graph.update_gizmos()
+			gizmos = graph.get_gizmos()
+		for gizmo in gizmos:
+			graph.set_subgizmo_selection(gizmo, index, Transform3D(Basis(), graph.points[index]))
+	# set_subgizmo_selection is deferred in the engine; redraw after it lands.
 	graph.update_gizmos()
+	graph.call_deferred("update_gizmos")
 	_refresh_attrib_panel()
 
 
@@ -325,6 +347,7 @@ func _select_connections(indices: PackedInt32Array, additive: bool) -> void:
 func _clear_selection() -> void:
 	selected_points = PackedInt32Array()
 	selected_connections = PackedInt32Array()
+	_hold_selection = -1
 	if graph:
 		if graph.has_method("clear_subgizmo_selection"):
 			graph.clear_subgizmo_selection()
