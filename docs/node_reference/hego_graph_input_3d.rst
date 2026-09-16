@@ -83,8 +83,9 @@ The toolbar switches **Select** and **Draw**. Draw is the default.
 
 **Select**
 
-- Click a point: Godot's usual move/rotate/scale widget appears on it. **Shift**
-  toggles extra points into that selection.
+- Click a point: Godot's move widget (the W tool, translation only) appears on
+  it. **Shift** toggles extra points into that selection. Drag an arrow or a
+  plane square to move the point.
 - Click a connection: select the edge (orange).
 - **Shift+click** empty space: clear the selection. A click on empty space
   without Shift does not add a point.

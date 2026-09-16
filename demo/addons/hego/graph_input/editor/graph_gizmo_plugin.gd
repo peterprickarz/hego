@@ -146,7 +146,8 @@ func _set_subgizmo_transform(gizmo: EditorNode3DGizmo, subgizmo_id: int, transfo
 	var node := gizmo.get_node_3d() as HEGoGraphInput3D
 	if node == null or subgizmo_id < 0 or subgizmo_id >= node.points.size():
 		return
-	node.set_point_position(subgizmo_id, transform.origin)
+	# Location only: ignore basis so rotate/scale handles cannot twist a point.
+	node.set_point_position_live(subgizmo_id, transform.origin)
 
 
 func _commit_subgizmos(gizmo: EditorNode3DGizmo, ids: PackedInt32Array, restores: Array, cancel: bool) -> void:

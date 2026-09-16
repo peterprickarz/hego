@@ -25,6 +25,8 @@ signal graph_changed
 @export var points: PackedVector3Array = PackedVector3Array():
 	set(value):
 		points = value
+		if _syncing:
+			return
 		_sync_attrib_sizes()
 		graph_changed.emit()
 
@@ -100,6 +102,19 @@ func set_point_position(index: int, position: Vector3) -> void:
 	var next := points.duplicate()
 	next[index] = position
 	points = next
+
+
+## Sets a point during a live gizmo drag without emitting [signal graph_changed].
+func set_point_position_live(index: int, position: Vector3) -> void:
+	if index < 0 or index >= points.size():
+		return
+	var next := points.duplicate()
+	next[index] = position
+	_syncing = true
+	points = next
+	_syncing = false
+	if Engine.is_editor_hint():
+		update_gizmos()
 
 
 ## Deletes the given point indices and any connection that used them. Remaining

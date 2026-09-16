@@ -39,6 +39,7 @@ var _drag_started := false
 var _own_click := false
 var _box := false
 var _reselecting := false
+var _saved_tool_button: Button
 
 
 func edit(object: Object) -> void:
@@ -68,8 +69,10 @@ func set_visible(visible: bool) -> void:
 	if attrib_panel:
 		attrib_panel.visible = visible
 	if not visible:
+		_restore_spatial_tool()
 		edit(null)
 	else:
+		_use_move_tool()
 		_refresh_attrib_panel()
 
 
@@ -123,6 +126,10 @@ func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 	if event.shift_pressed and empty:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	# Gizmo arrows sit in "empty" space. Let the 3D editor keep them in every mode.
+	if empty and _near_selection_gizmo(camera, event.position):
+		_pressed = false
+		return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 	if mode == Mode.DRAW and empty:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
@@ -147,6 +154,9 @@ func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 
 func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:
 	_pointer = event.position
+	# While the built-in widget is dragging, do not rebuild gizmos or hover.
+	if event.button_mask & MOUSE_BUTTON_MASK_LEFT and not _own_click:
+		return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 	if _pressed and not _drag_started and event.position.distance_to(_press_pos) > CLICK_PIXELS:
 		_drag_started = true
 		if _own_click and mode == Mode.SELECT:
@@ -294,17 +304,10 @@ func _clear_selection() -> void:
 	selected_points = PackedInt32Array()
 	selected_connections = PackedInt32Array()
 	if graph:
+		if graph.has_method("clear_subgizmo_selection"):
+			graph.clear_subgizmo_selection()
 		graph.update_gizmos()
 	_refresh_attrib_panel()
-	if graph == null or plugin == null:
-		return
-	# Re-selecting the node drops the 3D editor's subgizmo map so the built-in
-	# transform widget leaves the points.
-	_reselecting = true
-	var selection := EditorInterface.get_selection()
-	selection.clear()
-	selection.add_node(graph)
-	_reselecting = false
 
 
 func draw_overlay(overlay: Control) -> void:
@@ -440,7 +443,46 @@ func _near_selection_gizmo(camera: Camera3D, mouse: Vector2) -> bool:
 	var global_pt: Vector3 = graph.to_global(origin)
 	if camera.is_position_behind(global_pt):
 		return false
-	return camera.unproject_position(global_pt).distance_to(mouse) < 110.0
+	return camera.unproject_position(global_pt).distance_to(mouse) < 150.0
+
+
+func _spatial_editor() -> Node:
+	var found := EditorInterface.get_base_control().find_children("*", "Node3DEditor", true, false)
+	return found[0] if not found.is_empty() else null
+
+
+func _spatial_tool_button(keycode: int) -> Button:
+	var spatial := _spatial_editor()
+	if spatial == null:
+		return null
+	for node in spatial.find_children("*", "Button", true, false):
+		var button := node as Button
+		if button == null or button.shortcut == null:
+			continue
+		for ev in button.shortcut.events:
+			if ev is InputEventKey and ev.keycode == keycode and not ev.shift_pressed and not ev.ctrl_pressed and not ev.alt_pressed and not ev.meta_pressed:
+				return button
+	return null
+
+
+func _use_move_tool() -> void:
+	var move := _spatial_tool_button(KEY_W)
+	if move == null:
+		return
+	if _saved_tool_button == null:
+		for key in [KEY_Q, KEY_W, KEY_E, KEY_R]:
+			var button := _spatial_tool_button(key)
+			if button and button.button_pressed:
+				_saved_tool_button = button
+				break
+	if not move.button_pressed:
+		move.pressed.emit()
+
+
+func _restore_spatial_tool() -> void:
+	if _saved_tool_button and not _saved_tool_button.button_pressed:
+		_saved_tool_button.pressed.emit()
+	_saved_tool_button = null
 
 
 func _ids_equal(a: PackedInt32Array, b: PackedInt32Array) -> bool:
