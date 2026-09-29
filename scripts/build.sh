@@ -84,7 +84,7 @@ sys.path.insert(0, sys.argv[1] + "/hapi_generator")
 from generate_houdini_api import resolve_hfs
 
 with contextlib.redirect_stdout(sys.stderr):
-    hfs, _ = resolve_hfs(None)
+    hfs, _ = resolve_hfs(None, auto_detect=False)
 print(hfs)
 PY
 )"

@@ -134,11 +134,13 @@ def scons_default_hfs():
     return entry.group(1) if entry else None
 
 
-def resolve_hfs(explicit_hfs):
+def resolve_hfs(explicit_hfs, auto_detect=True):
     """Pick the Houdini install to parse.
 
     In the same order the build resolves it: --hfs, then $HFS, then the
     SConstruct default, and only then the newest install found on the machine.
+    The build passes auto_detect=False: the generated bindings target one Houdini
+    version, so it stops rather than silently compile against another install.
     """
     for hfs, source in ((explicit_hfs, "--hfs"), (os.environ.get("HFS"), "$HFS")):
         if not hfs:
@@ -154,6 +156,12 @@ def resolve_hfs(explicit_hfs):
     scons_hfs = scons_default_hfs()
     if scons_hfs and is_houdini_install(scons_hfs):
         return os.path.realpath(scons_hfs), "SConstruct default_hfs"
+
+    if not auto_detect:
+        sys.exit(
+            "Error: HFS is not set and the default install '%s' has no HAPI headers.\n"
+            "Set the HFS environment variable to your Houdini installation folder." % scons_hfs
+        )
 
     installs = find_houdini_installs()
     if not installs:

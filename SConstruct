@@ -23,7 +23,7 @@ from generate_houdini_api import resolve_hfs
 if GetOption("help"):
     HFS = os.environ.get("HFS", default_hfs.get(sys_name, ""))
 else:
-    HFS, _ = resolve_hfs(None)
+    HFS, _ = resolve_hfs(None, auto_detect=False)
 
 print(f"Using HFS = {HFS}")
 
