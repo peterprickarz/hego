@@ -10,17 +10,20 @@ import shutil
 default_hfs = {
     "Windows": r"C:\Program Files\Side Effects Software\Houdini 22.0.429",
     "Linux":   "/opt/hfs22.0",  # the symlink, so a new production build needs no change
-    "Darwin":  "/Applications/Houdini/Houdini22.0.429/Houdini.framework/Versions/Current/Resources"
+    "Darwin":  "/Applications/Houdini/Houdini22.0.429/Frameworks/Houdini.framework/Versions/Current/Resources"
 }
 
 sys_name = platform.system()
-HFS = os.environ.get("HFS", default_hfs.get(sys_name, ""))
+# Share header validation and installation discovery with the binding generator.
+# Only headers are needed here: HFS may also point at an SDK-only directory on a
+# cross-build host. Houdini's executable and libraries are loaded only at runtime.
+sys.path.insert(0, os.path.join(Dir("#").abspath, "hapi_generator"))
+from generate_houdini_api import resolve_hfs
 
-if not HFS or not os.path.isdir(HFS):
-    print("Error: HFS not found and no valid default for this OS.")
-    print("Please set environment variable HFS to your Houdini installation folder.")
-    print(f"Typical locations:\n  Windows → {default_hfs['Windows']}\n  Linux   → {default_hfs['Linux']}")
-    sys.exit(1)
+if GetOption("help"):
+    HFS = os.environ.get("HFS", default_hfs.get(sys_name, ""))
+else:
+    HFS, _ = resolve_hfs(None)
 
 print(f"Using HFS = {HFS}")
 
@@ -39,8 +42,14 @@ HB = os.path.join(HFS, "bin")
 # defined. The platform is read from the command line rather than from env, which does not
 # exist yet; the fallback matches godot-cpp's own default of building for the host.
 # ───────────────────────────────────────────────
-_target_platform = ARGUMENTS.get("platform", ARGUMENTS.get("p", sys_name.lower()))
+_host_platform = {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get(sys_name, sys_name.lower())
+_target_platform = ARGUMENTS.get("platform", ARGUMENTS.get("p", _host_platform))
 SConsignFile(f".sconsign-{_target_platform}.dblite")
+
+if _target_platform == "macos":
+    # macOS 11 is the first release with Apple Silicon support. Apply the same
+    # target to godot-cpp and HEGo, including builds made with OSXCross on Linux.
+    ARGUMENTS.setdefault("macos_deployment_target", "11.0")
 
 # ───────────────────────────────────────────────
 # Load godot-cpp environment
@@ -134,9 +143,16 @@ elif env["platform"] == "linux":
     env.Append(LIBS=["dl", "pthread"])
     env.Append(LIBPATH=[os.path.join(HFS, "dsolib")])
 
-elif env["platform"] == "macos" or sys_name == "Darwin":
-    env.Append(CCFLAGS=["-std=c++17"])
-    env.Append(LINKFLAGS=["-Wl,-rpath,@loader_path/../Frameworks/Houdini.framework/Versions/Current/Resources/dsolib"])
+elif env["platform"] == "macos":
+    # SCons defaults to its host's shared-library rules. Override them explicitly
+    # so Linux + OSXCross produces the same Mach-O dylib as native Apple Clang.
+    env["SHLIBPREFIX"] = "lib"
+    env["SHLIBSUFFIX"] = ".dylib"
+    env["SHLINKFLAGS"] = ["$LINKFLAGS", "-dynamiclib"]
+    if "-s" in env["LINKFLAGS"]:
+        env["LINKFLAGS"].remove("-s")
+        env.Append(LINKFLAGS=["-Wl,-S", "-Wl,-x", "-Wl,-dead_strip"])
+    env.Append(LINKFLAGS=[f"-Wl,-install_name,@rpath/libhego.macos.{env['target']}.dylib"])
 
 # Build machine info (optional, but matches setup script)
 if env["platform"] == "linux":
@@ -179,9 +195,14 @@ env.Append(CPPPATH=[src_dir])
 # Output library
 # ───────────────────────────────────────────────
 if env["platform"] == "macos":
-    library = env.SharedLibrary(
-        f"demo/addons/hego/bin/hego.{env['platform']}.{env['target']}.framework/hego.{env['platform']}.{env['target']}",
-        source=cpp_sources,
+    # Keep each architecture's build separate, then install the selected one at
+    # the stable path used by Godot. Use arch=universal to ship both Mac CPUs.
+    # Explicit per-CPU manifest entries cannot fall back to a universal file.
+    compiled_library = env.SharedLibrary(
+        f"{build_dir}/hego{env['suffix']}.dylib", source=cpp_sources,
+    )
+    library = env.InstallAs(
+        f"demo/addons/hego/bin/libhego.macos.{env['target']}.dylib", compiled_library,
     )
 else:
     library = env.SharedLibrary(

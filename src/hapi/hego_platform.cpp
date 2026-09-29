@@ -53,7 +53,7 @@ const char *HEGoPlatform::get_houdini_path()
 
 	// Fall back to environment variable
 	const char *env_path = std::getenv("HFS");
-	if (env_path)
+	if (env_path && env_path[0] != '\0')
 	{
 		cached_path = env_path;
 		return cached_path.c_str();
@@ -73,13 +73,20 @@ void HEGoPlatform::set_env_vars()
 	const char *houdiniBasePath = get_houdini_path();
 
 	std::string houdiniBinPath = std::string(houdiniBasePath) + "/bin";
+	const char *current_path = std::getenv("PATH");
+	std::string path = current_path ? current_path : "";
 
 #ifdef _WIN32
 	_putenv(("HFS=" + std::string(houdiniBasePath)).c_str());
-	_putenv((std::string("PATH=") + getenv("PATH") + ";" + houdiniBinPath).c_str());
+	if (!path.empty())
+		path += ";";
+	path += houdiniBinPath;
+	_putenv(("PATH=" + path).c_str());
 #else
 	setenv("HFS", houdiniBasePath, 1);
-	std::string path = std::string(getenv("PATH")) + ":" + houdiniBinPath;
+	if (!path.empty())
+		path += ":";
+	path += houdiniBinPath;
 	setenv("PATH", path.c_str(), 1);
 #endif
 
@@ -119,21 +126,38 @@ void *HEGoPlatform::load_lib_hapil()
 	return static_cast<void *>(libHAPIL);
 
 #else
-	// On Linux and macOS the loader finds libHAPIL through the search path that
-	// set_env_vars() prepared, so there is no full path to load from here.
-#if defined(__linux__)
-	const char *library_name = HAPI_LIB_OBJECT_LINUX;
-#else
+	// PATH locates Houdini's executables, not shared libraries. Load the selected
+	// installation explicitly so this also works when Godot is launched from Finder
+	// and when the build machine's Houdini path does not exist on this machine.
+	const std::string houdini_base_path = get_houdini_path();
+#if defined(__APPLE__)
 	const char *library_name = HAPI_LIB_OBJECT_MAC;
+	// HFS is Houdini.framework/Resources (or Versions/Current/Resources).
+	const std::string full_path = houdini_base_path + "/../Libraries/" + library_name;
+#else
+	const char *library_name = HAPI_LIB_OBJECT_LINUX;
+	const std::string full_path = houdini_base_path + "/dsolib/" + library_name;
 #endif
 
-	void *libHAPIL = dlopen(library_name, RTLD_LAZY);
+	void *libHAPIL = dlopen(full_path.c_str(), RTLD_LAZY);
 	if (!libHAPIL)
 	{
-		// dlerror() is the only place that says why, so surface it instead of
-		// leaving the caller with a bare null.
 		const char *dl_error = dlerror();
-		HEGo::Util::Log::error(HEGo::Util::Log::Category::PLATFORM, godot::String("Failed to load ") + library_name + " from " + get_houdini_path() + ": " + (dl_error ? dl_error : "unknown error"));
+		const std::string path_error = dl_error ? dl_error : "unknown error";
+		// Preserve support for installations configured through the process's
+		// loader search path before Godot starts.
+		libHAPIL = dlopen(library_name, RTLD_LAZY);
+		if (!libHAPIL)
+		{
+			dl_error = dlerror();
+			HEGo::Util::Log::error(HEGo::Util::Log::Category::PLATFORM, godot::String("Failed to load ") + full_path.c_str() + ": " + path_error.c_str() +
+					"\nFallback loader search for " + library_name + " also failed: " + (dl_error ? dl_error : "unknown error"));
+		}
+		else
+		{
+			HEGo::Util::Log::warning(HEGo::Util::Log::Category::PLATFORM, godot::String("Could not load ") + full_path.c_str() + ": " + path_error.c_str() +
+					". Loaded " + library_name + " through the system loader search path instead.");
+		}
 	}
 	return libHAPIL;
 #endif

@@ -51,8 +51,12 @@ git submodule update --init --recursive
 ### Prerequisites
 
 - **Python 3.8+** with SCons: `python -m pip install scons`
-- **Visual Studio 2022** Community edition or higher
+- **C++17 compiler**: Xcode Command Line Tools on macOS, GCC on Linux, or Visual Studio 2022 on Windows
 - **Git** for cloning and submodules
+
+See [Building on macOS and Linux](BUILDING.md) for native builds, Apple Silicon/Intel
+binaries, and cross-compiling from Linux to macOS with OSXCross. Only HAPI headers
+are required to compile; Houdini itself is needed when running a session.
 
 ### Quick Setup
 
@@ -74,10 +78,22 @@ git submodule update --init --recursive
 
 ### Building
 
-**Option 1: VS Code (Recommended)**
+**macOS / Linux**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install 'scons>=4.5,<5'
+scripts/build.sh              # native debug + release; discovers Houdini via HFS
+```
+
+For a build without a Houdini installation, first run
+`python scripts/fetch_hapi_headers.py` and set `HFS="$PWD/build/deps/houdini"`.
+See [BUILDING.md](BUILDING.md) for the complete commands and runtime setup.
+
+**Windows — Option 1: VS Code**
 - Use Ctrl+Shift+P → "Tasks: Run Task" → "build"
 
-**Option 2: Command Line**
+**Windows — Option 2: Command Line**
 - From VS2022 Developer Command Prompt: `scons`
 - Or any terminal: `scons` (if VS2022 is in PATH)
 

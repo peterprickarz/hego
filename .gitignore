@@ -1,6 +1,7 @@
 build
 /log/
 .venv
+__pycache__/
 demo/.godot
 *.TMP
 .sconsign*.dblite
