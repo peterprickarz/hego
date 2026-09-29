@@ -178,5 +178,16 @@ otool -L demo/addons/hego/bin/libhego.macos.template_debug.dylib
 ```
 
 These check binary format, CPU slices, Godot entry point, and linked libraries.
+Before packaging a macOS build, ad-hoc sign and verify both files on macOS so all
+CPU slices have a signature (the linker may sign only the ARM slice):
+
+```sh
+codesign --force --sign - demo/addons/hego/bin/libhego.macos.template_debug.dylib
+codesign --force --sign - demo/addons/hego/bin/libhego.macos.template_release.dylib
+codesign --verify --strict demo/addons/hego/bin/libhego.macos.template_debug.dylib
+codesign --verify --strict demo/addons/hego/bin/libhego.macos.template_release.dylib
+```
+
+Ad-hoc signing does not notarize a distribution or require a Developer ID identity.
 A successful compile or extension-load test does not test Houdini cooking; test
 a real session with a compatible Houdini installation before distribution.
