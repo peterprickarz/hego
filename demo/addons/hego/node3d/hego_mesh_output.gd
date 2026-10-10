@@ -356,13 +356,37 @@ static func copy_array_mesh_contents(target_mesh: ArrayMesh, source_mesh: ArrayM
 		var blend_shape_arrays := []
 		if source_mesh.has_method("surface_get_blend_shape_arrays"):
 			blend_shape_arrays = source_mesh.surface_get_blend_shape_arrays(surface_index)
-		var lods := {}
-		if source_mesh.has_method("surface_get_lods"):
-			lods = source_mesh.surface_get_lods(surface_index)
+		var lods := _surface_lods(source_mesh, surface_index)
 		target_mesh.add_surface_from_arrays(primitive_type, arrays, blend_shape_arrays, lods)
 		var surface_material := source_mesh.surface_get_material(surface_index)
 		if surface_material != null:
 			target_mesh.surface_set_material(surface_index, surface_material)
+
+
+# ArrayMesh exposes no public LOD getter in Godot 4.4. The rendering server
+# returns edge lengths and packed index buffers; use the same index width as
+# the base surface, including the 65536-vertex boundary.
+static func _surface_lods(mesh: ArrayMesh, surface_index: int) -> Dictionary:
+	var surface := RenderingServer.mesh_get_surface(mesh.get_rid(), surface_index)
+	var packed_lods: Array = surface.get("lods", [])
+	if not packed_lods.is_empty() and not packed_lods[0] is Dictionary:
+		# Godot 4.4's mesh_get_surface accidentally returns recursive arrays for
+		# LODs. Its resource serialization still carries the correct buffers.
+		var stored_surface: Dictionary = mesh.get("_surfaces")[surface_index]
+		var stored_lods: Array = stored_surface.get("lods", [])
+		packed_lods = []
+		for i in range(0, stored_lods.size(), 2):
+			packed_lods.append({"edge_length": stored_lods[i], "index_data": stored_lods[i + 1]})
+	var stride := 2 if int(surface.get("vertex_count", 0)) <= 65536 else 4
+	var lods := {}
+	for lod: Dictionary in packed_lods:
+		var bytes: PackedByteArray = lod["index_data"]
+		var indices := PackedInt32Array()
+		indices.resize(bytes.size() / stride)
+		for i in range(indices.size()):
+			indices[i] = bytes.decode_u16(i * stride) if stride == 2 else bytes.decode_u32(i * stride)
+		lods[float(lod["edge_length"])] = indices
+	return lods
 
 
 ## Loads a saved mesh bypassing the resource cache, so the instance in the scene

@@ -27,5 +27,22 @@ func _initialize() -> void:
 		var second := HEGoMeshOutput.build_array_mesh({null: surface})
 		check(first.surface_get_arrays(0) == second.surface_get_arrays(0), "repeated builds produce identical surfaces")
 		check(RenderingServer.mesh_get_surface(second.get_rid(), 0).get("lods", []).size() == 1, "repeated builds retain the LOD")
+	for count in [4, 65536, 65537]:
+		var source := HEGoMeshOutput.build_array_mesh({null: surface_data(count)})
+		# Include a high index to detect truncation across the index-width boundary.
+		var arrays := source.surface_get_arrays(0)
+		source.clear_surfaces()
+		source.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {8.0: PackedInt32Array([0, 2, count - 1]), 20.0: PackedInt32Array([1, 2, count - 1])})
+		var expected: Array = source.get("_surfaces")[0].get("lods", [])
+		check(expected.size() == 4, "renderer stores both source LODs (%d vertices)" % count)
+		var target := ArrayMesh.new()
+		HEGoMeshOutput.copy_array_mesh_contents(target, source)
+		check(target.get("_surfaces")[0].get("lods", []) == expected, "copy preserves LOD thresholds and index bytes (%d vertices)" % count)
+		var path := "user://hego_lod_regression_%d.res" % count
+		check(HEGoMeshOutput.save_mesh_resource(source, path).ok, "initial mesh save succeeds")
+		check(HEGoMeshOutput.save_mesh_resource(source, path).ok, "mesh overwrite succeeds")
+		var saved := HEGoMeshOutput.load_mesh_resource_fresh(path)
+		check(saved.get("_surfaces")[0].get("lods", []) == expected, "overwrite retains LODs (%d vertices)" % count)
+		DirAccess.remove_absolute(path)
 	print("failures: ", failures)
 	quit(1 if failures else 0)
