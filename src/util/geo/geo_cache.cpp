@@ -163,6 +163,7 @@ std::string GeoCache::attribute_key(const HAPI_PartInfo &part, HAPI_AttributeOwn
 godot::Array GeoCache::attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name)
 {
 	const std::string key = attribute_key(part, owner, name);
+	std::lock_guard<std::mutex> lock(my_attributes_mutex);
 
 	auto cached = my_attributes.find(key);
 	if (cached != my_attributes.end())
@@ -180,6 +181,28 @@ godot::Array GeoCache::attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner 
 					" values)");
 
 	return values;
+}
+
+godot::Array GeoCache::cached_attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name)
+{
+	std::lock_guard<std::mutex> lock(my_attributes_mutex);
+	auto cached = my_attributes.find(attribute_key(part, owner, name));
+	if (cached != my_attributes.end())
+	{
+		my_hits++;
+		// Array is shared by reference. Keep callers from editing the cache.
+		return cached->second.duplicate();
+	}
+	HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB,
+			godot::String("Attribute '") + name + "' was not loaded. Await load_attributes() before reading it.");
+	return godot::Array();
+}
+
+godot::PackedStringArray GeoCache::cached_attribute_names(const HAPI_PartInfo &part, HAPI_AttributeOwner owner)
+{
+	std::lock_guard<std::mutex> lock(my_attributes_mutex);
+	auto cached = my_attribute_names.find(attribute_key(part, owner, ""));
+	return cached != my_attribute_names.end() ? cached->second : godot::PackedStringArray();
 }
 
 godot::Array GeoCache::attribute_pairs(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::PackedStringArray &names)
@@ -206,6 +229,7 @@ godot::Array GeoCache::attribute_pairs(const HAPI_PartInfo &part, HAPI_Attribute
 godot::PackedStringArray GeoCache::attribute_names(const HAPI_PartInfo &part, HAPI_AttributeOwner owner)
 {
 	const std::string key = attribute_key(part, owner, "");
+	std::lock_guard<std::mutex> lock(my_attributes_mutex);
 
 	auto cached = my_attribute_names.find(key);
 	if (cached != my_attribute_names.end())

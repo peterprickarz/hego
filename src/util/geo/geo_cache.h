@@ -8,8 +8,10 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 
+#include <atomic>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -32,8 +34,8 @@ namespace Geo
 /// Validity is tied to the node's total cook count, so a cache invalidates itself as
 /// soon as anything recooks the node, whether HEGo asked for it or Houdini did.
 ///
-/// Fetching happens on the scheduler's worker thread, so instances of this class are
-/// only ever touched from there; the registry itself is guarded by a mutex.
+/// Fetches run on the scheduler worker. Published outputs use only the cached
+/// readers on the main thread; a mutex protects maps while more attributes load.
 class GeoCache
 {
 public:
@@ -68,6 +70,10 @@ public:
 	/// Returns an empty array when the part has no such attribute.
 	godot::Array attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name);
 
+	/// Reads already loaded values without HAPI calls. Warns when not loaded.
+	godot::Array cached_attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name);
+	godot::PackedStringArray cached_attribute_names(const HAPI_PartInfo &part, HAPI_AttributeOwner owner);
+
 	/// Names of every attribute of one owner on one part, as Houdini reports them.
 	/// Cheap: one call per (part, owner), then cached.
 	godot::PackedStringArray attribute_names(const HAPI_PartInfo &part, HAPI_AttributeOwner owner);
@@ -95,8 +101,9 @@ private:
 	std::map<std::string, godot::Array> my_attributes;
 	std::map<std::string, godot::PackedStringArray> my_attribute_names;
 
-	int my_hits = 0;
-	int my_misses = 0;
+	std::mutex my_attributes_mutex;
+	std::atomic<int> my_hits{0};
+	std::atomic<int> my_misses{0};
 };
 
 } // namespace Geo
