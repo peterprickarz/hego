@@ -75,27 +75,42 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	server_options.timeoutMs = 3000.0f;
 
 	my_session_type = session_type;
+	my_owns_server = false;
 	my_named_pipe = named_pipe;
 	my_tcp_port = tcp_port;
 	HAPI_Result session_result = HAPI_RESULT_FAILURE;
 	if (session_type == SessionType::NewNamedPipe)
 	{
-		// Start our server
-		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Starting a named-pipe server...");
-		HAPI_ProcessId process_id;
-		HOUDINI_CHECK_ERROR(HoudiniApi::StartThriftNamedPipeServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
-
-		// Connect to the newly started server
-		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Connecting to the named-pipe session...");
+		// Session Sync may already be listening on this pipe. Connecting first
+		// avoids spawning a competing server and leaves its scene owned by Houdini.
 		HAPI_SessionInfo session_info = HoudiniApi::SessionInfo_Create();
 		session_result = HoudiniApi::CreateThriftNamedPipeSession(&my_session, my_named_pipe.c_str(), &session_info);
+		if (session_result == HAPI_RESULT_SUCCESS)
+		{
+			HEGo::Util::Log::info(HEGo::Util::Log::Category::SESSION, "Attached to the existing named-pipe server.");
+		}
+		else
+		{
+			HoudiniApi::ClearConnectionError();
+			HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Starting a named-pipe server...");
+			HAPI_ProcessId process_id;
+			HAPI_Result server_result;
+			HOUDINI_CHECK_ERROR_GET(&server_result, HoudiniApi::StartThriftNamedPipeServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
+			my_owns_server = server_result == HAPI_RESULT_SUCCESS;
+
+			// Another process can win the race to start the server. In that case
+			// a successful connection below is borrowed too, so never clean it up.
+			session_result = HoudiniApi::CreateThriftNamedPipeSession(&my_session, my_named_pipe.c_str(), &session_info);
+		}
 	}
 	else if (session_type == SessionType::NewTCPSocket)
 	{
 		// Start our server
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Starting a TCP socket server...");
 		HAPI_ProcessId process_id;
-		HOUDINI_CHECK_ERROR(HoudiniApi::StartThriftSocketServer(&server_options, my_tcp_port, &process_id, nullptr));
+		HAPI_Result server_result;
+		HOUDINI_CHECK_ERROR_GET(&server_result, HoudiniApi::StartThriftSocketServer(&server_options, my_tcp_port, &process_id, nullptr));
+		my_owns_server = server_result == HAPI_RESULT_SUCCESS;
 
 		// Connect to the newly started server
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Connecting to the TCP socket session...");
@@ -109,7 +124,9 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 		// it is not HAPI's in-process session type.
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Starting a Shared Memory server...");
 		HAPI_ProcessId process_id;
-		HOUDINI_CHECK_ERROR(HoudiniApi::StartThriftSharedMemoryServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
+		HAPI_Result server_result;
+		HOUDINI_CHECK_ERROR_GET(&server_result, HoudiniApi::StartThriftSharedMemoryServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
+		my_owns_server = server_result == HAPI_RESULT_SUCCESS;
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Connecting to shared memory session...");
 		HAPI_SessionInfo session_info = HoudiniApi::SessionInfo_Create();
 		session_result = HoudiniApi::CreateThriftSharedMemorySession(&my_session, my_named_pipe.c_str(), &session_info);
@@ -153,17 +170,20 @@ bool HEGoSessionManager::stop_session()
 
 	if (HAPI_RESULT_SUCCESS == HoudiniApi::IsSessionValid(&my_session))
 	{
-		// SessionPtr is valid, clean up and close the session
-		HoudiniApi::Cleanup(&my_session);
+		// Cleanup resets the entire scene, including nodes made in the Houdini UI.
+		// A borrowed server only needs its client connection closed.
+		if (my_owns_server)
+			HoudiniApi::Cleanup(&my_session);
 
 		// When using an in-process session, this method must be called
 		// in order for the host process to shutdown cleanly.
-		if (my_session_type == InProcess)
+		if (my_owns_server && my_session_type == InProcess)
 			HoudiniApi::Shutdown(&my_session);
 
 		HoudiniApi::CloseSession(&my_session);
 	}
 
+	my_owns_server = false;
 	HoudiniApi::finalize_hapi();
 	HEGoPlatform::free_lib_hapil(libHAPIL);
 
