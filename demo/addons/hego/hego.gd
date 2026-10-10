@@ -58,6 +58,7 @@ func _exit_tree():
 	# Remove bottom panel
 	if bottom_panel:
 		remove_control_from_bottom_panel(bottom_panel)
+		bottom_panel.queue_free()
 		bottom_panel = null
 	
 	HEGoLog.get_singleton().info("session", "Plugin cleanup completed")
