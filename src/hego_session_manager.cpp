@@ -227,23 +227,23 @@ bool HEGoSessionManager::initialize(bool use_cooking_thread)
 		return false;
 	}
 
+	// The same cook policy applies even when HAPI is already initialized.
+	my_cook_options = HoudiniApi::CookOptions_Create();
+
+	my_cook_options.curveRefineLOD = 8.0f;
+	my_cook_options.clearErrorsAndWarnings = false;
+	my_cook_options.maxVerticesPerPrimitive = 3;
+	my_cook_options.splitGeosByGroup = false;
+	my_cook_options.refineCurveToLinear = false;
+	my_cook_options.handleBoxPartTypes = false;
+	my_cook_options.handleSpherePartTypes = false;
+	my_cook_options.splitPointsByVertexAttributes = false;
+	my_cook_options.packedPrimInstancingMode = HAPI_PACKEDPRIM_INSTANCING_MODE_FLAT;
+
 	if (HoudiniApi::IsInitialized(get_session()) == HAPI_RESULT_NOT_INITIALIZED)
 	{
-		// Initialize HAPI
-		HAPI_CookOptions cook_options = HoudiniApi::CookOptions_Create();
-
-		cook_options.curveRefineLOD = 8.0f;
-		cook_options.clearErrorsAndWarnings = false;
-		cook_options.maxVerticesPerPrimitive = 3;
-		cook_options.splitGeosByGroup = false;
-		cook_options.refineCurveToLinear = false;
-		cook_options.handleBoxPartTypes = false;
-		cook_options.handleSpherePartTypes = false;
-		cook_options.splitPointsByVertexAttributes = false;
-		cook_options.packedPrimInstancingMode = HAPI_PACKEDPRIM_INSTANCING_MODE_FLAT;
-
 		HAPI_Result result = HoudiniApi::Initialize(get_session(), // session
-				&cook_options,
+				&my_cook_options,
 				use_cooking_thread, // use_cooking_thread
 				-1, // cooking_thread_stack_size
 				"", // houdini_environment_files
@@ -252,8 +252,6 @@ bool HEGoSessionManager::initialize(bool use_cooking_thread)
 				nullptr, // image_dso_search_path
 				nullptr // audio_dso_search_path
 		);
-
-		my_cook_options = cook_options;
 
 		if (result == HAPI_RESULT_SUCCESS)
 		{
