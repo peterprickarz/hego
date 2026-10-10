@@ -17,12 +17,16 @@ const OUTPUTS_ROOT_NAME := "Outputs"
 
 
 ## Waits for [param task] to finish and returns its result, or [code]null[/code]
-## if it failed. [param host] is only needed for its scene tree, to yield a frame.
+## if it failed or the host leaves the tree. This does not cancel the native task.
 static func await_task(host: Node, task: HEGoTask) -> Variant:
 	if task == null:
 		HEGoLog.get_singleton().error(LOG_CATEGORY, "Task was null, the session is probably not running.")
 		return null
-	while task.get_status() < HEGoTask.COMPLETED:
+	while true:
+		if not is_instance_valid(host) or host.is_queued_for_deletion() or not host.is_inside_tree():
+			return null
+		if task.get_status() >= HEGoTask.COMPLETED:
+			break
 		await host.get_tree().process_frame
 	if task.get_status() == HEGoTask.FAILED:
 		HEGoLog.get_singleton().error(LOG_CATEGORY, "Task failed: " + task.get_error_message())

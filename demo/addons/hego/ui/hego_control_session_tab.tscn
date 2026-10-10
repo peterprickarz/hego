@@ -54,14 +54,6 @@ text = "Stop Session"
 [node name="ConnectionType" type="OptionButton" parent="Vbox/ConnectionHBox"]
 unique_name_in_owner = true
 layout_mode = 2
-selected = 1
-item_count = 3
-popup/item_0/text = "TCP  Port"
-popup/item_0/id = 0
-popup/item_1/text = "Named Pipe"
-popup/item_1/id = 1
-popup/item_2/text = "Shared Memory"
-popup/item_2/id = 2
 
 [node name="ConnectionData" type="TextEdit" parent="Vbox/ConnectionHBox"]
 unique_name_in_owner = true

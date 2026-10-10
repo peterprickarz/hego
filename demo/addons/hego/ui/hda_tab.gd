@@ -41,6 +41,7 @@ var hego_tool_node: Node
 ## showing several still has one set of preset buttons, and they belong to the first.
 var hego_asset_node: HEGoAssetNode
 var input_nodes: Array
+var _rebuild_generation := 0
 ## Whether a cook started from this panel is still running. Recook is disabled meanwhile, so
 ## a second cook cannot be fired into a node that is already cooking.
 var _cooking: bool = false
@@ -73,12 +74,7 @@ var _last_highlight: String = ""
 
 
 func _await_task(task: HEGoTask) -> Variant:
-	while task.get_status() < HEGoTask.COMPLETED:
-		await get_tree().process_frame
-	if task.get_status() == HEGoTask.FAILED:
-		push_error("[HEGoBottomPanel]: Task failed: " + task.get_error_message())
-		return null
-	return task.get_result()
+	return await HEGoNodeUtil.await_task(self, task)
 
 
 func _elapsed_msec(start_usec: int) -> float:
@@ -162,7 +158,7 @@ func _on_preset_dialog_confirmed():
 ## scroll to. A node with one HDA implements only [code]hego_get_asset_node()[/code] and is
 ## answered here, so it never has to know any of that exists.
 func _panel_assets() -> Array:
-	if hego_tool_node == null:
+	if not is_instance_valid(hego_tool_node):
 		return []
 
 	if hego_tool_node.has_method("hego_get_panel_assets"):
@@ -196,7 +192,7 @@ func _is_instantiated(asset) -> bool:
 ## Read straight off the node rather than from [method _panel_assets], so the request is
 ## still seen before the HDAs behind it have been cooked into existence.
 func _requested_highlight() -> String:
-	if hego_tool_node == null or not hego_tool_node.has_method("hego_get_panel_assets"):
+	if not is_instance_valid(hego_tool_node) or not hego_tool_node.has_method("hego_get_panel_assets"):
 		return ""
 
 	var entries = hego_tool_node.hego_get_panel_assets()
@@ -208,10 +204,23 @@ func _requested_highlight() -> String:
 	return ""
 
 
+func _exit_tree() -> void:
+	_rebuild_generation += 1
+
+
+func _is_rebuild_current(generation: int, selected_node) -> bool:
+	return generation == _rebuild_generation and is_inside_tree() and not is_queued_for_deletion() \
+		and is_instance_valid(selected_node) and not selected_node.is_queued_for_deletion() \
+		and selected_node.is_inside_tree() and selected_node == hego_tool_node
+
+
 func update_ui():
+	_rebuild_generation += 1
+	var generation := _rebuild_generation
+	var selected_node := hego_tool_node
 	_clear_widgets()
 
-	if hego_tool_node == null:
+	if not is_instance_valid(hego_tool_node):
 		preset_dropdown.clear()
 		preset_dropdown.add_item("No HEGo node selected")
 		preset_dropdown.set_item_disabled(0, true)
@@ -256,6 +265,8 @@ func update_ui():
 				_last_highlight = asset_label
 
 		var parm_dict = await _await_task(asset.get_parms_dict())
+		if not _is_rebuild_current(generation, selected_node):
+			return
 		if parm_dict and parm_dict.keys().size() != 0:
 			for key in parm_dict.keys():
 				add_parm_ui(parm_dict[key], container, asset)
@@ -263,11 +274,15 @@ func update_ui():
 	# Input rows belong to the node rather than to one HDA - there is a single input stash -
 	# so they are shown against the first HDA the node listed. A node chaining several takes
 	# its inputs on that one and wires the rest together itself.
-	await _build_input_rows(entries[0]["asset"])
+	await _build_input_rows(entries[0]["asset"], selected_node, generation)
+	if not _is_rebuild_current(generation, selected_node):
+		return
 
 	if highlighted_section != null:
 		# One frame, so the sections built above have a real size to scroll to.
 		await get_tree().process_frame
+		if not _is_rebuild_current(generation, selected_node):
+			return
 		if is_instance_valid(highlighted_section):
 			(parm_vbox.get_parent() as ScrollContainer).ensure_control_visible(highlighted_section)
 
@@ -275,9 +290,9 @@ func update_ui():
 
 
 ## Builds one row per input of [param asset], filled from the node's input stash.
-func _build_input_rows(asset: HEGoAssetNode) -> void:
+func _build_input_rows(asset: HEGoAssetNode, selected_node: Node, generation: int) -> void:
 	var input_names = await _await_task(asset.get_input_names())
-	if not input_names is PackedStringArray:
+	if not _is_rebuild_current(generation, selected_node) or not input_names is PackedStringArray:
 		return
 
 	input_nodes = Array()
@@ -285,8 +300,8 @@ func _build_input_rows(asset: HEGoAssetNode) -> void:
 		var input_node = preload("res://addons/hego/ui/input_ui.tscn").instantiate()
 		input_vbox.add_child(input_node)
 		var inputs = PackedStringArray()
-		if hego_tool_node.has_method("hego_get_input_stash"):
-			var input_stash = hego_tool_node.hego_get_input_stash()
+		if selected_node.has_method("hego_get_input_stash"):
+			var input_stash = selected_node.hego_get_input_stash()
 			if input_stash.size() > i:
 				inputs = input_stash[i]["inputs"]
 		input_node.setup(input_names[i], inputs)
@@ -305,7 +320,7 @@ func _on_section_open_changed(asset_label: String, is_open: bool) -> void:
 ## code, which this panel has no way of hearing about; the node list it would have to be told
 ## through is cheap to read, so it is read on the timer that is already running.
 func _poll_highlight() -> void:
-	if hego_tool_node == null or _cooking:
+	if not is_instance_valid(hego_tool_node) or _cooking:
 		return
 
 	var wanted := _requested_highlight()
@@ -415,10 +430,18 @@ func _on_remove_multiparm_instance(id: int, index: int, asset: HEGoAssetNode):
 ## anything, which made every has_method() guard in this file unreachable: a script could
 ## implement the whole documented interface and still get an empty, all-disabled tab.
 func set_selected_node(node):
+	if is_instance_valid(hego_tool_node) and hego_tool_node.tree_exiting.is_connected(_on_selected_node_exiting):
+		hego_tool_node.tree_exiting.disconnect(_on_selected_node_exiting)
 	hego_tool_node = node
+	if is_instance_valid(hego_tool_node):
+		hego_tool_node.tree_exiting.connect(_on_selected_node_exiting, CONNECT_ONE_SHOT)
 	hego_asset_node = null
 	await update_ui()
 	
+
+func _on_selected_node_exiting() -> void:
+	set_selected_node(null)
+
 
 func _on_value_changed(name, value, asset: HEGoAssetNode):
 	await _await_task(asset.set_parm(name, value))
@@ -475,7 +498,7 @@ func _on_recook_button_pressed():
 		
 		
 func recook():
-	if hego_tool_node == null or _cooking:
+	if not is_instance_valid(hego_tool_node) or _cooking:
 		return
 
 	_cooking = true

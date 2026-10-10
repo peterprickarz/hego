@@ -47,7 +47,7 @@
 			<return type="ArrayMesh" />
 			<param index="0" name="surfaces" type="Dictionary" />
 			<description>
-				Builds one [ArrayMesh] from a { material path: surface data } dictionary, adding a surface per material and wiring up LODs and materials.
+				Builds one [ArrayMesh] from a { material path: surface data } dictionary, adding a surface per material and wiring up LODs and materials. Returns null if empty or any surface is invalid; partial meshes are never published.
 			</description>
 		</method>
 		<method name="save_mesh_resource" qualifiers="static">

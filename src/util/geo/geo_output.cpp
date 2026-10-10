@@ -32,6 +32,15 @@ void HEGoPointOutput::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &ca
 {
 	my_cache = cache;
 	my_node_id = node_id;
+	if (is_valid())
+	{
+		// get_points() always includes P, even without explicit attribute requests.
+		my_cache->attribute(*my_cache->points_part(), HAPI_ATTROWNER_POINT, "P");
+		for (int owner = HAPI_ATTROWNER_VERTEX; owner < HAPI_ATTROWNER_MAX; ++owner)
+		{
+			my_cache->attribute_names(*my_cache->points_part(), static_cast<HAPI_AttributeOwner>(owner));
+		}
+	}
 }
 
 bool HEGoPointOutput::is_valid() const { return my_cache != nullptr && my_cache->points_part() != nullptr; }
@@ -51,7 +60,7 @@ godot::PackedStringArray HEGoPointOutput::get_attribute_names(int owner) const
 	{
 		return godot::PackedStringArray();
 	}
-	return my_cache->attribute_names(*my_cache->points_part(), to_hapi_owner(owner));
+	return my_cache->cached_attribute_names(*my_cache->points_part(), to_hapi_owner(owner));
 }
 
 bool HEGoPointOutput::has_attribute(const godot::String &name, int owner) const { return get_attribute_names(owner).has(name); }
@@ -123,7 +132,7 @@ godot::Array HEGoPointOutput::get_attribute(const godot::String &name, int owner
 		return godot::Array();
 	}
 
-	return my_cache->attribute(*my_cache->points_part(), to_hapi_owner(owner), name);
+	return my_cache->cached_attribute(*my_cache->points_part(), to_hapi_owner(owner), name);
 }
 
 godot::Ref<HEGoPointSelection> HEGoPointOutput::select_all()
@@ -334,6 +343,10 @@ bool HEGoSurfaceOutput::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &
 	my_cache = cache;
 	my_node_id = node_id;
 	my_valid = HEGo::Util::Geo::prepare_surface_data(*cache, point_attribs, my_part, my_prims, my_vertex_point_indices, my_point_attrs);
+	if (my_valid)
+	{
+		my_cache->attribute_names(my_part, HAPI_ATTROWNER_PRIM);
+	}
 	return my_valid;
 }
 
@@ -347,7 +360,7 @@ godot::PackedStringArray HEGoSurfaceOutput::get_attribute_names() const
 	{
 		return godot::PackedStringArray();
 	}
-	return my_cache->attribute_names(my_part, HAPI_ATTROWNER_PRIM);
+	return my_cache->cached_attribute_names(my_part, HAPI_ATTROWNER_PRIM);
 }
 
 bool HEGoSurfaceOutput::has_attribute(const godot::String &name) const { return get_attribute_names().has(name); }
@@ -387,13 +400,25 @@ godot::Ref<HEGoTask> HEGoSurfaceOutput::load_attributes(const godot::PackedStrin
 			});
 }
 
+void HEGoSurfaceOutput::load_attributes_now(const godot::PackedStringArray &names)
+{
+	if (!my_valid)
+	{
+		return;
+	}
+	for (int i = 0; i < names.size(); ++i)
+	{
+		my_cache->attribute(my_part, HAPI_ATTROWNER_PRIM, names[i]);
+	}
+}
+
 godot::Array HEGoSurfaceOutput::get_attribute(const godot::String &name) const
 {
 	if (!my_valid || !has_attribute(name))
 	{
 		return godot::Array();
 	}
-	return my_cache->attribute(my_part, HAPI_ATTROWNER_PRIM, name);
+	return my_cache->cached_attribute(my_part, HAPI_ATTROWNER_PRIM, name);
 }
 
 godot::Ref<HEGoSurfaceSelection> HEGoSurfaceOutput::select_all()

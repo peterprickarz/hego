@@ -91,7 +91,7 @@ Method Descriptions
 
 ``Variant`` **await_task**\ (\ host\: ``Node``, task\: :ref:`HEGoTask<class_HEGoTask>`\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_await_task>`
 
-Waits for ``task`` to finish and returns its result, or ``null`` if it failed. ``host`` is only needed for its scene tree, to yield a frame.
+Waits for ``task`` to finish and returns its result, or ``null`` if it failed or the host leaves the tree. This does not cancel the native task.
 
 .. rst-class:: classref-item-separator
 
