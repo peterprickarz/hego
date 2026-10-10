@@ -188,7 +188,7 @@ static func build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
 	var surface_id := 0
 	for material_key in surfaces:
 		var surface: Dictionary = surfaces[material_key]
-		var surface_array: Array = surface["surface_array"]
+		var surface_array: Array = surface["surface_array"].duplicate()
 
 		# An HDA that sets no LOD attribute simply has no such key here.
 		var hego_lod_array: Array = surface.get("hego_lod", [])
