@@ -28,10 +28,6 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 2
 
-[node name="ConnectionType" parent="TabContainer/Session/Vbox/ConnectionHBox" index="2"]
-popup/item_0/text = "Shared Memory"
-popup/item_2/text = "TCP  Port"
-
 [node name="Logs" parent="TabContainer/Session/Vbox" index="6"]
 text = ""
 

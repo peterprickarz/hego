@@ -46,6 +46,12 @@ var _known_categories: PackedStringArray
 
 ## Initialize the control and set up connections
 func _ready():
+	# Item IDs carry the API values independently of the display order.
+	connection_type.clear()
+	connection_type.add_item("Shared Memory", HEGoAPI.SESSION_IN_PROCESS)
+	connection_type.add_item("Named Pipe", HEGoAPI.SESSION_NAMED_PIPE)
+	connection_type.add_item("TCP Port", HEGoAPI.SESSION_TCP_SOCKET)
+	connection_type.select(connection_type.get_item_index(HEGoAPI.SESSION_NAMED_PIPE))
 	start_button.pressed.connect(_on_start_session_button_pressed)
 	stop_button.pressed.connect(_on_stop_session_button_pressed)
 	_build_log_toolbar()
@@ -73,6 +79,7 @@ func set_selected_node(node: Node):
 ## Handle start session button press - stops current session and starts new one
 func _on_start_session_button_pressed():
 	var connection_type_id = connection_type.selected
+	var session_type = connection_type.get_selected_id()
 	var connection_data_text = connection_data.text
 	var log := HEGoLog.get_singleton()
 
@@ -84,8 +91,6 @@ func _on_start_session_button_pressed():
 
 	await get_tree().process_frame
 
-	# Map UI connection type to HEGoAPI.SessionType (the UI is 0-based, the enum 1-based).
-	var session_type = connection_type_id + 1
 	if HEGoAPI.get_singleton().start_session(session_type, connection_data_text):
 		log.info("session", "Session started successfully.")
 		_set_session_status_connected()
