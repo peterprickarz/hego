@@ -44,5 +44,15 @@ func _initialize() -> void:
 		var saved := HEGoMeshOutput.load_mesh_resource_fresh(path)
 		check(saved.get("_surfaces")[0].get("lods", []) == expected, "overwrite retains LODs (%d vertices)" % count)
 		DirAccess.remove_absolute(path)
+	check(HEGoMeshOutput.build_array_mesh({}) == null, "empty groups produce no mesh")
+	for invalid_lods in [[1.0, 1.0, 8.0], [0.0], [0.0, null, 8.0], [0.0, -1.0, 8.0], [0.0, INF, 8.0], [0.0, "bad", 8.0]]:
+		var bad := surface_data()
+		bad.hego_lod = invalid_lods
+		check(HEGoMeshOutput.build_array_mesh({null: bad}) == null, "invalid LODs reject the whole mesh: %s" % [invalid_lods])
+	var malformed := surface_data()
+	malformed.surface_array[Mesh.ARRAY_INDEX][0] = 99
+	check(HEGoMeshOutput.build_array_mesh({null: malformed}) == null, "out of bounds indices are rejected")
+	check(HEGoMeshOutput.build_array_mesh({null: surface_data(), "bad": {}}) == null, "a failed later surface rejects a partial mesh")
+	check(not HEGoMeshOutput.save_mesh_resource(null, "user://invalid.res").ok, "invalid meshes cannot overwrite resources")
 	print("failures: ", failures)
 	quit(1 if failures else 0)
