@@ -5,6 +5,7 @@
 #   scripts/build.sh                          # host platform, both targets
 #   scripts/build.sh macos                    # native macOS, or OSXCross on Linux
 #   ARCH=universal scripts/build.sh macos      # Intel + Apple Silicon
+#   ARCH=arm64 scripts/build.sh linux         # Linux ARM64 (native or cross-toolchain)
 #   scripts/build.sh windows                  # cross-compile for Windows
 #   scripts/build.sh linux-compat             # redistributable Linux, in a container
 #   scripts/build.sh all                      # Linux + Windows release binaries
@@ -26,9 +27,9 @@
 #   OSXCROSS_ROOT=/opt/osxcross ARCH=arm64 scripts/build.sh macos
 # OSXCROSS_SDK selects the compiler suffix (e.g. darwin23.5), not the SDK version.
 # If unset, it is inferred when exactly one matching compiler is installed.
-# Optional overrides: ARCH, JOBS, SCONS, PYTHON, MACOS_SDK_PATH,
-# MACOS_DEPLOYMENT_TARGET. On macOS, ARCH defaults to the host architecture;
-# other builds default to x86_64. linux-compat and Windows require x86_64.
+# Optional overrides: ARCH, JOBS, SCONS, PYTHON, CC, CXX, AR, RANLIB, GLIBC_FLOOR,
+# MACOS_SDK_PATH, MACOS_DEPLOYMENT_TARGET. Native Linux and macOS default to the
+# host architecture. linux-compat and Windows default to and require x86_64.
 
 set -euo pipefail
 
@@ -40,12 +41,13 @@ SCONS="${SCONS:-scons}"
 PYTHON="${PYTHON:-python3}"
 ALL_TARGETS=(template_debug template_release)
 IMAGE=hego-linux-compat
-# The glibc the official Godot binaries target; anything they load, HEGo should load.
-GLIBC_FLOOR=2.28
+# x86_64 releases retain their glibc 2.28 ceiling. ARM64 native builds report the
+# required glibc; set GLIBC_FLOOR explicitly to enforce a distribution baseline.
+GLIBC_FLOOR="${GLIBC_FLOOR:-}"
 
 usage() {
     echo "Usage: scripts/build.sh [host|macos|linux|linux-compat|windows|all] [template_debug|template_release ...]"
-    echo "Overrides: HFS, ARCH, JOBS, SCONS, PYTHON, OSXCROSS_ROOT, OSXCROSS_SDK, MACOS_SDK_PATH, MACOS_DEPLOYMENT_TARGET"
+    echo "Overrides: HFS, ARCH, JOBS, SCONS, PYTHON, CC, CXX, AR, RANLIB, GLIBC_FLOOR, OSXCROSS_ROOT, OSXCROSS_SDK, MACOS_SDK_PATH, MACOS_DEPLOYMENT_TARGET"
 }
 
 fail() { echo "error: $*" >&2; exit 1; }
@@ -72,6 +74,7 @@ for target in "${TARGETS[@]}"; do
     esac
 done
 [[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || fail "JOBS must be a positive integer."
+[[ -z "$GLIBC_FLOOR" || "$GLIBC_FLOOR" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || fail "GLIBC_FLOOR must be a version such as 2.28."
 
 # Share discovery and header validation with SConstruct and the HAPI generator.
 # On macOS HFS is the Resources directory inside Houdini.framework.
@@ -185,45 +188,64 @@ build_linux_compat() {
     fi
     # Verify inside the container too: macOS does not ship GNU readelf or sort -V.
     podman run --rm --platform linux/amd64 --security-opt label=disable \
-        -v "$ROOT_DIR":/src -v "$HFS":"$HFS":ro -e HFS="$HFS" -e GLIBC_FLOOR="$GLIBC_FLOOR" -w /src \
+        -v "$ROOT_DIR":/src -v "$HFS":"$HFS":ro -e HFS="$HFS" -e GLIBC_FLOOR="${GLIBC_FLOOR:-2.28}" -w /src \
         "$IMAGE" bash -c "set -euo pipefail
 $(declare -f verify_linux_so)
 scons platform=linux target=\"\$1\" arch=x86_64 -j\"\$2\"
-verify_linux_so \"/src/demo/addons/hego/bin/libhego.linux.\$1.x86_64.so\"" \
+verify_linux_so \"/src/demo/addons/hego/bin/libhego.linux.\$1.x86_64.so\" x86_64 \"\$GLIBC_FLOOR\"" \
         hego-linux-compat "$target" "$JOBS"
 }
 
-# A Linux binary is only redistributable if it needs no symbol newer than the floor the
-# official Godot builds target, and carries no libstdc++ dependency at all.
+# Verify the actual ELF architecture, entry point, C++ runtime and optional glibc
+# ceiling. An ARM filename alone does not prove the compiler produced ARM code.
 verify_linux_so() {
-    local so="$1" newest
+    local so="$1" arch="$2" floor="${3:-}" newest headers dynamic symbols expected
+    case "$arch" in
+        arm64) expected=AArch64 ;;
+        x86_64) expected="Advanced Micro Devices X86-64" ;;
+        *) echo "error: unsupported Linux architecture $arch" >&2; return 1 ;;
+    esac
+    headers="$(LC_ALL=C readelf -h "$so")"
+    if ! grep -Eq "Machine:[[:space:]]+$expected[[:space:]]*$" <<<"$headers"; then
+        echo "error: $(basename "$so") is not $arch; check CC/CXX/AR/RANLIB." >&2
+        return 1
+    fi
+    symbols="$(readelf --dyn-syms --wide "$so")"
+    if ! grep -Eq 'GLOBAL[[:space:]]+DEFAULT[[:space:]]+[0-9]+[[:space:]]+hego_library_init$' <<<"$symbols"; then
+        echo "error: $(basename "$so") does not export hego_library_init" >&2
+        return 1
+    fi
     # Bare version numbers, so the comparison against GLIBC_FLOOR below is like for like.
     newest="$(readelf -V "$so" 2>/dev/null | grep -oE "GLIBC_[0-9]+\.[0-9]+(\.[0-9]+)?" \
         | sed 's/^GLIBC_//' | sort -uV | tail -1)"
     echo "  $(basename "$so"): needs glibc ${newest:-none}"
 
-    if readelf -d "$so" | grep -q "libstdc++"; then
+    dynamic="$(readelf -d "$so")"
+    if grep -q "libstdc++" <<<"$dynamic"; then
         echo "error: $(basename "$so") depends on libstdc++; it should be linked statically" >&2
         return 1
     fi
-    if [[ -n "$newest" ]] && [[ "$(printf '%s\n' "$newest" "$GLIBC_FLOOR" | sort -V | tail -1)" != "$GLIBC_FLOOR" ]]; then
-        echo "error: $(basename "$so") needs $newest, newer than the $GLIBC_FLOOR floor." >&2
-        echo "       Build it with \"scripts/build.sh linux-compat\"." >&2
+    if [[ -n "$floor" && -n "$newest" ]] && [[ "$(printf '%s\n' "$newest" "$floor" | sort -V | tail -1)" != "$floor" ]]; then
+        echo "error: $(basename "$so") needs $newest, newer than the $floor floor." >&2
+        echo "       Build against an older glibc sysroot (linux-compat is available for x86_64)." >&2
         return 1
     fi
 }
 
 for platform in "${PLATFORMS[@]}"; do
     arch="${ARCH:-x86_64}"
-    if [[ "$platform" == "macos" && "$HOST_OS" == "Darwin" && -z "${ARCH:-}" ]]; then
+    if [[ -z "${ARCH:-}" ]] && { [[ "$platform" == "macos" && "$HOST_OS" == "Darwin" ]] || [[ "$platform" == "linux" && "$HOST_OS" == "Linux" ]]; }; then
         arch="$(uname -m)"
     fi
+    case "$arch" in aarch64) arch=arm64 ;; amd64) arch=x86_64 ;; esac
     # Keep this array nonempty for set -u on macOS's stock Bash 3.2.
     build_args=("platform=$platform" "arch=$arch")
     case "$platform" in
         macos) configure_macos "$arch" ;;
         linux)
             [[ "$HOST_OS" == "Linux" ]] || fail "native Linux builds need a Linux host; use linux-compat for a container build."
+            case "$arch" in arm64|x86_64) ;; *) fail "Linux ARCH must be arm64 or x86_64." ;; esac
+            command -v readelf >/dev/null || fail "readelf not found; install binutils."
             ;;
         linux-compat)
             [[ "$arch" == "x86_64" ]] || fail "linux-compat currently supports ARCH=x86_64 only."
@@ -252,7 +274,11 @@ for platform in "${PLATFORMS[@]}"; do
             ( cd "$ROOT_DIR" && "$SCONS" "${build_args[@]}" "target=$target" -j"$JOBS" )
             case "$platform" in
                 windows) verify_windows_dll "$BIN_DIR/hego.windows.$target.$arch.dll" ;;
-                linux) verify_linux_so "$BIN_DIR/libhego.linux.$target.$arch.so" ;;
+                linux)
+                    floor="$GLIBC_FLOOR"
+                    [[ "$arch" != "x86_64" || -n "$floor" ]] || floor=2.28
+                    verify_linux_so "$BIN_DIR/libhego.linux.$target.$arch.so" "$arch" "$floor"
+                    ;;
             esac
         fi
     done

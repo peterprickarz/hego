@@ -54,7 +54,19 @@ if _target_platform == "macos":
 # ───────────────────────────────────────────────
 # Load godot-cpp environment
 # ───────────────────────────────────────────────
-env = SConscript("godot-cpp/SConstruct")
+if _target_platform == "linux":
+    # Configure the toolchain before godot-cpp creates its build targets, so the
+    # bindings and HEGo always use the same compiler (including cross-compilers).
+    # Prefer GCC 14 to match Houdini 22 when available; explicit tools win.
+    env = Environment(tools=["default"], PLATFORM="")
+    env["CC"] = os.environ.get("CC") or ("gcc-14" if shutil.which("gcc-14") else "gcc")
+    env["CXX"] = os.environ.get("CXX") or ("g++-14" if shutil.which("g++-14") else "g++")
+    for tool in ("AR", "RANLIB"):
+        if os.environ.get(tool):
+            env[tool] = os.environ[tool]
+    env = SConscript("godot-cpp/SConstruct", exports={"env": env})
+else:
+    env = SConscript("godot-cpp/SConstruct")
 
 # godot-cpp links libstdc++ and libgcc statically by default. That is what lets a binary
 # load on distributions older than the machine that built it, and it is the same choice
@@ -122,12 +134,6 @@ if env["platform"] == "windows":
         env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
 elif env["platform"] == "linux":
-    # Houdini 22.0 on Linux is built with GCC 14, so prefer gcc-14/g++-14 to match its
-    # toolchain when those binaries are available. Distros that ship a different GCC and
-    # don't provide versioned gcc-14 binaries (e.g. Fedora) fall back to the default gcc/g++.
-    # An explicit CC/CXX in the environment always wins, e.g. `CC=gcc CXX=g++ scons`.
-    env["CC"] = os.environ.get("CC") or ("gcc-14" if shutil.which("gcc-14") else "gcc")
-    env["CXX"] = os.environ.get("CXX") or ("g++-14" if shutil.which("g++-14") else "g++")
     env.Append(CCFLAGS=["-std=c++17", "-fPIC"])
 
     env.Append(LINKFLAGS=[

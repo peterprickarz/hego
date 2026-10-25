@@ -57,6 +57,8 @@ git submodule update --init --recursive
 See [Building on macOS and Linux](BUILDING.md) for native builds, Apple Silicon/Intel
 binaries, and cross-compiling from Linux to macOS with OSXCross. Only HAPI headers
 are required to compile; Houdini itself is needed when running a session.
+Experimental Linux ARM64 builds and an isolated runtime test are documented in
+[Linux ARM64 testing](BUILDING.md#linux-arm64-testing).
 
 ### Quick Setup
 
