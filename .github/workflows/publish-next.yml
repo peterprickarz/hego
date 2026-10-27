@@ -1,0 +1,30 @@
+name: Publish next addon
+on:
+  push:
+    branches: [next]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-release-next
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: next
+          fetch-depth: 0
+      - name: Configure publisher
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+      - name: Publish checked-in addon and binaries
+        run: |
+          # Queued runs publish the latest next, never an older event snapshot.
+          git fetch origin next
+          scripts/publish-next.sh origin refs/remotes/origin/next

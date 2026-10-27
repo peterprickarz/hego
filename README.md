@@ -48,6 +48,72 @@ git submodule update --init --recursive
 ## Developer Setup
 > If you're interested in contributing read on, otherwise check out the Releases section for the latest version
 
+### Testing HEGo in another project
+
+`next` is the development source branch. The **Publish next addon** workflow
+publishes its committed `demo/addons/hego` contents to `release-next`, with
+README, license, and a `SOURCE_COMMIT` file identifying the source revision.
+Each publication is a child of the previous publication: old submodule pins stay
+reachable. The initial publication creates an independent root commit. Publication
+uses ordinary pushes, never force-pushes, and does not modify the source checkout.
+It packages checked-in binaries; it does **not** build them. Include matching
+binaries when publishing native-code changes.
+
+After the first publication, a new consumer can install it with:
+
+```bash
+cd /path/to/godot-project
+git submodule add -b release-next https://github.com/peterprickarz/hego.git addons/hego
+```
+
+For an existing, genuine submodule, change its tracking branch from the consumer's
+repository root, then deliberately update and commit the tested pin:
+
+```bash
+git submodule set-branch --branch release-next game/addons/hego
+git submodule update --remote -- game/addons/hego
+git add .gitmodules game/addons/hego
+git commit -m "Update HEGo development dependency"
+```
+
+Use the actual repository-relative addon path; TheNetwork's Godot project is
+`game/`. A `.gitmodules` entry alone is insufficient: `git ls-files --stage --
+game/addons/hego` must show one `160000` entry. If it lists individual addon files,
+preserve any local edits and migrate the vendored files to a proper submodule
+first. The switch script intentionally refuses this mixed state.
+
+For live development, close the consumer's Godot editor before either switch
+(especially when changing native libraries), then run from the HEGo source repo:
+
+```bash
+python3 scripts/hego-dev.py enable ../TheNetwork/game --checkout .
+python3 scripts/hego-dev.py status ../TheNetwork/game
+# Reopen TheNetwork and test; edits under addons/hego affect this HEGo checkout.
+# Close its editor again before restoring the published package.
+python3 scripts/hego-dev.py disable ../TheNetwork/game
+```
+
+The script saves the initialized submodule directory under the consumer's Git
+directory and installs an absolute directory symlink to the local checkout's
+`demo/addons/hego`. It requires a clean submodule at the index's pinned revision.
+Ignored files are preserved in the saved directory. Disable restores that exact
+directory and refuses to overwrite a replaced link or restore against a changed
+index pin. Python 3.9+ and directory-symlink support are required.
+
+While enabled, commit HEGo changes in the **source checkout**, on a feature branch
+for a PR into `next`. Do not stage the consumer's addon symlink, change its pin,
+switch consumer branches, or run submodule updates until development mode is
+disabled. The consumer can show a local addon change during this time; the
+symlink is not a distributable dependency. After the PR is merged and published,
+disable development mode, update the submodule, test the packaged version, and
+commit the consumer's new pin.
+
+Local publisher/switch integration checks (temporary repositories only):
+
+```bash
+python3 scripts/tests/test_distribution.py
+```
+
 ### Prerequisites
 
 - **Python 3.8+** with SCons: `python -m pip install scons`
