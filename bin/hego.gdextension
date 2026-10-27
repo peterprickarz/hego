@@ -1,0 +1,15 @@
+[configuration]
+
+entry_symbol = "hego_library_init"
+compatibility_minimum = "4.4"
+
+[libraries]
+
+; Only the platforms HEGo actually ships a binary for. Listing one without a binary
+; behind it makes an export fail to load the extension at startup, which leaves every
+; HEGo class undefined. Add an entry here in the same commit that adds its binary.
+
+linux.debug.x86_64 = "res://addons/hego/bin/libhego.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://addons/hego/bin/libhego.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://addons/hego/bin/hego.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/hego/bin/hego.windows.template_release.x86_64.dll"

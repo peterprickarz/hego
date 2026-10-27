@@ -1,0 +1,71 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphAttributeDef" inherits="Resource" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		One attribute a [HEGoGraphInput3D] can store on its points or connections.
+	</brief_description>
+	<description>
+		Lives in a [HEGoGraphAttributes] list on a child of the graph. The name, owner and value type decide what is sent to Houdini; the rest only shapes the editor UI.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="default_value">
+			<return type="Variant" />
+			<description>
+				The default that matches [member value_type].
+			</description>
+		</method>
+		<method name="make_array">
+			<return type="Variant" />
+			<param index="0" name="size" type="int" />
+			<description>
+				A packed array of [param size] filled with [method default_value].
+			</description>
+		</method>
+		<method name="matches_array">
+			<return type="bool" />
+			<param index="0" name="array" type="Variant" />
+			<description>
+				Whether [param array] is the packed type this definition stores.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="attribute_name" type="String" setter="@attribute_name_setter" getter="" default="&quot;attr&quot;">
+			Houdini attribute name. Must be unique per owner on one graph.
+		</member>
+		<member name="owner" type="int" setter="@owner_setter" getter="" enum="HEGoGraphAttributeDef.Owner" default="0">
+			Whether this attribute is stored on points or on connections (Houdini prims).
+		</member>
+		<member name="value_type" type="int" setter="@value_type_setter" getter="" enum="HEGoGraphAttributeDef.ValueType" default="0">
+			Storage type sent to Houdini.
+		</member>
+		<member name="default_float" type="float" setter="@default_float_setter" getter="" default="0.0">
+			Default for a newly created point or connection when [member value_type] is FLOAT.
+		</member>
+		<member name="default_int" type="int" setter="@default_int_setter" getter="" default="0">
+			Default for a newly created point or connection when [member value_type] is INT.
+		</member>
+		<member name="default_string" type="String" setter="@default_string_setter" getter="" default="&quot;&quot;">
+			Default for a newly created point or connection when [member value_type] is STRING.
+		</member>
+		<member name="int_as_toggle" type="bool" setter="@int_as_toggle_setter" getter="" default="false">
+			When [member value_type] is INT, the editor shows a checkbox and stores 0 or 1.
+		</member>
+		<member name="string_options" type="PackedStringArray" setter="@string_options_setter" getter="" default="PackedStringArray()">
+			When [member value_type] is STRING and this is not empty, the editor shows a dropdown.
+		</member>
+	</members>
+	<constants>
+		<constant name="POINT" value="0" enum="Owner">
+		</constant>
+		<constant name="CONNECTION" value="1" enum="Owner">
+		</constant>
+		<constant name="FLOAT" value="0" enum="ValueType">
+		</constant>
+		<constant name="INT" value="1" enum="ValueType">
+		</constant>
+		<constant name="STRING" value="2" enum="ValueType">
+		</constant>
+	</constants>
+</class>

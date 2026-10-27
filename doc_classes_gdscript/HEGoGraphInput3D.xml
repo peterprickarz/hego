@@ -1,0 +1,162 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphInput3D" inherits="Node3D" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		A 3D graph of points and connections that can be fed into a [HEGoNode3D] input.
+	</brief_description>
+	<description>
+		Add a [HEGoGraphAttributes] child to declare the attributes each point and connection can carry. Positions are stored in local space. Connections are undirected unique pairs; a point with three or more connections is an intersection.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="connection_count">
+			<return type="int" />
+			<description>
+				Number of connections, i.e. half of [member connections].
+			</description>
+		</method>
+		<method name="get_connection">
+			<return type="Vector2i" />
+			<param index="0" name="index" type="int" />
+			<description>
+				The two point indices of connection [param index], smaller first.
+			</description>
+		</method>
+		<method name="add_point">
+			<return type="int" />
+			<param index="0" name="position" type="Vector3" />
+			<description>
+				Appends a point at [param position] and returns its index.
+			</description>
+		</method>
+		<method name="set_point_position">
+			<return type="void" />
+			<param index="0" name="index" type="int" />
+			<param index="1" name="position" type="Vector3" />
+			<description>
+				Moves point [param index] to [param position].
+			</description>
+		</method>
+		<method name="remove_points">
+			<return type="void" />
+			<param index="0" name="indices" type="PackedInt32Array" />
+			<description>
+				Deletes the given point indices and any connection that used them. Remaining connection indices are remapped.
+			</description>
+		</method>
+		<method name="add_connection">
+			<return type="int" />
+			<param index="0" name="a" type="int" />
+			<param index="1" name="b" type="int" />
+			<description>
+				Adds an undirected connection between [param a] and [param b]. Returns the new connection index, or [code]-1[/code] if the pair is invalid or already present.
+			</description>
+		</method>
+		<method name="has_connection">
+			<return type="bool" />
+			<param index="0" name="a" type="int" />
+			<param index="1" name="b" type="int" />
+			<description>
+				Whether an undirected connection between [param a] and [param b] already exists.
+			</description>
+		</method>
+		<method name="remove_connections">
+			<return type="void" />
+			<param index="0" name="indices" type="PackedInt32Array" />
+			<description>
+				Deletes the given connection indices. Points are left in place.
+			</description>
+		</method>
+		<method name="split_connection">
+			<return type="int" />
+			<param index="0" name="conn_index" type="int" />
+			<param index="1" name="position" type="Vector3" />
+			<description>
+				Inserts a point at [param position] on connection [param conn_index], replacing that connection with two that inherit its attributes. Returns the new point index, or [code]-1[/code] if the connection does not exist.
+			</description>
+		</method>
+		<method name="set_point_attrib_on">
+			<return type="void" />
+			<param index="0" name="name" type="String" />
+			<param index="1" name="indices" type="PackedInt32Array" />
+			<param index="2" name="value" type="Variant" />
+			<description>
+				Sets attribute [param name] on each of [param indices] to [param value].
+			</description>
+		</method>
+		<method name="set_connection_attrib_on">
+			<return type="void" />
+			<param index="0" name="name" type="String" />
+			<param index="1" name="indices" type="PackedInt32Array" />
+			<param index="2" name="value" type="Variant" />
+			<description>
+				Sets attribute [param name] on each of [param indices] to [param value].
+			</description>
+		</method>
+		<method name="sync_schema">
+			<return type="void" />
+			<description>
+				Rebuilds stored attribute arrays from [HEGoGraphAttributes] children: adds missing keys at their defaults, drops keys that are no longer defined, and resizes to the current point and connection counts.
+			</description>
+		</method>
+		<method name="collect_schema">
+			<return type="Array" />
+			<param index="0" name="warn" type="bool" default="true" />
+			<description>
+				Attribute definitions from every [HEGoGraphAttributes] child, in tree order. Reserved and duplicate names are skipped with a warning.
+			</description>
+		</method>
+		<method name="is_reserved_name" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="name" type="String" />
+			<description>
+				Whether [param name] is reserved for Houdini or HEGo metadata.
+			</description>
+		</method>
+		<method name="capture_state">
+			<return type="Dictionary" />
+			<description>
+				A copy of the topology and attribute arrays, for undo.
+			</description>
+		</method>
+		<method name="apply_state">
+			<return type="void" />
+			<param index="0" name="state" type="Dictionary" />
+			<description>
+				Restores a state produced by [method capture_state].
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="points" type="PackedVector3Array" setter="@points_setter" getter="" default="PackedVector3Array()">
+			Point positions, in this node's local space.
+		</member>
+		<member name="connections" type="PackedInt32Array" setter="@connections_setter" getter="" default="PackedInt32Array()">
+			Connection endpoints as index pairs [code][a0, b0, a1, b1, ...][/code]. Each pair is stored with the smaller index first.
+		</member>
+		<member name="point_attribs" type="Dictionary" setter="@point_attribs_setter" getter="" default="{}">
+			Per-point attribute values, keyed by name. Each value is a packed array the same length as [member points].
+		</member>
+		<member name="connection_attribs" type="Dictionary" setter="@connection_attribs_setter" getter="" default="{}">
+			Per-connection attribute values, keyed by name. Each value is a packed array the same length as [method connection_count].
+		</member>
+	</members>
+	<signals>
+		<signal name="graph_changed">
+			<description>
+				The graph's topology or attribute values changed.
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;input&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="RESERVED_NAMES" value="[&quot;P&quot;, &quot;Cd&quot;]">
+			Names that already mean something on Houdini input geometry.
+		</constant>
+		<constant name="RESERVED_PREFIX" value="&quot;_hego_&quot;">
+			Prefix reserved for HEGo's own metadata attributes.
+		</constant>
+	</constants>
+</class>

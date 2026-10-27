@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoLog" inherits="Object" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+HEGo's logger, shared by the C++ side and GDScript.
+</brief_description>
+<description>
+Everything HEGo logs goes through this singleton. Each entry carries a level, a category and a timestamp, and ends up in an in-memory buffer the HEGo bottom panel reads, in the Godot output if it is at or above the output level, and in a log file if file logging is enabled.
+
+Log your own messages through the same object so they appear alongside HEGo's:
+[codeblock]
+var log = HEGoLog.get_singleton()
+log.info("cook", "Cooking %s" % asset_name)
+log.warning("input", "Input %s has no mesh, skipping it." % path)
+[/codeblock]
+
+Recording is safe from any thread. HEGo's work runs on a background thread (see [HEGoTask]), so entries are recorded wherever they are produced and printed later on the main thread; nothing in the logging path calls into Godot from a worker thread.
+
+Warnings and errors also go through [code]push_warning()[/code] and [code]push_error()[/code], so they still reach Godot's debugger.
+
+Configured through the [code]hego/logging/[/code] project settings: [code]store_level[/code], [code]output_level[/code], [code]enable_file_logging[/code], [code]log_path[/code] and [code]max_log_files[/code].
+</description>
+<tutorials>
+<link title="Logging">https://hego.readthedocs.io/en/latest/api/logging.html</link>
+</tutorials>
+<methods>
+<method name="get_singleton" qualifiers="static">
+<return type="HEGoLog" />
+<description>
+Returns the global [HEGoLog] instance.
+</description>
+</method>
+<method name="level_name" qualifiers="static">
+<return type="String" />
+<param index="0" name="level" type="int" />
+<description>
+Human readable name of a level, for example [code]"WARNING"[/code] for [constant LEVEL_WARNING].
+</description>
+</method>
+<method name="trace">
+<return type="void" />
+<param index="0" name="category" type="String" />
+<param index="1" name="message" type="String" />
+<description>
+Records a per-element detail message. Dropped unless [code]hego/logging/store_level[/code] is lowered to [constant LEVEL_TRACE].
+</description>
+</method>
+<method name="debug">
+<return type="void" />
+<param index="0" name="category" type="String" />
+<param index="1" name="message" type="String" />
+<description>
+Records what HEGo is doing during a cook. Goes to the session panel and the log file, not to the Godot output, unless the output level is lowered.
+</description>
+</method>
+<method name="info">
+<return type="void" />
+<param index="0" name="category" type="String" />
+<param index="1" name="message" type="String" />
+<description>
+Records a milestone worth showing to the user: session started, cook finished, asset selected.
+</description>
+</method>
+<method name="warning">
+<return type="void" />
+<param index="0" name="category" type="String" />
+<param index="1" name="message" type="String" />
+<description>
+Records that something was skipped or guessed while the operation continued. Also raises a Godot warning.
+</description>
+</method>
+<method name="error">
+<return type="void" />
+<param index="0" name="category" type="String" />
+<param index="1" name="message" type="String" />
+<description>
+Records that an operation failed. Also raises a Godot error.
+</description>
+</method>
+<method name="log_message">
+<return type="void" />
+<param index="0" name="level" type="int" />
+<param index="1" name="category" type="String" />
+<param index="2" name="message" type="String" />
+<description>
+Records a message at an explicit level, for callers that decide the level at runtime.
+</description>
+</method>
+<method name="get_cursor" qualifiers="const">
+<return type="int" />
+<description>
+Index one past the newest entry. Pass a previously returned value to [method get_entries_since] to read only what arrived in between.
+</description>
+</method>
+<method name="get_entries_since" qualifiers="const">
+<return type="Array" />
+<param index="0" name="cursor" type="int" />
+<param index="1" name="min_level" type="int" default="0" />
+<description>
+Entries recorded since [code]cursor[/code], as dictionaries with [code]index[/code], [code]time[/code], [code]level[/code], [code]level_name[/code], [code]category[/code] and [code]message[/code].
+
+Entries dropped from the buffer since then are simply missing, so a reader that falls behind skips ahead rather than blocking anything.
+</description>
+</method>
+<method name="get_categories" qualifiers="const">
+<return type="PackedStringArray" />
+<description>
+Categories seen since the buffer was last cleared. HEGo uses [code]session[/code], [code]node[/code], [code]cook[/code], [code]input[/code], [code]output[/code], [code]attrib[/code], [code]parm[/code], [code]terrain3d[/code] and [code]platform[/code]; your own scripts may use any string.
+</description>
+</method>
+<method name="clear">
+<return type="void" />
+<description>
+Empties the buffer.
+</description>
+</method>
+<method name="save_to_file" qualifiers="const">
+<return type="bool" />
+<param index="0" name="path" type="String" />
+<description>
+Writes the whole buffer to [code]path[/code] as text. Returns [code]false[/code] if the file could not be written.
+</description>
+</method>
+<method name="flush">
+<return type="void" />
+<description>
+Prints everything recorded since the last call to the Godot output and the log file. Must run on the main thread; the editor plugin calls it every frame, so most callers never need to.
+</description>
+</method>
+<method name="get_log_file_path" qualifiers="const">
+<return type="String" />
+<description>
+Absolute path of the log file this run writes to, or an empty string when file logging is off.
+</description>
+</method>
+<method name="configure">
+<return type="void" />
+<description>
+Re-reads the [code]hego/logging/[/code] project settings and reopens the log file. Call after changing any of them at runtime.
+</description>
+</method>
+<method name="set_store_level">
+<return type="void" />
+<param index="0" name="level" type="int" />
+<description>
+Lowest level kept in the buffer.
+</description>
+</method>
+<method name="get_store_level" qualifiers="const">
+<return type="int" />
+<description>
+Lowest level kept in the buffer.
+</description>
+</method>
+<method name="set_output_level">
+<return type="void" />
+<param index="0" name="level" type="int" />
+<description>
+Lowest level printed to the Godot output.
+</description>
+</method>
+<method name="get_output_level" qualifiers="const">
+<return type="int" />
+<description>
+Lowest level printed to the Godot output.
+</description>
+</method>
+</methods>
+<constants>
+<constant name="LEVEL_TRACE" value="0" enum="Level">
+Per-element detail. Not recorded unless the store level is lowered to it.
+</constant>
+<constant name="LEVEL_DEBUG" value="1" enum="Level">
+What HEGo is doing during a cook. The default store level.
+</constant>
+<constant name="LEVEL_INFO" value="2" enum="Level">
+Milestones a user cares about. The default output level.
+</constant>
+<constant name="LEVEL_WARNING" value="3" enum="Level">
+Something was skipped or guessed; the operation continues.
+</constant>
+<constant name="LEVEL_ERROR" value="4" enum="Level">
+The operation failed.
+</constant>
+</constants>
+</class>

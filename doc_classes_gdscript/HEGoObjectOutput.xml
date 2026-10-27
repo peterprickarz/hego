@@ -1,0 +1,59 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoObjectOutput" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Spawns one Godot node per output point.
+	</brief_description>
+	<description>
+		Each point decides through attributes what to spawn (a registered class, or a packed scene), where to put it, how to orient it and which of its properties to override. Points without those attributes fall back to a plain [Node3D].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="point_attribs" qualifiers="static">
+			<return type="Array" />
+			<description>
+				Attributes this handler reads off each spawned point: the shared orientation set plus its own. Cd is not among them, because spawned nodes are not tinted. A function rather than a const, because a const cannot be built from another class's constant. See [HEGoPointUtil].
+			</description>
+		</method>
+		<method name="output_phase" qualifiers="static">
+			<return type="String" />
+			<description>
+				Name of the cook phase this handler is timed under.
+			</description>
+		</method>
+		<method name="should_handle" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="summary" type="Dictionary" />
+			<description>
+				Whether the cook produced points flagged for spawning.
+			</description>
+		</method>
+		<method name="handle" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+				Fetches the cook's output points and spawns a node for each.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;output&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="SPAWN_FILTER_ATTRIB" value="&quot;hego_spawn&quot;">
+			Points with this attribute set to 1 are spawned.
+		</constant>
+		<constant name="DEFAULT_NODE_PATH" value="&quot;Objects&quot;">
+			Node path used when a point does not specify hego_node_path.
+		</constant>
+		<constant name="DEFAULT_CLASS_NAME" value="&quot;Node3D&quot;">
+			Class spawned when a point does not specify hego_class_name, and the fallback whenever the requested class or scene cannot be used.
+		</constant>
+		<constant name="SPAWN_TYPE_CLASS" value="0">
+			hego_spawn_type: instantiate the class named by hego_class_name.
+		</constant>
+		<constant name="SPAWN_TYPE_SCENE" value="1">
+			hego_spawn_type: instantiate the packed scene at hego_resource_path.
+		</constant>
+	</constants>
+</class>

@@ -1,0 +1,70 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoTerrain3DOutput" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Builds a Terrain3D node from the heightfield layers of a cooked HDA.
+	</brief_description>
+	<description>
+		The [code]height[/code] layer drives the terrain itself; the optional [code]hegot3d_*[/code] layers add region masks, holes, per-texture weights and colour maps. Everything is driven by detail attributes on the height layer, so an HDA that does not set [code]hegot3d_spawn_terrain[/code] is skipped entirely.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="output_phase" qualifiers="static">
+			<return type="String" />
+			<description>
+				Name of the cook phase this handler is timed under.
+			</description>
+		</method>
+		<method name="should_handle" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="summary" type="Dictionary" />
+			<description>
+				Whether the cook produced heightfield volumes, and Terrain3D is there to receive them.
+			</description>
+		</method>
+		<method name="handle" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+				Fetches the cook's heightfield layers and builds the terrain.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;terrain3d&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="SPAWN_ATTRIB" value="&quot;hegot3d_spawn_terrain&quot;">
+			Attributes read off the height layer.
+		</constant>
+		<constant name="DATA_DIRECTORY_ATTRIB" value="&quot;hegot3d_data_directory&quot;">
+		</constant>
+		<constant name="NODE_PATH_ATTRIB" value="&quot;hegot3d_node_path&quot;">
+		</constant>
+		<constant name="REGION_SIZE_ATTRIB" value="&quot;hegot3d_region_size&quot;">
+		</constant>
+		<constant name="REGION_MAP_LAYER" value="&quot;hegot3d_region_map&quot;">
+			Optional layers.
+		</constant>
+		<constant name="HOLE_LAYER" value="&quot;hegot3d_hole&quot;">
+		</constant>
+		<constant name="COLOR_LAYERS" value="{&quot;b&quot;: &quot;hegot3d_color_map_b&quot;, &quot;g&quot;: &quot;hegot3d_color_map_g&quot;, &quot;r&quot;: &quot;hegot3d_color_map_r&quot;, &quot;roughness&quot;: &quot;hegot3d_color_map_roughness&quot;}">
+		</constant>
+		<constant name="REQUESTED_ATTRIBS" value="[&quot;hegot3d_spawn_terrain&quot;, &quot;hegot3d_data_directory&quot;, &quot;hegot3d_node_path&quot;, &quot;hegot3d_region_size&quot;, &quot;hegot3d_albedo_texture&quot;, &quot;hegot3d_normal_texture&quot;, &quot;hegot3d_ao_strength&quot;, &quot;hegot3d_detiling_rotation&quot;, &quot;hegot3d_detiling_shift&quot;, &quot;hegot3d_id&quot;, &quot;hegot3d_name&quot;, &quot;hegot3d_normal_depth&quot;, &quot;hegot3d_roughness&quot;, &quot;hegot3d_uv_scale&quot;]">
+			Attributes requested from the heightfield fetch.
+		</constant>
+		<constant name="DEFAULT_NODE_PATH" value="&quot;Terrain3D&quot;">
+			Default node name and region size when the HDA does not specify them.
+		</constant>
+		<constant name="DEFAULT_REGION_SIZE" value="256">
+		</constant>
+		<constant name="EXPECTED_HEIGHTFIELD_ROTATION" value="Vector3(-90, -90, 0)">
+			Rotation a Houdini heightfield is expected to have for the axis correction to hold.
+		</constant>
+		<constant name="ROTATION_TOLERANCE" value="0.5">
+		</constant>
+		<constant name="UPDATE_MAPS_HEIGHT_AND_CONTROL" value="3">
+			Terrain3DData.update_maps map type mask: height and control.
+		</constant>
+	</constants>
+</class>

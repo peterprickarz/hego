@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="HEGoFetchSurfacesConfig" load_steps=2 format=3 uid="uid://bgwimtc8w6fjm"]
+
+[ext_resource type="Script" uid="uid://d4be6h3jga6ru" path="res://addons/hego/fetch_surfaces_config.gd" id="1_3q0du"]
+
+[resource]
+script = ExtResource("1_3q0du")
+normal = true
+color = true
+uv = true
+uv2 = true
+tangents = true
+read_attribs = PackedStringArray("hego_lod", "hego_col_type", "hego_col_decomp_settings", "hego_storage_mode", "hego_resource_save_path")
+filter_attribs = PackedStringArray()
+filter_attrib_values = []
+split_attribs = PackedStringArray("hego_mesh_instance", "hego_material")

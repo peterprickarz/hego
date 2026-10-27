@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/hego/graph_input/editor/graph_toolbar.gd" id="1"]
+
+[node name="HEGoGraphToolbar" type="HBoxContainer"]
+script = ExtResource("1")

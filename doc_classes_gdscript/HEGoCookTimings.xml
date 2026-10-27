@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoCookTimings" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Collects the per-phase timings of a [method HEGoNode3D.cook] call.
+	</brief_description>
+	<description>
+		Usage: [method begin_phase] before a phase, [method end_phase] after it, and [method format_summary] once the cook is done. Phases are printed in the order they were recorded, so adding an output handler needs no change here.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="elapsed_msec" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="start_usec" type="int" />
+			<description>
+				Milliseconds elapsed since [param start_usec], as returned by [method Time.get_ticks_usec].
+			</description>
+		</method>
+		<method name="begin_phase">
+			<return type="void" />
+			<description>
+				Marks the start of a phase.
+			</description>
+		</method>
+		<method name="end_phase">
+			<return type="void" />
+			<param index="0" name="phase_name" type="String" />
+			<description>
+				Records the time since the last [method begin_phase] under [param phase_name].
+			</description>
+		</method>
+		<method name="total_msec">
+			<return type="float" />
+			<description>
+				Milliseconds since this object was created, i.e. since the cook started.
+			</description>
+		</method>
+		<method name="format_summary">
+			<return type="String" />
+			<description>
+				Human readable summary of every recorded phase plus the cook total.
+			</description>
+		</method>
+	</methods>
+</class>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoTransformableNode" inherits="HEGoBaseNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Base node type with transform synchronization support.
+</brief_description>
+<description>
+Adds transform control on top of [HEGoBaseNode].
+
+Use [method set_transform] to push a Godot transform to the underlying Houdini node.
+
+This is commonly used for object-level HDAs where world placement should match a Godot node.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="set_transform">
+<return type="HEGoTask" />
+<param index="0" name="xform" type="Transform3D" />
+<param index="1" name="force" type="bool" default="false" />
+<description>
+Submits a task to set the world transform of the wrapped Houdini node from a Godot [Transform3D].
+
+Call after instantiation. Reapply when your source node moves and you need Houdini output to stay in sync.
+
+The transform is cached internally. If the incoming transform is identical to the previously submitted one the call returns a no-op task unless [code]force[/code] is [code]true[/code].
+</description>
+</method>
+</methods>
+</class>

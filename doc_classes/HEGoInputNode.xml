@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoInputNode" inherits="HEGoBaseInputNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Creates Houdini input geometry from Godot meshes or raw point and primitive arrays.
+</brief_description>
+<description>
+Use this node to upload mesh topology and attributes from a [Mesh] or [MeshInstance3D], or to push raw points, polylines and polygons with [method set_geo].
+
+Instantiate first, then push geometry with one of the setter methods.
+
+This node is typically connected into [HEGoMergeNode] or directly into an HDA input.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="instantiate">
+<return type="HEGoTask" />
+<description>
+Submits a task to create a Houdini input node and store its id in this wrapper.
+
+If a valid node id already exists, the implementation attempts to reuse or replace that node according to HEGo input-node utility behavior.
+
+After creation, this wrapper is registered with the active session manager.
+</description>
+</method>
+<method name="set_geo">
+<return type="HEGoTask" />
+<param index="0" name="points" type="PackedVector3Array" />
+<param index="1" name="prim_type" type="String" />
+<param index="2" name="vertices" type="PackedInt32Array" />
+<param index="3" name="counts" type="PackedInt32Array" />
+<param index="4" name="attributes" type="Array" default="[]" />
+<param index="5" name="force" type="bool" default="false" />
+<description>
+Submits a task to upload raw geometry into this Houdini input node.
+
+[param prim_type] is [code]points[/code] (a point cloud), [code]polyline[/code] (open linear curves, one primitive per count) or [code]polygon[/code] (closed faces). [param vertices] is the point-index list whose length must equal the sum of [param counts]. Pass empty [param vertices] and [param counts] for [code]points[/code].
+
+[param attributes] is an array of dictionaries: [code]{ "name", "type": "point" or "prim", "value" }[/code] for a uniform value, or [code]{ "name", "type", "values" }[/code] for a per-element array.
+
+Geometry content is hashed internally. If the arrays and attributes are identical to the previous call the upload is skipped and a no-op task is returned, unless [param force] is [code]true[/code].
+</description>
+</method>
+<method name="set_geo_from_mesh">
+<return type="HEGoTask" />
+<param index="0" name="mesh" type="Mesh" />
+<param index="1" name="attributes" type="Array" default="[]" />
+<param index="2" name="force" type="bool" default="false" />
+<description>
+Submits a task to upload geometry from a [Mesh] into this Houdini input node.
+
+Use [code]attributes[/code] to pass optional custom attribute descriptors consumed by HEGo geometry input utilities.
+
+The mesh is converted into HAPI-compatible topology and point data. Existing input geometry for this node is replaced.
+
+Geometry content is hashed internally. If the mesh data and attributes are identical to the previous call the upload is skipped and a no-op task is returned, unless [code]force[/code] is [code]true[/code].
+</description>
+</method>
+<method name="set_geo_from_mesh_instance_3d">
+<return type="HEGoTask" />
+<param index="0" name="mesh_instance_3d" type="MeshInstance3D" />
+<param index="1" name="attributes" type="Array" default="[]" />
+<param index="2" name="force" type="bool" default="false" />
+<description>
+Submits a task to upload geometry from a [MeshInstance3D] into this Houdini input node.
+
+Any transform or instance context used by HEGo input utilities is derived from the provided node.
+
+Use this overload when you want to read from a scene node directly instead of a standalone mesh resource.
+
+Geometry content and transform are hashed internally. If neither has changed since the previous call a no-op task is returned. If only the transform changed, only the transform is re-sent. Pass [code]force[/code] as [code]true[/code] to always perform the full upload.
+</description>
+</method>
+</methods>
+</class>

@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoFetchPointsConfig" inherits="Resource" deprecated="Use HEGoAssetNode.get_point_output() instead. Fetch configs are kept" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Attributes, filters and splits for a point fetch, saved as a resource.
+	</brief_description>
+	<description>
+		only so existing projects can move across, and will be removed. The code API takes the same arguments, shares the same implementation and cache, and can decide what to read at runtime.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="read_attribs" type="PackedStringArray" setter="" getter="">
+			Attribute names to read from the cook, as [method HEGoPointOutput.load_attributes] takes them.
+		</member>
+		<member name="filter_attribs" type="PackedStringArray" setter="" getter="">
+			Attribute names to filter the points on, one per entry of [member filter_attrib_values].
+		</member>
+		<member name="filter_attrib_values" type="Array" setter="@filter_attrib_values_setter" getter="">
+			The value each attribute in [member filter_attribs] has to carry for a point to be kept.
+		</member>
+		<member name="split_attribs" type="PackedStringArray" setter="" getter="">
+			Attribute names to group the kept points by, applied in order, one nesting level each.
+		</member>
+	</members>
+</class>

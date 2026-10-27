@@ -1,0 +1,52 @@
+[gd_scene load_steps=5 format=3 uid="uid://0fn3nxqgnidi"]
+
+[ext_resource type="Script" uid="uid://nddq401i7fhb" path="res://addons/hego/ui/hego_control.gd" id="1_cqk42"]
+[ext_resource type="PackedScene" uid="uid://dgy20wwtpiuvb" path="res://addons/hego/ui/hego_control_session_tab.tscn" id="2_3tvfr"]
+[ext_resource type="PackedScene" uid="uid://dextswpkwodbg" path="res://addons/hego/ui/hego_control_hda_tab.tscn" id="3_fsb3y"]
+[ext_resource type="PackedScene" uid="uid://bo41metlftc8d" path="res://addons/hego/ui/hego_control_library.tscn" id="4_fsb3y"]
+
+[node name="Control" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_cqk42")
+
+[node name="TabContainer" type="TabContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+current_tab = 1
+
+[node name="Session" parent="TabContainer" instance=ExtResource("2_3tvfr")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="ConnectionType" parent="TabContainer/Session/Vbox/ConnectionHBox" index="2"]
+popup/item_0/text = "Shared Memory"
+popup/item_2/text = "TCP  Port"
+
+[node name="Logs" parent="TabContainer/Session/Vbox" index="6"]
+text = ""
+
+[node name="HDA" parent="TabContainer" instance=ExtResource("3_fsb3y")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="AssetPickerButton" parent="TabContainer/HDA/HSplitContainer2/Settings/PanelContainer/VBoxContainer" index="5"]
+disabled = true
+
+[node name="Library" parent="TabContainer" instance=ExtResource("4_fsb3y")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[editable path="TabContainer/Session"]
+[editable path="TabContainer/HDA"]
+[editable path="TabContainer/Library"]

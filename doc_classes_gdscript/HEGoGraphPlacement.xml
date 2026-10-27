@@ -1,0 +1,62 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphPlacement" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Ray hits against the camera plane or a world-aligned plane.
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="camera_plane" qualifiers="static">
+			<return type="Plane" />
+			<param index="0" name="camera_forward" type="Vector3" />
+			<param index="1" name="anchor" type="Vector3" />
+			<description>
+				Plane facing the camera and passing through [param anchor].
+			</description>
+		</method>
+		<method name="world_plane" qualifiers="static">
+			<return type="Plane" />
+			<param index="0" name="axis" type="int" enum="HEGoGraphPlacement.Axis" />
+			<param index="1" name="origin" type="Vector3" />
+			<param index="2" name="offset" type="float" />
+			<description>
+				World-aligned plane through [param origin] offset along its normal.
+			</description>
+		</method>
+		<method name="intersect_scene" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="root" type="Node" />
+			<param index="1" name="origin" type="Vector3" />
+			<param index="2" name="direction" type="Vector3" />
+			<param index="3" name="exclude" type="Node" default="null" />
+			<description>
+				Nearest hit against physics, meshes, CSG, and Terrain3D under [param root]. [param exclude] and its descendants are skipped. Returns a Vector3 or null.
+			</description>
+		</method>
+		<method name="intersect_ray" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="origin" type="Vector3" />
+			<param index="1" name="direction" type="Vector3" />
+			<param index="2" name="plane" type="Plane" />
+			<description>
+				Intersection of a ray with [param plane], or [code]null[/code] if it misses or hits behind the origin.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="CAMERA" value="0" enum="Mode">
+		</constant>
+		<constant name="WORLD" value="1" enum="Mode">
+		</constant>
+		<constant name="GEOMETRY" value="2" enum="Mode">
+		</constant>
+		<constant name="XZ" value="0" enum="Axis">
+		</constant>
+		<constant name="XY" value="1" enum="Axis">
+		</constant>
+		<constant name="YZ" value="2" enum="Axis">
+		</constant>
+	</constants>
+</class>

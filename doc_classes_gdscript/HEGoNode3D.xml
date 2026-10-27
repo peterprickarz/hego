@@ -1,0 +1,92 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoNode3D" inherits="Node3D" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Brings a Houdini Digital Asset into a Godot scene.
+	</brief_description>
+	<description>
+		Pick an HDA with [b]Select HDA[/b], set its parameters in the HEGo bottom panel, and recook. Cooking instantiates the HDA in the running Houdini session, feeds it the nodes wired up as inputs, cooks it, and turns the result into Godot nodes under a child called [code]Outputs[/code].  This node handles the great majority of cases. When you want one that does something it does not - its own attributes, its own output nodes, several HDAs chained together - write your own and use [HEGoAssetAgent], which is what this node uses. Read [method cook] below first: it is the worked example, and there is nothing in it a script of your own cannot do.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="cook">
+			<return type="void" />
+			<description>
+				Instantiates the HDA if needed, pushes inputs and parameters, cooks it and rebuilds the [code]Outputs[/code] subtree from the result.
+			</description>
+		</method>
+		<method name="output_handlers">
+			<return type="Array" />
+			<description>
+				The output handlers a cook runs, in the order it runs them.  Each is a script with [code]output_phase()[/code], [code]should_handle(summary)[/code] and [code]handle(context)[/code]. Override this in a subclass to add one of your own, to drop one this node does not need, or to change the order.  A function rather than a constant, because GDScript cannot build a constant out of other classes' references, and because the Terrain3D pair can then be left out entirely when that addon is absent rather than being asked on every cook.
+			</description>
+		</method>
+		<method name="hego_use_bottom_panel">
+			<return type="bool" />
+			<description>
+				Tells the plugin this node can be edited from the HEGo bottom panel.
+			</description>
+		</method>
+		<method name="hego_get_asset_node">
+			<return type="HEGoAssetNode" />
+			<description>
+				The asset node the bottom panel reads parameters from, or null before the first cook.
+			</description>
+		</method>
+		<method name="hego_get_asset_name">
+			<return type="String" />
+			<description>
+				The HDA this node cooks.
+			</description>
+		</method>
+		<method name="hego_set_parm_stash">
+			<return type="void" />
+			<param index="0" name="preset" type="PackedByteArray" />
+			<description>
+				Stores a parameter preset so it survives session restarts and scene reloads.
+			</description>
+		</method>
+		<method name="hego_get_input_stash">
+			<return type="Array" />
+			<description>
+				The stored input references.
+			</description>
+		</method>
+		<method name="hego_set_input_stash">
+			<return type="void" />
+			<param index="0" name="input_array" type="Array" />
+			<description>
+				Stores the input references the bottom panel collected.  Each HDA input can combine several Godot nodes, so [param input_array] holds one entry per HDA input, each with its own list of node paths and its settings.
+			</description>
+		</method>
+		<method name="hego_set_asset_name">
+			<return type="void" />
+			<param index="0" name="new_asset_name" type="String" />
+			<description>
+				Lets the panel's asset picker change which HDA this node cooks.  Implementing this is what tells the panel the picker applies at all; a node with an HDA written into its script leaves it out and gets no picker button.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="select_hda_btn" type="Variant" setter="" getter="" default="_show_select_hda_dialog">
+			Opens the HDA picker. The chosen operator is written to [member asset_name].
+		</member>
+		<member name="asset_name" type="String" setter="" getter="">
+			The asset definition name in Houdini, e.g. Sop/my_tool
+		</member>
+		<member name="parm_stash" type="PackedByteArray" setter="" getter="">
+			The HDA's parameters as a blob, so they survive a session restart and a scene reload.
+		</member>
+		<member name="input_stash" type="Array" setter="" getter="">
+			References to the Godot nodes wired into the HDA's inputs, one entry per input.
+		</member>
+		<member name="agent" type="HEGoAssetAgent" setter="" getter="" default="new(...)">
+			The tedious parts of driving an HDA. Everything it does is an ordinary call on [HEGoAssetNode]; see [HEGoAssetAgent].
+		</member>
+	</members>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;cook&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+	</constants>
+</class>

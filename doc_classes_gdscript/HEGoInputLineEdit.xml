@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoInputLineEdit" inherits="LineEdit" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		A field in the panel's Inputs pane that a scene node can be dragged onto.
+	</brief_description>
+	<description>
+		Dropping a node writes its path relative to the edited scene, which is the form the input rows are stored in; typing a path by hand works the same way.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="node_path" type="Variant" setter="" getter="" default="&quot;&quot;">
+			Unused. The dropped path is written straight to [member text], which is what the panel reads back.
+		</member>
+	</members>
+	<signals>
+		<signal name="input_changed">
+			<description>
+				Emitted when a node was dropped on the field, after [member text] has been rewritten.
+			</description>
+		</signal>
+	</signals>
+</class>

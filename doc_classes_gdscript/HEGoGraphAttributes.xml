@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphAttributes" inherits="Node" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Schema for a [HEGoGraphInput3D]: the attributes its points and connections can carry.
+	</brief_description>
+	<description>
+		Parent this under a graph and fill [member attributes]. The list can be saved as its own scene and reused under other graphs. Several children concatenate in tree order.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="attributes" type="HEGoGraphAttributeDef[]" setter="@attributes_setter" getter="" default="[]">
+			Attribute definitions this child adds to its parent graph.
+		</member>
+	</members>
+	<signals>
+		<signal name="schema_changed">
+			<description>
+				Emitted when the list of definitions, or a definition inside it, changes.
+			</description>
+		</signal>
+	</signals>
+</class>

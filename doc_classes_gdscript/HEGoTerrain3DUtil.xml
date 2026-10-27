@@ -1,0 +1,203 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoTerrain3DUtil" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Helpers shared by the Terrain3D input, output and instancer paths.
+	</brief_description>
+	<description>
+		Terrain3D is an optional addon, so nothing here refers to its types directly: everything goes through [ClassDB], [method Object.call] and [method Object.get], and every entry point degrades to a warning when the addon or a method is missing.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="is_available" qualifiers="static">
+			<return type="bool" />
+			<description>
+				Whether the Terrain3D addon is present in this project.
+			</description>
+		</method>
+		<method name="get_layer_by_name" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="layers" type="Array" />
+			<param index="1" name="layer_name" type="String" />
+			<description>
+				Returns the heightfield layer called [param layer_name], or an empty dictionary.
+			</description>
+		</method>
+		<method name="get_attr_value" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="layer" type="Dictionary" />
+			<param index="1" name="attr_name" type="String" />
+			<description>
+				Value of one of a layer's attributes, or [code]null[/code] when it is missing.
+			</description>
+		</method>
+		<method name="get_attr_string" qualifiers="static">
+			<return type="String" />
+			<param index="0" name="layer" type="Dictionary" />
+			<param index="1" name="attr_name" type="String" />
+			<description>
+				Same as [method get_attr_value], but always returns a stripped string.
+			</description>
+		</method>
+		<method name="is_valid_region_size" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="value" type="Variant" />
+			<description>
+				Whether [param value] is a region size Terrain3D accepts: a power of two between [constant MIN_REGION_SIZE] and [constant MAX_REGION_SIZE].
+			</description>
+		</method>
+		<method name="approx_equal_vec3" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="a" type="Vector3" />
+			<param index="1" name="b" type="Vector3" />
+			<param index="2" name="tolerance" type="float" />
+			<description>
+				Component-wise comparison with a tolerance.
+			</description>
+		</method>
+		<method name="collect_texture_layers" qualifiers="static">
+			<return type="Array" />
+			<param index="0" name="layers" type="Array" />
+			<description>
+				Collects the hegot3d_texture_layer_N layers, sorted by slot.
+			</description>
+		</method>
+		<method name="parse_texture_layer_index" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="layer_name" type="String" />
+			<description>
+				Slot number encoded in a hegot3d_texture_layer_N name, or -1 if there is none.
+			</description>
+		</method>
+		<method name="validate_texture_layers" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="texture_layers" type="Array" />
+			<description>
+				Checks that every texture layer can actually be turned into a Terrain3DTextureAsset.  Control maps address textures by slot, so a single unusable layer would shift every other one: validation is all-or-nothing. Returns [code]{ ok, layers, lowest_slot }[/code] on success and [code]{ ok, warning }[/code] on failure.
+			</description>
+		</method>
+		<method name="load_texture_resource" qualifiers="static">
+			<return type="Texture2D" />
+			<param index="0" name="resource_path" type="String" />
+			<description>
+				Loads a [Texture2D] from [param resource_path], or null if there is none.
+			</description>
+		</method>
+		<method name="get_texture_image" qualifiers="static">
+			<return type="Image" />
+			<param index="0" name="texture" type="Texture2D" />
+			<description>
+				The [Image] behind a texture, or null when it cannot be read.
+			</description>
+		</method>
+		<method name="get_image_signature" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="image" type="Image" />
+			<description>
+				Size and format of an image, used to compare textures against each other.
+			</description>
+		</method>
+		<method name="image_signature_matches" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="a" type="Dictionary" />
+			<param index="1" name="b" type="Dictionary" />
+			<description>
+				Whether two [method get_image_signature] results describe the same layout.
+			</description>
+		</method>
+		<method name="set_optional_property" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="obj" type="Object" />
+			<param index="1" name="property_name" type="String" />
+			<param index="2" name="value" type="Variant" />
+			<description>
+				Sets a property only if the object has it, for properties whose availability depends on the installed Terrain3D version.
+			</description>
+		</method>
+		<method name="build_control_bits_for_pixel" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="texture_layers" type="Array" />
+			<param index="1" name="terrain3d_util" type="Object" />
+			<param index="2" name="pixel_x" type="int" />
+			<param index="3" name="pixel_z" type="int" />
+			<param index="4" name="lowest_valid_texture_slot" type="int" />
+			<param index="5" name="hole_image" type="Image" />
+			<description>
+				Builds the Terrain3D control map value for one pixel.  Terrain3D blends exactly two textures per pixel, so the two heaviest weight layers become base and overlay and the rest are dropped. Pass -1 for [param pixel_x] and [param pixel_z] to get the value used for pixels outside every weight image.
+			</description>
+		</method>
+		<method name="encode_control_bits" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="terrain3d_util" type="Object" />
+			<param index="1" name="base_slot" type="int" />
+			<param index="2" name="overlay_slot" type="int" />
+			<param index="3" name="blend_value" type="int" />
+			<param index="4" name="is_hole" type="bool" />
+			<description>
+				Packs base slot, overlay slot, blend and hole flag into a Terrain3D control value.
+			</description>
+		</method>
+		<method name="fix_heightfield_image_transform" qualifiers="static">
+			<return type="Image" />
+			<param index="0" name="image" type="Image" />
+			<description>
+				Rotates a Houdini heightfield image into Terrain3D's orientation.  Houdini heightfields are stored rows-along-Z while Terrain3D expects rows-along-X, which is a 90 degree rotation; the import then mirrors along world X, so the result is flipped back here.
+			</description>
+		</method>
+		<method name="find_node_from_path" qualifiers="static">
+			<return type="Node" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="node_path_text" type="String" />
+			<description>
+				Resolves a Terrain3D node path, relative to [param host] first and to the edited scene root second, so HDAs can address terrains outside the HEGo node.
+			</description>
+		</method>
+		<method name="get_terrain_assets" qualifiers="static">
+			<return type="Object" />
+			<param index="0" name="terrain" type="Node" />
+			<description>
+				The Terrain3DAssets of a terrain, or null when it has none.
+			</description>
+		</method>
+		<method name="get_vertex_spacing" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="terrain3d_node" type="Node" />
+			<description>
+				World size of one terrain vertex, defaulting to 1.0 for terrains that do not say.
+			</description>
+		</method>
+		<method name="get_texture_name" qualifiers="static">
+			<return type="String" />
+			<param index="0" name="terrain3d_node" type="Node" />
+			<param index="1" name="texture_id" type="int" />
+			<description>
+				Name of the texture in [param texture_id]'s slot, or an empty string.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;terrain3d&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="ATTRIB_PREFIX" value="&quot;hegot3d_&quot;">
+			Prefix of every heightfield layer and attribute HEGo exchanges with Terrain3D.
+		</constant>
+		<constant name="HEIGHT_LAYER" value="&quot;height&quot;">
+			Layer holding the terrain height.
+		</constant>
+		<constant name="TEXTURE_LAYER_PREFIX" value="&quot;hegot3d_texture_layer_&quot;">
+			Layer name prefix of the per-texture weight layers.
+		</constant>
+		<constant name="MAX_TEXTURE_SLOT" value="31">
+			Highest texture slot Terrain3D control maps can address.
+		</constant>
+		<constant name="MIN_REGION_SIZE" value="64">
+			Region sizes Terrain3D accepts.
+		</constant>
+		<constant name="MAX_REGION_SIZE" value="2048">
+		</constant>
+		<constant name="TEXTURE_ASSET_ATTRIBS" value="{&quot;hegot3d_ao_strength&quot;: &quot;ao_strength&quot;, &quot;hegot3d_detiling_rotation&quot;: &quot;detiling_rotation&quot;, &quot;hegot3d_detiling_shift&quot;: &quot;detiling_shift&quot;, &quot;hegot3d_id&quot;: &quot;id&quot;, &quot;hegot3d_name&quot;: &quot;name&quot;, &quot;hegot3d_normal_depth&quot;: &quot;normal_depth&quot;, &quot;hegot3d_roughness&quot;: &quot;roughness&quot;, &quot;hegot3d_uv_scale&quot;: &quot;uv_scale&quot;}">
+			Optional Terrain3DTextureAsset properties an HDA can drive, keyed by attribute name.
+		</constant>
+	</constants>
+</class>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoInputReceiverNode" inherits="HEGoBaseNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Base node type that can receive node inputs.
+</brief_description>
+<description>
+Provides a helper for connecting another HEGo node into a specific input index on the current node.
+
+Use this as the base for nodes that accept upstream Houdini connections.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="connect_input">
+<return type="HEGoTask" />
+<param index="0" name="other_node" type="HEGoBaseNode" />
+<param index="1" name="input_index" type="int" />
+<param index="2" name="output_index" type="int" default="0" />
+<param index="3" name="force" type="bool" default="false" />
+<description>
+Submits a task to connect [code]other_node[/code] into this node's [code]input_index[/code].
+
+Both nodes should already be instantiated. If either node id is invalid, downstream HAPI calls can fail and log errors.
+
+[code]output_index[/code] selects which of [code]other_node[/code]'s outputs to take, for an HDA that has more than one. It defaults to the first, which is the only one most assets have.
+
+The connection is cached internally, on both the source node and its output index. Repeating a connection that is already in place returns a no-op task unless [code]force[/code] is [code]true[/code]; moving an input to a different output of the same node is a change, and is not skipped.
+</description>
+</method>
+</methods>
+</class>

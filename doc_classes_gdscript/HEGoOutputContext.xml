@@ -1,0 +1,80 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoOutputContext" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Everything one output handler is given to work with.
+	</brief_description>
+	<description>
+		A handler needs three things from the cook - the node the output belongs under, the HDA that produced it, and what that cook produced - and the scene plumbing every one of them would otherwise repeat. This carries all of it, so a handler's only argument names exactly what it may use, and any node can call one by building a context for it.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="create" qualifiers="static">
+			<return type="HEGoOutputContext" />
+			<param index="0" name="host_node" type="Node" />
+			<param index="1" name="asset_node" type="HEGoAssetNode" />
+			<param index="2" name="cook_summary" type="Dictionary" />
+			<description>
+				Builds a context for [param host_node]'s cook of [param asset_node].
+			</description>
+		</method>
+		<method name="await_task">
+			<return type="Variant" />
+			<param index="0" name="task" type="HEGoTask" />
+			<description>
+				Waits for [param task] and returns its result, or [code]null[/code] if it failed.
+			</description>
+		</method>
+		<method name="outputs_root">
+			<return type="Node3D" />
+			<description>
+				The node this cook's output is built under, created if it does not exist yet.
+			</description>
+		</method>
+		<method name="ensure_parent">
+			<return type="Node" />
+			<param index="0" name="root" type="Node" />
+			<param index="1" name="path_parts" type="PackedStringArray" />
+			<description>
+				Creates the intermediate nodes of [param path_parts] under [param root] and returns the node the leaf should be added to. The leaf itself is left to the caller.
+			</description>
+		</method>
+		<method name="own">
+			<return type="void" />
+			<param index="0" name="node" type="Node" />
+			<description>
+				Makes [param node] part of the saved scene while running in the editor. A spawned node whose owner is left unset silently disappears when the scene is saved, so every node a cook creates goes through here.
+			</description>
+		</method>
+		<method name="place">
+			<return type="Node" />
+			<param index="0" name="node_path" type="String" />
+			<param index="1" name="default_name" type="String" />
+			<param index="2" name="factory" type="Callable" />
+			<param index="3" name="unique" type="bool" default="false" />
+			<param index="4" name="configure" type="Callable" default="Callable()" />
+			<description>
+				Creates the node that [param node_path] names under this cook's output root, and returns it ready to use, named, parented and owned.  [param node_path] may contain slashes; everything before the last part becomes plain [Node3D]s. [param default_name] is used when the path names nothing. [param factory] is only called when a node actually has to be created.  An existing node at that location is reused when it is already the right class and replaced when it is not, so a handler that runs twice does not orphan what it built the first time. Pass [param unique] to suffix the name instead of reusing, which is what spawning one node per point needs.  [param configure] runs on a newly created node after it is named and before it enters the tree. Anything that has to be set before the node's [code]_ready()[/code] sees it belongs there rather than on the returned node: a spawned scene reading a property the HDA meant to override would otherwise read the default.
+			</description>
+		</method>
+		<method name="select_points">
+			<return type="HEGoPointSelection" />
+			<param index="0" name="filter_attrib" type="String" />
+			<param index="1" name="attribs" type="PackedStringArray" />
+			<description>
+				Fetches this cook's points, loads [param attribs], and returns the ones whose [param filter_attrib] is 1.  Returns [code]null[/code] when the fetch failed, the output is unusable, or nothing matched, so a handler can bail on one check rather than the four this replaces. [param filter_attrib] is loaded whether or not [param attribs] names it.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="host" type="Node" setter="" getter="">
+			The node this cook belongs to.  Output normally goes under [method outputs_root] rather than directly here. A handler that must parent somewhere else needs the host itself, which is why it is exposed: [HEGoTerrain3DOutput] deliberately builds outside the subtree a cook rebuilds, so the terrain it spawns survives recooking.
+		</member>
+		<member name="asset" type="HEGoAssetNode" setter="" getter="">
+			The Houdini node whose cook this is.
+		</member>
+		<member name="summary" type="Dictionary" setter="" getter="">
+			What the cook produced, as [method HEGoAssetNode.get_output_summary] reported it.  This is the same dictionary the handler's [code]should_handle()[/code] was asked about, so [method handle] can read what it was selected for rather than working it out again.
+		</member>
+	</members>
+</class>

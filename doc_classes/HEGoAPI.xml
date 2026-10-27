@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoAPI" inherits="Object" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Singleton entry point for HEGo session management, task scheduling, and HDA discovery.
+</brief_description>
+<description>
+This class owns the internal [code]HEGoSessionManager[/code] and task scheduler, initializes the Houdini API platform layer, and exposes session and task controls to scripts.
+
+The singleton is created during module initialization and is intended to be reused for the whole runtime.
+
+All HEGo node methods that call Houdini Engine submit work through the task scheduler and return [HEGoTask] objects. Use the scheduler query methods on this class to inspect queued, running, and completed tasks.
+
+It also stores [code]hego/houdini_installation_path[/code] in Godot project settings. That path is used when filtering built-in Houdini libraries from [method get_hda_libraries].
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="clear_completed_task_history">
+<return type="void" />
+<description>
+Clears the completed task history ring buffer.
+</description>
+</method>
+<method name="get_completed_task_history">
+<return type="Array" />
+<description>
+Returns an [Array] of [HEGoTask] objects that have finished executing (either [constant HEGoTask.COMPLETED] or [constant HEGoTask.FAILED]).
+
+The history is stored in a ring buffer capped at 64 entries. Newest entries are at the front of the array.
+</description>
+</method>
+<method name="get_current_task">
+<return type="HEGoTask" />
+<description>
+Returns the [HEGoTask] currently being executed on the background worker thread, or [code]null[/code] if the scheduler is idle.
+</description>
+</method>
+<method name="get_hda_libraries">
+<return type="Dictionary" />
+<description>
+Returns metadata for currently loaded non-built-in HDA libraries.
+
+The dictionary is keyed by library name when available (otherwise by library id as a string).
+Each value contains:
+- [code]id[/code]: HAPI asset library id.
+- [code]file_path[/code]: source library path.
+- [code]name[/code]: basename without extension.
+- [code]asset_count[/code]: number of available assets in the library.
+- [code]assets[/code]: [PackedStringArray] of operator names.
+
+Returns an empty dictionary if no session is active, if no libraries are loaded, or if querying HAPI fails.
+</description>
+</method>
+<method name="get_houdini_installation_path" qualifiers="const">
+<return type="String" />
+<description>
+Returns the configured Houdini installation path from project settings.
+</description>
+</method>
+<method name="get_pending_tasks">
+<return type="Array" />
+<description>
+Returns an [Array] of [HEGoTask] objects waiting in the scheduler queue (status [constant HEGoTask.PENDING]).
+
+Does not include the currently running task. See [method get_current_task] for that.
+</description>
+</method>
+<method name="get_singleton" qualifiers="static">
+<return type="HEGoAPI" />
+<description>
+Returns the global [HEGoAPI] singleton instance created during module initialization.
+</description>
+</method>
+<method name="get_task_pending_count">
+<return type="int" />
+<description>
+Returns the number of tasks waiting in the scheduler queue.
+
+This count does not include the currently running task.
+</description>
+</method>
+<method name="is_session_active">
+<return type="bool" />
+<description>
+Returns [code]true[/code] when the Houdini Engine session is currently active.
+</description>
+</method>
+<method name="set_houdini_installation_path">
+<return type="void" />
+<param index="0" name="path" type="String" />
+<description>
+Updates the [code]hego/houdini_installation_path[/code] project setting.
+</description>
+</method>
+<method name="start_session">
+<return type="bool" />
+<param index="0" name="connection_type" type="int" />
+<param index="1" name="connection_data" type="String" />
+<description>
+Starts a Houdini Engine session and initializes HAPI.
+
+[code]connection_type[/code] is one of [constant SESSION_IN_PROCESS], [constant SESSION_NAMED_PIPE] or [constant SESSION_TCP_SOCKET]. Any other value is rejected with an error rather than attempted.
+
+[code]connection_data[/code] is the pipe or shared memory name, or the port number for a TCP session. A TCP session falls back to port 9090 when it is not a valid port.
+
+Returns [code]true[/code] on successful session startup and initialization.
+</description>
+</method>
+<method name="stop_session">
+<return type="bool" />
+<description>
+Stops the task scheduler and then closes the active Houdini Engine session, releasing all session resources.
+
+Any pending tasks in the queue are discarded. The currently running task, if any, is allowed to finish before the session is closed.
+
+Returns [code]true[/code] when shutdown succeeds.
+</description>
+</method>
+<method name="submit_task">
+<return type="HEGoTask" />
+<param index="0" name="task" type="HEGoTask" />
+<description>
+Submits an [HEGoTask] to the scheduler queue for execution on the background worker thread.
+
+This is called internally by HEGo node methods. Direct use is rarely needed unless you are building custom task pipelines.
+
+Returns the same [HEGoTask] that was passed in, for convenience.
+</description>
+</method>
+</methods>
+<constants>
+<constant name="SESSION_IN_PROCESS" value="1" enum="SessionType">
+Houdini is started by HEGo and closes with it. Served by a shared memory server, which is the fastest transport but ties the session's lifetime to Godot's.
+</constant>
+<constant name="SESSION_NAMED_PIPE" value="2" enum="SessionType">
+HEGo starts a Thrift server on a named pipe. [code]connection_data[/code] is the pipe name.
+</constant>
+<constant name="SESSION_TCP_SOCKET" value="3" enum="SessionType">
+HEGo starts a Thrift server on a TCP socket. [code]connection_data[/code] is the port number.
+</constant>
+</constants>
+</class>
