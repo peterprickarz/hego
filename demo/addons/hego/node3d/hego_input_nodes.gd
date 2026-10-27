@@ -32,7 +32,8 @@ const CURVE_SAMPLE_LENGTH := 1.0
 ## input node to store, which is [param existing_node] itself when it was reused.
 ##
 ## [param settings] is the per-input settings dictionary from the input stash. It is
-## carried through the stash for future per-input options and is not read yet.
+## curve_sample_length optionally controls Path3D upload spacing in metres.
+## Missing, non-finite or non-positive values use the one-metre default.
 static func sync(host: Node, existing_node: Variant, input_node_path: Variant, settings: Dictionary) -> Variant:
 	var input := _resolve_input_node(host, input_node_path)
 	if input == null:
@@ -72,7 +73,10 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 	if input is Path3D:
 		var curve_node: HEGoCurveInputNode = existing_node if existing_node is HEGoCurveInputNode else HEGoCurveInputNode.new()
 		await HEGoNodeUtil.await_task(host, curve_node.instantiate())
-		await HEGoNodeUtil.await_task(host, curve_node.set_curve_from_path_3d(input, CURVE_SAMPLE_LENGTH))
+		var spacing := float(settings.get("curve_sample_length", CURVE_SAMPLE_LENGTH))
+		if not is_finite(spacing) or spacing <= 0.0:
+			spacing = CURVE_SAMPLE_LENGTH
+		await HEGoNodeUtil.await_task(host, curve_node.set_curve_from_path_3d(input, maxf(0.01, spacing)))
 		return curve_node
 
 	if input is MeshInstance3D:
