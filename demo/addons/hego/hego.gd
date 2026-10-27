@@ -75,6 +75,7 @@ func _exit_tree():
 		editor_selection.selection_changed.disconnect(_on_selection_changed)
 	
 	if graph_editor:
+		graph_editor.cleanup()
 		if graph_editor.toolbar:
 			remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, graph_editor.toolbar)
 			graph_editor.toolbar.queue_free()
@@ -124,6 +125,11 @@ func _edit(object: Object) -> void:
 func _make_visible(visible: bool) -> void:
 	if graph_editor:
 		graph_editor.set_visible(visible)
+
+
+func _input(event: InputEvent) -> void:
+	if graph_editor and graph_editor.handle_key_anywhere(event):
+		get_viewport().set_input_as_handled()
 
 
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:

@@ -5,7 +5,8 @@ extends RefCounted
 ##
 ## Point selection and the move/rotate/scale widget are Godot's built-in
 ## subgizmos. This object only handles Draw-mode clicks, connection picks,
-## Shift+empty to clear, and the attribute strip.
+## empty clicks that clear the selection, the right-click menu, and the
+## attribute strip.
 
 enum Mode {
 	SELECT,
@@ -13,6 +14,18 @@ enum Mode {
 }
 
 const CLICK_PIXELS := 8.0
+
+## Subgizmo id standing for the whole selection when it is more than one
+## point, or has connections. Scripts can only give Godot one subgizmo id, so
+## this one carries the move widget for all of them: its transform is their
+## centre, and moving it moves every point in [method group_points].
+const GROUP_SUBGIZMO := 0x3FFFFFFF
+
+enum MenuId {
+	SELECT,
+	SPLIT,
+	DELETE,
+}
 
 var plugin: EditorPlugin
 var gizmo_plugin: EditorNode3DGizmoPlugin
@@ -40,12 +53,28 @@ var _pointer := Vector2.ZERO
 var _pressed := false
 var _drag_started := false
 var _own_click := false
+## Plain empty press handed to the 3D editor so its move arrows still drag.
+## If it is released without moving, it clears the selection.
+var _empty_click := false
 var _box := false
 var _reselecting := false
 var _saved_tool_button: Button
+## Point or connection under a right press, shown in the menu on release.
+var _menu_point := -1
+var _menu_connection := -1
+var _menu_press_pos := Vector2.ZERO
+## World position the menu's Split inserts at.
+var _menu_split_at := Vector3.ZERO
+var _context_menu: PopupMenu
 ## Index we just selected ourselves; ignore stale gizmo selection until Godot's
 ## deferred set_subgizmo_selection lands.
 var _hold_selection := -1
+## True while Godot's subgizmo selection is [constant GROUP_SUBGIZMO] because
+## we put it there.
+var _group_pushed := false
+## Positions of the group's points when the current widget drag began.
+var _group_start: Dictionary = {}
+var _group_start_center := Vector3.ZERO
 
 
 func edit(object: Object) -> void:
@@ -66,6 +95,7 @@ func edit(object: Object) -> void:
 		if not graph.graph_changed.is_connected(_on_graph_changed):
 			graph.graph_changed.connect(_on_graph_changed)
 		graph.update_gizmos()
+	_refresh_attrib_panel()
 
 
 func set_visible(visible: bool) -> void:
@@ -95,6 +125,32 @@ func sync_point_selection(ids: PackedInt32Array) -> void:
 			_hold_selection = -1
 		else:
 			return
+	if ids.has(GROUP_SUBGIZMO):
+		if ids.size() == 1:
+			return
+		# Shift+click on a point while the group is selected: Godot adds
+		# the point next to the group id. Toggle it in and rebuild the group.
+		for id in ids:
+			if id == GROUP_SUBGIZMO:
+				continue
+			var found := selected_points.find(id)
+			if found >= 0:
+				selected_points.remove_at(found)
+			else:
+				selected_points.append(id)
+		_apply_selection()
+		return
+	if _group_pushed:
+		# Godot replaced the group (plain click on a point, Escape, ...):
+		# the connections go with it.
+		_group_pushed = false
+		selected_connections = PackedInt32Array()
+		selected_points = ids.duplicate()
+		if selected_points.size() > 0:
+			last_point = selected_points[selected_points.size() - 1]
+		graph.update_gizmos()
+		_refresh_attrib_panel()
+		return
 	if _ids_equal(selected_points, ids):
 		return
 	selected_points = ids.duplicate()
@@ -109,13 +165,16 @@ func handle_input(camera: Camera3D, event: InputEvent) -> int:
 
 	if event is InputEventKey and event.pressed and not event.echo:
 		ctrl_held = event.ctrl_pressed
-		if event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
-			if selected_points.size() > 0 or selected_connections.size() > 0:
-				_delete_selection()
-				return EditorPlugin.AFTER_GUI_INPUT_STOP
+		if _try_delete_key(event):
+			return EditorPlugin.AFTER_GUI_INPUT_STOP
 
 	if event is InputEventMouse:
 		ctrl_held = event.ctrl_pressed
+
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		var menu_result := _on_right_button(camera, event)
+		if menu_result != EditorPlugin.AFTER_GUI_INPUT_PASS:
+			return menu_result
 
 	if _is_camera_event(event):
 		return EditorPlugin.AFTER_GUI_INPUT_PASS
@@ -131,12 +190,64 @@ func handle_input(camera: Camera3D, event: InputEvent) -> int:
 	return EditorPlugin.AFTER_GUI_INPUT_PASS
 
 
+## Key path that does not need the 3D viewport to have focus.
+##
+## _forward_3d_gui_input only sees keys while the viewport surface has focus,
+## which it loses to the attribute strip, the scene tree, or any other panel
+## the user clicked last. The plugin feeds keys here from _input, and they
+## count while the mouse is over a 3D viewport and no text field has focus.
+func handle_key_anywhere(event: InputEvent) -> bool:
+	if graph == null or not is_instance_valid(graph):
+		return false
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo:
+		return false
+	var focus := EditorInterface.get_base_control().get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit:
+		return false
+	if not _mouse_over_3d_viewport():
+		return false
+	return _try_delete_key(key)
+
+
+func _try_delete_key(event: InputEventKey) -> bool:
+	if not _is_delete_key(event):
+		return false
+	if selected_points.is_empty() and selected_connections.is_empty():
+		return false
+	_delete_selection()
+	return true
+
+
+func _mouse_over_3d_viewport() -> bool:
+	for i in 4:
+		var vp := EditorInterface.get_editor_viewport_3d(i)
+		if vp == null:
+			continue
+		var container := vp.get_parent() as Control
+		if container and container.is_visible_in_tree() \
+				and container.get_global_rect().has_point(container.get_global_mouse_position()):
+			return true
+	return false
+
+
+func _is_delete_key(event: InputEventKey) -> bool:
+	if event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
+		return true
+	# Bare X only: Shift+X and friends are Godot's axis locks, Ctrl+X is cut,
+	# and X during an arrow drag locks the axis.
+	return event.keycode == KEY_X and not (event.shift_pressed or event.ctrl_pressed
+			or event.alt_pressed or event.meta_pressed) and not _pressed \
+			and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+
+
 func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 	_press_pos = event.position
 	_pointer = event.position
 	_pressed = true
 	_drag_started = false
 	_own_click = false
+	_empty_click = false
 	_box = false
 	_update_hover(camera, event.position)
 
@@ -144,26 +255,28 @@ func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 	if event.shift_pressed and empty:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
-	# Continue a polyline: Ctrl+empty always places, even on top of the widget.
+	# Ctrl+empty always places, even on top of the widget: connected to the
+	# selected point, or loose when nothing is selected.
 	if mode == Mode.DRAW and event.ctrl_pressed and empty:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
 	if mode == Mode.DRAW and event.ctrl_pressed and hover_point >= 0:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
-	if mode == Mode.DRAW and hover_connection >= 0:
-		_own_click = true
-		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	# Connections are ours: click selects, Ctrl+click in Draw splits.
 	if hover_connection >= 0:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
-	# First point, or an isolated add with nothing selected: Draw on empty.
-	if mode == Mode.DRAW and empty and not _has_point_selection():
+	# Nothing selected means no widget to drag: the click (or box) is ours.
+	if empty and not _has_point_selection() and not _group_pushed:
 		_own_click = true
 		return EditorPlugin.AFTER_GUI_INPUT_STOP
 	# Anything else (move arrows, selected point, empty while a point is
-	# selected) goes to the 3D editor so the translate widget can drag.
-	_pressed = false
+	# selected) goes to the 3D editor so the translate widget can drag. An
+	# empty press that comes back without moving clears the selection.
+	_empty_click = empty
+	if not _empty_click:
+		_pressed = false
 	return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 
 
@@ -171,6 +284,9 @@ func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:
 	_pointer = event.position
 	# While the built-in widget is dragging, do not rebuild gizmos or hover.
 	if event.button_mask & MOUSE_BUTTON_MASK_LEFT and not _own_click:
+		if _empty_click and event.position.distance_to(_press_pos) > CLICK_PIXELS:
+			_empty_click = false
+			_pressed = false
 		return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 	if _pressed and not _drag_started and event.position.distance_to(_press_pos) > CLICK_PIXELS:
 		_drag_started = true
@@ -185,7 +301,7 @@ func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:
 	var prev_c := hover_connection
 	_update_hover(camera, event.position)
 	var new_preview: Variant = null
-	if ctrl_held and last_point >= 0 and mode == Mode.DRAW:
+	if ctrl_held and connect_from_point() >= 0 and mode == Mode.DRAW:
 		new_preview = _hit(camera, event.position)
 	var preview_changed: bool = preview_cursor != new_preview
 	preview_cursor = new_preview
@@ -200,6 +316,11 @@ func _on_release(camera: Camera3D, event: InputEventMouseButton) -> int:
 	if not _pressed:
 		return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 	_pressed = false
+	if _empty_click:
+		_empty_click = false
+		_clear_selection()
+		# Still CUSTOM so the 3D editor ends whatever it began on press.
+		return EditorPlugin.AFTER_GUI_INPUT_CUSTOM
 	if _box:
 		_finish_box(camera, event.shift_pressed)
 		_box = false
@@ -221,6 +342,7 @@ func _cancel_pointer() -> void:
 	_pressed = false
 	_drag_started = false
 	_own_click = false
+	_empty_click = false
 	_box = false
 	if plugin:
 		plugin.update_overlays()
@@ -243,57 +365,156 @@ func _is_camera_event(event: InputEvent) -> bool:
 func _click(camera: Camera3D, mouse: Vector2, shift: bool, ctrl: bool) -> void:
 	_update_hover(camera, mouse)
 
-	# Shift+empty never places a point; it drops the current selection.
-	if hover_point < 0 and hover_connection < 0 and shift:
+	var connect_from := connect_from_point()
+
+	# Only Ctrl+click in Draw places a point; any other empty click drops
+	# the current selection.
+	if hover_point < 0 and hover_connection < 0 and (shift or not ctrl or mode != Mode.DRAW):
 		_clear_selection()
 		return
 
 	if hover_point >= 0:
-		if mode == Mode.DRAW and ctrl and last_point >= 0:
+		if mode == Mode.DRAW and ctrl:
 			var to_point := hover_point
-			_mutate("Connect graph points", func() -> void:
-				graph.add_connection(last_point, to_point)
-			)
+			if connect_from >= 0 and connect_from != to_point:
+				_mutate("Connect graph points", func() -> void:
+					graph.add_connection(connect_from, to_point)
+				)
 			_select_point_subgizmo(to_point)
 		return
 
 	if hover_connection >= 0:
-		# Shift+click selects the edge. Plain Draw click still splits.
-		if shift or mode != Mode.DRAW:
-			if mode == Mode.DRAW:
-				_clear_point_selection()
-			_select_connections(PackedInt32Array([hover_connection]), shift and mode == Mode.SELECT)
+		if mode == Mode.DRAW and ctrl and not shift:
+			_split_connection(hover_connection, _split_position(camera, mouse, hover_connection))
 			return
-		var a: int = graph.connections[hover_connection * 2]
-		var b: int = graph.connections[hover_connection * 2 + 1]
-		var split_at := HEGoGraphPicking.closest_on_segment(
-				graph.to_global(graph.points[a]), graph.to_global(graph.points[b]),
-				_ray_point(camera, mouse))
-		var local := graph.to_local(split_at)
-		var conn := hover_connection
-		# Do not assign the new index inside a lambda: GDScript captures
-		# ints by value, so the outer variable would stay -1.
-		var before: Dictionary = graph.capture_state()
-		var new_index := graph.split_connection(conn, local)
-		_commit_state("Split graph connection", before)
-		_select_point_subgizmo(new_index)
-		return
-
-	if mode != Mode.DRAW:
-		_clear_selection()
+		# Click selects the edge; Shift toggles it into the selection.
+		if not shift:
+			_clear_point_selection()
+		_select_connections(PackedInt32Array([hover_connection]), shift)
 		return
 
 	var hit: Variant = _hit(camera, mouse)
 	if hit == null:
 		return
 	var local_hit: Vector3 = graph.to_local(hit)
-	var connect_from := last_point if ctrl else -1
 	var before: Dictionary = graph.capture_state()
 	var new_index := graph.add_point(local_hit)
 	if connect_from >= 0:
 		graph.add_connection(connect_from, new_index)
 	_commit_state("Add graph point", before)
 	_select_point_subgizmo(new_index)
+
+
+## Point on connection [param conn] under [param mouse], in world space.
+##
+## The closest point between the view ray and the segment, so the split lands
+## under the cursor whatever the placement plane.
+func _split_position(camera: Camera3D, mouse: Vector2, conn: int) -> Vector3:
+	var a := graph.to_global(graph.points[graph.connections[conn * 2]])
+	var b := graph.to_global(graph.points[graph.connections[conn * 2 + 1]])
+	var origin := camera.project_ray_origin(mouse)
+	var far := origin + camera.project_ray_normal(mouse) * maxf(camera.far, 10000.0)
+	var closest := Geometry3D.get_closest_points_between_segments(origin, far, a, b)
+	return closest[1]
+
+
+func _split_connection(conn: int, world_pos: Vector3) -> void:
+	if conn < 0 or conn >= graph.connection_count():
+		return
+	var local := graph.to_local(world_pos)
+	# Do not assign the new index inside a lambda: GDScript captures
+	# ints by value, so the outer variable would stay -1.
+	var before: Dictionary = graph.capture_state()
+	var new_index := graph.split_connection(conn, local)
+	selected_connections = PackedInt32Array()
+	_commit_state("Split graph connection", before)
+	_select_point_subgizmo(new_index)
+
+
+func _on_right_button(camera: Camera3D, event: InputEventMouseButton) -> int:
+	if event.pressed:
+		_menu_point = -1
+		_menu_connection = -1
+		if event.shift_pressed or event.ctrl_pressed or event.alt_pressed or event.meta_pressed:
+			return EditorPlugin.AFTER_GUI_INPUT_PASS
+		_update_hover(camera, event.position)
+		if hover_point < 0 and hover_connection < 0:
+			return EditorPlugin.AFTER_GUI_INPUT_PASS
+		# Taking the press keeps Godot from starting freelook over an element.
+		_menu_point = hover_point
+		_menu_connection = hover_connection
+		_menu_press_pos = event.position
+		if _menu_connection >= 0:
+			_menu_split_at = _split_position(camera, event.position, _menu_connection)
+		return EditorPlugin.AFTER_GUI_INPUT_STOP
+	if _menu_point < 0 and _menu_connection < 0:
+		return EditorPlugin.AFTER_GUI_INPUT_PASS
+	if event.position.distance_to(_menu_press_pos) <= CLICK_PIXELS:
+		_show_context_menu(camera, event.position)
+	else:
+		_menu_point = -1
+		_menu_connection = -1
+	return EditorPlugin.AFTER_GUI_INPUT_STOP
+
+
+func _show_context_menu(camera: Camera3D, mouse: Vector2) -> void:
+	if _context_menu == null:
+		_context_menu = PopupMenu.new()
+		_context_menu.id_pressed.connect(_on_context_menu_id)
+		EditorInterface.get_base_control().add_child(_context_menu)
+	_context_menu.clear()
+	_context_menu.add_item("Select", MenuId.SELECT)
+	if _menu_connection >= 0:
+		_context_menu.add_item("Split", MenuId.SPLIT)
+	_context_menu.add_item("Delete", MenuId.DELETE)
+	_context_menu.reset_size()
+	var screen := Vector2(DisplayServer.mouse_get_position())
+	var container := camera.get_viewport().get_parent() as Control
+	if container:
+		screen = container.get_screen_position() + mouse
+	_context_menu.popup(Rect2i(Vector2i(screen), Vector2i.ZERO))
+
+
+func _on_context_menu_id(id: int) -> void:
+	var point := _menu_point
+	var conn := _menu_connection
+	_menu_point = -1
+	_menu_connection = -1
+	if graph == null or not is_instance_valid(graph):
+		return
+	if point >= 0 and point < graph.points.size():
+		match id:
+			MenuId.SELECT:
+				selected_connections = PackedInt32Array()
+				_select_point_subgizmo(point)
+			MenuId.DELETE:
+				_mutate("Delete graph point", func() -> void:
+					graph.remove_points(PackedInt32Array([point]))
+				)
+				_clear_selection()
+				last_point = -1
+	elif conn >= 0 and conn < graph.connection_count():
+		match id:
+			MenuId.SELECT:
+				_clear_point_selection()
+				_select_connections(PackedInt32Array([conn]), false)
+			MenuId.SPLIT:
+				_split_connection(conn, _menu_split_at)
+			MenuId.DELETE:
+				_mutate("Delete graph connection", func() -> void:
+					graph.remove_connections(PackedInt32Array([conn]))
+				)
+				# Connection indices shift; points are untouched.
+				selected_connections = PackedInt32Array()
+				graph.update_gizmos()
+				_refresh_attrib_panel()
+
+
+## Frees the right-click menu; the plugin calls this on exit.
+func cleanup() -> void:
+	if _context_menu and is_instance_valid(_context_menu):
+		_context_menu.queue_free()
+	_context_menu = null
 
 
 func _delete_selection() -> void:
@@ -310,7 +531,19 @@ func _delete_selection() -> void:
 
 
 func _has_point_selection() -> bool:
-	return selected_points.size() > 0 or _hold_selection >= 0 or last_point >= 0
+	return selected_points.size() > 0 or _hold_selection >= 0
+
+
+## Point a Ctrl+click connects from, or -1 when no point is selected.
+func connect_from_point() -> int:
+	if graph == null or not _has_point_selection():
+		return -1
+	if last_point >= 0 and last_point < graph.points.size() \
+			and (_hold_selection == last_point or selected_points.has(last_point)):
+		return last_point
+	if selected_points.size() > 0 and selected_points[-1] < graph.points.size():
+		return selected_points[-1]
+	return -1
 
 
 func _select_point_subgizmo(index: int) -> void:
@@ -319,6 +552,7 @@ func _select_point_subgizmo(index: int) -> void:
 	last_point = index
 	selected_points = PackedInt32Array([index])
 	selected_connections = PackedInt32Array()
+	_group_pushed = false
 	_hold_selection = index
 	# Node3D.set_subgizmo_selection is group-deferred, so a redraw from
 	# add_point can restore the previous id before it lands. Talk to
@@ -340,6 +574,12 @@ func on_gizmo_redraw(gizmo: EditorNode3DGizmo) -> void:
 func _push_engine_subgizmo(index: int) -> void:
 	if graph == null or index < 0 or index >= graph.points.size():
 		return
+	_push_engine_id(index, Transform3D(Basis(), graph.points[index]))
+
+
+## Hands Godot [param id] as the only selected subgizmo. False when the gizmo
+## does not exist yet.
+func _push_engine_id(id: int, xf: Transform3D) -> bool:
 	var giz: Variant = active_gizmo
 	if giz == null:
 		var gizmos := graph.get_gizmos()
@@ -347,15 +587,83 @@ func _push_engine_subgizmo(index: int) -> void:
 			giz = gizmos[0]
 			active_gizmo = giz
 	if giz == null:
-		return
-	var xf := Transform3D(Basis(), graph.points[index])
+		return false
 	var spatial := _spatial_editor()
 	if spatial and spatial.has_method("_set_subgizmo_selection"):
-		spatial.call("_set_subgizmo_selection", graph, giz, index, xf)
+		spatial.call("_set_subgizmo_selection", graph, giz, id, xf)
 		if spatial.has_method("update_transform_gizmo"):
 			spatial.call("update_transform_gizmo")
 	else:
-		graph.set_subgizmo_selection(giz, index, xf)
+		graph.set_subgizmo_selection(giz, id, xf)
+	return true
+
+
+## Points the group widget moves: the selected points plus both ends of every
+## selected connection.
+func group_points() -> PackedInt32Array:
+	var ids := PackedInt32Array()
+	if graph == null:
+		return ids
+	for p in selected_points:
+		if p >= 0 and p < graph.points.size() and not ids.has(p):
+			ids.append(p)
+	for c in selected_connections:
+		if c < 0 or c >= graph.connection_count():
+			continue
+		for end in [graph.connections[c * 2], graph.connections[c * 2 + 1]]:
+			if not ids.has(end):
+				ids.append(end)
+	return ids
+
+
+## Local-space centre of [method group_points].
+func group_center() -> Vector3:
+	var ids := group_points()
+	if ids.is_empty():
+		return Vector3.ZERO
+	var sum := Vector3.ZERO
+	for p in ids:
+		sum += graph.points[p]
+	return sum / ids.size()
+
+
+## Moves the group so its centre sits at [param center]. Offsets are taken
+## from where the points were when the drag began, so a point shared by two
+## selected connections moves once.
+func move_group_live(center: Vector3) -> void:
+	if _group_start.is_empty():
+		for p in group_points():
+			_group_start[p] = graph.points[p]
+		_group_start_center = group_center()
+	var delta := center - _group_start_center
+	for p in _group_start:
+		graph.set_point_position_live(p, _group_start[p] + delta)
+
+
+## Ends a group drag. Returns the positions from before it, keyed by point.
+func take_group_start() -> Dictionary:
+	var start := _group_start
+	_group_start = {}
+	return start
+
+
+## Pushes Godot's subgizmo selection to match ours: nothing, one point, or
+## the group.
+func _apply_selection() -> void:
+	_group_start = {}
+	if selected_connections.is_empty() and selected_points.size() == 1:
+		_select_point_subgizmo(selected_points[0])
+		return
+	_hold_selection = -1
+	if selected_connections.is_empty() and selected_points.is_empty():
+		_clear_point_selection()
+	else:
+		_group_pushed = _push_engine_id(GROUP_SUBGIZMO, Transform3D(Basis(), group_center()))
+	if selected_points.size() > 0:
+		last_point = selected_points[selected_points.size() - 1]
+	if graph:
+		graph.update_gizmos()
+	_refresh_attrib_panel()
 
 
 func _schedule_subgizmo_retry() -> void:
@@ -386,13 +694,14 @@ func _select_connections(indices: PackedInt32Array, additive: bool) -> void:
 				selected_connections.remove_at(found)
 			else:
 				selected_connections.append(index)
-	graph.update_gizmos()
-	_refresh_attrib_panel()
+	_apply_selection()
 
 
 func _clear_point_selection() -> void:
 	selected_points = PackedInt32Array()
 	_hold_selection = -1
+	_group_pushed = false
+	_group_start = {}
 	if graph == null:
 		return
 	var spatial := _spatial_editor()
@@ -404,6 +713,7 @@ func _clear_point_selection() -> void:
 
 func _clear_selection() -> void:
 	selected_connections = PackedInt32Array()
+	preview_cursor = null
 	_clear_point_selection()
 	if graph:
 		graph.update_gizmos()
@@ -437,19 +747,15 @@ func _finish_box(camera: Camera3D, additive: bool) -> void:
 	for index in cons:
 		if selected_connections.find(index) < 0:
 			selected_connections.append(index)
-	# Point box-select is left to Godot subgizmos when CUSTOM/PASS is used.
-	# Our overlay box still records connections; points come from subgizmo frustum
-	# only if the 3D editor ran it. Apply points ourselves so mixed boxes work.
+	# The box is ours, not Godot's frustum select, so apply points here and
+	# hand Godot the matching subgizmo (one point, or the group).
 	if not additive:
 		selected_points = pts
 	else:
 		for index in pts:
 			if selected_points.find(index) < 0:
 				selected_points.append(index)
-	if selected_points.size() > 0:
-		last_point = selected_points[selected_points.size() - 1]
-	graph.update_gizmos()
-	_refresh_attrib_panel()
+	_apply_selection()
 
 
 func _update_hover(camera: Camera3D, mouse: Vector2) -> void:
@@ -496,13 +802,6 @@ func _hit(camera: Camera3D, mouse: Vector2) -> Variant:
 	else:
 		plane = HEGoGraphPlacement.camera_plane(-camera.global_transform.basis.z, anchor)
 	return HEGoGraphPlacement.intersect_ray(origin, direction, plane)
-
-
-func _ray_point(camera: Camera3D, mouse: Vector2) -> Vector3:
-	var hit: Variant = _hit(camera, mouse)
-	if hit != null:
-		return hit
-	return camera.project_ray_origin(mouse) + camera.project_ray_normal(mouse)
 
 
 func _mutate(action: String, fn: Callable) -> void:

@@ -73,30 +73,39 @@ The toolbar switches **Select** and **Draw**. Draw is the default.
 
 **Draw**
 
-- Click empty space: add a point. The new point is selected so the move widget
-  sits on it. **Shift+click** empty space clears the selection instead of placing
-  a point.
-- **Ctrl** while adding: also connect to the previously selected point. The new
+- **Ctrl+click** empty space: add a point. With a point selected, the new point is
+  connected to it; with nothing selected, it is a loose, unconnected point. The new
   point is selected, so the next **Ctrl+click** continues the polyline.
-- **Ctrl+click** an existing point: connect the previous selection to it, then select
-  it. That is how you branch.
-- Click a connection: split it, inserting a point at the closest spot on the segment.
-  Both new connections inherit the original connection's attributes.
-- **Shift+click** a connection: select the edge instead of splitting it.
+- **Ctrl+click** an existing point: connect the selected point to it, then select
+  it. That is how you branch. With nothing selected it just selects the point.
+- **Ctrl+click** a connection: split it, inserting a point under the cursor. Both
+  new connections inherit the original connection's attributes.
 
 **Select**
+
+- Drag a box on empty space while nothing is selected: points and connection
+  midpoints inside the rectangle are selected. **Shift**+drag works with a
+  selection too, and adds.
+
+**Both modes**
 
 - Click a point: Godot's move widget (the W tool, translation only) appears on
   it. **Shift** toggles extra points into that selection. Drag an arrow or a
   plane square to move the point.
-- Click a connection: select the edge (orange).
-- **Shift+click** empty space: clear the selection. A click on empty space
-  without Shift does not add a point.
-- Drag a box away from the transform widget: points and connection midpoints
-  inside the rectangle are selected. **Shift** adds.
-- **Delete** / **Backspace**: selected connections are removed; selected points are
-  removed and take their incident connections with them. With nothing selected, Delete
-  still deletes the node, as the editor usually does.
+- Click a connection: select the edge (orange). **Shift** toggles it into the
+  selection.
+- With connections or several points selected, the move widget sits at the centre
+  of the selection. Dragging it moves every selected point and both ends of every
+  selected connection together, as one undo step.
+- Click empty space: clear the selection. A click never places a point without Ctrl.
+- Right-click a point: a menu with **Select** and **Delete**. Right-click a
+  connection: **Select**, **Split** and **Delete**. Right-drag elsewhere still
+  moves the camera.
+- **X**, **Delete** or **Backspace**: selected connections are removed; selected points
+  are removed and take their incident connections with them. The keys work while the
+  mouse is over the viewport, even if another panel has keyboard focus. With nothing
+  selected, Delete still deletes the node, as the editor usually does. X is ignored
+  while a mouse button is held, so it still locks the axis during an arrow drag.
 
 Undo applies to every topology and attribute change.
 
@@ -126,8 +135,9 @@ Where a new point (or a dragged point) lands:
 Attribute strip
 ~~~~~~~~~~~~~~~
 
-With one or more points or connections selected, the bottom strip shows the schema
-entries for that owner.
+The bottom strip always lists every schema entry, so it keeps the same height and
+the viewport does not jump. Entries are editable while at least one element of
+their owner (point or connection) is selected, and greyed out otherwise.
 
 - Float: a spin box.
 - Int with ``int_as_toggle``: a checkbox.

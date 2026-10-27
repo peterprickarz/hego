@@ -98,9 +98,10 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		gizmo.add_lines(selected_lines, get_material("lines_selected", gizmo), false)
 		gizmo.add_lines(selected_lines, get_material("lines_selected", gizmo), false)
 
-	if editor and editor.graph == node and editor.preview_cursor != null and editor.last_point >= 0 and editor.last_point < node.points.size():
+	var preview_from: int = editor.connect_from_point() if editor and editor.graph == node else -1
+	if editor and editor.graph == node and editor.preview_cursor != null and preview_from >= 0:
 		var preview := PackedVector3Array()
-		preview.append(node.points[editor.last_point])
+		preview.append(node.points[preview_from])
 		preview.append(node.to_local(editor.preview_cursor))
 		gizmo.add_lines(preview, get_material("preview", gizmo), false)
 
@@ -145,6 +146,10 @@ func _subgizmos_intersect_frustum(gizmo: EditorNode3DGizmo, camera: Camera3D, fr
 
 func _get_subgizmo_transform(gizmo: EditorNode3DGizmo, subgizmo_id: int) -> Transform3D:
 	var node := gizmo.get_node_3d() as HEGoGraphInput3D
+	if subgizmo_id == HEGoGraphEditor.GROUP_SUBGIZMO:
+		if editor and editor.graph == node:
+			return Transform3D(Basis(), editor.group_center())
+		return Transform3D()
 	if node == null or subgizmo_id < 0 or subgizmo_id >= node.points.size():
 		return Transform3D()
 	return Transform3D(Basis(), node.points[subgizmo_id])
@@ -152,6 +157,10 @@ func _get_subgizmo_transform(gizmo: EditorNode3DGizmo, subgizmo_id: int) -> Tran
 
 func _set_subgizmo_transform(gizmo: EditorNode3DGizmo, subgizmo_id: int, transform: Transform3D) -> void:
 	var node := gizmo.get_node_3d() as HEGoGraphInput3D
+	if subgizmo_id == HEGoGraphEditor.GROUP_SUBGIZMO:
+		if editor and editor.graph == node:
+			editor.move_group_live(transform.origin)
+		return
 	if node == null or subgizmo_id < 0 or subgizmo_id >= node.points.size():
 		return
 	# Location only: ignore basis so rotate/scale handles cannot twist a point.
@@ -162,16 +171,29 @@ func _commit_subgizmos(gizmo: EditorNode3DGizmo, ids: PackedInt32Array, restores
 	var node := gizmo.get_node_3d() as HEGoGraphInput3D
 	if node == null:
 		return
+	# The group id restores from where each of its points started.
+	var group_start: Dictionary = {}
+	if ids.has(HEGoGraphEditor.GROUP_SUBGIZMO) and editor and editor.graph == node:
+		group_start = editor.take_group_start()
 	if cancel:
 		for i in ids.size():
-			if i < restores.size() and restores[i] is Transform3D:
+			if ids[i] != HEGoGraphEditor.GROUP_SUBGIZMO and i < restores.size() and restores[i] is Transform3D:
 				node.set_point_position(ids[i], (restores[i] as Transform3D).origin)
+		for p in group_start:
+			node.set_point_position(p, group_start[p])
 		return
 	var after: Dictionary = node.capture_state()
 	var before_points := node.points.duplicate()
+	var moved := not group_start.is_empty()
 	for i in ids.size():
-		if i < restores.size() and restores[i] is Transform3D:
+		if ids[i] != HEGoGraphEditor.GROUP_SUBGIZMO and i < restores.size() and restores[i] is Transform3D:
 			before_points[ids[i]] = (restores[i] as Transform3D).origin
+			moved = true
+	for p in group_start:
+		if p < before_points.size():
+			before_points[p] = group_start[p]
+	if not moved:
+		return
 	var before := after.duplicate(true)
 	before["points"] = before_points
 	if editor and editor.plugin:
