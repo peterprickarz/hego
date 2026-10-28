@@ -126,14 +126,16 @@ void disconnect_node_inputs(HEGoSessionManager *session_mgr, HAPI_NodeId target_
 {
 	HAPI_NodeInfo node_info = HoudiniApi::NodeInfo_Create();
 	HOUDINI_CHECK_ERROR(HoudiniApi::GetNodeInfo(session_mgr->get_session(), target_node_id, &node_info));
-	for (int i = 0; i < node_info.inputCount; i++)
+	// Merge SOPs compact their inputs when a wire is removed. Disconnect from
+	// the end so no remaining source shifts into a slot already visited.
+	for (int i = node_info.inputCount - 1; i >= 0; --i)
 	{
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "Disconnecting node slot " + godot::String::num(i));
 		HAPI_NodeId input_id = -1;
 		HOUDINI_CHECK_ERROR(HoudiniApi::QueryNodeInput(session_mgr->get_session(), target_node_id, i, &input_id));
 		if (input_id == -1)
 		{
-			break;
+			continue;
 		}
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "disconnecting node id " + godot::String::num(input_id));
 		HOUDINI_CHECK_ERROR(HoudiniApi::DisconnectNodeInput(session_mgr->get_session(), target_node_id, i));
@@ -270,6 +272,15 @@ HAPI_NodeId create_input_from_mesh(HEGoSessionManager *session_mgr, godot::Ref<g
 				vertices.push_back(position_start_id + j);
 			}
 		}
+	}
+
+	// Empty CSG results and empty ArrayMeshes must clear the previous input.
+	// HAPI rejects zero-length attribute/topology uploads; the array uploader
+	// already handles a zero-point part without issuing those calls.
+	if (npoints == 0)
+	{
+		return create_input_from_arrays(session_mgr, godot::PackedVector3Array(), "points",
+				godot::PackedInt32Array(), godot::PackedInt32Array(), node_id, godot::Array());
 	}
 
 	for (int i = 0; i < nvertices / 3; i++)
@@ -414,19 +425,25 @@ HAPI_NodeId create_input_from_arrays(HEGoSessionManager *session_mgr, const godo
 
 	node_id = HEGo::Util::Node::create_and_cook_input_node(session_mgr, "geo", node_id);
 
+	if (npoints == 0)
+	{
+		// Input nodes are locked Null SOPs. Unlock and cook their empty source;
+		// committing a zero-sized part can retain the last nonempty geometry.
+		HOUDINI_CHECK_ERROR(HoudiniApi::RevertGeo(session, node_id));
+		HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session, node_id, session_mgr->get_cook_options()));
+		session_mgr->wait_for_ready();
+		return node_id;
+	}
+
 	HAPI_PartInfo part = HoudiniApi::PartInfo_Create();
 	part.pointCount = npoints;
 	part.vertexCount = nverts;
 	part.faceCount = nprims;
 
-	if (prim_type == "polyline")
-	{
-		part.type = HAPI_PARTTYPE_CURVE;
-	}
-	else
-	{
-		part.type = HAPI_PARTTYPE_MESH;
-	}
+	// Curve parts ignore SetVertexList and allocate sequential CV indices.
+	// Marshal indexed polygons instead; HEGoInputNode opens them with a native
+	// Ends SOP. This preserves shared graph points and their attribute ownership.
+	part.type = HAPI_PARTTYPE_MESH;
 
 	HOUDINI_CHECK_ERROR(HoudiniApi::SetPartInfo(session, node_id, 0, &part));
 
@@ -462,25 +479,7 @@ HAPI_NodeId create_input_from_arrays(HEGoSessionManager *session_mgr, const godo
 		prim_counts[static_cast<size_t>(i)] = counts[i];
 	}
 
-	if (prim_type == "polyline")
-	{
-		HAPI_CurveInfo curve = HoudiniApi::CurveInfo_Create();
-		curve.curveType = HAPI_CURVETYPE_LINEAR;
-		curve.curveCount = nprims;
-		curve.vertexCount = nverts;
-		curve.knotCount = 0;
-		curve.isPeriodic = false;
-		curve.isRational = false;
-		curve.order = HAPI_CURVE_ORDER_LINEAR;
-		curve.hasKnots = false;
-		curve.isClosed = false;
-		HOUDINI_CHECK_ERROR(HoudiniApi::SetCurveInfo(session, node_id, 0, &curve));
-		if (nprims > 0)
-		{
-			HOUDINI_CHECK_ERROR(HoudiniApi::SetCurveCounts(session, node_id, 0, prim_counts.data(), 0, nprims));
-		}
-	}
-	else if (nprims > 0)
+	if (nprims > 0)
 	{
 		HOUDINI_CHECK_ERROR(HoudiniApi::SetFaceCounts(session, node_id, 0, prim_counts.data(), 0, nprims));
 	}

@@ -52,7 +52,7 @@ Signals
 
 **input_changed**\ (\ ) :ref:`🔗<class_HEGoInputLineEdit_signal_input_changed>`
 
-Emitted when a node was dropped on the field, after ``text`` has been rewritten.
+Emitted when a node is dropped or a typed path is committed with Enter or focus loss.
 
 .. rst-class:: classref-section-separator
 

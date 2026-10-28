@@ -30,6 +30,10 @@ Methods
    :widths: auto
 
    +-------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Array``   | :ref:`resolve_paths<class_HEGoInputNodes_method_resolve_paths>`\ (\ host\: ``Node``, paths\: ``Array``, settings\: ``Dictionary``\ ) |static|                        |
+   +-------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``    | :ref:`is_compatible_source<class_HEGoInputNodes_method_is_compatible_source>`\ (\ node\: ``Node``\ ) |static|                                                        |
+   +-------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Variant`` | :ref:`sync<class_HEGoInputNodes_method_sync>`\ (\ host\: ``Node``, existing_node\: ``Variant``, input_node_path\: ``Variant``, settings\: ``Dictionary``\ ) |static| |
    +-------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
@@ -107,13 +111,37 @@ Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
 Method Descriptions
 -------------------
 
+.. _class_HEGoInputNodes_method_resolve_paths:
+
+.. rst-class:: classref-method
+
+``Array`` **resolve_paths**\ (\ host\: ``Node``, paths\: ``Array``, settings\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_resolve_paths>`
+
+Expands input roots when settings.include_children is enabled. The stored paths remain compact; descendants are discovered again on every cook in scene order. Overlapping selections contribute each source once. Hidden authoring nodes are included, but this host's generated Outputs and CSG Boolean operands are not.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoInputNodes_method_is_compatible_source:
+
+.. rst-class:: classref-method
+
+``bool`` **is_compatible_source**\ (\ node\: ``Node``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_is_compatible_source>`
+
+Whether a node supplies one of HEGo's supported input kinds. CSG assemblies bake from their root shape, including all of their Boolean children.
+
+.. rst-class:: classref-item-separator
+
+----
+
 .. _class_HEGoInputNodes_method_sync:
 
 .. rst-class:: classref-method
 
 ``Variant`` **sync**\ (\ host\: ``Node``, existing_node\: ``Variant``, input_node_path\: ``Variant``, settings\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_sync>`
 
-Creates or updates the input node for the Godot node at ``input_node_path``.  Pass the previous input node as ``existing_node`` to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is ``existing_node`` itself when it was reused.  ``settings`` is the per-input settings dictionary from the input stash. It is carried through the stash for future per-input options and is not read yet.
+Creates or updates the input node for the Godot node at ``input_node_path``.  Pass the previous input node as ``existing_node`` to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is ``existing_node`` itself when it was reused.  ``settings`` is the per-input settings dictionary from the input stash. curve_sample_length optionally controls Path3D upload spacing in metres. Missing, non-finite or non-positive values use the one-metre default.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

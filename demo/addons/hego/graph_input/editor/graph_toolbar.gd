@@ -18,6 +18,8 @@ func _ready() -> void:
 
 	_select = _toggle("Select")
 	_draw = _toggle("Draw")
+	_select.tooltip_text = "Select points or connections. C connects two selected points."
+	_draw.tooltip_text = "Ctrl+click to draw. C connects two selected points."
 	_select.button_group = ButtonGroup.new()
 	_draw.button_group = _select.button_group
 	_draw.button_pressed = true

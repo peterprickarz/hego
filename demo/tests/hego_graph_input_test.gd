@@ -3,6 +3,13 @@
 ## No Houdini session. The viewport editor and cook path are tested elsewhere.
 extends SceneTree
 
+# Exercise shortcut topology without requiring a running editor UI.
+class ShortcutEditor extends HEGoGraphEditor:
+	var commits := 0
+	func _commit_state(_action: String, _before: Dictionary) -> void:
+		commits += 1
+
+
 var failures := 0
 
 
@@ -133,7 +140,11 @@ func _initialize() -> void:
 
 	# Split inherits the original connection's attributes onto both new ones.
 	attributed.set_connection_attrib_on("closed", PackedInt32Array([0]), 1)
-	attributed.split_connection(0, Vector3(0.5, 0, 0))
+	attributed.set_point_attrib_on("width", PackedInt32Array([0]), 0.2)
+	attributed.set_point_attrib_on("width", PackedInt32Array([1]), 0.6)
+	var inserted := attributed.split_connection(0, Vector3(0.25, 0, 0))
+	check(is_equal_approx(attributed.point_attribs["width"][inserted], 0.3), "split interpolates float fields at the projected fraction")
+	check(attributed.point_attribs["kind"][inserted] == "wall", "split inherits discrete fields from the nearer endpoint")
 	check(attributed.connection_attribs["closed"].size() == 2, "split grows connection attribs")
 	check(attributed.connection_attribs["closed"][0] == 1 and attributed.connection_attribs["closed"][1] == 1,
 			"both new connections inherit the original value")
@@ -184,6 +195,24 @@ func _initialize() -> void:
 	restored.add_point(Vector3.ZERO)
 	restored.apply_state(snap)
 	check(restored.points.size() == 2 and restored.connection_count() == 1, "apply_state restores topology")
+
+
+	var shortcut_graph := make_graph()
+	shortcut_graph.add_point(Vector3.ZERO)
+	shortcut_graph.add_point(Vector3.RIGHT)
+	var editor := ShortcutEditor.new()
+	editor.graph = shortcut_graph
+	editor.selected_points = PackedInt32Array([0, 1])
+	var key := InputEventKey.new()
+	key.keycode = KEY_C
+	key.pressed = true
+	check(editor._try_connect_key(key) and shortcut_graph.has_connection(0, 1), "C connects two selected points")
+	check(editor._try_connect_key(key) and editor.commits == 1, "C on an existing edge does not add an undo action")
+	key.ctrl_pressed = true
+	check(not editor._try_connect_key(key), "modified C remains available to editor shortcuts")
+	key.ctrl_pressed = false
+	editor.selected_points = PackedInt32Array([0])
+	check(not editor._try_connect_key(key), "C requires exactly two selected points")
 
 	if failures == 0:
 		print("All graph input tests passed.")

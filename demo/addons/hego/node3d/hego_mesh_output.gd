@@ -350,6 +350,9 @@ static func save_mesh_resource(mesh: ArrayMesh, save_path: String) -> Dictionary
 ## identity, and everything already pointing at it sees the update.
 static func copy_array_mesh_contents(target_mesh: ArrayMesh, source_mesh: ArrayMesh) -> void:
 	target_mesh.clear_surfaces()
+	# Use the resource serialization format on versions without surface_get_lods.
+	# Godot 4.4's RenderingServer.mesh_get_surface has a broken LOD-array wrapper.
+	var saved_surfaces: Array = source_mesh.get("_surfaces") if not source_mesh.has_method("surface_get_lods") else []
 	for surface_index in range(source_mesh.get_surface_count()):
 		var primitive_type := source_mesh.surface_get_primitive_type(surface_index)
 		var arrays := source_mesh.surface_get_arrays(surface_index)
@@ -359,6 +362,18 @@ static func copy_array_mesh_contents(target_mesh: ArrayMesh, source_mesh: ArrayM
 		var lods := {}
 		if source_mesh.has_method("surface_get_lods"):
 			lods = source_mesh.surface_get_lods(surface_index)
+		else:
+			# Serialized LODs alternate edge length and packed index bytes.
+			var saved_lods: Array = saved_surfaces[surface_index].get("lods", [])
+			var vertex_count: int = arrays[Mesh.ARRAY_VERTEX].size()
+			var stride := 2 if vertex_count <= 65536 else 4
+			for lod_index in range(0, saved_lods.size(), 2):
+				var bytes: PackedByteArray = saved_lods[lod_index + 1]
+				var indices := PackedInt32Array()
+				indices.resize(bytes.size() / stride)
+				for i in indices.size():
+					indices[i] = bytes.decode_u16(i * stride) if stride == 2 else bytes.decode_u32(i * stride)
+				lods[float(saved_lods[lod_index])] = indices
 		target_mesh.add_surface_from_arrays(primitive_type, arrays, blend_shape_arrays, lods)
 		var surface_material := source_mesh.surface_get_material(surface_index)
 		if surface_material != null:

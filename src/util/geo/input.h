@@ -142,9 +142,10 @@ godot::String validate_input_arrays(const godot::PackedVector3Array &points, con
 /**
  * Create or update a Houdini input from raw point positions and primitives.
  *
- * prim_type selects the part: "points" is a point cloud, "polyline" is open
- * linear curves (one prim per count), "polygon" is closed mesh faces. Custom
- * attributes are applied after topology, then the geo is committed.
+ * All indexed geometry is marshalled as a mesh part, preserving vertex-point
+ * associations. HEGoInputNode follows a "polyline" upload with a native Ends SOP
+ * set to Open. Curve-part marshalling cannot represent shared point indices.
+ * Custom attributes are applied after topology, then the geo is committed.
  *
  * @return The Houdini input node id on success, or -1 if the arrays are invalid.
  */

@@ -79,15 +79,18 @@ The toolbar switches **Select** and **Draw**. Draw is the default.
 - **Ctrl+click** an existing point: connect the selected point to it, then select
   it. That is how you branch. With nothing selected it just selects the point.
 - **Ctrl+click** a connection: split it, inserting a point under the cursor. Both
-  new connections inherit the original connection's attributes.
+  new connections inherit the original connection's attributes. Float point
+  attributes interpolate between the endpoints; discrete fields use the nearer endpoint.
 
 **Select**
 
 - Drag a box on empty space while nothing is selected: points and connection
-  midpoints inside the rectangle are selected. **Shift**+drag works with a
+  midpoints inside the rectangle are selected. **Shift+drag** works with a
   selection too, and adds.
 
 **Both modes**
+
+- **C**: connect exactly two selected points. Existing connections are left unchanged.
 
 - Click a point: Godot's move widget (the W tool, translation only) appears on
   it. **Shift** toggles extra points into that selection. Drag an arrow or a

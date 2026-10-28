@@ -48,6 +48,24 @@ func run_tests() -> void:
 	check(line_texts(ui) == three, "each line shows its own node path, got %s" % str(line_texts(ui)))
 	check(ui.get_inputs() == three, "get_inputs() round trips every entry")
 	check(int(ui.spin_box.value) == 3, "the spin box shows the count")
+	check(not ui.include_children.button_pressed, "legacy inputs default to explicit nodes")
+	ui.setup("geo", three, {"include_children": true, "curve_sample_length": .1})
+	check(ui.include_children.button_pressed, "Include Children restores the saved setting")
+	check(ui.get_inputs() == three, "recursive inputs retain the compact parent paths")
+	var events := [0]
+	ui.inputs_changed.connect(func(): events[0] += 1)
+	ui.include_children.button_pressed = false
+	check(events[0] == 1, "toggling child expansion notifies the panel exactly once")
+	ui.setup("geo", three, {"include_children": true})
+	check(events[0] == 1, "rebuilding the UI does not trigger a cook or overwrite the stash")
+	var typed = ui.input_container.get_child(0)
+	typed.focus_entered.emit()
+	typed.text = "TypedParent"
+	check(events[0] == 1, "typing does not start a cook for each keystroke")
+	typed.text_submitted.emit("TypedParent")
+	check(events[0] == 2, "typed paths notify the panel as well as dragged nodes")
+	typed.focus_exited.emit()
+	check(events[0] == 2, "focus loss after Enter does not trigger a duplicate cook")
 
 	# --- growing and shrinking an existing list ----------------------------
 	ui.setup("geo", PackedStringArray(["Node3D/X"]))
@@ -82,6 +100,62 @@ func run_tests() -> void:
 		if fresh.input_container.get_child_count() != count:
 			ok = false
 	check(ok, "a freshly instantiated list is correct for 1, 2 and 3 inputs")
+
+	# Visibility changes scene nodes, independently of cook settings and signals.
+	var host := Node3D.new()
+	root.add_child(host)
+	var parent := Node3D.new()
+	parent.name = "Sources"
+	host.add_child(parent)
+	var hidden_child := MeshInstance3D.new()
+	hidden_child.visible = false
+	parent.add_child(hidden_child)
+	var other := Node3D.new()
+	other.name = "Other"
+	other.visible = false
+	host.add_child(other)
+	var undo := UndoRedo.new()
+	var visibility_ui := make_input_ui()
+	var visibility_cook_events := [0]
+	visibility_ui.inputs_changed.connect(func(): visibility_cook_events[0] += 1)
+	visibility_ui.setup("geometry", PackedStringArray(["Sources"]), {"include_children": true}, host, undo)
+	check(visibility_ui.input_visible.button_pressed and not visibility_ui.input_visible.disabled, "visibility reflects the referenced parent")
+	visibility_ui.input_visible.button_pressed = false
+	check(not parent.visible and not hidden_child.visible, "hiding the parent preserves child flags")
+	check(visibility_cook_events[0] == 0, "visibility does not change input settings or request a cook")
+	undo.undo()
+	visibility_ui.refresh_visibility()
+	check(parent.visible and visibility_ui.input_visible.button_pressed, "undo restores source visibility and the toggle")
+	undo.redo()
+	visibility_ui.refresh_visibility()
+	check(not parent.visible and not visibility_ui.input_visible.button_pressed, "redo hides the source again")
+	visibility_ui.input_visible.button_pressed = true
+	check(parent.visible and not hidden_child.visible, "showing the parent keeps intentionally hidden children hidden")
+	visibility_ui.setup("geometry", PackedStringArray(["Sources", "Other", "Sources"]), {}, host, undo)
+	check(visibility_ui.input_visible.text == "Mixed" and visibility_ui._visibility_targets().size() == 2, "mixed visibility and duplicate paths are handled")
+	visibility_ui.input_visible.button_pressed = false
+	check(not parent.visible and not other.visible, "mixed visibility click hides all references")
+	undo.undo()
+	visibility_ui.refresh_visibility()
+	check(parent.visible and not other.visible and visibility_ui.input_visible.text == "Mixed", "undo restores each node's original visibility")
+	parent.visible = false
+	visibility_ui.refresh_visibility()
+	check(not visibility_ui.input_visible.button_pressed, "scene-tree visibility changes update the toggle")
+	var container := Node.new()
+	container.name = "Container"
+	host.add_child(container)
+	var spatial := Node3D.new()
+	container.add_child(spatial)
+	visibility_ui.setup("geometry", PackedStringArray(["Container"]), {"include_children": true}, host, undo)
+	visibility_ui.input_visible.button_pressed = false
+	check(not spatial.visible, "plain Node containers can hide their 3D children when expansion is enabled")
+	visibility_ui.setup("geometry", PackedStringArray(["Missing"]), {}, host, undo)
+	check(visibility_ui.input_visible.disabled, "missing references disable visibility safely")
+	visibility_ui.setup("geometry", PackedStringArray(), {}, host, undo)
+	check(visibility_ui.input_visible.disabled, "empty inputs disable visibility")
+	host.free()
+	visibility_ui.refresh_visibility()
+	check(visibility_ui.input_visible.disabled, "deleted input hosts are safe")
 
 	print("")
 	print("failures: ", failures)

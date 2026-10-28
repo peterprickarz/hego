@@ -81,6 +81,22 @@ func _initialize() -> void:
 	await tab.recook()
 	check(custom.cooked, "Recook calls cook() on a non-HEGoNode3D")
 
+	# --- child expansion is persisted through the real panel handler ---------
+	var original_settings := {"curve_sample_length": .04, "custom_setting": 7}
+	custom.input_stash = [{"inputs": ["Inputs/Concrete"], "settings": original_settings}]
+	var input_ui = preload("res://addons/hego/ui/input_ui.tscn").instantiate()
+	tab.input_vbox.add_child(input_ui)
+	input_ui.setup("ConcreteCSG", PackedStringArray(["Inputs/Concrete"]), original_settings)
+	tab.input_nodes = [input_ui]
+	tab.auto_recook_toggle.set_pressed_no_signal(false)
+	input_ui.inputs_changed.connect(tab._on_input_changed)
+	input_ui.include_children.button_pressed = true
+	check(custom.input_stash[0].settings.include_children, "panel saves Include Children on the selected input")
+	check(custom.input_stash[0].settings.curve_sample_length == .04 and custom.input_stash[0].settings.custom_setting == 7, "panel preserves unrelated input settings")
+	check(not original_settings.has("include_children"), "editing the panel does not mutate a shared settings dictionary")
+	input_ui.setup("ConcreteCSG", custom.input_stash[0].inputs, custom.input_stash[0].settings)
+	check(input_ui.include_children.button_pressed and input_ui.get_inputs().size() == 1, "rebuilt panel retains one parent and its expansion setting")
+
 	# --- the picker only applies to a node that offers it --------------------
 	check(not tab._can_pick_asset(), "a node with a fixed HDA does not offer the picker")
 	check(not tab.asset_picker_button.visible, "so the picker button is hidden")

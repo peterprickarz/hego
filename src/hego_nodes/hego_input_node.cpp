@@ -3,6 +3,7 @@
 #include "hego_api.h"
 #include "hego_input_node.h"
 #include "util/geo/input.h"
+#include "util/hego_util.h"
 
 #include <godot_cpp/classes/material.hpp>
 #include "util/geo/transform.h"
@@ -25,6 +26,8 @@ HEGoInputNode::~HEGoInputNode() {}
 void HEGoInputNode::reset_node_id()
 {
 	HEGoBaseInputNode::reset_node_id();
+	geometry_node_id = -1;
+	polyline_node_id = -1;
 	last_geo_hash = 0;
 	has_cached_mesh_instance_transform = false;
 }
@@ -79,14 +82,15 @@ uint64_t HEGoInputNode::compute_geo_hash(const godot::PackedVector3Array &points
 
 godot::Ref<HEGoTask> HEGoInputNode::instantiate()
 {
-	HAPI_NodeId nid = node_id;
+	HAPI_NodeId nid = geometry_node_id;
 	godot::String name = node_name;
 	// A reference, not a raw pointer: the task runs on the worker thread and must not
 	// find this node destroyed underneath it if the owning script is freed meanwhile.
 	godot::Ref<HEGoInputNode> self = this;
 
 	return submit("Instantiate input node", nid, [self, name, nid](HEGoSessionManager *mgr) -> godot::Variant {
-		self->node_id = HEGo::Util::Node::create_and_cook_input_node(mgr, name, nid);
+		self->geometry_node_id = HEGo::Util::Node::create_and_cook_input_node(mgr, name, nid);
+		if (self->node_id < 0) self->node_id = self->geometry_node_id;
 		mgr->register_node(self.ptr());
 		return self->node_id;
 	});
@@ -102,7 +106,7 @@ godot::Ref<HEGoTask> HEGoInputNode::set_geo_from_mesh_instance_3d(godot::MeshIns
 	// Extract data from Godot node on main thread before submitting
 	godot::Ref<godot::Mesh> mesh = mesh_instance->get_mesh();
 	godot::Transform3D xform = mesh_instance->get_global_transform();
-	HAPI_NodeId nid = node_id;
+	HAPI_NodeId nid = geometry_node_id;
 
 	uint64_t geo_hash = compute_mesh_hash(mesh, attributes);
 	bool geo_changed = force || (geo_hash != last_geo_hash);
@@ -126,8 +130,11 @@ godot::Ref<HEGoTask> HEGoInputNode::set_geo_from_mesh_instance_3d(godot::MeshIns
 		});
 	}
 
-	return submit("Set geo from MeshInstance3D", nid, [nid, mesh, xform, attributes](HEGoSessionManager *mgr) -> godot::Variant {
+	godot::Ref<HEGoInputNode> self = this;
+	return submit("Set geo from MeshInstance3D", nid, [self, nid, mesh, xform, attributes](HEGoSessionManager *mgr) -> godot::Variant {
 		HEGo::Util::Geo::create_input_from_mesh(mgr, mesh, nid, attributes);
+		self->node_id = nid;
+		HOUDINI_CHECK_ERROR(HoudiniApi::SetNodeDisplay(mgr->get_session(), nid, 1));
 		HEGo::Util::Geo::set_object_transform(mgr, nid, xform);
 		return 0;
 	});
@@ -135,7 +142,7 @@ godot::Ref<HEGoTask> HEGoInputNode::set_geo_from_mesh_instance_3d(godot::MeshIns
 
 godot::Ref<HEGoTask> HEGoInputNode::set_geo_from_mesh(godot::Ref<godot::Mesh> mesh, const godot::Array &attributes, bool force)
 {
-	HAPI_NodeId nid = node_id;
+	HAPI_NodeId nid = geometry_node_id;
 
 	uint64_t geo_hash = compute_mesh_hash(mesh, attributes);
 	if (!force && geo_hash == last_geo_hash)
@@ -145,8 +152,11 @@ godot::Ref<HEGoTask> HEGoInputNode::set_geo_from_mesh(godot::Ref<godot::Mesh> me
 
 	last_geo_hash = geo_hash;
 
-	return submit("Set geo from Mesh", nid, [nid, mesh, attributes](HEGoSessionManager *mgr) -> godot::Variant {
+	godot::Ref<HEGoInputNode> self = this;
+	return submit("Set geo from Mesh", nid, [self, nid, mesh, attributes](HEGoSessionManager *mgr) -> godot::Variant {
 		HEGo::Util::Geo::create_input_from_mesh(mgr, mesh, nid, attributes);
+		self->node_id = nid;
+		HOUDINI_CHECK_ERROR(HoudiniApi::SetNodeDisplay(mgr->get_session(), nid, 1));
 		return 0;
 	});
 }
@@ -160,7 +170,7 @@ godot::Ref<HEGoTask> HEGoInputNode::set_geo(const godot::PackedVector3Array &poi
 		return make_failed(error, "Set geo");
 	}
 
-	HAPI_NodeId nid = node_id;
+	HAPI_NodeId nid = geometry_node_id;
 	uint64_t geo_hash = compute_geo_hash(points, prim_type, vertices, counts, attributes);
 	if (!force && geo_hash == last_geo_hash)
 	{
@@ -169,8 +179,26 @@ godot::Ref<HEGoTask> HEGoInputNode::set_geo(const godot::PackedVector3Array &poi
 
 	last_geo_hash = geo_hash;
 
-	return submit("Set geo", nid, [nid, points, prim_type, vertices, counts, attributes](HEGoSessionManager *mgr) -> godot::Variant {
+	godot::Ref<HEGoInputNode> self = this;
+	return submit("Set geo", nid, [self, nid, points, prim_type, vertices, counts, attributes](HEGoSessionManager *mgr) -> godot::Variant {
 		HEGo::Util::Geo::create_input_from_arrays(mgr, points, prim_type, vertices, counts, nid, attributes);
+		if (prim_type == "polyline")
+		{
+			const HAPI_Session *session = mgr->get_session();
+			if (self->polyline_node_id < 0)
+			{
+				HAPI_NodeInfo info;
+				HOUDINI_CHECK_ERROR(HoudiniApi::GetNodeInfo(session, nid, &info));
+				HOUDINI_CHECK_ERROR(HoudiniApi::CreateNode(session, info.parentId, "ends", "open_polylines", false, &self->polyline_node_id));
+				HOUDINI_CHECK_ERROR(HoudiniApi::SetParmIntValue(session, self->polyline_node_id, "closeu", 0, 1));
+				HOUDINI_CHECK_ERROR(HoudiniApi::ConnectNodeInput(session, self->polyline_node_id, 0, nid, 0));
+			}
+			self->node_id = self->polyline_node_id;
+		}
+		else self->node_id = nid;
+		// Cross-object HAPI connections reference the input's OBJ, so select the
+		// actual output SOP as its display geometry (including after type changes).
+		HOUDINI_CHECK_ERROR(HoudiniApi::SetNodeDisplay(mgr->get_session(), self->node_id, 1));
 		return 0;
 	});
 }

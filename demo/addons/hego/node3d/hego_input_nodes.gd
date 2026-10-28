@@ -25,13 +25,81 @@ const NO_MATERIAL := "empty"
 const CURVE_SAMPLE_LENGTH := 1.0
 
 
+## Expands input roots when settings.include_children is enabled. The stored paths
+## remain compact; descendants are discovered again on every cook in scene order.
+## Overlapping selections contribute each source once. Hidden authoring nodes are
+## included, but this host's generated Outputs and CSG Boolean operands are not.
+static func resolve_paths(host: Node, paths: Array, settings: Dictionary) -> Array:
+	if not settings.get("include_children", false):
+		var explicit: Array = []
+		for path in paths:
+			var node := _resolve_input_node(host, path)
+			if node != null and is_compatible_source(node) and not node.is_queued_for_deletion():
+				explicit.append(path)
+			elif not str(path).is_empty():
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s has no compatible source; containers need Include Children enabled." % str(path))
+		# Removing invalid sources also disconnects an old child when a user turns
+		# expansion off but leaves its parent selected.
+		return explicit
+	var resolved: Array = []
+	var visited := {}
+	var outputs := host.get_node_or_null(HEGoNodeUtil.OUTPUTS_ROOT_NAME)
+	for path in paths:
+		var source := _resolve_input_node(host, path)
+		if source == null:
+			if not str(path).is_empty():
+				HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input parent %s could not be found, skipping it." % str(path))
+			continue
+		_collect_sources(host, source, outputs, visited, resolved)
+	return resolved
+
+
+## Whether a node supplies one of HEGo's supported input kinds. CSG assemblies
+## bake from their root shape, including all of their Boolean children.
+static func is_compatible_source(node: Node) -> bool:
+	if node is HEGoGraphInput3D:
+		return not node.points.is_empty()
+	if node is Path3D:
+		return node.curve != null and node.curve.point_count > 0
+	if node is MeshInstance3D:
+		return node.mesh != null
+	if node is CSGShape3D:
+		return node.is_root_shape()
+	return HEGoTerrain3DUtil.is_available() and node.is_class("Terrain3D")
+
+
+static func _collect_sources(host: Node, node: Node, outputs: Node, visited: Dictionary, resolved: Array) -> void:
+	if (outputs != null and (node == outputs or outputs.is_ancestor_of(node))) or node.is_queued_for_deletion() or visited.has(node.get_instance_id()):
+		return
+	visited[node.get_instance_id()] = true
+	if is_compatible_source(node):
+		resolved.append(_source_path(host, node))
+	# A baked CSG root already contains its operands; uploading them again changes
+	# the Boolean result and can duplicate faces. Treat that assembly as one source.
+	if node is CSGShape3D:
+		return
+	for child in node.get_children():
+		_collect_sources(host, child, outputs, visited, resolved)
+
+
+static func _source_path(host: Node, node: Node) -> String:
+	var tree := host.get_tree()
+	if tree != null:
+		for scene in [tree.edited_scene_root, tree.current_scene]:
+			if scene != null and (scene == node or scene.is_ancestor_of(node)):
+				return str(scene.get_path_to(node))
+	# Also support tools/tests without a current scene. Absolute paths avoid an
+	# ambiguous host-relative path resolving against a different scene node.
+	return str(node.get_path())
+
+
 ## Creates or updates the input node for the Godot node at [param input_node_path].
 ##
 ## Pass the previous input node as [param existing_node] to reuse it when the source
 ## node still has the same type; pass null to always create a fresh one. Returns the
 ## input node to store, which is [param existing_node] itself when it was reused.
 ##
-## [param settings] is the per-input settings dictionary from the input stash. It is
+## [param settings] is the per-input settings dictionary from the input stash.
 ## curve_sample_length optionally controls Path3D upload spacing in metres.
 ## Missing, non-finite or non-positive values use the one-metre default.
 static func sync(host: Node, existing_node: Variant, input_node_path: Variant, settings: Dictionary) -> Variant:

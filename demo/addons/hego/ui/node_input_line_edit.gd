@@ -7,12 +7,25 @@ class_name HEGoInputLineEdit
 ## Dropping a node writes its path relative to the edited scene, which is the form the input
 ## rows are stored in; typing a path by hand works the same way.
 
-## Emitted when a node was dropped on the field, after [member text] has been rewritten.
+## Emitted when a node is dropped or a typed path is committed with Enter or focus loss.
 signal input_changed()
 
 ## Unused. The dropped path is written straight to [member text], which is what the panel
 ## reads back.
 var node_path = ""
+var _committed_text := ""
+
+
+func _ready() -> void:
+	focus_entered.connect(func(): _committed_text = text)
+	text_submitted.connect(func(_value: String): _commit_text())
+	focus_exited.connect(_commit_text)
+
+
+func _commit_text() -> void:
+	if text != _committed_text:
+		_committed_text = text
+		input_changed.emit()
 
 
 func _can_drop_data(position: Vector2, data) -> bool:
@@ -31,4 +44,5 @@ func _drop_data(position: Vector2, data) -> void:
 			text = "Error: No scene root"
 	else:
 		text = "Error: Invalid node path"
+	_committed_text = text
 	input_changed.emit()

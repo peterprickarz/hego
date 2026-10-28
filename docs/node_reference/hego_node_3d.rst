@@ -26,6 +26,47 @@ Create a ``HEGoNode3D`` in your scene, open the HEGo bottom panel, assign an HDA
 Inputs are converted to Houdini data before cook, and outputs are regenerated after cook based on
 attributes described below.
 
+Including Children
+------------------
+
+In the bottom panel's **Inputs** section, enable **Include Children** for an HDA
+input and drop a parent node into its path field. One parent can replace a long
+list of individual sources, for example ``Inputs/Concrete`` on a concrete input.
+The setting is saved with that input in the scene and restored when the panel
+reopens. It is off by default for existing scenes.
+
+Each cook discovers the selected nodes and their compatible descendants,
+recursively and in scene-tree order. Supported sources are Path3D,
+HEGoGraphInput3D, MeshInstance3D, CSGShape3D and Terrain3D. Empty mesh/path/graph
+sources are skipped; hidden authoring sources are included. Adding, removing,
+renaming or reparenting children takes effect on the next cook without editing
+the list. Overlapping selections feed each source only once.
+
+A CSG root is one baked assembly, including its Boolean operands; those operands
+are not uploaded separately. The current generator's ``Outputs`` subtree is
+excluded to prevent its own generated geometry feeding back into its input.
+
+The adjacent **Visible** toggle shows or hides the referenced input nodes without
+recooking or disabling them as Houdini inputs. A referenced 3D parent controls its
+subtree while preserving its children's individual visibility flags. With mixed
+visibility the control reads **Mixed**; click once to hide all, then again to show
+all. It follows scene-tree visibility changes and supports editor undo/redo.
+Visibility is stored on the scene nodes, not in the input settings. Ancestors that
+are themselves hidden still need to be shown in the scene tree.
+
+From code, use the same persisted setting the panel edits:
+
+.. code-block:: gdscript
+
+    input_stash = [{
+        "inputs": ["../Inputs/Concrete"],
+        "settings": {"include_children": true},
+    }]
+
+Custom cookers using ``HEGoAssetAgent.sync_inputs()`` get this behavior too.
+``HEGoInputNodes.resolve_paths(host, paths, settings)`` exposes the same discovery
+for any preprocessing a custom tool needs before cooking.
+
 What a Cook Does
 ----------------
 

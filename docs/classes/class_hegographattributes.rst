@@ -26,12 +26,12 @@ Parent this under a graph and fill :ref:`attributes<class_HEGoGraphAttributes_pr
 Properties
 ----------
 
-.. table::
-   :widths: auto
+.. list-table::
+   :widths: 40 50 10
 
-   +----------------------------------------------------------------------------------------+------------------------------------------------------------------+--------+
-   | ``Array``\[:ref:`HEGoGraphAttributeDef<class_HEGoGraphAttributeDef>`\] | :ref:`attributes<class_HEGoGraphAttributes_property_attributes>` | ``[]`` |
-   +----------------------------------------------------------------------------------------+------------------------------------------------------------------+--------+
+   * - ``Array``\[:ref:`HEGoGraphAttributeDef<class_HEGoGraphAttributeDef>`\]
+     - :ref:`attributes<class_HEGoGraphAttributes_property_attributes>`
+     - ``[]``
 
 .. rst-class:: classref-section-separator
 

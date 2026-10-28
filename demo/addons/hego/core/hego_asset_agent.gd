@@ -161,6 +161,7 @@ func sync_inputs(asset: HEGoAssetNode, skip_indices := []) -> void:
 		if index < rows.size() and rows[index] is Dictionary:
 			paths = rows[index].get("inputs", [])
 			settings = rows[index].get("settings", {})
+		paths = HEGoInputNodes.resolve_paths(owner_node, paths, settings)
 
 		if chains.has(index):
 			await _update_chain(asset, chains, index, paths, settings)

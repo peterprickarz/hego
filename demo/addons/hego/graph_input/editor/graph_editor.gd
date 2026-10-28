@@ -165,7 +165,7 @@ func handle_input(camera: Camera3D, event: InputEvent) -> int:
 
 	if event is InputEventKey and event.pressed and not event.echo:
 		ctrl_held = event.ctrl_pressed
-		if _try_delete_key(event):
+		if _try_connect_key(event) or _try_delete_key(event):
 			return EditorPlugin.AFTER_GUI_INPUT_STOP
 
 	if event is InputEventMouse:
@@ -207,7 +207,27 @@ func handle_key_anywhere(event: InputEvent) -> bool:
 		return false
 	if not _mouse_over_3d_viewport():
 		return false
-	return _try_delete_key(key)
+	return _try_connect_key(key) or _try_delete_key(key)
+
+
+## Bare C connects exactly two selected points in either editing mode.
+func _try_connect_key(event: InputEventKey) -> bool:
+	if event.keycode != KEY_C or event.shift_pressed or event.ctrl_pressed \
+			or event.alt_pressed or event.meta_pressed or _pressed \
+			or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return false
+	if selected_points.size() != 2:
+		return false
+	var a := selected_points[0]
+	var b := selected_points[1]
+	if a == b or a < 0 or b < 0 or a >= graph.points.size() or b >= graph.points.size():
+		return false
+	# Consume an already connected pair without creating a redundant undo step.
+	if not graph.has_connection(a, b):
+		_mutate("Connect graph points", func() -> void:
+			graph.add_connection(a, b)
+		)
+	return true
 
 
 func _try_delete_key(event: InputEventKey) -> bool:

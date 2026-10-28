@@ -16,7 +16,7 @@
 	<signals>
 		<signal name="input_changed">
 			<description>
-				Emitted when a node was dropped on the field, after [member text] has been rewritten.
+				Emitted when a node is dropped or a typed path is committed with Enter or focus loss.
 			</description>
 		</signal>
 	</signals>

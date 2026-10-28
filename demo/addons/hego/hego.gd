@@ -23,6 +23,7 @@ func _enter_tree():
 	# Initialization of the plugin goes here.
 	bottom_panel = preload("res://addons/hego/hego_control.tscn").instantiate()
 	add_control_to_bottom_panel(bottom_panel, "HEGo")
+	bottom_panel.get_node("TabContainer/HDA").input_visibility_undo_redo = get_undo_redo()
 	
 	editor_selection = get_editor_interface().get_selection()
 	editor_selection.selection_changed.connect(_on_selection_changed)

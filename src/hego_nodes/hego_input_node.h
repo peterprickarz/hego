@@ -21,6 +21,8 @@ class HEGoInputNode : public HEGoBaseInputNode
 
 private:
 	godot::String node_name;
+	HAPI_NodeId geometry_node_id = -1;
+	HAPI_NodeId polyline_node_id = -1;
 	uint64_t last_geo_hash = 0;
 	godot::Transform3D last_mesh_instance_transform;
 	bool has_cached_mesh_instance_transform = false;

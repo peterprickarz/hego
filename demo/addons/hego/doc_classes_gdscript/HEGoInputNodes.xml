@@ -9,6 +9,22 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="resolve_paths" qualifiers="static">
+			<return type="Array" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="paths" type="Array" />
+			<param index="2" name="settings" type="Dictionary" />
+			<description>
+				Expands input roots when settings.include_children is enabled. The stored paths remain compact; descendants are discovered again on every cook in scene order. Overlapping selections contribute each source once. Hidden authoring nodes are included, but this host's generated Outputs and CSG Boolean operands are not.
+			</description>
+		</method>
+		<method name="is_compatible_source" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="node" type="Node" />
+			<description>
+				Whether a node supplies one of HEGo's supported input kinds. CSG assemblies bake from their root shape, including all of their Boolean children.
+			</description>
+		</method>
 		<method name="sync" qualifiers="static">
 			<return type="Variant" />
 			<param index="0" name="host" type="Node" />
@@ -16,7 +32,7 @@
 			<param index="2" name="input_node_path" type="Variant" />
 			<param index="3" name="settings" type="Dictionary" />
 			<description>
-				Creates or updates the input node for the Godot node at [param input_node_path].  Pass the previous input node as [param existing_node] to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is [param existing_node] itself when it was reused.  [param settings] is the per-input settings dictionary from the input stash. It is carried through the stash for future per-input options and is not read yet.
+				Creates or updates the input node for the Godot node at [param input_node_path].  Pass the previous input node as [param existing_node] to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is [param existing_node] itself when it was reused.  [param settings] is the per-input settings dictionary from the input stash. curve_sample_length optionally controls Path3D upload spacing in metres. Missing, non-finite or non-positive values use the one-metre default.
 			</description>
 		</method>
 	</methods>

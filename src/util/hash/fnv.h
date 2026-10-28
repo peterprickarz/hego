@@ -11,6 +11,8 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_color_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
@@ -183,6 +185,21 @@ inline uint64_t hash_variant(const godot::Variant &v, uint64_t hash)
 			hash = hash_packed_int32(a, hash);
 			break;
 		}
+
+		case godot::Variant::PACKED_FLOAT32_ARRAY:
+		{
+			godot::PackedFloat32Array a = v;
+			hash = hash_combine(hash, static_cast<uint64_t>(a.size()));
+			if (!a.is_empty()) hash = fnv1a(a.ptr(), a.size() * sizeof(float), hash);
+			break;
+		}
+		case godot::Variant::PACKED_STRING_ARRAY:
+		{
+			godot::PackedStringArray a = v;
+			hash = hash_combine(hash, static_cast<uint64_t>(a.size()));
+			for (int64_t i = 0; i < a.size(); ++i) hash = hash_string(a[i], hash);
+			break;
+		}
 		case godot::Variant::PACKED_VECTOR3_ARRAY:
 		{
 			godot::PackedVector3Array a = v;
@@ -196,7 +213,9 @@ inline uint64_t hash_variant(const godot::Variant &v, uint64_t hash)
 			break;
 		}
 		default:
-			// For unsupported types, hash the type tag only (will cause cache misses but not incorrect caching)
+			// Preserve content sensitivity for other Variant types too. A type-only
+			// fallback incorrectly treats every value of that type as unchanged.
+			hash = hash_combine(hash, v.hash());
 			break;
 	}
 	return hash;
