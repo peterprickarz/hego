@@ -22,6 +22,19 @@ text = "InputName"
 [node name="SpinBox" type="SpinBox" parent="HBoxContainer"]
 layout_mode = 2
 
+[node name="InputOptions" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="IncludeChildren" type="CheckBox" parent="InputOptions"]
+layout_mode = 2
+text = "Include Children"
+tooltip_text = "Include each selected node and all compatible descendants on every cook. CSG assemblies are included once; their Boolean children and this generator's Outputs are skipped."
+
+[node name="InputVisible" type="CheckBox" parent="InputOptions"]
+layout_mode = 2
+text = "Visible"
+disabled = true
+
 [node name="HSeparator" type="HSeparator" parent="."]
 layout_mode = 2
 

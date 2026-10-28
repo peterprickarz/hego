@@ -233,9 +233,18 @@ func split_connection(conn_index: int, position: Vector3) -> int:
 		return -1
 	var a: int = connections[conn_index * 2]
 	var b: int = connections[conn_index * 2 + 1]
+	# Preserve continuous fields such as radius when inserting a control point.
+	# Discrete labels/toggles inherit the nearer endpoint, rather than a default.
+	var span := points[b] - points[a]
+	var weight := clampf((position - points[a]).dot(span) / maxf(span.length_squared(), 0.00000001), 0.0, 1.0)
+	var point_values := {}
+	for key in point_attribs:
+		var values: Variant = point_attribs[key]
+		point_values[key] = lerpf(values[a], values[b], weight) if values is PackedFloat32Array else values[a if weight <= 0.5 else b]
 	var saved := _copy_attrib_row(connection_attribs, conn_index)
 	remove_connections(PackedInt32Array([conn_index]))
 	var new_point := add_point(position)
+	_apply_attrib_row(point_attribs, new_point, point_values)
 	var c0 := add_connection(a, new_point)
 	var c1 := add_connection(new_point, b)
 	if c0 >= 0:

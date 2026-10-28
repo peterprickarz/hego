@@ -41,6 +41,7 @@ var hego_tool_node: Node
 ## showing several still has one set of preset buttons, and they belong to the first.
 var hego_asset_node: HEGoAssetNode
 var input_nodes: Array
+var input_visibility_undo_redo: EditorUndoRedoManager
 ## Whether a cook started from this panel is still running. Recook is disabled meanwhile, so
 ## a second cook cannot be fired into a node that is already cooking.
 var _cooking: bool = false
@@ -285,11 +286,13 @@ func _build_input_rows(asset: HEGoAssetNode) -> void:
 		var input_node = preload("res://addons/hego/ui/input_ui.tscn").instantiate()
 		input_vbox.add_child(input_node)
 		var inputs = PackedStringArray()
+		var settings := {}
 		if hego_tool_node.has_method("hego_get_input_stash"):
 			var input_stash = hego_tool_node.hego_get_input_stash()
 			if input_stash.size() > i:
 				inputs = input_stash[i]["inputs"]
-		input_node.setup(input_names[i], inputs)
+				settings = input_stash[i].get("settings", {})
+		input_node.setup(input_names[i], inputs, settings, hego_tool_node, input_visibility_undo_redo)
 		input_node.inputs_changed.connect(_on_input_changed)
 		input_nodes.append(input_node)
 
@@ -438,7 +441,8 @@ func _on_input_changed():
 	for i in range(input_nodes.size()):
 		var settings = {}
 		if i < stashed.size() and stashed[i] is Dictionary:
-			settings = stashed[i].get("settings", {})
+			settings = stashed[i].get("settings", {}).duplicate()
+		settings["include_children"] = input_nodes[i].include_children.button_pressed
 		inputs.append({
 			"inputs": input_nodes[i].get_inputs(),
 			"settings": settings,
