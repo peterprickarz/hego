@@ -10,7 +10,7 @@
 HEGoTerrain3DOutput
 ===================
 
-**Inherits:** ``RefCounted``
+**Inherits:** :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` **<** ``RefCounted``
 
 Builds a Terrain3D node from the heightfield layers of a cooked HDA.
 
@@ -19,7 +19,7 @@ Builds a Terrain3D node from the heightfield layers of a cooked HDA.
 Description
 -----------
 
-The ``height`` layer drives the terrain itself; the optional ``hegot3d_*`` layers add region masks, holes, per-texture weights and colour maps. Everything is driven by detail attributes on the height layer, so an HDA that does not set ``hegot3d_spawn_terrain`` is skipped entirely.
+The ``height`` layer drives the terrain itself; the optional ``hegot3d_*`` layers add region masks, holes, per-texture weights and colour maps. Everything is driven by detail attributes on the height layer, so an HDA that does not set ``hegot3d_spawn_terrain`` is skipped entirely.  HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; HEGo never names it. It reports :ref:`handles_heightfields()<class_HEGoTerrain3DOutput_method_handles_heightfields>`, so a cook extension that publishes the heightfields elsewhere, such as the HEGo Strata bridge's targets, skips it.
 
 .. rst-class:: classref-reftable-group
 
@@ -29,13 +29,15 @@ Methods
 .. table::
    :widths: auto
 
-   +------------+------------------------------------------------------------------------------------------------------------------------------------+
-   | ``String`` | :ref:`output_phase<class_HEGoTerrain3DOutput_method_output_phase>`\ (\ ) |static|                                                  |
-   +------------+------------------------------------------------------------------------------------------------------------------------------------+
-   | ``bool``   | :ref:`should_handle<class_HEGoTerrain3DOutput_method_should_handle>`\ (\ summary\: ``Dictionary``\ ) |static|                      |
-   +------------+------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|     | :ref:`handle<class_HEGoTerrain3DOutput_method_handle>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static| |
-   +------------+------------------------------------------------------------------------------------------------------------------------------------+
+   +------------+---------------------------------------------------------------------------------------------------------------------------+
+   | ``String`` | :ref:`output_phase<class_HEGoTerrain3DOutput_method_output_phase>`\ (\ )                                                  |
+   +------------+---------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``   | :ref:`should_handle<class_HEGoTerrain3DOutput_method_should_handle>`\ (\ summary\: ``Dictionary``\ )                      |
+   +------------+---------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``   | :ref:`handles_heightfields<class_HEGoTerrain3DOutput_method_handles_heightfields>`\ (\ )                                  |
+   +------------+---------------------------------------------------------------------------------------------------------------------------+
+   | |void|     | :ref:`handle<class_HEGoTerrain3DOutput_method_handle>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |
+   +------------+---------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -199,7 +201,7 @@ Method Descriptions
 
 .. rst-class:: classref-method
 
-``String`` **output_phase**\ (\ ) |static| :ref:`🔗<class_HEGoTerrain3DOutput_method_output_phase>`
+``String`` **output_phase**\ (\ ) :ref:`🔗<class_HEGoTerrain3DOutput_method_output_phase>`
 
 Name of the cook phase this handler is timed under.
 
@@ -211,9 +213,21 @@ Name of the cook phase this handler is timed under.
 
 .. rst-class:: classref-method
 
-``bool`` **should_handle**\ (\ summary\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoTerrain3DOutput_method_should_handle>`
+``bool`` **should_handle**\ (\ summary\: ``Dictionary``\ ) :ref:`🔗<class_HEGoTerrain3DOutput_method_should_handle>`
 
 Whether the cook produced heightfield volumes, and Terrain3D is there to receive them.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoTerrain3DOutput_method_handles_heightfields:
+
+.. rst-class:: classref-method
+
+``bool`` **handles_heightfields**\ (\ ) :ref:`🔗<class_HEGoTerrain3DOutput_method_handles_heightfields>`
+
+This handler turns heightfield volumes into terrain.
 
 .. rst-class:: classref-item-separator
 
@@ -223,7 +237,7 @@ Whether the cook produced heightfield volumes, and Terrain3D is there to receive
 
 .. rst-class:: classref-method
 
-|void| **handle**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static| :ref:`🔗<class_HEGoTerrain3DOutput_method_handle>`
+|void| **handle**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) :ref:`🔗<class_HEGoTerrain3DOutput_method_handle>`
 
 Fetches the cook's heightfield layers and builds the terrain.
 
@@ -246,4 +260,4 @@ Class Registration
 ------------------
 
 - Kind: GDScript class
-- Script: ``res://addons/hego/node3d/hego_terrain3d_output.gd``
+- Script: ``res://addons/hego_terrain3d/hego_terrain3d_output.gd``

@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoStrataTargets" inherits="HEGoCookExtension" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Publishes the heightfields an HEGo node's HDA outputs into procedural terrain layers.
+	</brief_description>
+	<description>
+		Add it as a child of an [HEGoNode3D] and list the layers in [member targets]. A cook then becomes one transaction: every terrain input is snapshotted before upload, every target receives a complete validated result, and anything that changes or fails along the way leaves all previous results, terrain and Outputs alike, in place. Paths in [member targets] are relative to the HEGo node, the same as its input paths.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="of" qualifiers="static">
+			<return type="HEGoStrataTargets" />
+			<param index="0" name="host" type="Node" />
+			<description>
+				The binding under [param host], or null when it has none.
+			</description>
+		</method>
+		<method name="ensure" qualifiers="static">
+			<return type="HEGoStrataTargets" />
+			<param index="0" name="host" type="Node" />
+			<description>
+				The binding under [param host], created when it has none. A new binding is owned by the host's owner, so it is saved with the scene; add the host to its scene first.
+			</description>
+		</method>
+		<method name="get_producer">
+			<return type="String" />
+			<description>
+			</description>
+		</method>
+		<method name="mark_stale">
+			<return type="void" />
+			<description>
+				Records that the host's inputs or parameters changed, so every bound layer and any runtime bake built from them is stale until the next explicit cook.
+			</description>
+		</method>
+		<method name="cook_prepare">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="cook" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="cook_before">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="asset" type="HEGoAssetNode" />
+			<param index="2" name="cook" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="cook_commit">
+			<return type="Dictionary" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+			</description>
+		</method>
+		<method name="cook_failed">
+			<return type="void" />
+			<param index="0" name="_host" type="Node" />
+			<param index="1" name="cook" type="Dictionary" />
+			<param index="2" name="message" type="String" />
+			<description>
+			</description>
+		</method>
+		<method name="skips_output_handler">
+			<return type="bool" />
+			<param index="0" name="handler" type="Variant" />
+			<param index="1" name="cook" type="Dictionary" />
+			<description>
+				One terrain backend per cook: a host publishing into terrain layers does not also let another output handler turn the same heightfields into terrain.
+			</description>
+		</method>
+		<method name="inputs_changed">
+			<return type="void" />
+			<description>
+			</description>
+		</method>
+		<method name="requires_explicit_cook">
+			<return type="bool" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="targets" type="Dictionary[]" setter="" getter="" default="[]">
+			Complete procedural output bindings. Each entry has path, channels, and optional required_channels. Height is required by default when declared; use mask-only declarations for scalar-only stages. Targets must be explicitly procedural.
+		</member>
+		<member name="producer_id" type="String" setter="" getter="" default="&quot;&quot;">
+			Stable identity of this producer, recorded on the layers it publishes. Generated on first use when empty.
+		</member>
+		<member name="status" type="String" setter="" getter="" default="&quot;No terrain cook yet&quot;">
+		</member>
+		<member name="stale" type="bool" setter="" getter="" default="true">
+		</member>
+	</members>
+	<constants>
+		<constant name="COOK_KEY" value="&quot;hego_strata&quot;">
+			Key this extension keeps its per-cook state under in the shared cook dictionary.
+		</constant>
+		<constant name="DEFAULT_NAME" value="&quot;StrataTargets&quot;">
+			Name given to a binding created with [method ensure].
+		</constant>
+	</constants>
+</class>

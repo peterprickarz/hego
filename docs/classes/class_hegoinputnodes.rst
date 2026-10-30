@@ -19,7 +19,7 @@ Turns the Godot nodes wired into a :ref:`HEGoNode3D<class_HEGoNode3D>` into HEGo
 Description
 -----------
 
-Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` becomes points and polyline primitives, and a Terrain3D becomes a heightfield input. Other addons add kinds of their own through :ref:`HEGoInputHandler<class_HEGoInputHandler>`, which is consulted first. The node path of the source is always sent along as ``_hego_node_path`` so an HDA can tell its inputs apart.
+Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, and a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` becomes points and polyline primitives. Other addons add kinds of their own, such as terrains, through :ref:`HEGoInputHandler<class_HEGoInputHandler>`, which is consulted first. The node path of the source is always sent along as ``_hego_node_path`` so an HDA can tell its inputs apart.
 
 .. rst-class:: classref-reftable-group
 
@@ -105,6 +105,14 @@ Value used for a surface that has no override material.
 **CURVE_SAMPLE_LENGTH** = ``1.0`` :ref:`🔗<class_HEGoInputNodes_constant_CURVE_SAMPLE_LENGTH>`
 
 Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
+
+.. _class_HEGoInputNodes_constant_INPUT_PATH_KEY:
+
+.. rst-class:: classref-constant
+
+**INPUT_PATH_KEY** = ``"_input_path"`` :ref:`🔗<class_HEGoInputNodes_constant_INPUT_PATH_KEY>`
+
+Key under which :ref:`sync()<class_HEGoInputNodes_method_sync>` passes an :ref:`HEGoInputHandler<class_HEGoInputHandler>` the input path it resolved, as stored in the input stash, so the handler can send it as :ref:`NODE_PATH_ATTRIB<class_HEGoInputNodes_constant_NODE_PATH_ATTRIB>`.
 
 .. _class_HEGoInputNodes_constant_HANDLER_BASE:
 

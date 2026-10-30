@@ -4,7 +4,7 @@
 		Turns the Godot nodes wired into a [HEGoNode3D] into HEGo input nodes.
 	</brief_description>
 	<description>
-		Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, a [HEGoGraphInput3D] becomes points and polyline primitives, and a Terrain3D becomes a heightfield input. Other addons add kinds of their own through [HEGoInputHandler], which is consulted first. The node path of the source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
+		Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, and a [HEGoGraphInput3D] becomes points and polyline primitives. Other addons add kinds of their own, such as terrains, through [HEGoInputHandler], which is consulted first. The node path of the source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -65,6 +65,9 @@
 		</constant>
 		<constant name="CURVE_SAMPLE_LENGTH" value="1.0">
 			Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
+		</constant>
+		<constant name="INPUT_PATH_KEY" value="&quot;_input_path&quot;">
+			Key under which [method sync] passes an [HEGoInputHandler] the input path it resolved, as stored in the input stash, so the handler can send it as [constant NODE_PATH_ATTRIB].
 		</constant>
 		<constant name="HANDLER_BASE" value="&amp;&quot;HEGoInputHandler&quot;">
 			Class every extension input handler extends.

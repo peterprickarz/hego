@@ -86,6 +86,7 @@ GROUPS = [
             "HEGoInputNodes",
             "HEGoInputHandler",
             "HEGoCookExtension",
+            "HEGoOutputHandler",
             "HEGoCookTimings",
             "HEGoGraphInput3D",
             "HEGoGraphAttributes",
@@ -108,19 +109,6 @@ GROUPS = [
         ],
     ),
     (
-        "terrain3d",
-        "Terrain3D",
-        "Heightfields in both directions, for projects using the optional Terrain3D addon. "
-        "None of it refers to Terrain3D's types directly, so HEGo runs without the addon "
-        "installed.",
-        [
-            "HEGoTerrain3DInput",
-            "HEGoTerrain3DOutput",
-            "HEGoTerrain3DInstancer",
-            "HEGoTerrain3DUtil",
-        ],
-    ),
-    (
         "resources",
         "Resources",
         "What HEGo saves to disk.",
@@ -129,6 +117,36 @@ GROUPS = [
             "HEGoHDAPreset",
             "HEGoFetchPointsConfig",
             "HEGoFetchSurfacesConfig",
+        ],
+    ),
+    # The bridge addons are installed separately and depend on HEGo, never the other way
+    # round. Their classes are documented here because their pages link HEGo's.
+    (
+        "hego_strata",
+        "HEGo Strata bridge",
+        "The separate ``addons/hego_strata`` addon, which depends on HEGo and Strata: Strata "
+        "layers as HDA inputs, and a cook's heightfields published into Strata layers. It "
+        "plugs into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` and "
+        ":ref:`HEGoCookExtension<class_HEGoCookExtension>`.",
+        [
+            "HEGoStrataInput",
+            "HEGoStrataTargets",
+            "HEGoStrataOutput",
+        ],
+    ),
+    (
+        "terrain3d",
+        "HEGo Terrain3D bridge",
+        "The separate ``addons/hego_terrain3d`` addon, which depends on HEGo and on the "
+        "Terrain3D addon: heightfields in both directions, and Terrain3D instancing. It plugs "
+        "into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` and "
+        ":ref:`HEGoOutputHandler<class_HEGoOutputHandler>`, and reaches Terrain3D only through "
+        "``ClassDB``, so its scripts still load without Terrain3D installed.",
+        [
+            "HEGoTerrain3DInput",
+            "HEGoTerrain3DOutput",
+            "HEGoTerrain3DInstancer",
+            "HEGoTerrain3DUtil",
         ],
     ),
 ]
@@ -141,6 +159,7 @@ INTERNAL_CLASSES = {
     "HEGoGraphEditor": "viewport editing for HEGoGraphInput3D",
     "HEGoGraphPicking": "screen-space picking for the graph editor",
     "HEGoGraphPlacement": "ray-plane hits for the graph editor",
+    "HEGoStrataInputSettings": "the Strata options in a bottom panel input row",
 }
 
 # Methods a class inherits are documented on the class that declares them, and make_rst does
@@ -206,8 +225,10 @@ def read_registration_kinds(register_types_cpp):
     return kinds
 
 
-def read_script_paths(gdscript_src_dir, project_dir):
-    """Class name to the res:// path of the script declaring it."""
+def read_script_paths(gdscript_src_dir):
+    """Class name to the res:// path of the script declaring it, for one addon directory."""
+    # An addon lives at <project>/addons/<name>.
+    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(gdscript_src_dir)))
     paths = {}
     for directory, _, files in os.walk(gdscript_src_dir):
         for name in sorted(files):
@@ -300,7 +321,8 @@ def write_index(out_dir):
         "HEGo Class Reference",
         "====================",
         "",
-        "Every class HEGo registers. The C++ pages come from the class reference XML in",
+        "Every class HEGo registers, and those of the two bridge addons, HEGo Strata and HEGo",
+        "Terrain3D. The C++ pages come from the class reference XML in",
         "``demo/addons/hego/doc_classes``; the GDScript pages are generated from the scripts'",
         "own ``##`` comments, so a class page and the editor's built-in help say the same thing.",
         "",
@@ -361,13 +383,17 @@ def main():
     parser.add_argument("--generated", required=True, help="where make_rst.py wrote its pages")
     parser.add_argument("--out", required=True, help="docs/classes")
     parser.add_argument("--cpp-xml", required=True)
-    parser.add_argument("--gdscript-xml", required=True)
-    parser.add_argument("--gdscript-src", required=True)
+    parser.add_argument("--gdscript-xml", required=True, action="append",
+                        help="an addon's doc_classes_gdscript; once per addon")
+    parser.add_argument("--gdscript-src", required=True, action="append",
+                        help="an addon directory, for the script paths; once per addon")
     parser.add_argument("--register-types", required=True)
     args = parser.parse_args()
 
     cpp_classes = read_classes(args.cpp_xml)
-    gdscript_classes = read_classes(args.gdscript_xml)
+    gdscript_classes = {}
+    for xml_dir in args.gdscript_xml:
+        gdscript_classes.update(read_classes(xml_dir))
     briefs = dict(cpp_classes)
     briefs.update(gdscript_classes)
 
@@ -430,8 +456,9 @@ def main():
     resolve_engine_references(args.out)
 
     # ── footers ──────────────────────────────────────────────────────────────
-    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.gdscript_src)))
-    script_paths = read_script_paths(args.gdscript_src, project_dir)
+    script_paths = {}
+    for src_dir in args.gdscript_src:
+        script_paths.update(read_script_paths(src_dir))
     kinds = read_registration_kinds(args.register_types)
 
     for name in sorted(briefs):

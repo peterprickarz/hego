@@ -96,7 +96,8 @@ Examples
 
 The ``demo`` folder in the repo contains the project used for testing and development. Even if you
 only download the binaries, it is still recommended to look at this demo project. The demo project
-also comes with `Terrain3D <https://github.com/TokisanGames/Terrain3D>`_ installed and contains
+also comes with `Terrain3D <https://github.com/TokisanGames/Terrain3D>`_ installed, together with
+the HEGo Terrain3D bridge addon (``addons/hego_terrain3d``) that connects it to HEGo, and contains
 examples for generating terrains using Terrain3D.
 
 Troubleshooting

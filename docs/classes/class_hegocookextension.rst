@@ -12,6 +12,8 @@ HEGoCookExtension
 
 **Inherits:** ``Node``
 
+**Inherited By:** :ref:`HEGoStrataTargets<class_HEGoStrataTargets>`
+
 A child of an :ref:`HEGoNode3D<class_HEGoNode3D>` that takes part in its cooks.
 
 .. rst-class:: classref-introduction-group
@@ -108,7 +110,7 @@ The cook stopped before finishing, at any step, with ``message`` saying why.
 
 ``bool`` **skips_output_handler**\ (\ _handler\: ``Variant``, _cook\: ``Dictionary``\ ) :ref:`🔗<class_HEGoCookExtension_method_skips_output_handler>`
 
-Whether this cook should skip the standard output handler ``handler``, for example because the extension produces that kind of output itself.
+Whether this cook should skip the output handler ``handler``, one entry of :ref:`HEGoNode3D.output_handlers()<class_HEGoNode3D_method_output_handlers>`, for example because the extension produces that kind of output itself. ``handler`` is either one of HEGo's own handler scripts or an :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` instance; an extension that consumes the heightfields skips the latter when :ref:`HEGoOutputHandler.handles_heightfields()<class_HEGoOutputHandler_method_handles_heightfields>` is true, without naming it.
 
 .. rst-class:: classref-item-separator
 

@@ -19,7 +19,7 @@ Features
 - **Bidirectional data flow**: convert between Godot and Houdini geometry formats
 - **Parameter management**: automatic type conversion between Godot Variant and HAPI types
 - **Mesh generation**: generate Godot meshes, instances, and scene nodes from Houdini output
-- **Terrain3D bridge**: generate `Terrain3D <https://tokisan.com/terrain3d/>`_ terrains, use Terrain3D instancing, and feed Terrain3D heightfield inputs into Houdini
+- **Terrain3D bridge**: generate `Terrain3D <https://tokisan.com/terrain3d/>`_ terrains, use Terrain3D instancing, and feed Terrain3D heightfield inputs into Houdini, through the separate HEGo Terrain3D addon (``addons/hego_terrain3d``)
 
 Where to Start
 --------------

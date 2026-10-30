@@ -1,0 +1,86 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoStrataOutput" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Routes a cook's heightfields into the terrain layers an [HEGoStrataTargets] binds, and publishes them in one transaction. A volume names its target with the primitive attribute hegostrata_layer_path; the other attributes below describe its role.
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="to_houdini_attrs" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="attrs" type="Dictionary" />
+			<description>
+				Strata field metadata as Houdini primitive attributes. Other keys pass through as-is.
+			</description>
+		</method>
+		<method name="from_houdini_attrs" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="attrs" type="Dictionary" />
+			<description>
+				Fetched primitive attributes as Strata stores them, with the prefix removed.
+			</description>
+		</method>
+		<method name="prepare" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="rows" type="Array" />
+			<param index="2" name="declarations" type="Array" />
+			<param index="3" name="producer" type="String" />
+			<param index="4" name="guard" type="Callable" default="Callable()" />
+			<description>
+				Prebind every target to an instance and stable layer ID before asynchronous upload/cooking. Missing terrain input references fail a procedural cook.
+			</description>
+		</method>
+		<method name="fail" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="state" type="Dictionary" />
+			<param index="1" name="message" type="String" />
+			<description>
+			</description>
+		</method>
+		<method name="capture_preset" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="asset" type="HEGoAssetNode" />
+			<param index="2" name="state" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="handle" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<param index="1" name="state" type="Dictionary" />
+			<description>
+				[param state] is what [method prepare] returned for this cook.
+			</description>
+		</method>
+		<method name="route_fields" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="state" type="Dictionary" />
+			<param index="2" name="fields" type="Array" />
+			<description>
+				This function also supports fixture/tests without starting a Houdini session.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="ATTR_PREFIX" value="&quot;hegostrata_&quot;">
+			Strata stores its field metadata under plain keys (role, channel, ...). In Houdini the same values are primitive attributes with this prefix, so they cannot collide with an HDA's own attributes.
+		</constant>
+		<constant name="STRATA_KEYS" value="[&quot;layer_path&quot;, &quot;empty&quot;, &quot;role&quot;, &quot;channel&quot;, &quot;composition&quot;, &quot;snapshot_mode&quot;, &quot;resampled_spacing&quot;]">
+		</constant>
+		<constant name="TARGET_ATTR" value="&quot;hegostrata_layer_path&quot;">
+		</constant>
+		<constant name="EMPTY_ATTR" value="&quot;hegostrata_empty&quot;">
+		</constant>
+		<constant name="COMPOSITION_ATTR" value="&quot;hegostrata_composition&quot;">
+		</constant>
+		<constant name="ROLE_ATTR" value="&quot;hegostrata_role&quot;">
+		</constant>
+		<constant name="CHANNEL_ATTR" value="&quot;hegostrata_channel&quot;">
+		</constant>
+	</constants>
+</class>

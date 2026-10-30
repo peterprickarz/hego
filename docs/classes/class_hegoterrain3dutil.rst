@@ -19,7 +19,7 @@ Helpers shared by the Terrain3D input, output and instancer paths.
 Description
 -----------
 
-Terrain3D is an optional addon, so nothing here refers to its types directly: everything goes through ``ClassDB``, ``Object.call()`` and ``Object.get()``, and every entry point degrades to a warning when the addon or a method is missing.
+This bridge needs Terrain3D, but nothing in it refers to Terrain3D's types directly: everything goes through ``ClassDB``, ``Object.call()`` and ``Object.get()``, and every entry point degrades to a warning when the addon or a method is missing. So the bridge's scripts still load, and HEGo keeps cooking, in a project without Terrain3D.
 
 .. rst-class:: classref-reftable-group
 
@@ -426,4 +426,4 @@ Class Registration
 ------------------
 
 - Kind: GDScript class
-- Script: ``res://addons/hego/node3d/hego_terrain3d_util.gd``
+- Script: ``res://addons/hego_terrain3d/hego_terrain3d_util.gd``

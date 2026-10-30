@@ -25,6 +25,13 @@
 				Waits for [param task] like [method await_task], but reports the outcome rather than logging it: [code]{ok: true, value}[/code], or [code]{ok: false, message}[/code] when the task failed, was null, or [param host] left the scene tree while it waited.  Use this where failure has to be told apart from a task that legitimately completed with null, which is what HEGo returns for work it could skip.
 			</description>
 		</method>
+		<method name="global_subclasses" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="base" type="StringName" />
+			<description>
+				Every global class that extends [param base], directly or through other global classes, as a dictionary from class name to script path. [param base] itself is not included.  Reads [method ProjectSettings.get_global_class_list], which exported games have too. This is how HEGo finds the [HEGoInputHandler]s and [HEGoOutputHandler]s other addons provide.
+			</description>
+		</method>
 		<method name="output_has" qualifiers="static">
 			<return type="bool" />
 			<param index="0" name="summary" type="Dictionary" />

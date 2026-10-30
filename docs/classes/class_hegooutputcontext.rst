@@ -78,7 +78,7 @@ Property Descriptions
 
 ``Node`` **host** :ref:`🔗<class_HEGoOutputContext_property_host>`
 
-The node this cook belongs to.  Output normally goes under :ref:`outputs_root()<class_HEGoOutputContext_method_outputs_root>` rather than directly here. A handler that must parent somewhere else needs the host itself, which is why it is exposed: :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>` deliberately builds outside the subtree a cook rebuilds, so the terrain it spawns survives recooking.
+The node this cook belongs to.  Output normally goes under :ref:`outputs_root()<class_HEGoOutputContext_method_outputs_root>` rather than directly here. A handler that must parent somewhere else needs the host itself, which is why it is exposed: the HEGo Terrain3D bridge's terrain output deliberately builds outside the subtree a cook rebuilds, so the terrain it spawns survives recooking.
 
 .. rst-class:: classref-item-separator
 

@@ -177,8 +177,10 @@ combine several Godot nodes:
 
 :ref:`HEGoInputNodes.sync()<class_HEGoInputNodes_method_sync>` is what turns a Godot node
 into the input node its type needs — ``Path3D`` into a curve input, ``MeshInstance3D`` or
-``CSGShape3D`` into a mesh input, ``Terrain3D`` into a heightfield input — and it is worth
-calling whether or not you use an agent.
+``CSGShape3D`` into a mesh input, and whatever kinds the installed
+:ref:`HEGoInputHandler<class_HEGoInputHandler>`\ s add, such as ``Terrain3D`` into a
+heightfield input with the HEGo Terrain3D bridge — and it is worth calling whether or not
+you use an agent.
 
 The agent does this for every input the HDA has, reading the paths from the node's input
 stash so the bottom panel's Inputs pane and your script write to the same place.

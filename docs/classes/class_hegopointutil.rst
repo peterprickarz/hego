@@ -19,7 +19,7 @@ Point attribute maths shared by every handler that scatters something.
 Description
 -----------
 
-Multimesh instancing, object spawning and Terrain3D instancing all turn the same four point attributes - ``N``, ``up``, ``pscale`` and ``scale`` - into the same orientation. Having it in one place is what keeps an HDA's points landing identically whichever of the three reads them, and is where to look when they do not.
+Multimesh instancing, object spawning and the instancing output handlers other addons add all turn the same four point attributes - ``N``, ``up``, ``pscale`` and ``scale`` - into the same orientation. Having it in one place is what keeps an HDA's points landing identically whichever handler reads them, and is where to look when they do not.
 
 .. rst-class:: classref-reftable-group
 

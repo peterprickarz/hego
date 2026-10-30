@@ -30,9 +30,9 @@ git submodule update --init --recursive
 
 > **Note**: The `release` branch is automatically updated with each commit to `main` and contains only the addon files, making it perfect for submodule use.
 
-### Strata terrain and the HEGo Strata bridge
+### Strata, Terrain3D and the HEGo bridges
 
-HEGo ships with two more addons that are developed in this repository but installed
+HEGo ships with three more addons that are developed in this repository but installed
 separately, each with a one-way dependency:
 
 | Addon | Folder | Depends on | What it does |
@@ -40,9 +40,15 @@ separately, each with a one-way dependency:
 | **HEGo** | `addons/hego` | – | Houdini Engine integration (this addon) |
 | **Strata** | `addons/strata` | – | Layered terrain: hand and procedural layers, quadtree mesher, material renderer, bake, collision and navigation. Works without Houdini. |
 | **HEGo Strata** | `addons/hego_strata` | HEGo + Strata | Routes HDA heightfield volumes carrying `hegostrata_*` attributes into Strata layers |
+| **HEGo Terrain3D** | `addons/hego_terrain3d` | HEGo + [Terrain3D](https://github.com/TokisanGames/Terrain3D) | Sends Terrain3D nodes to HDAs as heightfield inputs, and turns heightfields and points carrying `hegot3d_*` attributes into Terrain3D terrains and instances |
+
+Terrain3D is TokisanGames' addon, not part of this repository: install it yourself at
+`addons/terrain_3d` (the demo vendors and is tested with 1.0.1). Neither HEGo nor
+Terrain3D depends on HEGo Terrain3D, and it contains no native code.
 
 The `next` channel publishes them as `release-next` (HEGo), `strata-release-next`,
-`hego-strata-release-next` and `release-next-bundle` (all three); see
+`hego-strata-release-next`, `hego-terrain3d-release-next` and `release-next-bundle`
+(all four of ours); see
 [docs/next-packaging.md](docs/next-packaging.md). Cooking a terrain is covered in
 [docs/terrain-houdini-integration.md](docs/terrain-houdini-integration.md), the terrain
 itself in [docs/terrain-runtime.md](docs/terrain-runtime.md).
@@ -60,7 +66,7 @@ itself in [docs/terrain-runtime.md](docs/terrain-runtime.md).
 - **Bidirectional Data Flow**: Convert between Godot and Houdini geometry formats
 - **Parameter Management**: Automatic type conversion between Godot Variant and HAPI types
 - **Mesh Generation**: Generate Godot meshes, instances, and scene nodes from Houdini
-- **[Terrain3D](https://tokisan.com/terrain3d/) Bridge**: Generate Terrain3D terrains, use Terrain3D instancing, Terrain3D heightfield inputs
+- **[Terrain3D](https://tokisan.com/terrain3d/) Bridge**: Generate Terrain3D terrains, use Terrain3D instancing, Terrain3D heightfield inputs. This is the separate `hego_terrain3d` addon, installed next to HEGo and Terrain3D
 
 ## Requirements
 
@@ -86,11 +92,13 @@ automated standalone/integration tests use disposable projects.
 ### Testing HEGo in another project
 
 `next` is the development source branch. The **Publish next addon** workflow
-stages four matched refs: `release-next` (HEGo), `strata-release-next`
+stages five matched refs: `release-next` (HEGo), `strata-release-next`
 (Strata, the standalone terrain), `hego-strata-release-next` (the bridge that cooks HDAs
-into terrain layers), and `release-next-bundle` (all three in a consumer layout).
-HEGo and Strata each stand alone; only the bridge's package manifest declares
-dependencies, on the other two at the same source revision.
+into terrain layers), `hego-terrain3d-release-next` (the Terrain3D bridge), and
+`release-next-bundle` (all four in a consumer layout).
+HEGo and Strata each stand alone; only the bridges' package manifests declare
+dependencies: HEGo Strata on the other two, HEGo Terrain3D on HEGo, each at the same
+source revision. HEGo Terrain3D also names Terrain3D as an external requirement.
 Every package records `SOURCE_COMMIT`; native build receipts must match the
 selected source revision before staging. Each publication is a child of its
 previous publication, uses an atomic non-force push, and does not
@@ -105,9 +113,11 @@ git submodule add -b release-next https://github.com/peterprickarz/hego.git addo
 
 That is all HEGo needs. To cook HDAs into Strata layers, also install
 `strata-release-next` at `addons/strata` and `hego-strata-release-next`
-at `addons/hego_strata`, or use `release-next-bundle` and place its three
-directories in the project's `addons/` directory. Strata can also be installed
-alone, without HEGo or Houdini.
+at `addons/hego_strata`. For Terrain3D, install `hego-terrain3d-release-next` at
+`addons/hego_terrain3d` and Terrain3D itself at `addons/terrain_3d`. Or use
+`release-next-bundle` and place its four directories in the project's `addons/`
+directory (Terrain3D is not in it). Strata can also be installed alone, without
+HEGo or Houdini.
 
 For an existing, genuine submodule, change its tracking branch from the consumer's
 repository root, then deliberately update and commit the tested pin:
@@ -253,8 +263,10 @@ scripts/generate_docs.sh            # rewrites docs/classes from the class refer
 python -m sphinx -W -b html docs docs/_build/html
 ```
 
-`generate_gdscript_docs.sh` needs Godot (set `GODOT` to pick the binary) and writes
-`demo/addons/hego/doc_classes_gdscript/`, which is committed so the site builds without it.
+`generate_gdscript_docs.sh` needs Godot (set `GODOT` to pick the binary) and writes the
+`doc_classes_gdscript/` directory of HEGo and of both bridge addons (`hego_strata`,
+`hego_terrain3d`), each documenting its own classes; they are committed so the site builds
+without Godot.
 A class with no place in the tree fails `generate_docs.sh`; add it to a group in
 `scripts/class_tree.py`.
 

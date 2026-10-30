@@ -1,6 +1,6 @@
 # Development package layout
 
-`scripts/publish-next.sh` creates four matched package refs from one committed
+`scripts/publish-next.sh` creates five matched package refs from one committed
 source revision. The publisher validates both native build manifests before it
 stages or pushes anything. Each package records its source revision in
 `SOURCE_COMMIT` and `PACKAGE.json`.
@@ -11,16 +11,36 @@ accept the matched update leaves all published refs unchanged.
 | --- | --- | --- |
 | `release-next` | HEGo addon root | Standalone HEGo at `addons/hego`, the same single-addon submodule path as before. It needs no other package. |
 | `strata-release-next` | Strata addon root | Standalone Strata at `addons/strata`; it needs neither HEGo nor Houdini. |
-| `hego-strata-release-next` | HEGo Strata addon root | The bridge at `addons/hego_strata`, for cooking HDAs into terrain layers. Requires the other two. |
-| `release-next-bundle` | `hego/`, `strata/` and `hego_strata/` | Copy the three directories into a Godot project's `addons/` directory. |
+| `hego-strata-release-next` | HEGo Strata addon root | The bridge at `addons/hego_strata`, for cooking HDAs into Strata layers. Requires HEGo and Strata. |
+| `hego-terrain3d-release-next` | HEGo Terrain3D addon root | The Terrain3D bridge at `addons/hego_terrain3d`: Terrain3D heightfield inputs, terrains and instancing. Requires HEGo and the Terrain3D addon. |
+| `release-next-bundle` | `hego/`, `strata/`, `hego_strata/` and `hego_terrain3d/` | Copy the four directories into a Godot project's `addons/` directory. Terrain3D is not included. |
 
 Dependencies point one way. The HEGo and Strata manifests declare no package
-dependencies; the bridge manifest requires `release-next` and
-`strata-release-next` at its own `SOURCE_COMMIT`. The bundle contains all three
-addon trees so a consumer can install the matched set in one operation. The
-bridge contains no native code, so it has no build receipt. Its native extension
-is built from `SConstruct.terrain` using godot-cpp and does not invoke SCons's
-Houdini-dependent HEGo build.
+dependencies; the HEGo Strata manifest requires `release-next` and
+`strata-release-next` at its own `SOURCE_COMMIT`, and the HEGo Terrain3D manifest
+requires `release-next` at its own `SOURCE_COMMIT`. Terrain3D itself is
+TokisanGames' addon, not one of these packages, so the HEGo Terrain3D manifest
+names it under `external_requires` instead: Terrain3D at `addons/terrain_3d`,
+tested with 1.0.1 and installed by the user. The bundle contains all four
+addon trees so a consumer can install the matched set in one operation, and
+repeats that external requirement; a project without Terrain3D leaves out
+`hego_terrain3d/`. Neither bridge contains native code, so neither has a build
+receipt, and the publisher validates receipts for HEGo and Strata only. Strata's
+native extension is built from `SConstruct.terrain` using godot-cpp and does not
+invoke SCons's Houdini-dependent HEGo build.
+
+The HEGo Terrain3D manifest, with `<sha>` the source revision:
+
+```json
+{
+  "format_version": 1,
+  "package": "hego-terrain3d",
+  "addon_path": "addons/hego_terrain3d",
+  "source_commit": "<sha>",
+  "requires": [{"package": "hego", "branch": "release-next", "addon_path": "addons/hego", "source_commit": "<sha>"}],
+  "external_requires": [{"name": "Terrain3D", "author": "TokisanGames", "url": "https://github.com/TokisanGames/Terrain3D", "addon_path": "addons/terrain_3d", "tested_version": "1.0.1", "installed_by": "user"}]
+}
+```
 
 ## Platform scope and release gate
 
@@ -94,8 +114,9 @@ revision into a package.
 
 ## Validate package staging without publishing
 
-The dry-run validates receipts, builds all three trees locally, and prints the
-prospective tree IDs without contacting a remote:
+The dry-run validates receipts, builds all five trees locally, and prints the
+prospective tree IDs without contacting a remote. An addon directory missing from
+the source revision stops it with an error rather than staging an empty package:
 
 ```bash
 scripts/publish-next.sh origin HEAD --dry-run

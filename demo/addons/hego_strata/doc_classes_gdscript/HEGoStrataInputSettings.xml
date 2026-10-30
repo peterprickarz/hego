@@ -1,0 +1,47 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoStrataInputSettings" inherits="VBoxContainer" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		The terrain options HEGo's panel shows in an input row that reads a terrain layer. [HEGoStrataInput] creates it; see [method HEGoInputHandler.create_settings_editor].
+	</brief_description>
+	<description>
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="load_settings">
+			<return type="void" />
+			<param index="0" name="settings" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="get_settings">
+			<return type="Dictionary" />
+			<description>
+				terrain_spacing is always written, so 0 replaces a spacing stored earlier. Per-channel spacings and the sample budget are not edited here and stay as stored.
+			</description>
+		</method>
+		<method name="refresh">
+			<return type="void" />
+			<param index="0" name="_host" type="Node" />
+			<param index="1" name="nodes" type="Array" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="mode" type="OptionButton" setter="" getter="">
+		</member>
+		<member name="channels" type="LineEdit" setter="" getter="">
+		</member>
+		<member name="spacing" type="SpinBox" setter="" getter="">
+		</member>
+		<member name="status_label" type="Label" setter="" getter="">
+		</member>
+	</members>
+	<signals>
+		<signal name="changed">
+			<description>
+			</description>
+		</signal>
+	</signals>
+</class>

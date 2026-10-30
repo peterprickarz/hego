@@ -10,7 +10,7 @@
 HEGoTerrain3DInstancer
 ======================
 
-**Inherits:** ``RefCounted``
+**Inherits:** :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` **<** ``RefCounted``
 
 Scatters scenes onto an existing Terrain3D through its instancer.
 
@@ -19,7 +19,7 @@ Scatters scenes onto an existing Terrain3D through its instancer.
 Description
 -----------
 
-The point fetch groups points by terrain node path and then by scene path, so one HDA can populate several terrains with several scenes each. Slots HEGo generated on a previous cook are recognised by their ``hegot3d_`` name prefix and reused, which keeps hand-authored mesh assets untouched.
+The point fetch groups points by terrain node path and then by scene path, so one HDA can populate several terrains with several scenes each. Slots HEGo generated on a previous cook are recognised by their ``hegot3d_`` name prefix and reused, which keeps hand-authored mesh assets untouched.  HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; HEGo never names it. It does not report ``handles_heightfields()``: it reads points, not volumes, and does nothing for a cook whose points lack :ref:`INSTANCING_FILTER_ATTRIB<class_HEGoTerrain3DInstancer_constant_INSTANCING_FILTER_ATTRIB>`.
 
 .. rst-class:: classref-reftable-group
 
@@ -29,15 +29,15 @@ Methods
 .. table::
    :widths: auto
 
-   +------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Array``  | :ref:`point_attribs<class_HEGoTerrain3DInstancer_method_point_attribs>`\ (\ ) |static|                                                |
-   +------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | ``String`` | :ref:`output_phase<class_HEGoTerrain3DInstancer_method_output_phase>`\ (\ ) |static|                                                  |
-   +------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | ``bool``   | :ref:`should_handle<class_HEGoTerrain3DInstancer_method_should_handle>`\ (\ summary\: ``Dictionary``\ ) |static|                      |
-   +------------+---------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|     | :ref:`handle<class_HEGoTerrain3DInstancer_method_handle>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static| |
-   +------------+---------------------------------------------------------------------------------------------------------------------------------------+
+   +------------+------------------------------------------------------------------------------------------------------------------------------+
+   | ``Array``  | :ref:`point_attribs<class_HEGoTerrain3DInstancer_method_point_attribs>`\ (\ ) |static|                                       |
+   +------------+------------------------------------------------------------------------------------------------------------------------------+
+   | ``String`` | :ref:`output_phase<class_HEGoTerrain3DInstancer_method_output_phase>`\ (\ )                                                  |
+   +------------+------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``   | :ref:`should_handle<class_HEGoTerrain3DInstancer_method_should_handle>`\ (\ summary\: ``Dictionary``\ )                      |
+   +------------+------------------------------------------------------------------------------------------------------------------------------+
+   | |void|     | :ref:`handle<class_HEGoTerrain3DInstancer_method_handle>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |
+   +------------+------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -125,7 +125,7 @@ Attributes this handler reads off each instanced point: the shared orientation s
 
 .. rst-class:: classref-method
 
-``String`` **output_phase**\ (\ ) |static| :ref:`🔗<class_HEGoTerrain3DInstancer_method_output_phase>`
+``String`` **output_phase**\ (\ ) :ref:`🔗<class_HEGoTerrain3DInstancer_method_output_phase>`
 
 Name of the cook phase this handler is timed under.
 
@@ -137,7 +137,7 @@ Name of the cook phase this handler is timed under.
 
 .. rst-class:: classref-method
 
-``bool`` **should_handle**\ (\ summary\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoTerrain3DInstancer_method_should_handle>`
+``bool`` **should_handle**\ (\ summary\: ``Dictionary``\ ) :ref:`🔗<class_HEGoTerrain3DInstancer_method_should_handle>`
 
 Whether the cook produced points flagged for Terrain3D instancing.
 
@@ -149,7 +149,7 @@ Whether the cook produced points flagged for Terrain3D instancing.
 
 .. rst-class:: classref-method
 
-|void| **handle**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static| :ref:`🔗<class_HEGoTerrain3DInstancer_method_handle>`
+|void| **handle**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) :ref:`🔗<class_HEGoTerrain3DInstancer_method_handle>`
 
 Fetches the cook's instancing points and populates the terrains.
 
@@ -172,4 +172,4 @@ Class Registration
 ------------------
 
 - Kind: GDScript class
-- Script: ``res://addons/hego/node3d/hego_terrain3d_instancer.gd``
+- Script: ``res://addons/hego_terrain3d/hego_terrain3d_instancer.gd``

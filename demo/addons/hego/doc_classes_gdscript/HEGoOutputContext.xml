@@ -68,7 +68,7 @@
 	</methods>
 	<members>
 		<member name="host" type="Node" setter="" getter="">
-			The node this cook belongs to.  Output normally goes under [method outputs_root] rather than directly here. A handler that must parent somewhere else needs the host itself, which is why it is exposed: [HEGoTerrain3DOutput] deliberately builds outside the subtree a cook rebuilds, so the terrain it spawns survives recooking.
+			The node this cook belongs to.  Output normally goes under [method outputs_root] rather than directly here. A handler that must parent somewhere else needs the host itself, which is why it is exposed: the HEGo Terrain3D bridge's terrain output deliberately builds outside the subtree a cook rebuilds, so the terrain it spawns survives recooking.
 		</member>
 		<member name="asset" type="HEGoAssetNode" setter="" getter="">
 			The Houdini node whose cook this is.

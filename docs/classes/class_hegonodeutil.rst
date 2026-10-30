@@ -34,6 +34,8 @@ Methods
    +----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Dictionary`` | :ref:`checked_task<class_HEGoNodeUtil_method_checked_task>`\ (\ host\: ``Variant``, task\: :ref:`HEGoTask<class_HEGoTask>`\ ) |static|                                                                          |
    +----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`global_subclasses<class_HEGoNodeUtil_method_global_subclasses>`\ (\ base\: ``StringName``\ ) |static|                                                                                                     |
+   +----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``bool``       | :ref:`output_has<class_HEGoNodeUtil_method_output_has>`\ (\ summary\: ``Dictionary``, key\: ``String``\ ) |static|                                                                                              |
    +----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``bool``       | :ref:`output_has_attribute<class_HEGoNodeUtil_method_output_has_attribute>`\ (\ summary\: ``Dictionary``, list_key\: ``String``, attribute\: ``String``\ ) |static|                                             |
@@ -106,6 +108,18 @@ Waits for ``task`` to finish and returns its result, or ``null`` if it failed or
 ``Dictionary`` **checked_task**\ (\ host\: ``Variant``, task\: :ref:`HEGoTask<class_HEGoTask>`\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_checked_task>`
 
 Waits for ``task`` like :ref:`await_task()<class_HEGoNodeUtil_method_await_task>`, but reports the outcome rather than logging it: ``{ok: true, value}``, or ``{ok: false, message}`` when the task failed, was null, or ``host`` left the scene tree while it waited.  Use this where failure has to be told apart from a task that legitimately completed with null, which is what HEGo returns for work it could skip.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoNodeUtil_method_global_subclasses:
+
+.. rst-class:: classref-method
+
+``Dictionary`` **global_subclasses**\ (\ base\: ``StringName``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_global_subclasses>`
+
+Every global class that extends ``base``, directly or through other global classes, as a dictionary from class name to script path. ``base`` itself is not included.  Reads ``ProjectSettings.get_global_class_list()``, which exported games have too. This is how HEGo finds the :ref:`HEGoInputHandler<class_HEGoInputHandler>`\ s and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`\ s other addons provide.
 
 .. rst-class:: classref-item-separator
 

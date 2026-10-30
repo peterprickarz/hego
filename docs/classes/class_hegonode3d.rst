@@ -188,7 +188,7 @@ Instantiates the HDA if needed, pushes inputs and parameters, cooks it and rebui
 
 ``Array`` **output_handlers**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_output_handlers>`
 
-The output handlers a cook runs, in the order it runs them.  Each is a script with ``output_phase()``, ``should_handle(summary)`` and ``handle(context)``. Override this in a subclass to add one of your own, to drop one this node does not need, or to change the order.  A function rather than a constant, because GDScript cannot build a constant out of other classes' references, and because the Terrain3D pair can then be left out entirely when that addon is absent rather than being asked on every cook.
+The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh and object output, then every :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` other addons provide (see :ref:`HEGoOutputHandler.extension_handlers()<class_HEGoOutputHandler_method_extension_handlers>`), then curve output.  Each has ``output_phase()``, ``should_handle(summary)`` and ``handle(context)``: HEGo's own are scripts with those as static functions, the extension handlers are instances. Override this in a subclass to add one of your own, to drop one this node does not need, or to change the order.  A function rather than a constant, because GDScript cannot build a constant out of other classes' references, and because the extension handlers are discovered at run time.
 
 .. rst-class:: classref-item-separator
 

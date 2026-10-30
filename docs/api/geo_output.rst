@@ -183,8 +183,8 @@ everything else, and the part list is already known from the cook.
 
 Each built-in handler exposes ``should_handle(summary)`` deciding from it, so the
 requirement stays next to the code that has it: mesh output wants ``has_mesh``,
-object spawning wants points carrying ``hego_spawn``, Terrain3D output wants
-volume parts, and so on. Your own handler can do the same.
+object spawning wants points carrying ``hego_spawn``, the HEGo Terrain3D bridge's terrain
+output wants volume parts, and so on. Your own handler can do the same.
 
 The rule is deliberately one-sided: **anything unknown means the handler runs**. A
 summary that could not be read, or that is missing a key, costs a little time

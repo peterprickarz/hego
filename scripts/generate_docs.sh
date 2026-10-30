@@ -4,9 +4,10 @@
 # docs/index.rst points at. Read the Docs runs this before every Sphinx build, so it must
 # work with nothing but python3 and curl.
 #
-# There are two XML sources. demo/addons/hego/doc_classes is hand-written and describes the
-# C++ classes; demo/addons/hego/doc_classes_gdscript is generated from the GDScript classes'
-# ## comments by scripts/generate_gdscript_docs.sh, which needs Godot and is run by hand.
+# There are two kinds of XML source. demo/addons/hego/doc_classes is hand-written and
+# describes the C++ classes; each addon's doc_classes_gdscript - HEGo's and the two bridges',
+# hego_strata and hego_terrain3d - is generated from its GDScript classes' ## comments by
+# scripts/generate_gdscript_docs.sh, which needs Godot and is run by hand.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,8 +15,15 @@ DOCS_DIR="$ROOT_DIR/docs"
 TOOLS_DIR="$DOCS_DIR/.tools"
 TOOLS_MISC_DIR="$TOOLS_DIR/misc/utility"
 XML_SRC_DIR="$ROOT_DIR/demo/addons/hego/doc_classes"
-GDSCRIPT_XML_SRC_DIR="$ROOT_DIR/demo/addons/hego/doc_classes_gdscript"
-GDSCRIPT_SRC_DIR="$ROOT_DIR/demo/addons/hego"
+# Keep in step with ADDONS in scripts/generate_gdscript_docs.sh.
+GDSCRIPT_ADDONS=(hego hego_strata hego_terrain3d)
+GDSCRIPT_XML_SRC_DIRS=()
+GDSCRIPT_TREE_ARGS=()
+for addon in "${GDSCRIPT_ADDONS[@]}"; do
+  GDSCRIPT_XML_SRC_DIRS+=("$ROOT_DIR/demo/addons/$addon/doc_classes_gdscript")
+  GDSCRIPT_TREE_ARGS+=(--gdscript-xml "$ROOT_DIR/demo/addons/$addon/doc_classes_gdscript")
+  GDSCRIPT_TREE_ARGS+=(--gdscript-src "$ROOT_DIR/demo/addons/$addon")
+done
 RST_OUT_DIR="$DOCS_DIR/classes"
 TMP_RST_DIR="$DOCS_DIR/.tmp_rst"
 STUB_XML_DIR="$DOCS_DIR/.tmp_stub_xml"
@@ -36,7 +44,7 @@ if [[ -d "$LEGACY_TOOLS_DIR/godot-master" ]]; then
   rm -rf "$LEGACY_TOOLS_DIR/godot-master"
 fi
 
-for required_dir in "$XML_SRC_DIR" "$GDSCRIPT_XML_SRC_DIR"; do
+for required_dir in "$XML_SRC_DIR" "${GDSCRIPT_XML_SRC_DIRS[@]}"; do
   if [[ ! -d "$required_dir" ]]; then
     echo "Error: XML source directory not found: $required_dir"
     exit 1
@@ -80,10 +88,14 @@ STUB_EOF
 
 # make_rst.py miscomputes grid-table widths for GDScript typed arrays (type="X[]"), which
 # docutils then rejects. The class reference shows those as plain Array; the member
-# descriptions name the element type.
+# descriptions name the element type. The addons' XML goes into one directory, which works
+# because a class name is global to the project.
 GDSCRIPT_XML_DIR="$DOCS_DIR/.tmp_gdscript_xml"
 rm -rf "$GDSCRIPT_XML_DIR"
-cp -r "$GDSCRIPT_XML_SRC_DIR" "$GDSCRIPT_XML_DIR"
+mkdir -p "$GDSCRIPT_XML_DIR"
+for source_dir in "${GDSCRIPT_XML_SRC_DIRS[@]}"; do
+  cp "$source_dir"/*.xml "$GDSCRIPT_XML_DIR"/
+done
 sed -i -E 's/type="([A-Za-z0-9_]+)\[\]"/type="Array"/g' "$GDSCRIPT_XML_DIR"/*.xml
 
 echo "Generating .rst class reference files from XML..."
@@ -106,8 +118,7 @@ python3 "$ROOT_DIR/scripts/class_tree.py" \
   --generated "$TMP_RST_DIR" \
   --out "$RST_OUT_DIR" \
   --cpp-xml "$XML_SRC_DIR" \
-  --gdscript-xml "$GDSCRIPT_XML_SRC_DIR" \
-  --gdscript-src "$GDSCRIPT_SRC_DIR" \
+  "${GDSCRIPT_TREE_ARGS[@]}" \
   --register-types "$REGISTER_TYPES_CPP"
 
 rm -rf "$STUB_XML_DIR" "$GDSCRIPT_XML_DIR"

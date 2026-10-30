@@ -18,7 +18,7 @@
 		<method name="output_handlers">
 			<return type="Array" />
 			<description>
-				The output handlers a cook runs, in the order it runs them.  Each is a script with [code]output_phase()[/code], [code]should_handle(summary)[/code] and [code]handle(context)[/code]. Override this in a subclass to add one of your own, to drop one this node does not need, or to change the order.  A function rather than a constant, because GDScript cannot build a constant out of other classes' references, and because the Terrain3D pair can then be left out entirely when that addon is absent rather than being asked on every cook.
+				The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh and object output, then every [HEGoOutputHandler] other addons provide (see [method HEGoOutputHandler.extension_handlers]), then curve output.  Each has [code]output_phase()[/code], [code]should_handle(summary)[/code] and [code]handle(context)[/code]: HEGo's own are scripts with those as static functions, the extension handlers are instances. Override this in a subclass to add one of your own, to drop one this node does not need, or to change the order.  A function rather than a constant, because GDScript cannot build a constant out of other classes' references, and because the extension handlers are discovered at run time.
 			</description>
 		</method>
 		<method name="cook_extensions">

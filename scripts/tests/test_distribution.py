@@ -3,6 +3,7 @@ from pathlib import Path
 import subprocess as sp
 import tempfile
 import os
+import json
 repo=Path(__file__).resolve().parents[2]
 env=os.environ | dict(GIT_AUTHOR_NAME="Test",GIT_AUTHOR_EMAIL="test@example.org",GIT_COMMITTER_NAME="Test",GIT_COMMITTER_EMAIL="test@example.org")
 def run(*cmd,cwd=None,ok=True):
@@ -28,6 +29,8 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     terrain=source/"demo/addons/strata"; terrain.mkdir(parents=True)
     bridge=source/"demo/addons/hego_strata"; bridge.mkdir(parents=True)
     (bridge/"plugin.cfg").write_text("bridge plugin")
+    terrain3d_bridge=source/"demo/addons/hego_terrain3d"; terrain3d_bridge.mkdir(parents=True)
+    (terrain3d_bridge/"plugin.cfg").write_text("terrain3d bridge plugin")
     for addon, extension, libs in (
         (hego, "hego", ("libhego.linux.template_debug.x86_64.so", "libhego.linux.template_release.x86_64.so")),
         (terrain, "strata", ("libstrata.linux.template_debug.x86_64.so", "libstrata.linux.template_release.x86_64.so")),
@@ -94,6 +97,7 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
         return run(*args,cwd=source)
     dry=publish("--dry-run")
     assert "DRY RUN release-next" in dry and "DRY RUN strata-release-next" in dry and "DRY RUN hego-strata-release-next" in dry and "DRY RUN release-next-bundle" in dry
+    assert "DRY RUN hego-terrain3d-release-next" in dry
     assert not git(remote,"branch","--list")
     publish()
     first=git(remote,"rev-parse","release-next")
@@ -121,6 +125,10 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     assert git(remote,"show","release-next-bundle:hego/bin/hego.gdextension").startswith("[libraries]")
     assert git(remote,"show","release-next-bundle:strata/bin/strata.gdextension").startswith("[libraries]")
     assert git(remote,"show","release-next-bundle:hego_strata/plugin.cfg")=="bridge plugin"
+    assert git(remote,"show","release-next-bundle:hego_terrain3d/plugin.cfg")=="terrain3d bridge plugin"
+    terrain3d_package=json.loads(git(remote,"show","hego-terrain3d-release-next:PACKAGE.json"))
+    assert [(item["package"], item["branch"]) for item in terrain3d_package["requires"]]==[("hego","release-next")]
+    assert terrain3d_package["external_requires"][0]["name"]=="Terrain3D" and terrain3d_package["external_requires"][0]["addon_path"]=="addons/terrain_3d"
     assert git(remote,"show","release-next-bundle:hego/bin/libhego.linux.template_debug.x86_64.so")=="fresh-hego-libhego.linux.template_debug.x86_64.so"
     assert git(remote,"show","release-next-bundle:strata/bin/libstrata.linux.template_debug.x86_64.so")=="fresh-strata-libstrata.linux.template_debug.x86_64.so"
     publish(); assert git(remote,"rev-parse","release-next")==first

@@ -12,6 +12,8 @@ HEGoInputHandler
 
 **Inherits:** ``RefCounted``
 
+**Inherited By:** :ref:`HEGoStrataInput<class_HEGoStrataInput>`, :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
+
 Teaches HEGo to send another kind of Godot node to an HDA input.
 
 .. rst-class:: classref-introduction-group
@@ -19,7 +21,7 @@ Teaches HEGo to send another kind of Godot node to an HDA input.
 Description
 -----------
 
-HEGo itself handles paths, meshes, CSG shapes, graph inputs and Terrain3D. Another addon adds a kind by extending this class and giving it a ``class_name``: HEGo finds every global class that extends it, in the editor and in exported games alike, so installing that addon is all it takes. The dependency only runs one way. The extending addon names HEGo's classes; HEGo never names the addon's.  Every method has a default that handles nothing, so a handler overrides only what it needs. Handlers are created once and reused, so keep per-input state in the input node :ref:`sync()<class_HEGoInputHandler_method_sync>` returns, not on the handler.
+HEGo itself handles paths, meshes, CSG shapes and graph inputs; the HEGo Strata and HEGo Terrain3D bridges add terrains. Another addon adds a kind by extending this class and giving it a ``class_name``: HEGo finds every global class that extends it, in the editor and in exported games alike, so installing that addon is all it takes. The dependency only runs one way. The extending addon names HEGo's classes; HEGo never names the addon's.  Every method has a default that handles nothing, so a handler overrides only what it needs. Handlers are created once and reused, so keep per-input state in the input node :ref:`sync()<class_HEGoInputHandler_method_sync>` returns, not on the handler.
 
 .. rst-class:: classref-reftable-group
 
@@ -68,7 +70,7 @@ Whether this handler turns ``node`` into an input. Also decides whether the node
 
 ``Dictionary`` **sync**\ (\ _host\: ``Node``, _existing_node\: ``Variant``, _node\: ``Node``, _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoInputHandler_method_sync>`
 
-Creates or updates the HEGo input node for ``node``.  ``existing_node`` is the input node this HDA input used last cook, possibly of another type; reuse it when it fits. ``settings`` is the input's settings dictionary from the input stash. During a cook it also carries ``_cook``, the dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s share, so a handler can pick up what an extension prepared for this cook.  Returns ``{ok: true, node}``, or ``{ok: false, message}`` when the input could not be sent, which stops the cook with the previous output left in place.
+Creates or updates the HEGo input node for ``node``.  ``existing_node`` is the input node this HDA input used last cook, possibly of another type; reuse it when it fits. ``settings`` is the input's settings dictionary from the input stash. During a cook it also carries ``_cook``, the dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s share, so a handler can pick up what an extension prepared for this cook, and ``_input_path`` (:ref:`HEGoInputNodes.INPUT_PATH_KEY<class_HEGoInputNodes_constant_INPUT_PATH_KEY>`), the path the input was resolved from, which HEGo's own inputs send as ``_hego_node_path``.  Returns ``{ok: true, node}``, or ``{ok: false, message}`` when the input could not be sent, which stops the cook with the previous output left in place.
 
 .. rst-class:: classref-item-separator
 

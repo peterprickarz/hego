@@ -19,6 +19,11 @@ and what it does with them is :doc:`/api/node3d_modules`.
 - Spawning nodes by class name and setting most properties
 - Spawning scenes by resource path
 
+The Terrain3D items need the HEGo Terrain3D bridge addon (``addons/hego_terrain3d``) next to
+HEGo and Terrain3D; it adds them through
+:ref:`HEGoInputHandler<class_HEGoInputHandler>` and
+:ref:`HEGoOutputHandler<class_HEGoOutputHandler>`. See :doc:`/api/node3d_modules`.
+
 Usage
 -----
 
@@ -37,7 +42,8 @@ reopens. It is off by default for existing scenes.
 
 Each cook discovers the selected nodes and their compatible descendants,
 recursively and in scene-tree order. Supported sources are Path3D,
-HEGoGraphInput3D, MeshInstance3D, CSGShape3D and Terrain3D. Empty mesh/path/graph
+HEGoGraphInput3D, MeshInstance3D, CSGShape3D and, with the HEGo Terrain3D bridge,
+Terrain3D. Empty mesh/path/graph
 sources are skipped; hidden authoring sources are included. Adding, removing,
 renaming or reparenting children takes effect on the next cook without editing
 the list. Overlapping selections feed each source only once.
@@ -125,7 +131,8 @@ Inputs
 The following sections describe what ``HEGoNode3D`` sends into Houdini when you connect different
 Godot node types as HDA inputs.
 
-Supported input types include Path3D, MeshInstance3D, CSGShape3D, and Terrain3D.
+Supported input types include Path3D, MeshInstance3D, CSGShape3D, and, with the HEGo
+Terrain3D bridge addon, Terrain3D.
 
 .. toctree::
    :maxdepth: 2
@@ -136,7 +143,8 @@ Outputs
 -------
 
 The following sections describe output-side attributes read after cook. Choose the output type
-that best fits your use case: geometry, instancing, object spawning, or Terrain3D.
+that best fits your use case: geometry, instancing, object spawning, or Terrain3D (with the
+HEGo Terrain3D bridge addon).
 
 .. toctree::
    :maxdepth: 2
