@@ -1,4 +1,4 @@
-[gd_scene load_steps=57 format=4 uid="uid://dgirr7lofrano"]
+[gd_scene load_steps=65 format=4 uid="uid://dgirr7lofrano"]
 
 [ext_resource type="Script" uid="uid://bi8r4ieqeir4b" path="res://island/authoring_level.gd" id="1_xvlrx"]
 [ext_resource type="Script" uid="uid://be5gtust1fosq" path="res://addons/strata/strata_terrain_3d.gd" id="2_esx07"]
@@ -19,6 +19,10 @@
 [ext_resource type="Resource" path="res://island/terrain/coarse_erosion/sand.res" id="48_3jk0b"]
 [ext_resource type="Resource" path="res://island/terrain/coarse_erosion/scree.res" id="49_s82hw"]
 [ext_resource type="Resource" path="res://island/terrain/coarse_erosion/sediment.res" id="50_qojdi"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/material_coastal_sand.res" id="coarse_erosion_coastal_sand"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/material_island_grass.res" id="coarse_erosion_island_grass"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/material_scree_gravel.res" id="coarse_erosion_scree_gravel"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/material_dark_cliff.res" id="coarse_erosion_dark_cliff"]
 [ext_resource type="StrataLayerData" path="res://island/terrain/manual_fine.res" id="52_pp17k"]
 [ext_resource type="Resource" path="res://island/terrain/detail_erosion/debris.res" id="53_e56s8"]
 [ext_resource type="Resource" path="res://island/terrain/detail_erosion/erosion_delta.res" id="54_82oju"]
@@ -29,6 +33,10 @@
 [ext_resource type="Resource" path="res://island/terrain/detail_erosion/sand.res" id="59_lfdpt"]
 [ext_resource type="Resource" path="res://island/terrain/detail_erosion/scree.res" id="60_y2gv7"]
 [ext_resource type="Resource" path="res://island/terrain/detail_erosion/sediment.res" id="61_5ulx2"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/material_coastal_sand.res" id="detail_erosion_coastal_sand"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/material_island_grass.res" id="detail_erosion_island_grass"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/material_scree_gravel.res" id="detail_erosion_scree_gravel"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/material_dark_cliff.res" id="detail_erosion_dark_cliff"]
 [ext_resource type="StrataLayerData" path="res://island/terrain/building_flatten.res" id="63_1baja"]
 [ext_resource type="Resource" path="res://island/terrain/terrain_tint/terrain_ao.res" id="64_l7iht"]
 [ext_resource type="Resource" path="res://island/terrain/terrain_tint/terrain_tint_b.res" id="65_waqvu"]
@@ -154,7 +162,11 @@ procedural_fields = {
 "rock": ExtResource("47_0227a"),
 "sand": ExtResource("48_3jk0b"),
 "scree": ExtResource("49_s82hw"),
-"sediment": ExtResource("50_qojdi")
+"sediment": ExtResource("50_qojdi"),
+"material_coastal_sand": ExtResource("coarse_erosion_coastal_sand"),
+"material_island_grass": ExtResource("coarse_erosion_island_grass"),
+"material_scree_gravel": ExtResource("coarse_erosion_scree_gravel"),
+"material_dark_cliff": ExtResource("coarse_erosion_dark_cliff")
 }
 procedural_revision = 2
 procedural_status = "Cached procedural result; explicit recook required"
@@ -167,7 +179,11 @@ composition_modes = {
 "rock": 0.0,
 "sand": 0.0,
 "scree": 0.0,
-"sediment": 0.0
+"sediment": 0.0,
+"material_coastal_sand": 0.0,
+"material_island_grass": 0.0,
+"material_scree_gravel": 0.0,
+"material_dark_cliff": 0.0
 }
 
 [node name="ManualFine" type="Node" parent="Terrain"]
@@ -194,7 +210,11 @@ procedural_fields = {
 "rock": ExtResource("58_hbsss"),
 "sand": ExtResource("59_lfdpt"),
 "scree": ExtResource("60_y2gv7"),
-"sediment": ExtResource("61_5ulx2")
+"sediment": ExtResource("61_5ulx2"),
+"material_coastal_sand": ExtResource("detail_erosion_coastal_sand"),
+"material_island_grass": ExtResource("detail_erosion_island_grass"),
+"material_scree_gravel": ExtResource("detail_erosion_scree_gravel"),
+"material_dark_cliff": ExtResource("detail_erosion_dark_cliff")
 }
 procedural_revision = 3
 procedural_status = "Cached procedural result; explicit recook required"
@@ -207,7 +227,11 @@ composition_modes = {
 "rock": 0.0,
 "sand": 0.0,
 "scree": 0.0,
-"sediment": 0.0
+"sediment": 0.0,
+"material_coastal_sand": 0.0,
+"material_island_grass": 0.0,
+"material_scree_gravel": 0.0,
+"material_dark_cliff": 0.0
 }
 
 [node name="BuildingFlatten" type="Node" parent="Terrain"]
