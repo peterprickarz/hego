@@ -12,6 +12,9 @@ static func payload_hashes(data: StrataRuntimeData) -> Dictionary:
 	var payloads := {"heights": data.heights.to_byte_array(), "holes": data.holes, "nav_exclusions": data.nav_exclusions, "lattice": PackedFloat64Array([data.bounds.position.x, data.bounds.position.y, data.bounds.size.x, data.bounds.size.y, data.height_min, data.height_max]).to_byte_array()}
 	for name in data.channels:
 		payloads["channel:" + name] = data.channels[name].values.to_byte_array() + data.channels[name].coverage.to_byte_array()
+	for name in data.nav_profiles:
+		payloads["profile:" + name] = data.nav_profiles[name]
+	payloads["profile_rules"] = var_to_bytes(data.nav_profile_rules)
 	for key in payloads:
 		var context := HashingContext.new()
 		context.start(HashingContext.HASH_SHA256)
@@ -51,6 +54,35 @@ func run() -> void:
 		check(mask.status == int(row.mask_status) and (mask.status != S.OK or absf(mask.value - row.mask) < 0.000000001), "mask at %s" % point)
 	check(holes > 0, "roundtrip covers hole queries")
 
+	# Static navigation profiles load, are reproducible here, and bake.
+	var D := StrataRuntimeData.DEFAULT_NAV_PROFILE
+	check(data.get_nav_profile_names().map(func(name: StringName) -> String: return String(name)) == expected.profiles and data.has_nav_profile(&"wet") and data.has_nav_profile(D), "profiles load from the exported data: %s" % [data.get_nav_profile_names()])
+	check(float(data.get_nav_profile_rule(&"flat_dry").all[0].slope_max) == 20.123456789 and data.get_nav_profile_rule(D) == {"exclusion": true}, "rules load with exact thresholds")
+	for name in data.nav_profiles:
+		check(StrataNavProfiles.evaluate(data, data.get_nav_profile_rule(name)) == data.get_nav_profile_mask(name), "profile %s re-evaluates to its stored mask without the extension" % name)
+	var wet_navigation := StrataNavigation.new()
+	wet_navigation.profile = &"flat_dry"
+	wet_navigation.navigation_layers = 8
+	wet_navigation.tile_cells = 16
+	wet_navigation.use_async = false
+	wet_navigation.data = data
+	terrain.add_child(wet_navigation)
+	var profiled := wet_navigation.bake_region(data.bounds)
+	check(profiled.ok and profiled.regions > 0 and wet_navigation.get_stats().profile == &"flat_dry", "a profiled population bakes without the extension: %s" % profiled)
+	var faces := 0
+	for key_z in range(wet_navigation.get_tile_grid().y):
+		for key_x in range(wet_navigation.get_tile_grid().x):
+			faces += wet_navigation.build_source_faces(wet_navigation.get_tile_cells(Vector2i(key_x, key_z))).size() / 6
+	var open_cells := 0
+	var cells := data.get_cell_resolution()
+	for z in range(cells.y):
+		for x in range(cells.x):
+			open_cells += 0 if data.is_nav_blocked_cell(Vector2i(x, z), &"flat_dry") else 1
+	check(faces == open_cells and open_cells < cells.x * cells.y, "profiled source faces are exactly the open cells (%d)" % open_cells)
+	wet_navigation.profile = &"missing"
+	check(not wet_navigation.bake_region(data.bounds).ok, "a missing profile fails the bake without the extension")
+	wet_navigation.free()
+
 	check(collision.prepare_region(data.bounds).ok, "collision builds without the extension")
 	await physics_frame
 	await physics_frame
@@ -88,6 +120,7 @@ func run() -> void:
 		var loaded: StrataRuntimeData = ResourceLoader.load(path_name, "", ResourceLoader.CACHE_MODE_IGNORE)
 		check(loaded != null and payload_hashes(loaded) == expected.hashes, "%s is bit-identical" % path_name)
 		check(loaded != null and loaded.heights == data.heights and loaded.holes == data.holes and loaded.nav_exclusions == data.nav_exclusions and loaded.channels == data.channels and loaded.channel_names == data.channel_names and loaded.bounds == data.bounds, "%s preserves every payload" % path_name)
+		check(loaded != null and loaded.nav_profiles == data.nav_profiles and loaded.nav_profile_rules == data.nav_profile_rules and loaded.nav_profiles.keys()[0] is StringName and loaded.validate().ok, "%s preserves profiles and exact rules" % path_name)
 		check(loaded.material_ids != null and loaded.material_ids.get_data() == data.material_ids.get_data() and loaded.material_weights.get_data() == data.material_weights.get_data(), "%s preserves material controls" % path_name)
 	var text: StrataRuntimeData = ResourceLoader.load("res://export/runtime_data_text.tres", "", ResourceLoader.CACHE_MODE_IGNORE)
 	check(text != null and payload_hashes(text) == expected.hashes and text.validate().ok, "text resource written by the authoring project is bit-identical here")

@@ -369,6 +369,13 @@ func sample_runtime_height_world(world_position: Vector3) -> Dictionary:
 		return {"status": StrataRuntimeData.Status.NOT_RESIDENT, "value": NAN}
 	return runtime_data.sample_height_world(world_position, global_transform)
 
+## A retained channel of the published bake at a world position ({ok, status,
+## value, coverage}; see StrataRuntimeData.sample_channel()).
+func sample_runtime_channel(name: StringName, world_position: Vector3, interpolation: int = StrataRuntimeData.Interpolation.BILINEAR) -> Dictionary:
+	if runtime_data == null:
+		return {"ok": false, "status": StrataRuntimeData.Status.NOT_RESIDENT, "value": NAN, "coverage": 0.0}
+	return runtime_data.sample_channel_world(name, world_position, global_transform, interpolation)
+
 func _validate_property(property: Dictionary) -> void:
 	if property.name in ["runtime_data", "runtime_bake_stale"]:
 		property.usage |= PROPERTY_USAGE_READ_ONLY

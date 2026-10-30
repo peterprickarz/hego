@@ -114,8 +114,75 @@ func run() -> void:
 	check(data.sample_channel(&"wetness", Vector2(100, 100)).status == S.OUTSIDE, "channel outside bounds")
 	var manifest := data.get_manifest()
 	check(manifest.height_bytes == 35 * 4 and manifest.channels[0].bytes == 35 * 8 and manifest.hole_cells == 3, "manifest bytes: %s" % manifest)
+
+	# Channel lookup: has_channel, ok, exact lattice values, TRIANGLE/BILINEAR.
+	check(data.has_channel(&"wetness") and not data.has_channel(&"unbaked") and not data.has_channel(&"missing"), "has_channel means retained and resident")
+	check(data.sample_channel(&"wetness", data.bounds.position).ok and not data.sample_channel(&"missing", data.bounds.position).ok and not data.sample_channel(&"wetness", Vector2(100, 100)).ok, "ok mirrors an OK status")
+	# A nonplanar, fully covered channel (the fixture heights, so the height
+	# sampler is an independent reference for both interpolations).
+	var relief := data.heights.duplicate()
+	var full := PackedFloat32Array(); full.resize(count); full.fill(1.0)
+	var with_relief := data.channels.duplicate()
+	with_relief["relief"] = {"values": relief, "coverage": full}
+	data.channels = with_relief
+	data.channel_names = PackedStringArray(["wetness", "unbaked", "relief"])
+	check(data.validate().ok and data.has_channel(&"relief"), "second channel validates")
+	var lattice_exact := true
+	for j in range(5):
+		for i in range(7):
+			for mode in [StrataRuntimeData.Interpolation.TRIANGLE, StrataRuntimeData.Interpolation.BILINEAR]:
+				var sampled := data.sample_channel(&"relief", data.bounds.position + Vector2(i, j), mode)
+				lattice_exact = lattice_exact and sampled.ok and sampled.value == relief[j * 7 + i] and sampled.coverage == 1.0
+	check(lattice_exact, "sample_channel returns the stored value at every lattice point in both modes")
+	var channel_gap := 0.0
+	for cell in [Vector2i(0, 0), Vector2i(2, 1), Vector2i(5, 3)]:
+		for f in [Vector2(0.25, 0.25), Vector2(0.75, 0.75), Vector2(0.7, 0.2), Vector2(0.2, 0.7), Vector2(0.5, 0.5)]:
+			var point: Vector2 = data.bounds.position + Vector2(cell) + f
+			var local := data.local_to_lattice(point) - Vector2(cell)
+			var triangle: float = data.sample_channel(&"relief", point, StrataRuntimeData.Interpolation.TRIANGLE).value
+			var bilinear: float = data.sample_channel(&"relief", point, StrataRuntimeData.Interpolation.BILINEAR).value
+			near(triangle, reference_height(data, cell, local), 0.000001, "channel TRIANGLE interpolation cell %s f %s" % [cell, f])
+			near(bilinear, data.sample_height(point, StrataRuntimeData.Interpolation.BILINEAR, true).value, 0.000001, "channel BILINEAR interpolation cell %s f %s" % [cell, f])
+			check(bilinear == data.sample_channel(&"relief", point).value, "BILINEAR is the default channel interpolation")
+			channel_gap = maxf(channel_gap, absf(triangle - bilinear))
+	check(channel_gap > 0.25, "the two channel interpolations differ on a nonplanar cell (%s)" % channel_gap)
+	var channel_transform := Transform3D(Basis(Vector3.UP, deg_to_rad(-71.0)), Vector3(-30.0, 4.0, 12.5))
+	var channel_point := data.bounds.position + Vector2(3.3, 1.7)
+	var channel_world := data.sample_channel_world(&"relief", channel_transform * Vector3(channel_point.x, 99.0, channel_point.y), channel_transform, StrataRuntimeData.Interpolation.TRIANGLE)
+	check(channel_world.ok, "world channel query OK")
+	near(channel_world.value, data.sample_channel(&"relief", channel_point, StrataRuntimeData.Interpolation.TRIANGLE).value, 0.00001, "world channel query maps to terrain-local XZ")
+
+	# Navigation profile accessors without stored profiles: default = exclusions.
+	var D := StrataRuntimeData.DEFAULT_NAV_PROFILE
+	check(data.has_nav_profile(D) and not data.has_nav_profile(&"paths") and data.get_nav_profile_names() == [D], "default profile is always present")
+	check(data.get_nav_profile_rule(D) == {"exclusion": true} and data.get_nav_profile_mask(D) == data.nav_exclusions, "default profile is the nav_exclusions mask")
+	check(data.is_nav_blocked_cell(Vector2i(2, 1)) and data.is_nav_blocked_cell(Vector2i(2, 1), D) and not data.is_nav_blocked_cell(Vector2i(0, 0)), "holes block the default profile")
+	check(data.is_nav_blocked_cell(Vector2i(0, 0), &"paths") and data.get_nav_profile_image(&"paths") == null, "unknown profiles block every cell and have no image")
+	var default_image := data.get_nav_profile_image(D)
+	check(default_image.get_size() == Vector2i(6, 4) and default_image.get_format() == Image.FORMAT_L8, "profile image is L8 cells")
+	var path_mask := cell_mask(Vector2i(6, 4), [Rect2i(0, 0, 3, 4)])
+	data.nav_profiles = {&"paths": path_mask}
+	check(not data.validate().ok, "a stored profile needs its rule")
+	data.nav_profile_rules = {D: {"exclusion": true}, &"paths": {"channel": "relief", "min": 0.0}}
+	check(data.validate().ok and data.has_nav_profile(&"paths") and data.get_nav_profile_names() == [D, &"paths"], "profile with rule validates: %s" % data.validate())
+	check(data.is_nav_blocked_cell(Vector2i(1, 1), &"paths") and not data.is_nav_blocked_cell(Vector2i(3, 1), &"paths") and data.is_nav_blocked_cell(Vector2i(4, 3), &"paths"), "profile cells and holes are blocked for that profile")
+	check(data.get_nav_profile_image(&"paths").get_pixel(1, 1).r == 1.0 and data.get_nav_profile_image(&"paths").get_pixel(3, 1).r == 0.0, "profile image marks blocked cells")
+	var profile_manifest := data.get_manifest()
+	check(profile_manifest.nav_profile_bytes == 24 and profile_manifest.nav_profiles.size() == 2 and profile_manifest.nav_profiles[1].blocked_cells == 12 and profile_manifest.total_bytes == manifest.total_bytes + 35 * 8 + 24, "manifest lists profiles and counts their bytes: %s" % [profile_manifest.nav_profiles])
+	for broken in [{&"paths": PackedByteArray([0, 255])}, {&"paths": PackedByteArray([7]) + path_mask.slice(1)}, {"paths": path_mask}, {D: path_mask}]:
+		data.nav_profiles = broken
+		check(not data.validate().ok, "malformed profile storage rejected: %s" % [broken.keys()])
+	data.nav_profiles = {}
+	check(not data.validate().ok, "a rule without its mask is rejected")
+	data.nav_profile_rules = {}
+	check(data.validate().ok, "profile-free data validates again")
+	var rule_bytes := StrataRuntimeData.new()
+	rule_bytes.set("nav_profile_rule_data", var_to_bytes([1, 2]))
+	check(not rule_bytes.validate().ok, "malformed stored profile rules fail validation")
+
 	data.evict_channel(&"wetness")
 	check(data.sample_channel(&"wetness", data.bounds.position).status == S.NOT_RESIDENT, "evicted channel is NOT_RESIDENT")
+	check(not data.has_channel(&"wetness") and data.channel_names.has("wetness"), "evicted channel stays listed but has_channel is false")
 
 	# Batch and world conversion through translation + yaw.
 	var transform := Transform3D(Basis(Vector3.UP, deg_to_rad(37.0)), Vector3(120.0, -15.0, -42.0))
@@ -208,4 +275,24 @@ func run() -> void:
 		many.append(Vector2(-2000.0 + index * 0.37, 1000.0 - index * 0.11))
 	large.sample_heights(many)
 	print("10k batch height queries: %.1f ms" % ((Time.get_ticks_usec() - started) / 1000.0))
+
+	# A three-term profile (channel, slope, exclusion) on the 4 km / 1 m lattice.
+	var strip := Image.create(4097, 4097, false, Image.FORMAT_RF)
+	strip.fill_rect(Rect2i(2000, 0, 8, 4097), Color(1, 0, 0))
+	var footpath := strip.get_data().to_float32_array()
+	strip = null
+	var excluded := Image.create(4096, 4096, false, Image.FORMAT_L8)
+	excluded.fill_rect(Rect2i(2000, 1000, 8, 16), Color(1, 1, 1))
+	large.channels = {"footpath": {"values": footpath, "coverage": footpath}}
+	large.channel_names = PackedStringArray(["footpath"])
+	large.nav_exclusions = excluded.get_data()
+	excluded = null
+	var rule := {"all": [{"channel": "footpath", "min": 0.5}, {"slope_max": 35.0}, {"exclusion": true}]}
+	started = Time.get_ticks_usec()
+	var evaluated := StrataNavProfiles.evaluate_checked(large, rule)
+	var evaluate_ms := (Time.get_ticks_usec() - started) / 1000.0
+	# Path samples x 2000..2007: cells 1999..2007 have a corner on it, 2000..2006
+	# a mean of 1, 1999 and 2007 a mean of 0.5; 8 x 16 of them are excluded.
+	check(evaluated.ok and evaluated.mask.size() == 4096 * 4096 and evaluated.blocked_cells == 4096 * 4096 - 9 * 4096 + 8 * 16, "4097^2 three-term profile: %s blocked" % evaluated.get("blocked_cells"))
+	print("4097^2 three-term navigation profile evaluate: %.0f ms (%d terms)" % [evaluate_ms, evaluated.get("terms", 0)])
 	finish("RUNTIME_DATA_TEST")

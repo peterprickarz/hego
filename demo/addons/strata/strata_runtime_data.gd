@@ -22,6 +22,8 @@ const MAX_PAYLOAD_BYTES := 512 * 1024 * 1024
 const MACRO_MAX_SIDE := 4097
 const MACRO_TINT_MAX := 2.0
 const MACRO_NEUTRAL := Color(1.0, 1.0, 1.0, 1.0)
+## Navigation profile that is always present: the nav_exclusions mask itself.
+const DEFAULT_NAV_PROFILE := &"default"
 
 @export var format_version := FORMAT_VERSION
 ## Increments on every published bake of the owning terrain.
@@ -30,6 +32,12 @@ const MACRO_NEUTRAL := Color(1.0, 1.0, 1.0, 1.0)
 ## (resolution - 1) cells, row-major. Empty means no masked cells.
 @export var holes := PackedByteArray()
 @export var nav_exclusions := PackedByteArray()
+## Static navigation profiles (StrataNavProfiles): StringName -> canonical cell
+## mask in the holes/nav_exclusions convention, 255 = BLOCKED for that
+## population, empty = nothing blocked. Holes are not repeated in the masks;
+## is_nav_blocked_cell() and StrataNavigation always add them. DEFAULT_NAV_PROFILE
+## is never stored here: it is nav_exclusions (rule {"exclusion": true}).
+@export var nav_profiles := {}
 ## Channels listed here were retained by the bake. Evicted ones stay listed.
 @export var channel_names := PackedStringArray()
 ## Optional renderer controls, stored as validated by the bake.
@@ -75,6 +83,10 @@ var channels: Dictionary = {}:
 		channels = value
 		_payload_checked = false
 		_channel_scans = {}
+## StringName -> the rule Dictionary each profile was evaluated from, including
+## DEFAULT_NAV_PROFILE after a bake. Persisted as var_to_bytes (see
+## _get_property_list) because text resources round float thresholds.
+var nav_profile_rules := {}
 var _decode_error := ""
 var _payload_checked := false
 var _payload_validation: Dictionary = {}
@@ -88,6 +100,8 @@ func _get_property_list() -> Array[Dictionary]:
 		{"name": "height_data", "type": TYPE_PACKED_BYTE_ARRAY, "usage": PROPERTY_USAGE_STORAGE},
 		{"name": "channel_data", "type": TYPE_DICTIONARY, "usage": PROPERTY_USAGE_STORAGE},
 		{"name": "macro_lattice", "type": TYPE_PACKED_BYTE_ARRAY, "usage": PROPERTY_USAGE_STORAGE},
+		{"name": "nav_profile_rule_data", "type": TYPE_PACKED_BYTE_ARRAY, "usage": PROPERTY_USAGE_STORAGE},
+		{"name": "nav_profile_rules", "type": TYPE_DICTIONARY, "usage": shown},
 		{"name": "bounds", "type": TYPE_RECT2, "usage": shown},
 		{"name": "macro_bounds", "type": TYPE_RECT2, "usage": shown},
 		{"name": "height_min", "type": TYPE_FLOAT, "usage": shown},
@@ -108,6 +122,8 @@ func _get(property: StringName) -> Variant:
 		&"macro_lattice":
 			if macro_image == null: return PackedByteArray()
 			return PackedFloat64Array([macro_bounds.position.x, macro_bounds.position.y, macro_bounds.size.x, macro_bounds.size.y]).to_byte_array()
+		&"nav_profile_rule_data":
+			return var_to_bytes(nav_profile_rules) if not nav_profile_rules.is_empty() else PackedByteArray()
 	return null
 
 func _set(property: StringName, value: Variant) -> bool:
@@ -165,6 +181,19 @@ func _set(property: StringName, value: Variant) -> bool:
 			var lattice: PackedFloat64Array = (value as PackedByteArray).to_float64_array()
 			macro_bounds = Rect2(lattice[0], lattice[1], lattice[2], lattice[3])
 			return true
+		&"nav_profile_rule_data":
+			nav_profile_rules = {}
+			if not value is PackedByteArray:
+				_decode_error = "Stored navigation profile rules are malformed"
+				return true
+			if (value as PackedByteArray).is_empty():
+				return true
+			var rules: Variant = bytes_to_var(value)
+			if not rules is Dictionary:
+				_decode_error = "Stored navigation profile rules are malformed"
+				return true
+			nav_profile_rules = rules
+			return true
 	return false
 
 func get_spacing() -> float:
@@ -200,11 +229,24 @@ func validate() -> Dictionary:
 		return _error("Cell masks must have (width - 1) x (height - 1) entries")
 	if not _canonical_mask(holes) or not _canonical_mask(nav_exclusions):
 		return _error("Cell masks must contain only 0 and 255")
+	var profile_bytes := 0
+	for name in nav_profiles:
+		if not name is StringName or String(name).strip_edges().is_empty() or name == DEFAULT_NAV_PROFILE:
+			return _error("Navigation profile names must be nonempty StringNames other than %s" % DEFAULT_NAV_PROFILE)
+		var mask: Variant = nav_profiles[name]
+		if not mask is PackedByteArray or not (mask as PackedByteArray).is_empty() and (mask as PackedByteArray).size() != cells or not _canonical_mask(mask):
+			return _error("Navigation profile %s must be an empty or canonical (width - 1) x (height - 1) cell mask" % name)
+		if not nav_profile_rules.get(name) is Dictionary:
+			return _error("Navigation profile %s has no stored rule" % name)
+		profile_bytes += (mask as PackedByteArray).size()
+	for name in nav_profile_rules:
+		if not name is StringName or not (name == DEFAULT_NAV_PROFILE or nav_profiles.has(name)) or not nav_profile_rules[name] is Dictionary:
+			return _error("Navigation profile rule %s has no matching profile mask" % name)
 	var names := {}
 	for name in channel_names:
 		if name.strip_edges().is_empty() or names.has(name): return _error("Runtime channel manifest names must be nonempty and unique")
 		names[name] = true
-	var payload_bytes := heights.size() * 4 + holes.size() + nav_exclusions.size()
+	var payload_bytes := heights.size() * 4 + holes.size() + nav_exclusions.size() + profile_bytes
 	for name in channels:
 		if not channel_names.has(String(name)):
 			return _error("Channel payload %s is missing from the manifest" % name)
@@ -329,6 +371,14 @@ static func canonicalize_cell_mask(source: Variant, cells: Vector2i) -> Dictiona
 func get_manifest() -> Dictionary:
 	var channel_entries: Array = []
 	var total := heights.size() * 4 + holes.size() + nav_exclusions.size()
+	var profile_entries: Array = [{"name": DEFAULT_NAV_PROFILE, "blocked_cells": nav_exclusions.count(MASK_SET), "bytes": 0, "mask": "nav_exclusions", "rule": get_nav_profile_rule(DEFAULT_NAV_PROFILE)}]
+	var profile_bytes := 0
+	for name in get_nav_profile_names():
+		if name == DEFAULT_NAV_PROFILE: continue
+		var mask: PackedByteArray = nav_profiles[name]
+		profile_entries.append({"name": name, "blocked_cells": mask.count(MASK_SET), "bytes": mask.size(), "mask": "nav_profiles", "rule": get_nav_profile_rule(name)})
+		profile_bytes += mask.size()
+	total += profile_bytes
 	for name in channel_names:
 		var entry: Dictionary = channels.get(name, {})
 		var bytes := 0
@@ -342,7 +392,7 @@ func get_manifest() -> Dictionary:
 	total += material_bytes
 	var macro_bytes := macro_image.get_data().size() if macro_image != null else 0
 	total += macro_bytes
-	return {"format_version": format_version, "bake_revision": bake_revision, "bounds": bounds, "resolution": resolution, "spacing": get_spacing(), "height_bytes": heights.size() * 4, "hole_cells": holes.count(MASK_SET), "nav_excluded_cells": nav_exclusions.count(MASK_SET), "mask_bytes": holes.size() + nav_exclusions.size(), "channels": channel_entries, "material_bytes": material_bytes, "macro_bytes": macro_bytes, "macro_resolution": macro_image.get_size() if macro_image != null else Vector2i.ZERO, "macro_bounds": macro_bounds, "total_bytes": total}
+	return {"format_version": format_version, "bake_revision": bake_revision, "bounds": bounds, "resolution": resolution, "spacing": get_spacing(), "height_bytes": heights.size() * 4, "hole_cells": holes.count(MASK_SET), "nav_excluded_cells": nav_exclusions.count(MASK_SET), "mask_bytes": holes.size() + nav_exclusions.size(), "nav_profiles": profile_entries, "nav_profile_bytes": profile_bytes, "channels": channel_entries, "material_bytes": material_bytes, "macro_bytes": macro_bytes, "macro_resolution": macro_image.get_size() if macro_image != null else Vector2i.ZERO, "macro_bounds": macro_bounds, "total_bytes": total}
 
 ## Frees a retained channel payload while keeping its manifest entry, so later
 ## queries report NOT_RESIDENT instead of ABSENT.
@@ -361,6 +411,9 @@ func duplicate_runtime() -> StrataRuntimeData:
 	copy.height_max = height_max
 	copy.holes = holes.duplicate()
 	copy.nav_exclusions = nav_exclusions.duplicate()
+	for name in nav_profiles:
+		copy.nav_profiles[name] = (nav_profiles[name] as PackedByteArray).duplicate()
+	copy.nav_profile_rules = nav_profile_rules.duplicate(true)
 	copy.channels = channels.duplicate(true)
 	copy.channel_names = channel_names.duplicate()
 	copy.material_ids = material_ids.duplicate() if material_ids != null else null
@@ -477,6 +530,37 @@ func get_hole_image() -> Image:
 func get_nav_exclusion_image() -> Image:
 	return _mask_image(nav_exclusions)
 
+## True for DEFAULT_NAV_PROFILE (always) and every stored profile.
+func has_nav_profile(name: StringName) -> bool:
+	return name == DEFAULT_NAV_PROFILE or nav_profiles.has(name)
+
+## DEFAULT_NAV_PROFILE first, then the stored profiles in name order.
+func get_nav_profile_names() -> Array[StringName]:
+	var names: Array[StringName] = []
+	for name in nav_profiles:
+		names.append(StringName(name))
+	names.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
+	names.push_front(DEFAULT_NAV_PROFILE)
+	return names
+
+## Canonical blocked-cell mask of a profile (255 = blocked, empty = none). The
+## default profile is nav_exclusions. Unknown names return an empty mask; check
+## has_nav_profile() first.
+func get_nav_profile_mask(name: StringName) -> PackedByteArray:
+	if name == DEFAULT_NAV_PROFILE: return nav_exclusions
+	return nav_profiles.get(name, PackedByteArray())
+
+## The rule a profile was evaluated from ({} for an unknown profile).
+func get_nav_profile_rule(name: StringName) -> Dictionary:
+	if nav_profile_rules.has(name): return nav_profile_rules[name]
+	return {"exclusion": true} if name == DEFAULT_NAV_PROFILE else {}
+
+## L8 image of the profile's blocked cells (255), like get_hole_image(); null
+## for an unknown profile.
+func get_nav_profile_image(name: StringName) -> Image:
+	if not has_nav_profile(name): return null
+	return _mask_image(get_nav_profile_mask(name))
+
 func _mask_image(mask: PackedByteArray) -> Image:
 	var cells := get_cell_resolution()
 	if cells.x < 1 or cells.y < 1:
@@ -491,9 +575,12 @@ func is_hole_cell(cell: Vector2i) -> bool:
 func is_nav_excluded_cell(cell: Vector2i) -> bool:
 	return _mask_at(nav_exclusions, cell)
 
-## Hole or navigation exclusion: cells that never carry navigation source faces.
-func is_nav_blocked_cell(cell: Vector2i) -> bool:
-	return _mask_at(holes, cell) or _mask_at(nav_exclusions, cell)
+## Hole, or blocked for the profile (the default profile is nav_exclusions):
+## cells that never carry that profile's navigation source faces. Every cell is
+## blocked for an unknown profile.
+func is_nav_blocked_cell(cell: Vector2i, profile: StringName = DEFAULT_NAV_PROFILE) -> bool:
+	if not has_nav_profile(profile): return true
+	return _mask_at(holes, cell) or _mask_at(get_nav_profile_mask(profile), cell)
 
 func _mask_at(mask: PackedByteArray, cell: Vector2i) -> bool:
 	if mask.is_empty() or cell.x < 0 or cell.y < 0 or cell.x >= resolution.x - 1 or cell.y >= resolution.y - 1:
@@ -612,31 +699,56 @@ func sample_heights_world(world_positions: PackedVector3Array, terrain_transform
 	result.positions = positions
 	return result
 
-## {status, value, coverage}. Coverage-weighted bilinear over defined corners,
-## like native layer sampling; a defined zero is OK, never ABSENT.
-func sample_channel(name: StringName, position: Vector2) -> Dictionary:
+## True when the bake retained the channel and its payload is resident (not
+## evicted), so sample_channel() can return OK.
+func has_channel(name: StringName) -> bool:
+	return channel_names.has(String(name)) and channels.has(String(name))
+
+## {ok, status, value, coverage} in terrain-local XZ. Coverage-weighted over the
+## defined corners, like native layer sampling; a defined zero is OK, never
+## ABSENT. BILINEAR (default) weights all four corners; TRIANGLE uses the
+## canonical (a, b, c) / (b, d, c) triangle containing the point. Channels are
+## resident float32, so a query reads four samples with no decode step.
+func sample_channel(name: StringName, position: Vector2, interpolation: int = Interpolation.BILINEAR) -> Dictionary:
 	if not position.is_finite() or not contains_local(position):
-		return {"status": Status.OUTSIDE, "value": NAN, "coverage": 0.0}
+		return {"ok": false, "status": Status.OUTSIDE, "value": NAN, "coverage": 0.0}
 	if not channel_names.has(String(name)):
-		return {"status": Status.ABSENT, "value": NAN, "coverage": 0.0}
+		return {"ok": false, "status": Status.ABSENT, "value": NAN, "coverage": 0.0}
 	var entry: Dictionary = channels.get(String(name), {})
 	if entry.is_empty():
-		return {"status": Status.NOT_RESIDENT, "value": NAN, "coverage": 0.0}
+		return {"ok": false, "status": Status.NOT_RESIDENT, "value": NAN, "coverage": 0.0}
 	var lattice := local_to_lattice(position)
-	var cell := Vector2i(mini(floori(lattice.x), resolution.x - 2), mini(floori(lattice.y), resolution.y - 2))
+	var cell := Vector2i(clampi(floori(lattice.x), 0, resolution.x - 2), clampi(floori(lattice.y), 0, resolution.y - 2))
 	var f := (lattice - Vector2(cell)).clamp(Vector2.ZERO, Vector2.ONE)
+	# Corner weights of a, b, c, d.
+	var wa := (1.0 - f.x) * (1.0 - f.y)
+	var wb := f.x * (1.0 - f.y)
+	var wc := (1.0 - f.x) * f.y
+	var wd := f.x * f.y
+	if interpolation == Interpolation.TRIANGLE:
+		if f.x + f.y <= 1.0:
+			wa = 1.0 - f.x - f.y; wb = f.x; wc = f.y; wd = 0.0
+		else:
+			wa = 0.0; wb = 1.0 - f.y; wc = 1.0 - f.x; wd = f.x + f.y - 1.0
 	var values: PackedFloat32Array = entry.values
 	var coverage: PackedFloat32Array = entry.coverage
+	var a := cell.y * resolution.x + cell.x
+	var c := a + resolution.x
 	var numerator := 0.0
 	var weight_sum := 0.0
 	var covered := 0.0
-	for corner: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
-		var weight := (f.x if corner.x == 1 else 1.0 - f.x) * (f.y if corner.y == 1 else 1.0 - f.y)
-		var index := (cell.y + corner.y) * resolution.x + cell.x + corner.x
+	for corner in [[a, wa], [a + 1, wb], [c, wc], [c + 1, wd]]:
+		var index: int = corner[0]
+		var weight: float = corner[1]
 		if weight > 0.0 and coverage[index] > 0.0:
 			numerator += values[index] * weight
 			weight_sum += weight
 			covered += coverage[index] * weight
 	if weight_sum <= 0.0:
-		return {"status": Status.ABSENT, "value": NAN, "coverage": 0.0}
-	return {"status": Status.OK, "value": numerator / weight_sum, "coverage": covered}
+		return {"ok": false, "status": Status.ABSENT, "value": NAN, "coverage": 0.0}
+	return {"ok": true, "status": Status.OK, "value": numerator / weight_sum, "coverage": covered}
+
+## World-space sample_channel() through the terrain's global transform.
+func sample_channel_world(name: StringName, world_position: Vector3, terrain_transform: Transform3D, interpolation: int = Interpolation.BILINEAR) -> Dictionary:
+	var local := terrain_transform.affine_inverse() * world_position
+	return sample_channel(name, Vector2(local.x, local.z), interpolation)

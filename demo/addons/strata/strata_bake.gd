@@ -7,6 +7,8 @@ extends RefCounted
 ## previous runtime data and stale state untouched.
 
 const CONTROL_MAX := 1025
+## Preloaded so bakes parse before the editor has registered the class name.
+const NavProfiles := preload("strata_nav_profiles.gd")
 
 ## Cheap in-session identity of everything that affects the compiled stack.
 ## Stored on the terrain after a bake; any difference marks the bake stale.
@@ -34,6 +36,14 @@ static func _error(message: String) -> Dictionary:
 ##     (L8/R8/RF) or bytes, size (width - 1, height - 1). Float >= 0.5 /
 ##     byte >= 128 marks a cell.
 ##   channels: PackedStringArray of custom scalar channels to retain (deduplicated).
+##   nav_profiles: Array of {"name": StringName, "rule": Dictionary} static
+##     navigation profiles (StrataNavProfiles DSL), evaluated after the channels
+##     and masks into data.nav_profiles (255 = blocked) with their rules in
+##     data.nav_profile_rules. Rules may only reference channels retained by
+##     this bake, so every mask is reproducible from the data. The "default"
+##     profile is reserved and always the nav_exclusions mask. Each profile
+##     costs one byte per cell of the payload budget; any invalid rule fails the
+##     bake.
 ##   max_runtime_bytes: aggregate retained payload budget, default/max 512 MiB.
 ##   material_ids (RGBA8) + material_weights (RGBAF/RGBAH): optional controls.
 ##   allow_stale_procedural (false): accept cached procedural results that need
@@ -70,10 +80,13 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 		if not requested_channels.has(name): requested_channels.append(name)
 	var payload_limit := int(options.get("max_runtime_bytes", StrataRuntimeData.MAX_PAYLOAD_BYTES))
 	if payload_limit < 1 or payload_limit > StrataRuntimeData.MAX_PAYLOAD_BYTES: return _error("max_runtime_bytes must be positive and at most 512 MiB")
+	var profiles: Variant = options.get("nav_profiles", [])
+	var profile_check: Dictionary = NavProfiles.validate_profiles(profiles, requested_channels)
+	if not profile_check.ok: return profile_check
 	# Preflight the expensive full-grid custom fields before compiling heights or
 	# allocating any of their value/coverage pairs. Exact mask/control bytes are
-	# added below before the custom-channel loop.
-	var planned_bytes := sample_count * (4 + requested_channels.size() * 8)
+	# added below before the custom-channel loop; profiles count one byte per cell.
+	var planned_bytes := sample_count * (4 + requested_channels.size() * 8) + (resolution.x - 1) * (resolution.y - 1) * (profiles as Array).size()
 	if planned_bytes > payload_limit: return _error("Requested runtime heights/channels exceed the aggregate payload budget")
 	var stale: PackedStringArray = []
 	for layer in terrain.get_layers():
@@ -135,6 +148,9 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 			return channel
 		data.channels[name] = {"values": channel.values, "coverage": channel.coverage}
 		data.channel_names.append(name)
+	var applied: Dictionary = NavProfiles.apply(data, profiles)
+	if not applied.ok:
+		return applied
 	if options.has("material_ids") or options.has("material_weights"):
 		var controls := _check_controls(options.get("material_ids"), options.get("material_weights"))
 		if not controls.ok:
@@ -158,7 +174,7 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	# an externally supplied result can never describe an older stack.
 	if stack_signature(terrain) != signature or not StrataProcedural.token_is_current(compiled.token) or not masks.is_empty() and not StrataProcedural.token_is_current(masks.token) or macro.has("token") and not StrataProcedural.token_is_current(macro.token):
 		return _error("Terrain stack changed while compiling; bake rejected")
-	var report := {"resolution": resolution, "spacing": spacing, "stale_procedural_used": stale, "mask_source": "layers" if not masks.is_empty() else "explicit", "mask_report": masks.get("report", {}), "hole_cells": data.holes.count(StrataRuntimeData.MASK_SET), "nav_excluded_cells": data.nav_exclusions.count(StrataRuntimeData.MASK_SET), "macro": macro.get("report"), "manifest": data.get_manifest(), "cpu_ms": (Time.get_ticks_usec() - started) / 1000.0}
+	var report := {"resolution": resolution, "spacing": spacing, "stale_procedural_used": stale, "mask_source": "layers" if not masks.is_empty() else "explicit", "mask_report": masks.get("report", {}), "hole_cells": data.holes.count(StrataRuntimeData.MASK_SET), "nav_excluded_cells": data.nav_exclusions.count(StrataRuntimeData.MASK_SET), "nav_profiles": applied.report, "nav_profiles_ms": applied.ms, "macro": macro.get("report"), "manifest": data.get_manifest(), "cpu_ms": (Time.get_ticks_usec() - started) / 1000.0}
 	return {"ok": true, "data": data, "signature": signature, "report": report}
 
 ## compile() and publish on success. The terrain's old bake survives failure.

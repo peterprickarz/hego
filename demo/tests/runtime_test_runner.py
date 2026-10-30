@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ADDON = ROOT / "demo" / "addons" / "strata"
 TESTS = Path(__file__).resolve().parent
-RUNTIME_SCRIPTS = ("strata_runtime_data.gd", "strata_collision.gd", "strata_navigation.gd", "strata_render_settings.gd")
+RUNTIME_SCRIPTS = ("strata_runtime_data.gd", "strata_nav_profiles.gd", "strata_collision.gd", "strata_navigation.gd", "strata_render_settings.gd")
 SUITES = ("runtime_data_test.gd", "runtime_collision_test.gd", "runtime_navigation_test.gd", "runtime_bake_test.gd", "runtime_macro_test.gd")
 RUNTIME_ONLY_SUITES = ("runtime_roundtrip_test.gd", "runtime_macro_roundtrip_test.gd")
 PROJECT = """config_version=5

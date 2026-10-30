@@ -2,10 +2,11 @@ class_name StrataNavigation
 extends Node3D
 ## Bounded, tiled navigation for selected gameplay areas. Each tile bakes real
 ## Recast navigation through NavigationServer3D from terrain source triangles
-## (the canonical (a, b, c), (b, d, c) split). Hole and navigation-exclusion
-## cells contribute no faces. Tiles bake padded source geometry and clip to their
-## own rectangle (border_size + filter_baking_aabb), so agent-radius erosion is
-## consistent across tile edges and adjacent regions connect on the shared map.
+## (the canonical (a, b, c), (b, d, c) split). Hole cells and the cells the
+## profile blocks contribute no faces. Tiles bake padded source geometry and
+## clip to their own rectangle (border_size + filter_baking_aabb), so
+## agent-radius erosion is consistent across tile edges and adjacent regions
+## connect on the shared map.
 ##
 ## Map requirement: Godot 4.4 merges region edges by flooring vertices to
 ## cell_size * merge_rasterizer_cell_scale. Recast emits terrain vertices closer
@@ -15,6 +16,16 @@ extends Node3D
 ## clamps smaller values to 0.01), or call NavigationServer3D.map_set_merge_rasterizer_cell_scale()
 ## on the map you own. This node never changes the map. Opt-in diagnostics
 ## predict conflicts and warn with this remedy when any exist.
+##
+## Agent populations: the bake stores one static navigation profile per
+## population (StrataNavProfiles, StrataRuntimeData.nav_profiles). The intended
+## pattern is one StrataNavigation per population, all sharing the same data,
+## each with its own `profile` and its own `navigation_layers` bit; agents then
+## query with that population's layers (NavigationAgent3D.navigation_layers or
+## NavigationServer3D.map_get_path(..., navigation_layers)). Each node bakes its
+## own regions, so populations never see each other's walkable areas. Godot's
+## map edge merge ignores layers, so two nodes baking the same profile and
+## settings on one map duplicate every edge; give identical populations one node.
 
 signal bake_finished(result: Dictionary)
 
@@ -22,6 +33,15 @@ signal bake_finished(result: Dictionary)
 	set(value):
 		data = value
 		clear()
+## Static navigation profile of the data to bake (StrataRuntimeData.nav_profiles;
+## the default profile is the nav_exclusions mask). Changing it clears the
+## resident tiles and cancels pending bakes, like tile_cells. A profile missing
+## from the data makes bake_region() fail.
+@export var profile: StringName = StrataRuntimeData.DEFAULT_NAV_PROFILE:
+	set(value):
+		if value != profile:
+			profile = value
+			clear()
 ## Cell intervals per tile side. tile_cells * spacing must be a multiple of the
 ## navigation cell size so voxel grids line up across tiles. Tile keys depend on
 ## it, so changing it clears the resident tiles and cancels pending bakes.
@@ -284,6 +304,7 @@ func get_regions() -> Array[NavigationRegion3D]:
 func get_stats() -> Dictionary:
 	var stats := _stats.duplicate()
 	stats.regions = _tiles.size()
+	stats.profile = profile
 	return stats
 
 func _resolved_cell_size() -> Vector2:
@@ -295,11 +316,13 @@ func _resolved_cell_size() -> Vector2:
 ## Everything that changes a tile's baked mesh, except the data itself.
 func _bake_config() -> Dictionary:
 	var cells := _resolved_cell_size()
-	return {"tile_cells": tile_cells, "agent_radius": agent_radius, "agent_height": agent_height, "agent_max_climb": agent_max_climb, "agent_max_slope": agent_max_slope, "edge_max_error": edge_max_error, "cell_size": cells.x, "cell_height": cells.y}
+	return {"profile": profile, "tile_cells": tile_cells, "agent_radius": agent_radius, "agent_height": agent_height, "agent_max_climb": agent_max_climb, "agent_max_slope": agent_max_slope, "edge_max_error": edge_max_error, "cell_size": cells.x, "cell_height": cells.y}
 
 func _plan(local_rect: Rect2, keep_existing: bool) -> Dictionary:
 	if data == null or not data.validate().ok or not data.is_resident():
 		return _error("Navigation needs valid resident runtime terrain data")
+	if not data.has_nav_profile(profile):
+		return _error("Navigation profile %s is not in the runtime data (available: %s)" % [profile, ", ".join(data.get_nav_profile_names())])
 	if tile_cells < 1 or max_tiles < 1:
 		return _error("tile_cells (%d) and max_tiles (%d) must be at least 1" % [tile_cells, max_tiles])
 	for setting in [agent_radius, agent_height, agent_max_climb, agent_max_slope, edge_max_error, cell_size, cell_height]:
@@ -377,15 +400,18 @@ func _plan(local_rect: Rect2, keep_existing: bool) -> Dictionary:
 			keep_keys[key] = true
 	return {"ok": true, "jobs": jobs, "keys": keep_keys, "faces": faces_total, "config": config, "replace_all": replace_all, "agent": {"radius": radius, "height": height, "max_climb": climb, "max_slope": agent_max_slope, "edge_max_error": edge_max_error, "cell_size": cells.x, "cell_height": cells.y, "border": border}}
 
-## Terrain-local triangles for solid, non-excluded cells in `cells`. Holes and
-## exclusions are the two canonical final cell masks, checked per cell.
+## Terrain-local triangles for the cells in `cells` that are neither holes nor
+## blocked for `profile`: two canonical final cell masks, checked per cell. No
+## faces for a profile the data does not have.
 func build_source_faces(cells: Rect2i) -> PackedVector3Array:
 	var faces := PackedVector3Array()
+	if not data.has_nav_profile(profile):
+		return faces
 	var width := data.resolution.x
 	var cell_width := width - 1
 	var heights := data.heights
 	var holes := data.holes
-	var exclusions := data.nav_exclusions
+	var exclusions := data.get_nav_profile_mask(profile)
 	var origin := data.bounds.position
 	var spacing := data.get_spacing()
 	faces.resize(cells.size.x * cells.size.y * 6)

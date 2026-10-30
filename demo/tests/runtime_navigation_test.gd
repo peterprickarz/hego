@@ -33,14 +33,14 @@ func path_length(path: PackedVector3Array) -> float:
 	return total
 
 ## Minimum horizontal distance from a terrain-local point to any blocked cell.
-func blocked_clearance(local: Vector2) -> float:
+func blocked_clearance(local: Vector2, profile: StringName = StrataRuntimeData.DEFAULT_NAV_PROFILE) -> float:
 	var lattice := data.local_to_lattice(local)
 	var nearest := INF
 	var base := Vector2i(floori(lattice.x), floori(lattice.y))
 	for z in range(base.y - 3, base.y + 4):
 		for x in range(base.x - 3, base.x + 4):
 			var cell := Vector2i(x, z)
-			if not data.is_nav_blocked_cell(cell):
+			if not data.is_nav_blocked_cell(cell, profile):
 				continue
 			var closest := lattice.clamp(Vector2(cell), Vector2(cell) + Vector2.ONE)
 			nearest = minf(nearest, (closest - lattice).length() * data.get_spacing())
@@ -48,11 +48,11 @@ func blocked_clearance(local: Vector2) -> float:
 
 ## Mirrors Godot 4.4's map merge: world vertices floor-quantized to the map
 ## cell size/height; an edge key used by more than two polygons fails to merge.
-func merge_conflicts() -> Dictionary:
+func merge_conflicts(regions: Array[NavigationRegion3D] = []) -> Dictionary:
 	var size := NavigationServer3D.map_get_cell_size(map) * NavigationServer3D.map_get_merge_rasterizer_cell_scale(map)
 	var height := NavigationServer3D.map_get_cell_height(map) * NavigationServer3D.map_get_merge_rasterizer_cell_scale(map)
 	var edges := {}
-	for region in navigation.get_regions():
+	for region in regions if not regions.is_empty() else navigation.get_regions():
 		var mesh := region.navigation_mesh
 		var vertices := mesh.get_vertices()
 		for polygon_index in range(mesh.get_polygon_count()):
@@ -75,7 +75,7 @@ func merge_conflicts() -> Dictionary:
 	return result
 
 ## Samples every path segment at 5 cm in terrain-local space.
-func check_path(path: PackedVector3Array, from: Vector3, to: Vector3, label: String) -> Dictionary:
+func check_path(path: PackedVector3Array, from: Vector3, to: Vector3, label: String, profile: StringName = StrataRuntimeData.DEFAULT_NAV_PROFILE) -> Dictionary:
 	check(path.size() >= 2, "%s: path exists (%d points)" % [label, path.size()])
 	if path.size() < 2:
 		return {"length": 0.0, "clearance": 0.0}
@@ -88,7 +88,7 @@ func check_path(path: PackedVector3Array, from: Vector3, to: Vector3, label: Str
 		for step in range(steps + 1):
 			var point := inverse * path[index - 1].lerp(path[index], float(step) / steps)
 			var local := Vector2(point.x, point.z)
-			clearance = minf(clearance, blocked_clearance(local))
+			clearance = minf(clearance, blocked_clearance(local, profile))
 			var surface: Dictionary = data.sample_height(local)
 			if surface.status == StrataRuntimeData.Status.OK:
 				max_height_error = maxf(max_height_error, absf(point.y - surface.value))
@@ -99,13 +99,171 @@ func check_path(path: PackedVector3Array, from: Vector3, to: Vector3, label: Str
 	check(max_height_error < 0.6, "%s: path follows the terrain surface (max error %s)" % [label, max_height_error])
 	return {"length": path_length(path), "clearance": clearance}
 
+## Ramp: flat to x = 3, 45 degrees to x = 6, then 2 m per metre (63.4 degrees).
+static func ramp(i: int, _j: int) -> float:
+	if i <= 3: return 0.0
+	if i <= 6: return float(i - 3)
+	return 3.0 + 2.0 * (i - 6)
+
+## Columns x whose cells are walkable (0) in every row; checks rows agree.
+func walkable_columns(mask: PackedByteArray, cells: Vector2i) -> Array:
+	var columns := []
+	for x in range(cells.x):
+		var walkable := mask.is_empty() or mask[x] == 0
+		for z in range(cells.y):
+			if (mask.is_empty() or mask[z * cells.x + x] == 0) != walkable:
+				return ["rows differ at column %d" % x]
+		if walkable: columns.append(x)
+	return columns
+
+## Independent per-cell reference: float64 corner means, triangle normals.
+static func reference_walkable(source: StrataRuntimeData, rule: Dictionary, cell: Vector2i) -> Variant:
+	var w := source.resolution.x
+	var i := cell.y * w + cell.x
+	if rule.has("all"):
+		var result: Variant = true
+		for child in rule.all:
+			var value: Variant = reference_walkable(source, child, cell)
+			if value == null: return null
+			result = result and value
+		return result
+	if rule.has("any"):
+		var result: Variant = false
+		for child in rule.any:
+			var value: Variant = reference_walkable(source, child, cell)
+			if value == null: return null
+			result = result or value
+		return result
+	if rule.has("not"):
+		var value: Variant = reference_walkable(source, rule["not"], cell)
+		return null if value == null else not value
+	if rule.has("exclusion"):
+		return not source.is_nav_excluded_cell(cell)
+	if rule.has("slope_min") or rule.has("slope_max"):
+		var s := source.get_spacing()
+		var a := Vector3(0, source.heights[i], 0)
+		var b := Vector3(s, source.heights[i + 1], 0)
+		var c := Vector3(0, source.heights[i + w], s)
+		var d := Vector3(s, source.heights[i + w + 1], s)
+		var steep := 0.0
+		for triangle in [[a, b, c], [b, d, c]]:
+			var normal: Vector3 = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalized()
+			steep = maxf(steep, rad_to_deg(acos(absf(normal.y))))
+		var low := float(rule.get("slope_min", 0.0))
+		var high := float(rule.get("slope_max", 90.0))
+		if absf(steep - low) < 0.001 or absf(steep - high) < 0.001: return null
+		return steep >= low and steep <= high
+	var values: PackedFloat32Array = source.heights if rule.has("height_min") or rule.has("height_max") else source.channels[rule.channel].values
+	var mean := (float(values[i]) + values[i + 1] + values[i + w] + values[i + w + 1]) * 0.25
+	var low := float(rule.get("height_min", rule.get("min", -INF)))
+	var high := float(rule.get("height_max", rule.get("max", INF)))
+	if absf(mean - low) < 0.0001 or absf(mean - high) < 0.0001: return null
+	return mean >= low and mean <= high
+
+## Profile rules on a ramp, the two-triangle split and combinators, plus an
+## independent per-cell reference over every scheduling path of the evaluator.
+func check_rules() -> void:
+	var ramp_data := make_data(Rect2(0, 0, 9, 3), Vector2i(10, 4), ramp)
+	var cells := ramp_data.get_cell_resolution()
+	ramp_data.nav_exclusions = cell_mask(cells, [Rect2i(0, 1, 9, 1)])
+	var fungal := PackedFloat32Array(); fungal.resize(40)
+	for j in range(4): fungal[j * 10 + 4] = 1.0
+	var full := PackedFloat32Array(); full.resize(40); full.fill(1.0)
+	ramp_data.channels = {"fungal_network": {"values": fungal, "coverage": full}}
+	ramp_data.channel_names = PackedStringArray(["fungal_network"])
+	check(ramp_data.validate().ok, "ramp fixture valid")
+	# Cell means by column: 0, 0, 0, 0.5, 1.5, 2.5, 4, 6, 8; slopes 0, 45, 63.4.
+	var expectations := [
+		[{"slope_max": 30.0}, [0, 1, 2]],
+		[{"slope_max": 50.0}, [0, 1, 2, 3, 4, 5]],
+		[{"slope_min": 50.0}, [6, 7, 8]],
+		[{"slope_min": 30.0, "slope_max": 50.0}, [3, 4, 5]],
+		[{"height_min": 1.0}, [4, 5, 6, 7, 8]],
+		[{"height_max": 1.5}, [0, 1, 2, 3, 4]],
+		[{"height_min": 1.5, "height_max": 4.0}, [4, 5, 6]],
+		[{"not": {"height_min": 1.0}}, [0, 1, 2, 3]],
+		[{"all": [{"slope_max": 50.0}, {"height_min": 1.0}]}, [4, 5]],
+		[{"any": [{"slope_max": 30.0}, {"height_min": 5.0}]}, [0, 1, 2, 7, 8]],
+		[{"not": {"any": [{"slope_min": 50.0}, {"height_max": 0.0}]}}, [3, 4, 5]],
+		# Mean of the four corners: two of them on the 0/1 network column.
+		[{"channel": "fungal_network", "min": 0.5}, [3, 4]],
+		[{"channel": "fungal_network", "min": 0.6}, []],
+		[{"channel": "fungal_network", "max": 0.25}, [0, 1, 2, 5, 6, 7, 8]],
+	]
+	for entry in expectations:
+		var mask := StrataNavProfiles.evaluate(ramp_data, entry[0])
+		check(walkable_columns(mask, cells) == entry[1], "ramp rule %s walkable columns %s (expected %s)" % [entry[0], walkable_columns(mask, cells), entry[1]])
+	# Exclusion literal: the middle row; the default rule reproduces nav_exclusions.
+	check(StrataNavProfiles.evaluate(ramp_data, StrataNavProfiles.DEFAULT_RULE) == ramp_data.nav_exclusions, "the default rule is exactly nav_exclusions")
+	var inverted := StrataNavProfiles.evaluate(ramp_data, {"not": {"exclusion": true}})
+	check(inverted.count(255) == 18 and inverted[9] == 0 and inverted[0] == 255, "not exclusion walks only the excluded row")
+	var excluded_flat := StrataNavProfiles.evaluate(ramp_data, {"all": [{"exclusion": true}, {"slope_max": 30.0}]})
+	check(excluded_flat.count(0) == 6 and excluded_flat[0] == 0 and excluded_flat[9] == 255, "all of exclusion and slope")
+	check(StrataNavProfiles.evaluate(ramp_data, {"any": [{"slope_min": 0.0}, {"height_min": 99.0}]}).is_empty(), "a rule true everywhere stores an empty mask")
+	check(StrataNavProfiles.evaluate(ramp_data, {"all": [{"height_min": 99.0}, {"slope_max": 10.0}]}).count(255) == 27, "a rule false everywhere blocks every cell")
+	# The steeper of the two canonical triangles decides, in either one.
+	for corner in [Vector2i(1, 1), Vector2i(0, 0)]:
+		var probe := make_data(Rect2(0, 0, 1, 1), Vector2i(2, 2), func(i: int, j: int) -> float: return 2.0 if Vector2i(i, j) == corner else 0.0)
+		check(StrataNavProfiles.evaluate(probe, {"slope_max": 60.0}) == PackedByteArray([255]) and StrataNavProfiles.evaluate(probe, {"slope_min": 70.0}).is_empty() and StrataNavProfiles.evaluate(probe, {"slope_min": 71.0}) == PackedByteArray([255]), "the 70.5 degree triangle with raised corner %s decides the cell" % corner)
+
+	# Reference over the navigation fixture: sparse and dense terms, literals and
+	# nested terms, so candidate passes and sparse/dense mapping are all covered.
+	var rules := [
+		{"all": [{"channel": "footpath", "min": 0.5}, {"slope_max": 12.0}, {"exclusion": true}]},
+		{"all": [{"not": {"channel": "footpath", "min": 0.5}}, {"slope_max": 12.0}]},
+		{"all": [{"height_max": -1.0}, {"slope_min": 4.0}, {"not": {"exclusion": true}}]},
+		{"all": [{"channel": "footpath", "min": 0.25}, {"any": [{"exclusion": true}, {"slope_min": 20.0}]}, {"slope_max": 50.0}]},
+		{"any": [{"channel": "footpath", "min": 0.5}, {"slope_min": 40.0}, {"not": {"exclusion": true}}]},
+		{"all": [{"slope_max": 30.0}, {"not": {"slope_max": 30.0}}]},
+		{"not": {"all": [{"height_min": -1.5}, {"height_max": 0.5}]}},
+	]
+	var data_cells := data.get_cell_resolution()
+	for rule in rules:
+		var mask := StrataNavProfiles.evaluate(data, rule)
+		var mismatches := 0
+		var compared := 0
+		for z in range(data_cells.y):
+			for x in range(data_cells.x):
+				var expected: Variant = reference_walkable(data, rule, Vector2i(x, z))
+				if expected == null: continue
+				compared += 1
+				var walkable := mask.is_empty() or mask[z * data_cells.x + x] == 0
+				if walkable != expected: mismatches += 1
+		check(mismatches == 0 and compared > data_cells.x * data_cells.y * 0.95, "rule %s matches the per-cell reference (%d mismatches of %d)" % [rule, mismatches, compared])
+
 func run() -> void:
 	data = make_data(Rect2(-48.0, -24.0, 96.0, 48.0), Vector2i(97, 49), gentle)
 	var cells := data.get_cell_resolution()
 	# Hole wall leaving a gap at the top; exclusion pad reaching the far edge.
 	data.holes = cell_mask(cells, [Rect2i(44, 0, 4, 34)])
 	data.nav_exclusions = cell_mask(cells, [Rect2i(60, 36, 6, 12)])
+	# Footpath: an L of path samples, x 4..10 for z 4..45 and z 38..45 for x 4..40.
+	var footpath := PackedFloat32Array(); footpath.resize(97 * 49)
+	var covered := PackedFloat32Array(); covered.resize(97 * 49); covered.fill(1.0)
+	for j in range(49):
+		for i in range(97):
+			if i >= 4 and i <= 10 and j >= 4 and j <= 45 or j >= 38 and j <= 45 and i >= 4 and i <= 40:
+				footpath[j * 97 + i] = 1.0
+	data.channels = {"footpath": {"values": footpath, "coverage": covered}}
+	data.channel_names = PackedStringArray(["footpath"])
+	var applied := StrataNavProfiles.apply(data, [{"name": &"paths", "rule": {"channel": "footpath", "min": 0.5}}])
+	check(applied.ok and data.get_nav_profile_names() == [&"default", &"paths"], "paths profile evaluated: %s" % applied)
+	# Walkable: cells with at least two of four path corners (mean >= 0.5); the
+	# outer corner cells of the L have only one.
+	var expected_paths := PackedByteArray(); expected_paths.resize(cells.x * cells.y); expected_paths.fill(255)
+	for z in range(cells.y):
+		for x in range(cells.x):
+			var corners := 0
+			for corner in [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x, z + 1), Vector2i(x + 1, z + 1)]:
+				corners += 1 if footpath[corner.y * 97 + corner.x] == 1.0 else 0
+			if corners >= 2: expected_paths[z * cells.x + x] = 0
+	var path_differences := []
+	for index in range(expected_paths.size()):
+		if data.get_nav_profile_mask(&"paths")[index] != expected_paths[index]: path_differences.append(Vector2i(index % cells.x, index / cells.x))
+	check(path_differences.is_empty() and expected_paths.count(0) == 609, "paths profile walks exactly the footpath cells (%d); differing cells %s" % [expected_paths.count(0), path_differences.slice(0, 12)])
+	check(data.is_nav_blocked_cell(Vector2i(20, 20), &"paths") and not data.is_nav_blocked_cell(Vector2i(20, 20)) and not data.is_nav_blocked_cell(Vector2i(20, 40), &"paths"), "is_nav_blocked_cell follows the profile")
 	check(data.validate().ok and data.height_min < 0.0 and data.height_max > 0.0, "signed navigation fixture valid")
+	check_rules()
 
 	terrain_root = Node3D.new()
 	terrain_root.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(23.0)), Vector3(40.0, 5.0, -30.0))
@@ -206,6 +364,53 @@ func run() -> void:
 	check(NavigationServer3D.map_get_regions(map).size() == baseline_regions + 6, "rebake replaces regions instead of adding duplicates")
 	navigation.agent_max_slope = 45.0
 	navigation.agent_max_climb = 0.25
+
+	# Agent populations: one StrataNavigation per profile, each on its own layer.
+	check(navigation.bake_region(data.bounds).ok and navigation.get_stats().profile == &"default", "default population (layer 1) rebaked at 45 degrees")
+	var paths_nav := StrataNavigation.new()
+	paths_nav.name = "PathsNavigation"
+	paths_nav.tile_cells = 32
+	paths_nav.agent_radius = AGENT_RADIUS
+	paths_nav.use_async = false
+	paths_nav.navigation_layers = 2
+	paths_nav.profile = &"paths"
+	paths_nav.data = data
+	terrain_root.add_child(paths_nav)
+	var paths_baked := paths_nav.bake_region(data.bounds)
+	check(paths_baked.ok and paths_baked.regions > 0 and paths_nav.get_stats().profile == &"paths", "paths population (layer 2) bakes: %s" % paths_baked)
+	var paths_faces := paths_nav.build_source_faces(Rect2i(Vector2i.ZERO, cells)).size() / 6
+	check(paths_faces == data.get_nav_profile_mask(&"paths").count(0), "paths source faces cover only path cells (%d)" % paths_faces)
+	await sync_map()
+	var populations := merge_conflicts(navigation.get_regions() + paths_nav.get_regions())
+	print("two-population edge-key conflicts on one map: %s" % populations)
+	check(populations.cross_tile == 0 and populations.intra_tile == 0, "the two populations' regions merge on one map without edge conflicts: %s" % populations)
+	var path_from := world_at(Vector2(36, 41.5))
+	var path_to := world_at(Vector2(7, 8))
+	var off_path := world_at(Vector2(25, 15))
+	var along := NavigationServer3D.map_get_path(map, path_from, path_to, true, 2)
+	var along_result := check_path(along, path_from, path_to, "paths layer along the footpath", &"paths")
+	check(along_result.length > path_from.distance_to(path_to) * 1.2, "the footpath route follows the L, not the diagonal (%s vs %s)" % [along_result.length, path_from.distance_to(path_to)])
+	var stranded := NavigationServer3D.map_get_path(map, path_from, off_path, true, 2)
+	check(stranded.is_empty() or stranded[-1].distance_to(off_path) > 5.0, "no paths-layer route reaches the off-path target (ends %s m away)" % (stranded[-1].distance_to(off_path) if not stranded.is_empty() else INF))
+	var inverse_root := terrain_root.global_transform.affine_inverse()
+	var stays_on_path := true
+	for point in stranded:
+		var local := inverse_root * point
+		stays_on_path = stays_on_path and blocked_clearance(Vector2(local.x, local.z), &"paths") > 0.0
+	check(stays_on_path, "the stranded paths-layer route stays on path cells")
+	check_path(NavigationServer3D.map_get_path(map, path_from, off_path, true, 1), path_from, off_path, "default layer reaches the off-path target")
+	var missing_nav := StrataNavigation.new()
+	missing_nav.profile = &"swamp"
+	missing_nav.use_async = false
+	missing_nav.data = data
+	terrain_root.add_child(missing_nav)
+	var missing := missing_nav.bake_region(data.bounds)
+	check(not missing.ok and "swamp" in missing.message and missing_nav.get_regions().is_empty() and missing_nav.build_source_faces(Rect2i(0, 0, 4, 4)).is_empty(), "a missing profile is a bake error, not a crash: %s" % missing.get("message"))
+	missing_nav.free()
+	paths_nav.profile = &"default"
+	check(paths_nav.get_regions().is_empty() and paths_nav.get_stats().profile == &"default" and paths_nav.get_stats().regions == 0, "changing the profile clears the population's tiles")
+	paths_nav.free()
+	await sync_map()
 
 	# Bounded selected area, asynchronous, published only after every tile.
 	navigation.clear()

@@ -43,6 +43,9 @@ static func payload_hashes(data: StrataRuntimeData) -> Dictionary:
 	var payloads := {"heights": data.heights.to_byte_array(), "holes": data.holes, "nav_exclusions": data.nav_exclusions, "lattice": PackedFloat64Array([data.bounds.position.x, data.bounds.position.y, data.bounds.size.x, data.bounds.size.y, data.height_min, data.height_max]).to_byte_array()}
 	for name in data.channels:
 		payloads["channel:" + name] = data.channels[name].values.to_byte_array() + data.channels[name].coverage.to_byte_array()
+	for name in data.nav_profiles:
+		payloads["profile:" + name] = data.nav_profiles[name]
+	payloads["profile_rules"] = var_to_bytes(data.nav_profile_rules)
 	for key in payloads:
 		var context := HashingContext.new()
 		context.start(HashingContext.HASH_SHA256)
@@ -127,7 +130,10 @@ func run() -> void:
 	ids.fill(Color(3.0 / 255.0, 7.0 / 255.0, 0, 0))
 	var weights := Image.create(5, 5, false, Image.FORMAT_RGBAF)
 	weights.fill(Color(0.75, 0.25, 0, 0))
-	var options := {"holes": holes, "nav_exclusions": exclusions, "channels": PackedStringArray(["mask"]), "material_ids": ids, "material_weights": weights}
+	# Two static navigation profiles; the slope threshold has more digits than a
+	# text resource keeps, so the roundtrip proves exact rule storage.
+	var profiles := [{"name": &"wet", "rule": {"channel": "mask", "min": 0.5}}, {"name": &"flat_dry", "rule": {"all": [{"slope_max": 20.123456789}, {"not": {"channel": "mask", "min": 1.0}}, {"exclusion": true}]}}]
+	var options := {"holes": holes, "nav_exclusions": exclusions, "channels": PackedStringArray(["mask"]), "material_ids": ids, "material_weights": weights, "nav_profiles": profiles}
 	var baked := StrataBake.bake(terrain, options)
 	check(baked.ok, "complete bake: %s" % baked.get("message", ""))
 	var data := terrain.runtime_data
@@ -157,6 +163,37 @@ func run() -> void:
 	near(data.sample_channel(&"mask", Vector2(1, 0)).value, 2.5, 0.0, "generic mask stays unclamped above one")
 	near(data.sample_channel(&"mask", Vector2(2, 0)).value, -1.0, 0.0, "generic mask stays signed")
 	check(data.material_ids.get_pixel(2, 2).g8 == 7 and is_equal_approx(data.material_weights.get_pixel(2, 2).r, 0.75), "material controls retained")
+
+	# Static navigation profiles: stored masks (255 = blocked), rules, default.
+	var D := StrataRuntimeData.DEFAULT_NAV_PROFILE
+	check(data.nav_profiles.keys() == [&"wet", &"flat_dry"] and not data.nav_profiles.has(D) and data.get_nav_profile_names() == [D, &"flat_dry", &"wet"], "profiles stored by name; default is not a stored copy: %s" % [data.nav_profiles.keys()])
+	check(data.nav_profile_rules == {D: {"exclusion": true}, &"wet": profiles[0].rule, &"flat_dry": profiles[1].rule}, "the bake records every rule, including the default: %s" % [data.nav_profile_rules])
+	check(data.has_nav_profile(D) and data.get_nav_profile_mask(D) == data.nav_exclusions and data.get_nav_profile_image(D).get_data() == data.get_nav_exclusion_image().get_data(), "the default profile equals the nav_exclusions mask")
+	check(data.validate().ok, "profiled bake validates")
+	var mask_values: PackedFloat32Array = data.channels["mask"].values
+	var mask_coverage: PackedFloat32Array = data.channels["mask"].coverage
+	var uncovered_zero := true
+	for index in range(mask_values.size()):
+		uncovered_zero = uncovered_zero and (mask_coverage[index] > 0.0 or mask_values[index] == 0.0)
+	check(uncovered_zero, "uncovered mask samples store 0, the value profile rules read")
+	var wet_expected := PackedByteArray(); wet_expected.resize(cells.x * cells.y)
+	for z in range(cells.y):
+		for x in range(cells.x):
+			var i := z * 49 + x
+			var mean := (float(mask_values[i]) + mask_values[i + 1] + mask_values[i + 49] + mask_values[i + 50]) * 0.25
+			wet_expected[z * cells.x + x] = 0 if mean >= 0.5 else 255
+	check(data.nav_profiles[&"wet"] == wet_expected and wet_expected.count(0) > 0, "wet profile is the cell-mean threshold of the retained mask (%d walkable cells)" % wet_expected.count(0))
+	check(data.nav_profiles[&"flat_dry"] == StrataNavProfiles.evaluate(data, profiles[1].rule) and data.nav_profiles[&"flat_dry"].count(0) > 0 and data.nav_profiles[&"flat_dry"].count(255) > 36, "flat_dry is reproducible from the stored data")
+	check(data.is_nav_blocked_cell(Vector2i(36, 8), &"flat_dry") and data.is_nav_blocked_cell(Vector2i(36, 8), &"wet") == (wet_expected[8 * 48 + 36] == 255), "excluded cells block flat_dry; wet ignores exclusions")
+	check(data.is_nav_blocked_cell(Vector2i(31, 5), &"wet") and data.is_nav_blocked_cell(Vector2i(31, 5), &"flat_dry"), "holes block every profile")
+	var profile_manifest := data.get_manifest()
+	check(profile_manifest.nav_profile_bytes == 2 * 48 * 32 and profile_manifest.nav_profiles.size() == 3 and profile_manifest.nav_profiles[0].name == D and profile_manifest.nav_profiles[0].blocked_cells == 36, "manifest lists default + both profiles: %s" % [profile_manifest.nav_profiles])
+	check(baked.report.nav_profiles.has(&"wet") and baked.report.nav_profiles[&"flat_dry"].terms == 3 and baked.report.nav_profiles[&"wet"].blocked_cells == wet_expected.count(255), "bake report lists profile evaluation: %s" % [baked.report.nav_profiles])
+	var evicted := data.duplicate_runtime()
+	check(evicted.nav_profiles == data.nav_profiles and evicted.nav_profile_rules == data.nav_profile_rules, "duplicate_runtime copies profiles and rules")
+	evicted.evict_channel(&"mask")
+	var not_resident := StrataNavProfiles.evaluate_checked(evicted, profiles[0].rule)
+	check(not not_resident.ok and "not resident" in not_resident.message, "evaluating an evicted channel is an error: %s" % not_resident.get("message"))
 
 	# Layered categorical holes: ManualFine authors a Hole region, the upper
 	# BuildingFlatten owns Solid over part of it; the native compiler resolves
@@ -215,6 +252,17 @@ func run() -> void:
 	check(deduplicated.ok and deduplicated.data.channel_names == PackedStringArray(["mask"]), "requested runtime channels are deduplicated before allocation")
 	var denied := StrataBake.compile(terrain, {"channels": PackedStringArray(["mask"]), "max_runtime_bytes": 49 * 33 * 12 - 1})
 	check(not denied.ok and terrain.runtime_data == data, "aggregate runtime channel budget rejects without publishing a partial bake")
+	# Each profile costs one byte per cell of the same budget.
+	var profile_free := options.duplicate()
+	profile_free.erase("nav_profiles")
+	var base_total: int = StrataBake.compile(terrain, profile_free).data.get_manifest().total_bytes
+	var with_budget := options.duplicate()
+	with_budget.max_runtime_bytes = base_total + 2 * 48 * 32 - 1
+	var over := StrataBake.compile(terrain, with_budget)
+	check(not over.ok and "budget" in over.message, "two profiles one byte over the budget are rejected: %s" % over.get("message"))
+	with_budget.max_runtime_bytes = base_total + 2 * 48 * 32
+	var exact := StrataBake.compile(terrain, with_budget)
+	check(exact.ok and exact.data.get_manifest().total_bytes == base_total + 2 * 48 * 32, "profiles fit a budget of exactly one byte per cell each")
 	detail.procedural_stale = true
 	check(terrain.is_runtime_bake_stale(), "procedural stale intent invalidates an otherwise unchanged bake")
 	var accepted_options := options.duplicate(); accepted_options.allow_stale_procedural = true
@@ -234,6 +282,40 @@ func run() -> void:
 	check(not StrataBake.bake(terrain, {"material_ids": bad_ids, "material_weights": weights}).ok and terrain.runtime_data == data, "invalid material ids reject without touching the bake")
 	check(not StrataBake.bake(terrain, {"spacing": 0.7}).ok and terrain.runtime_data == data, "spacing that does not divide the bounds is rejected")
 	check(not StrataBake.bake(terrain, {"channels": PackedStringArray(["height"])}).ok, "height cannot be retained as a custom channel")
+	# Invalid profiles fail the bake, name the profile, and keep the old bake.
+	var many_terms := []
+	for index in range(9): many_terms.append({"height_min": float(index)})
+	for invalid in [
+		[{"name": &"swim", "rule": {"channel": "water", "min": 0.5}}, ["swim", "water", "not retained"]],
+		[{"name": &"typo", "rule": {"channel": "mask", "minimum": 0.5}}, ["typo", "unknown key minimum"]],
+		[{"name": &"nan", "rule": {"channel": "mask", "min": NAN}}, ["nan", "finite"]],
+		[{"name": &"inf", "rule": {"all": [{"height_max": INF}]}}, ["inf", "finite"]],
+		[{"name": &"mixed", "rule": {"channel": "mask", "min": 0.5, "slope_max": 30.0}}, ["mixed", "mixes"]],
+		[{"name": &"steep", "rule": {"slope_max": 120.0}}, ["steep", "0..90"]],
+		[{"name": &"inverted", "rule": {"height_min": 2.0, "height_max": 1.0}}, ["inverted", "above"]],
+		[{"name": &"empty", "rule": {"any": []}}, ["empty", "nonempty"]],
+		[{"name": &"flag", "rule": {"exclusion": false}}, ["flag", "must be true"]],
+		[{"name": &"text", "rule": {"not": "exclusion"}}, ["text", "Dictionary"]],
+		[{"name": &"wide", "rule": {"all": many_terms}}, ["wide", "at most 8"]],
+		[{"name": &"default", "rule": {"exclusion": true}}, ["reserved"]],
+		[{"name": &"norule"}, ["norule", "no rule"]],
+		[{"name": &"extra", "rule": {"exclusion": true}, "layers": 2}, ["extra", "unknown key layers"]]]:
+		var invalid_options := options.duplicate()
+		invalid_options.nav_profiles = [invalid[0]]
+		var failed := StrataBake.bake(terrain, invalid_options)
+		var named: bool = not failed.ok
+		for fragment in invalid[1]: named = named and fragment in String(failed.get("message", ""))
+		check(named and terrain.runtime_data == data and data.bake_revision == revision, "invalid profile %s rejected: %s" % [invalid[0].get("name"), failed.get("message")])
+	var duplicate_names := options.duplicate()
+	duplicate_names.nav_profiles = [profiles[0], profiles[0]]
+	check(not StrataBake.bake(terrain, duplicate_names).ok and terrain.runtime_data == data, "duplicate profile names are rejected")
+	var unretained := options.duplicate()
+	unretained.channels = PackedStringArray()
+	var unretained_result := StrataBake.bake(terrain, unretained)
+	check(not unretained_result.ok and "not retained" in unretained_result.message and terrain.runtime_data == data, "a rule may only read channels retained by this bake: %s" % unretained_result.get("message"))
+	check(not StrataBake.bake(terrain, {"nav_profiles": {"wet": {}}}).ok, "nav_profiles must be an Array")
+	var plain := StrataBake.compile(terrain)
+	check(plain.ok and plain.data.nav_profiles.is_empty() and plain.data.nav_profile_rules == {D: {"exclusion": true}} and plain.data.get_nav_profile_names() == [D], "a bake without profiles still documents the default profile")
 
 	# A compiled field from before an edit is stale.
 	var early := StrataProcedural.compile_heightfield(terrain, null, 1.0)
@@ -336,10 +418,12 @@ func run() -> void:
 	for point in points:
 		var sampled := data.sample_height(point)
 		var mask := data.sample_channel(&"mask", point)
+		var world_mask := terrain.sample_runtime_channel(&"mask", terrain.global_transform * Vector3(point.x, 7.0, point.y))
+		check(world_mask.status == mask.status and (not mask.ok or absf(world_mask.value - mask.value) < 0.00001), "sample_runtime_channel maps world to local at %s" % point)
 		expected_rows.append({"x": point.x, "z": point.y, "status": sampled.status, "height": sampled.value if sampled.status == S.OK else 0.0, "mask_status": mask.status, "mask": mask.value if mask.status == S.OK else 0.0})
 	var file := FileAccess.open("res://export/expected.json", FileAccess.WRITE)
 	# Path from open ground past the hole block (the raised pad is unreachable).
-	file.store_string(JSON.stringify({"transform": var_to_str(terrain.transform), "revision": data.bake_revision, "rows": expected_rows, "nav_from": [-18.0, -10.0], "nav_to": [20.0, -13.0], "hashes": payload_hashes(data)}))
+	file.store_string(JSON.stringify({"transform": var_to_str(terrain.transform), "revision": data.bake_revision, "rows": expected_rows, "nav_from": [-18.0, -10.0], "nav_to": [20.0, -13.0], "profiles": data.get_nav_profile_names().map(func(name: StringName) -> String: return String(name)), "hashes": payload_hashes(data)}))
 	file.close()
 	scene.free()
 	finish("RUNTIME_BAKE_TEST")
