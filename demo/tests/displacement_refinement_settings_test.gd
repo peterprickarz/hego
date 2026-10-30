@@ -49,9 +49,11 @@ func run() -> void:
 	for property in settings.get_property_list(): visible[property.name] = property
 	for name in ["displacement_refinement_enabled", "displacement_vertex_spacing", "displacement_refinement_radius", "displacement_refinement_budget"]:
 		check(visible.has(name) and int(visible[name].usage) & PROPERTY_USAGE_EDITOR != 0 and int(visible[name].usage) & PROPERTY_USAGE_STORAGE != 0, "Inspector and serialization expose " + name)
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://test_exports"))
-	check(ResourceSaver.save(settings, "res://test_exports/refinement_settings.tres") == OK, "settings resource saved")
-	var loaded := ResourceLoader.load("res://test_exports/refinement_settings.tres", "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRenderSettings
+	# Disposable exports go to user://, never into the project.
+	var exports := "user://refinement_test_%d" % OS.get_process_id()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(exports))
+	check(ResourceSaver.save(settings, exports + "/refinement_settings.tres") == OK, "settings resource saved")
+	var loaded := ResourceLoader.load(exports + "/refinement_settings.tres", "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRenderSettings
 	check(loaded != null and loaded.displacement_vertex_spacing == 0.125 and loaded.displacement_refinement_radius == 0.0 and loaded.displacement_refinement_budget == 0, "settings resource roundtrip")
 	var bounds := Rect2(-2048, -2048, 4096, 4096)
 	check(StrataRenderer.refinement_target_patch_size(bounds, 64, 0.0625) == 4.0, "default requests 4 m patches independently from 8 m base")
@@ -122,8 +124,8 @@ func run() -> void:
 	check(baked.get("ok", false), "actual runtime bake accepts refinement settings")
 	if baked.get("ok", false):
 		check(baked.data.render_settings != terrain.render_settings, "runtime bake snapshots settings independently")
-		check(ResourceSaver.save(baked.data, "res://test_exports/refinement_runtime.res", ResourceSaver.FLAG_COMPRESS) == OK, "runtime resource saved")
-		var runtime := ResourceLoader.load("res://test_exports/refinement_runtime.res", "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRuntimeData
+		check(ResourceSaver.save(baked.data, exports + "/refinement_runtime.res", ResourceSaver.FLAG_COMPRESS) == OK, "runtime resource saved")
+		var runtime := ResourceLoader.load(exports + "/refinement_runtime.res", "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRuntimeData
 		check(runtime != null and runtime.render_settings.displacement_vertex_spacing == 0.03125 and runtime.render_settings.displacement_refinement_radius == 24.0 and runtime.render_settings.displacement_refinement_budget == 768, "runtime resource preserves refinement settings")
 		terrain.render_settings.displacement_refinement_radius = 48.0
 		check(baked.data.render_settings.displacement_refinement_radius == 24.0, "live settings edits never alter a published runtime artifact")
@@ -135,4 +137,6 @@ func run() -> void:
 		if property.name == "near_displacement_status": check(int(property.usage) & PROPERTY_USAGE_READ_ONLY != 0 and int(property.usage) & PROPERTY_USAGE_STORAGE == 0, "Inspector status is read-only and never stored")
 	terrain.free()
 	print("DISPLACEMENT_REFINEMENT_SETTINGS checks=", checks, " failures=", failures)
+	for name in DirAccess.get_files_at(exports): DirAccess.remove_absolute(ProjectSettings.globalize_path(exports + "/" + name))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(exports))
 	quit(0 if failures == 0 else 1)
