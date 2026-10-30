@@ -1,6 +1,6 @@
 @tool
 class_name HEGoTerrain3DOutput
-extends RefCounted
+extends HEGoOutputHandler
 
 ## Builds a Terrain3D node from the heightfield layers of a cooked HDA.
 ##
@@ -8,6 +8,10 @@ extends RefCounted
 ## [code]hegot3d_*[/code] layers add region masks, holes, per-texture weights and
 ## colour maps. Everything is driven by detail attributes on the height layer, so an
 ## HDA that does not set [code]hegot3d_spawn_terrain[/code] is skipped entirely.
+##
+## HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. It reports
+## [method handles_heightfields], so a cook extension that publishes the heightfields
+## elsewhere, such as the HEGo Strata bridge's targets, skips it.
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "terrain3d"
@@ -59,17 +63,22 @@ const UPDATE_MAPS_HEIGHT_AND_CONTROL := 3
 
 
 ## Name of the cook phase this handler is timed under.
-static func output_phase() -> String:
+func output_phase() -> String:
 	return "terrain3d_output"
 
 
 ## Whether the cook produced heightfield volumes, and Terrain3D is there to receive them.
-static func should_handle(summary: Dictionary) -> bool:
+func should_handle(summary: Dictionary) -> bool:
 	return HEGoTerrain3DUtil.is_available() and HEGoNodeUtil.output_has(summary, "has_volumes")
 
 
+## This handler turns heightfield volumes into terrain.
+func handles_heightfields() -> bool:
+	return true
+
+
 ## Fetches the cook's heightfield layers and builds the terrain.
-static func handle(context: HEGoOutputContext) -> void:
+func handle(context: HEGoOutputContext) -> void:
 	if not HEGoTerrain3DUtil.is_available():
 		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Terrain3D addon is not installed, skipping Terrain3D output.")
 		return

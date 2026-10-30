@@ -1,13 +1,15 @@
 @tool
 class_name HEGoTerrain3DInput
-extends RefCounted
+extends HEGoInputHandler
 
-## Reads an existing Terrain3D node into heightfield layers Houdini can consume.
+## Sends an existing Terrain3D node to an HDA input as heightfield layers.
 ##
 ## Terrain3D stores terrain as independent square regions; Houdini wants one
 ## rectangular heightfield. The regions are stitched into a single image, and the
 ## control map is unpacked into one weight layer per texture used, plus masks marking
 ## which pixels belong to a region at all and which are holes.
+##
+## HEGo finds this handler because it extends [HEGoInputHandler]; HEGo never names it.
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "terrain3d"
@@ -21,10 +23,33 @@ const REGION_MAP_LAYER := "hegot3d_region_map"
 const HOLE_LAYER := "hegot3d_hole"
 
 ## Attribute carrying the Godot node path back to Houdini.
-const NODE_PATH_ATTRIB := "_hego_node_path"
+const NODE_PATH_ATTRIB := HEGoInputNodes.NODE_PATH_ATTRIB
 
 ## Attribute carrying a texture layer's Terrain3D texture name.
 const TEXTURE_NAME_ATTRIB := "_hego_texture_name"
+
+
+## Whether [param node] is a Terrain3D, and the addon is there to read it.
+func handles(node: Node) -> bool:
+	return HEGoTerrain3DUtil.is_available() and node.is_class("Terrain3D")
+
+
+## Uploads [param node]'s regions into a heightfield input, reusing [param existing_node]
+## when it already is one. A terrain without regions still yields an empty input, so the
+## HDA input stays connected.
+func sync(host: Node, existing_node: Variant, node: Node, settings: Dictionary) -> Dictionary:
+	# The path as the input stash holds it, which is what HEGo's own inputs send too.
+	var input_path := String(settings.get(HEGoInputNodes.INPUT_PATH_KEY, String(node.get_path())))
+	var terrain_node: HEGoHeightfieldInputNode = existing_node if existing_node is HEGoHeightfieldInputNode else HEGoHeightfieldInputNode.new()
+	var instantiated := await HEGoNodeUtil.checked_task(host, terrain_node.instantiate())
+	if not instantiated.ok:
+		return {"ok": false, "message": "Terrain3D input %s could not be created: %s" % [input_path, instantiated.message]}
+	var layers := read_layers(node, input_path)
+	if not layers.is_empty():
+		var uploaded := await HEGoNodeUtil.checked_task(host, terrain_node.set_layers(layers, get_vertex_spacing(node), 1.0, true))
+		if not uploaded.ok:
+			return {"ok": false, "message": "Terrain3D input %s could not be uploaded: %s" % [input_path, uploaded.message]}
+	return {"ok": true, "node": terrain_node}
 
 
 ## Reads [param terrain3d_node] into a layer dictionary for

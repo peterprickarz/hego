@@ -139,12 +139,12 @@ func cook_failed(_host: Node, cook: Dictionary, message: String) -> void:
 	_set_result(HEGoStrataOutput.fail(state, message), state.get("generation", -1))
 
 
-## One terrain backend per cook: a host publishing into terrain layers does not also build
-## Terrain3D output from the same heightfields.
+## One terrain backend per cook: a host publishing into terrain layers does not also let
+## another output handler turn the same heightfields into terrain.
 func skips_output_handler(handler: Variant, cook: Dictionary) -> bool:
 	if not cook.get(COOK_KEY, {}).get("active", false):
 		return false
-	return handler == HEGoTerrain3DOutput or handler == HEGoTerrain3DInstancer
+	return handler is HEGoOutputHandler and handler.handles_heightfields()
 
 
 func inputs_changed() -> void:

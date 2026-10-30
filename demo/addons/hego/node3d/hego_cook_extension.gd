@@ -44,8 +44,11 @@ func cook_failed(_host: Node, _cook: Dictionary, _message: String) -> void:
 	pass
 
 
-## Whether this cook should skip the standard output handler [param handler], for example
-## because the extension produces that kind of output itself.
+## Whether this cook should skip the output handler [param handler], one entry of
+## [method HEGoNode3D.output_handlers], for example because the extension produces that kind
+## of output itself. [param handler] is either one of HEGo's own handler scripts or an
+## [HEGoOutputHandler] instance; an extension that consumes the heightfields skips the
+## latter when [method HEGoOutputHandler.handles_heightfields] is true, without naming it.
 func skips_output_handler(_handler: Variant, _cook: Dictionary) -> bool:
 	return false
 

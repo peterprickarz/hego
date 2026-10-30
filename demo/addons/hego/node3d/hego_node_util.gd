@@ -57,6 +57,30 @@ static func checked_task(host: Variant, task: HEGoTask) -> Dictionary:
 	return {"ok": true, "value": task.get_result()}
 
 
+## Every global class that extends [param base], directly or through other global classes,
+## as a dictionary from class name to script path. [param base] itself is not included.
+##
+## Reads [method ProjectSettings.get_global_class_list], which exported games have too. This
+## is how HEGo finds the [HEGoInputHandler]s and [HEGoOutputHandler]s other addons provide.
+static func global_subclasses(base: StringName) -> Dictionary:
+	var bases := {}
+	var paths := {}
+	for entry in ProjectSettings.get_global_class_list():
+		bases[entry["class"]] = entry["base"]
+		paths[entry["class"]] = entry["path"]
+	var found := {}
+	for name in bases:
+		var ancestor: Variant = bases[name]
+		# Bounded, so a malformed class cache cannot loop forever.
+		for _depth in range(64):
+			if ancestor == base or not bases.has(ancestor):
+				break
+			ancestor = bases[ancestor]
+		if name != base and ancestor == base:
+			found[name] = paths[name]
+	return found
+
+
 ## Whether the cook produced the kind of geometry a handler needs.
 ##
 ## [param summary] is [method HEGoAssetNode.get_output_summary]'s result and

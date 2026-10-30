@@ -2,11 +2,13 @@
 """Checks the addon split in disposable projects. Never starts Houdini.
 
 HEGo and Strata must each work without the other; only hego_strata
-depends on both. This stages two projects under --work, never touching demo/:
+depends on both. Likewise HEGo works without Terrain3D; only hego_terrain3d depends on
+both. This stages these projects under --work, never touching demo/:
 
-  hego_only    addons/hego alone            -> tests/hego_standalone_test.gd
-  strata_only  addons/strata alone          -> tests/terrain_cache_standalone_test.gd
-  all_addons   hego, strata and the bridge  -> tests/hego_extension_points_test.gd
+  hego_only       addons/hego alone                    -> tests/hego_standalone_test.gd
+  strata_only     addons/strata alone                  -> tests/terrain_cache_standalone_test.gd
+  all_addons      hego, strata and hego_strata         -> tests/hego_extension_points_test.gd
+  hego_terrain3d  hego, terrain_3d and hego_terrain3d  -> tests/hego_terrain3d_bridge_test.gd
 
 Strata on its own is covered by runtime_test_runner.py, whose runtime project has no
 HEGo. Pass --godot (or set GODOT_BIN) to a real Godot binary; a launcher that opens a
@@ -27,6 +29,7 @@ PROJECTS = {
     "hego_only": (("hego",), "hego_standalone_test.gd", "HEGO_STANDALONE_TEST: PASS"),
     "strata_only": (("strata",), "terrain_cache_standalone_test.gd", "HEGO_TERRAIN_STANDALONE_CACHE_PASS"),
     "all_addons": (("hego", "strata", "hego_strata"), "hego_extension_points_test.gd", "HEGO_EXTENSION_POINTS_TEST: PASS"),
+    "hego_terrain3d": (("hego", "terrain_3d", "hego_terrain3d"), "hego_terrain3d_bridge_test.gd", "HEGO_TERRAIN3D_BRIDGE_TEST: PASS"),
 }
 PROJECT = """config_version=5
 

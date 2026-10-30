@@ -5,11 +5,11 @@ extends RefCounted
 ## Turns the Godot nodes wired into a [HEGoNode3D] into HEGo input nodes.
 ##
 ## Which input node a Godot node needs depends on its type: paths become curve
-## inputs, meshes and CSG shapes become geometry inputs, a [HEGoGraphInput3D]
-## becomes points and polyline primitives, and a Terrain3D becomes a heightfield
-## input. Other addons add kinds of their own through [HEGoInputHandler], which is
-## consulted first. The node path of the source is always sent along as
-## [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
+## inputs, meshes and CSG shapes become geometry inputs, and a [HEGoGraphInput3D]
+## becomes points and polyline primitives. Other addons add kinds of their own, such as
+## terrains, through [HEGoInputHandler], which is consulted first. The node path of the
+## source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its
+## inputs apart.
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "input"
@@ -25,6 +25,10 @@ const NO_MATERIAL := "empty"
 ## Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
 const CURVE_SAMPLE_LENGTH := 1.0
 
+## Key under which [method sync] passes an [HEGoInputHandler] the input path it resolved,
+## as stored in the input stash, so the handler can send it as [constant NODE_PATH_ATTRIB].
+const INPUT_PATH_KEY := "_input_path"
+
 ## Class every extension input handler extends.
 const HANDLER_BASE := &"HEGoInputHandler"
 
@@ -37,21 +41,7 @@ static var _handlers: Array[HEGoInputHandler] = []
 ## [HEGoInputHandler]. Rescanned whenever the project's class list changes, so an addon
 ## installed in an open editor is picked up without a restart.
 static func extension_handlers() -> Array[HEGoInputHandler]:
-	var bases := {}
-	var paths := {}
-	for entry in ProjectSettings.get_global_class_list():
-		bases[entry["class"]] = entry["base"]
-		paths[entry["class"]] = entry["path"]
-	var found := PackedStringArray()
-	for name in bases:
-		var base: Variant = bases[name]
-		# Bounded, so a malformed class cache cannot loop forever.
-		for _depth in range(64):
-			if base == HANDLER_BASE or not bases.has(base):
-				break
-			base = bases[base]
-		if name != HANDLER_BASE and base == HANDLER_BASE:
-			found.append(paths[name])
+	var found := PackedStringArray(HEGoNodeUtil.global_subclasses(HANDLER_BASE).values())
 	found.sort()
 	if found == _handler_paths:
 		return _handlers
@@ -121,7 +111,7 @@ static func is_compatible_source(node: Node) -> bool:
 		return node.mesh != null
 	if node is CSGShape3D:
 		return node.is_root_shape()
-	return HEGoTerrain3DUtil.is_available() and node.is_class("Terrain3D")
+	return false
 
 
 static func _collect_sources(host: Node, node: Node, outputs: Node, visited: Dictionary, resolved: Array) -> void:
@@ -171,6 +161,7 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 
 	var handler := handler_for(input)
 	if handler != null:
+		settings[INPUT_PATH_KEY] = str(input_node_path)
 		var result: Dictionary = await handler.sync(host, existing_node, input, settings)
 		if result.get("ok", false):
 			return result.node
@@ -242,15 +233,7 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 		await _input_task(host, csg_node.set_transform(input.global_transform), settings)
 		return csg_node
 
-	if HEGoTerrain3DUtil.is_available() and input.is_class("Terrain3D"):
-		var terrain_node: HEGoHeightfieldInputNode = existing_node if existing_node is HEGoHeightfieldInputNode else HEGoHeightfieldInputNode.new()
-		await _input_task(host, terrain_node.instantiate(), settings)
-		var layers := HEGoTerrain3DInput.read_layers(input, str(input_node_path))
-		if not layers.is_empty():
-			await _input_task(host, terrain_node.set_layers(layers, HEGoTerrain3DInput.get_vertex_spacing(input), 1.0, true), settings)
-		return terrain_node
-
-	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s is not a Path3D, HEGoGraphInput3D, MeshInstance3D, CSGShape3D or Terrain3D." % str(input_node_path))
+	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s is not a Path3D, HEGoGraphInput3D, MeshInstance3D or CSGShape3D, and no input handler accepts it." % str(input_node_path))
 	return existing_node
 
 

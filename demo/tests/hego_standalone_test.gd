@@ -21,13 +21,21 @@ func check(value: bool, message: String) -> void:
 
 func run() -> void:
 	check(not DirAccess.dir_exists_absolute("res://addons/strata") and not ClassDB.class_exists("StrataLayerData"), "this project really has no Strata addon")
-	for path in ["res://addons/hego/HEGoNode3D.gd", "res://addons/hego/core/hego_asset_agent.gd", "res://addons/hego/node3d/hego_input_nodes.gd", "res://addons/hego/node3d/hego_cook_extension.gd", "res://addons/hego/node3d/hego_input_handler.gd", "res://addons/hego/ui/input_ui.gd", "res://addons/hego/ui/hda_tab.gd"]:
+	check(not DirAccess.dir_exists_absolute("res://addons/hego_terrain3d") and not ClassDB.class_exists("Terrain3D"), "this project really has no Terrain3D addon or bridge")
+	for path in ["res://addons/hego/HEGoNode3D.gd", "res://addons/hego/core/hego_asset_agent.gd", "res://addons/hego/node3d/hego_input_nodes.gd", "res://addons/hego/node3d/hego_cook_extension.gd", "res://addons/hego/node3d/hego_input_handler.gd", "res://addons/hego/node3d/hego_output_handler.gd", "res://addons/hego/ui/input_ui.gd", "res://addons/hego/ui/hda_tab.gd"]:
 		var script := load(path) as GDScript
 		check(script != null and script.can_instantiate(), path + " compiles without Strata")
 	check(HEGoInputNodes.extension_handlers().is_empty(), "no extension input handlers are found")
+	check(HEGoOutputHandler.extension_handlers().is_empty(), "no extension output handlers are found")
+	var bridge_classes: Array = []
+	for entry in ProjectSettings.get_global_class_list():
+		if String(entry["class"]).begins_with("HEGoTerrain3D"):
+			bridge_classes.append(entry["class"])
+	check(bridge_classes.is_empty(), "no HEGoTerrain3D* class exists without the bridge, found %s" % str(bridge_classes))
 
 	var host := HEGoNode3D.new(); host.name = "Host"; root.add_child(host)
 	check(host.cook_extensions().is_empty() and not host.hego_requires_explicit_cook(), "an HEGo node has no extensions and recooks automatically")
+	check(host.output_handlers() == [HEGoMeshOutput, HEGoMultiMeshOutput, HEGoObjectOutput, HEGoCurveOutput], "an HEGo node runs exactly its four built-in output handlers")
 	host.hego_notify_cook_inputs_changed()
 	var mesh := MeshInstance3D.new(); mesh.name = "Mesh"; mesh.mesh = BoxMesh.new(); root.add_child(mesh)
 	check(HEGoInputNodes.is_compatible_source(mesh) and HEGoInputNodes.handler_for(mesh) == null, "built-in input kinds are unaffected")

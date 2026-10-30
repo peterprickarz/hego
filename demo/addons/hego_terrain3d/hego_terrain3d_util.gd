@@ -4,9 +4,10 @@ extends RefCounted
 
 ## Helpers shared by the Terrain3D input, output and instancer paths.
 ##
-## Terrain3D is an optional addon, so nothing here refers to its types directly:
-## everything goes through [ClassDB], [method Object.call] and [method Object.get],
-## and every entry point degrades to a warning when the addon or a method is missing.
+## This bridge needs Terrain3D, but nothing in it refers to Terrain3D's types directly:
+## everything goes through [ClassDB], [method Object.call] and [method Object.get], and
+## every entry point degrades to a warning when the addon or a method is missing. So the
+## bridge's scripts still load, and HEGo keeps cooking, in a project without Terrain3D.
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "terrain3d"

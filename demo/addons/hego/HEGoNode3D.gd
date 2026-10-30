@@ -139,24 +139,24 @@ func cook() -> void:
 	_last_cook_succeeded = true
 
 
-## The output handlers a cook runs, in the order it runs them.
+## The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh and
+## object output, then every [HEGoOutputHandler] other addons provide (see
+## [method HEGoOutputHandler.extension_handlers]), then curve output.
 ##
-## Each is a script with [code]output_phase()[/code], [code]should_handle(summary)[/code] and
-## [code]handle(context)[/code]. Override this in a subclass to add one of your own, to drop
-## one this node does not need, or to change the order.
+## Each has [code]output_phase()[/code], [code]should_handle(summary)[/code] and
+## [code]handle(context)[/code]: HEGo's own are scripts with those as static functions, the
+## extension handlers are instances. Override this in a subclass to add one of your own, to
+## drop one this node does not need, or to change the order.
 ##
 ## A function rather than a constant, because GDScript cannot build a constant out of other
-## classes' references, and because the Terrain3D pair can then be left out entirely when
-## that addon is absent rather than being asked on every cook.
+## classes' references, and because the extension handlers are discovered at run time.
 func output_handlers() -> Array:
-	var handlers := [
+	var handlers: Array = [
 		HEGoMeshOutput,
 		HEGoMultiMeshOutput,
 		HEGoObjectOutput,
 	]
-	if HEGoTerrain3DUtil.is_available():
-		handlers.append(HEGoTerrain3DOutput)
-		handlers.append(HEGoTerrain3DInstancer)
+	handlers.append_array(HEGoOutputHandler.extension_handlers())
 	handlers.append(HEGoCurveOutput)
 	return handlers
 
@@ -284,7 +284,7 @@ func _show_select_hda_dialog() -> void:
 	# Looked up by name rather than referenced directly. EditorInterface exists only in an
 	# editor build, so naming it here would fail this script's parse in an exported game and
 	# take every method above down with it, leaving cooked scenes with a node that has lost
-	# its script. The Terrain3D paths go through Object.call() for the same reason.
+	# its script.
 	var editor_interface := Engine.get_singleton("EditorInterface")
 	if editor_interface == null:
 		return

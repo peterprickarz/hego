@@ -1,6 +1,6 @@
 @tool
 class_name HEGoTerrain3DInstancer
-extends RefCounted
+extends HEGoOutputHandler
 
 ## Scatters scenes onto an existing Terrain3D through its instancer.
 ##
@@ -8,6 +8,10 @@ extends RefCounted
 ## HDA can populate several terrains with several scenes each. Slots HEGo generated on
 ## a previous cook are recognised by their [code]hegot3d_[/code] name prefix and reused,
 ## which keeps hand-authored mesh assets untouched.
+##
+## HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. It does not
+## report [method handles_heightfields]: it reads points, not volumes, and does nothing
+## for a cook whose points lack [constant INSTANCING_FILTER_ATTRIB].
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "terrain3d"
@@ -48,19 +52,19 @@ const MESH_ASSET_ATTRIBS := {
 
 
 ## Name of the cook phase this handler is timed under.
-static func output_phase() -> String:
+func output_phase() -> String:
 	return "terrain3d_instancer_output"
 
 
 ## Whether the cook produced points flagged for Terrain3D instancing.
-static func should_handle(summary: Dictionary) -> bool:
+func should_handle(summary: Dictionary) -> bool:
 	return HEGoTerrain3DUtil.is_available() \
 		and HEGoNodeUtil.output_has(summary, "has_points") \
 		and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", INSTANCING_FILTER_ATTRIB)
 
 
 ## Fetches the cook's instancing points and populates the terrains.
-static func handle(context: HEGoOutputContext) -> void:
+func handle(context: HEGoOutputContext) -> void:
 	if not HEGoTerrain3DUtil.is_available():
 		return
 

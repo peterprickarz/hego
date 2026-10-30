@@ -12,9 +12,9 @@ extends RefCounted
 ## The node this cook belongs to.
 ##
 ## Output normally goes under [method outputs_root] rather than directly here. A handler
-## that must parent somewhere else needs the host itself, which is why it is exposed:
-## [HEGoTerrain3DOutput] deliberately builds outside the subtree a cook rebuilds, so the
-## terrain it spawns survives recooking.
+## that must parent somewhere else needs the host itself, which is why it is exposed: the
+## HEGo Terrain3D bridge's terrain output deliberately builds outside the subtree a cook
+## rebuilds, so the terrain it spawns survives recooking.
 var host: Node
 
 ## The Houdini node whose cook this is.

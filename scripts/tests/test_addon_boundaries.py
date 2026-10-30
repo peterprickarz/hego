@@ -1,9 +1,12 @@
 """Each addon may only name classes from the addons it declares as dependencies.
 
-hego and strata depend on nothing; hego_strata depends on both. Godot has
-no addon dependency system: a script naming another addon's class, or loading one of
-its files, *is* the dependency. This keeps every such reference pointing the declared
-way, so neither standalone addon can quietly start requiring the other again.
+hego and strata depend on nothing; hego_strata depends on both. hego_terrain3d
+depends on hego and on the external Terrain3D addon (addons/terrain_3d), which it only
+reaches through ClassDB, is_class() and Object.call(), never by class name, so that
+dependency is not a scanned one. Godot has no addon dependency system: a script naming
+another addon's class, or loading one of its files, *is* the dependency. This keeps every
+such reference pointing the declared way, so no standalone addon can quietly start
+requiring another again.
 
 Run: python3 scripts/tests/test_addon_boundaries.py
 """
@@ -17,6 +20,7 @@ DEPENDS = {
     "hego": set(),
     "strata": set(),
     "hego_strata": {"hego", "strata"},
+    "hego_terrain3d": {"hego"},
 }
 NATIVE_SOURCES = {"hego": ROOT / "src", "strata": ROOT / "terrain" / "src"}
 SCANNED = {".gd", ".tscn", ".tres", ".gdshader", ".gdshaderinc", ".cfg", ".gdextension"}
@@ -52,6 +56,25 @@ class AddonBoundaries(unittest.TestCase):
             self.assertTrue(classes_of(addon), f"found no classes in {addon}; is the scan still right?")
         self.assertIn("StrataLayerData", classes_of("strata"))
         self.assertIn("HEGoAPI", classes_of("hego"))
+        self.assertIn("HEGoTerrain3DOutput", classes_of("hego_terrain3d"))
+
+    def test_terrain3d_lives_only_in_its_bridge(self):
+        # Terrain3D's own classes are not in the scan above, so check the code that would
+        # use them directly: their names as strings (ClassDB, is_class), the addon's files
+        # and the bridge's attribute prefix. Prose may still mention the bridge.
+        # graph_placement.gd may probe for a Terrain3D node by class name string when
+        # picking in the viewport; nothing else outside the bridge may.
+        allowed = {ADDONS / "hego" / "graph_input" / "editor" / "graph_placement.gd"}
+        pattern = re.compile(r"[\"']Terrain3D\w*[\"']|addons/terrain_3d|hegot3d_|HEGoTerrain3D")
+        violations = []
+        for addon in ("hego", "strata", "hego_strata"):
+            for path in sorted((ADDONS / addon).rglob("*")):
+                if path.suffix not in SCANNED or not path.is_file() or path in allowed:
+                    continue
+                for line_number, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                    if pattern.search(line):
+                        violations.append(f"{path.relative_to(ROOT)}:{line_number}: {line.strip()}")
+        self.assertEqual(violations, [], "\n".join(violations))
 
     def test_references_follow_declared_dependencies(self):
         owned = {addon: classes_of(addon) for addon in DEPENDS}

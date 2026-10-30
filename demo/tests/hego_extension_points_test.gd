@@ -12,6 +12,13 @@ class RefusingExtension extends HEGoCookExtension:
 		return {"ok": false, "message": "refused for test"}
 
 
+## Stands in for an output handler that builds terrain from heightfields; this project has
+## no Terrain3D bridge.
+class HeightfieldOutput extends HEGoOutputHandler:
+	func handles_heightfields() -> bool:
+		return true
+
+
 class RecordingExtension extends HEGoCookExtension:
 	var prepared := 0
 	var failed: Array = []
@@ -34,9 +41,11 @@ func check(value: bool, message: String) -> void:
 
 
 func run() -> void:
-	var handlers := HEGoInputNodes.extension_handlers()
-	check(handlers.size() == 1 and handlers[0] is HEGoStrataInput, "HEGo discovers the bridge's terrain input handler from the class list")
-	check(HEGoInputNodes.extension_handlers()[0] == handlers[0], "handler instances are reused while the class list is unchanged")
+	# The demo project also has the Terrain3D bridge's input handler; the staged project
+	# has only this bridge's.
+	var handlers := HEGoInputNodes.extension_handlers().filter(func(handler): return handler is HEGoStrataInput)
+	check(handlers.size() == 1, "HEGo discovers the bridge's terrain input handler from the class list")
+	check(HEGoInputNodes.extension_handlers().has(handlers[0]) if handlers.size() == 1 else false, "handler instances are reused while the class list is unchanged")
 
 	var scene := Node3D.new(); root.add_child(scene)
 	var terrain := StrataTerrain3D.new(); terrain.name = "Terrain"; terrain.base_bounds = Rect2(0, 0, 4, 4); terrain.set_preview_enabled(false)
@@ -60,7 +69,8 @@ func run() -> void:
 	host.hego_notify_cook_inputs_changed()
 	check(binding.stale and layer.procedural_stale and layer.producer_intent_revision == intent + 1, "an input change reaches the binding and marks its target layer stale")
 	var active := {HEGoStrataTargets.COOK_KEY: {"active": true}}
-	check(binding.skips_output_handler(HEGoTerrain3DOutput, active) and not binding.skips_output_handler(HEGoTerrain3DOutput, {}) and not binding.skips_output_handler(HEGoMeshOutput, active), "a terrain cook skips only the Terrain3D output handlers")
+	var heightfields := HeightfieldOutput.new()
+	check(binding.skips_output_handler(heightfields, active) and not binding.skips_output_handler(heightfields, {}) and not binding.skips_output_handler(HEGoOutputHandler.new(), active) and not binding.skips_output_handler(HEGoMeshOutput, active), "a terrain cook skips only output handlers that turn heightfields into terrain")
 
 	# Hooks run in child order. The extension that stops a cook records its own reason;
 	# the others are told through cook_failed, and nothing reaches Houdini.
