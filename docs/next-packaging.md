@@ -24,10 +24,13 @@ Houdini-dependent HEGo build.
 
 ## Platform scope and release gate
 
-Strata's standalone build scaffold now offers host Linux, a glibc-compatible
-Linux container, and MinGW Windows debug/release configurations. The extension
-descriptor names Linux and Windows libraries. `SConstruct.terrain` uses only
-godot-cpp and Strata sources; none of these targets requires Houdini or HEGo.
+Both extensions build for Linux x86_64 and ARM64 (host toolchain or the glibc
+2.28 AlmaLinux container, which runs under qemu-user-static on a foreign host),
+Windows x86_64 (MinGW-w64) and macOS (universal x86_64 + arm64, natively or with
+OSXCross on Linux). The extension descriptors name all of these libraries, so a
+release that lacks one of them is rejected by the receipt gate below until it is
+built. `SConstruct.terrain` uses only godot-cpp and Strata sources; none of the
+Strata targets requires Houdini or HEGo.
 On 2026-10-30, HEGo's Linux-compatible and Windows debug/release artifacts were
 rebuilt and receipted, and Strata's matching native receipts were validated.
 All four Linux libraries require glibc no newer than 2.25. Both debug and release
@@ -53,7 +56,9 @@ HEGo builds require the Houdini 22 headers and runtime configuration:
 
 ```bash
 scripts/build.sh linux template_debug template_release
-# Or scripts/build.sh all for the configured Linux-compatible and Windows builds.
+scripts/build.sh all                                   # linux-compat x86_64 + Windows
+ARCH=arm64 scripts/build.sh linux-compat               # Linux ARM64 container (qemu on x86_64 hosts)
+OSXCROSS_ROOT=~/osxcross ARCH=universal scripts/build.sh macos
 ```
 
 Terrain builds independently, without `HFS`:
@@ -62,7 +67,9 @@ Terrain builds independently, without `HFS`:
 scripts/build-terrain.sh                          # host platform, both targets
 scripts/build-terrain.sh linux-compat             # glibc 2.28 container
 scripts/build-terrain.sh windows                 # MinGW-w64 cross-build
-scripts/build-terrain.sh all                      # linux-compat + Windows
+scripts/build-terrain.sh all                      # linux-compat x86_64 + Windows
+ARCH=arm64 scripts/build-terrain.sh linux-compat  # Linux ARM64 container (qemu on x86_64 hosts)
+OSXCROSS_ROOT=~/osxcross ARCH=universal scripts/build-terrain.sh macos
 scripts/build-terrain.sh template_debug           # legacy host-target form
 scripts/build-terrain.sh --dry-run all template_debug
 python3 scripts/tests/test_build_terrain.py

@@ -6,6 +6,7 @@
 #   scripts/build.sh macos                    # native macOS, or OSXCross on Linux
 #   ARCH=universal scripts/build.sh macos      # Intel + Apple Silicon
 #   ARCH=arm64 scripts/build.sh linux         # Linux ARM64 (native or cross-toolchain)
+#   ARCH=arm64 scripts/build.sh linux-compat  # Linux ARM64 in the glibc 2.28 container (qemu on x86_64 hosts)
 #   scripts/build.sh windows                  # cross-compile for Windows
 #   scripts/build.sh linux-compat             # redistributable Linux, in a container
 #   scripts/build.sh all                      # Linux + Windows release binaries
@@ -30,7 +31,8 @@
 # If unset, it is inferred when exactly one matching compiler is installed.
 # Optional overrides: ARCH, JOBS, SCONS, PYTHON, CC, CXX, AR, RANLIB, GLIBC_FLOOR,
 # MACOS_SDK_PATH, MACOS_DEPLOYMENT_TARGET. Native Linux and macOS default to the
-# host architecture. linux-compat and Windows default to and require x86_64.
+# host architecture; linux-compat defaults to x86_64 and also accepts ARCH=arm64
+# (qemu-user-static on a foreign host); Windows is x86_64 only.
 
 set -euo pipefail
 
@@ -100,6 +102,7 @@ export HFS
 
 configure_macos() {
     local arch="$1" sdk_path="${MACOS_SDK_PATH:-}" compiler_arch compiler sdk tool
+    MACOS_COMPILER=""
     case "$arch" in
         arm64|x86_64|universal) ;;
         *) fail "macOS ARCH must be arm64, x86_64, or universal." ;;
@@ -108,6 +111,7 @@ configure_macos() {
     if [[ "$HOST_OS" == "Darwin" ]]; then
         command -v xcrun >/dev/null || fail "xcrun not found; install Xcode Command Line Tools with xcode-select --install."
         xcrun --find clang++ >/dev/null || fail "no working Apple compiler; check xcode-select."
+        MACOS_COMPILER="$(xcrun --find clang++)"
         if [[ -z "$sdk_path" ]]; then
             sdk_path="$(xcrun --sdk macosx --show-sdk-path)" || fail "no macOS SDK found; check xcode-select."
         fi
@@ -137,6 +141,7 @@ configure_macos() {
             compiler="$OSXCROSS_ROOT/target/bin/arm64-apple-$sdk-clang++"
             [[ -x "$compiler" ]] || fail "universal builds also require the OSXCross ARM compiler: $compiler"
         fi
+        MACOS_COMPILER="$OSXCROSS_ROOT/target/bin/$compiler_arch-apple-$sdk-clang++"
         build_args+=("osxcross_sdk=$sdk")
     else
         fail "macOS builds require a macOS host or OSXCross on Linux."
@@ -181,24 +186,48 @@ verify_windows_dll() {
 # Builds inside the glibc 2.28 image. Houdini is mounted at its real path so the rpath
 # baked into the binary matches the host, and label=disable keeps podman from relabelling
 # anything on the host.
+# The OCI platform name and image tag for a container build of $arch. A foreign
+# architecture runs the AlmaLinux image under qemu-user-static (binfmt_misc).
+container_platform() {
+    case "$1" in
+        arm64) echo linux/arm64 ;;
+        x86_64) echo linux/amd64 ;;
+        *) fail "no container platform for architecture $1" ;;
+    esac
+}
+
+require_container_arch() {
+    local arch="$1" host
+    host="$(uname -m)"
+    case "$host" in aarch64) host=arm64 ;; amd64) host=x86_64 ;; esac
+    [[ "$arch" == "$host" ]] && return 0
+    local binfmt=/proc/sys/fs/binfmt_misc/qemu-aarch64
+    [[ "$arch" == "x86_64" ]] && binfmt=/proc/sys/fs/binfmt_misc/qemu-x86_64
+    [[ -e "$binfmt" ]] || fail "building $arch containers on a $host host needs qemu-user-static (binfmt_misc); install it, e.g. dnf install qemu-user-static"
+}
+
 build_linux_compat() {
-    local target="$1"
+    local target="$1" arch="$2" oci image
     if ! command -v podman >/dev/null; then
         echo "error: podman not found; linux-compat needs it. Use \"linux\" for a host build." >&2
         exit 1
     fi
-    if ! podman image exists "$IMAGE"; then
-        echo "building the $IMAGE image (first run only)"
-        podman build --platform linux/amd64 -t "$IMAGE" -f "$ROOT_DIR/scripts/linux-compat.Containerfile" "$ROOT_DIR"
+    require_container_arch "$arch"
+    oci="$(container_platform "$arch")"
+    image="$IMAGE"
+    [[ "$arch" == "x86_64" ]] || image="$IMAGE-$arch"
+    if ! podman image exists "$image"; then
+        echo "building the $image image (first run only)"
+        podman build --platform "$oci" -t "$image" -f "$ROOT_DIR/scripts/linux-compat.Containerfile" "$ROOT_DIR"
     fi
     # Verify inside the container too: macOS does not ship GNU readelf or sort -V.
-    podman run --rm --platform linux/amd64 --security-opt label=disable \
+    podman run --rm --platform "$oci" --security-opt label=disable \
         -v "$ROOT_DIR":/src -v "$HFS":"$HFS":ro -e HFS="$HFS" -e GLIBC_FLOOR="${GLIBC_FLOOR:-2.28}" -w /src \
-        "$IMAGE" bash -c "set -euo pipefail
+        "$image" bash -c "set -euo pipefail
 $(declare -f verify_linux_so)
-scons platform=linux target=\"\$1\" arch=x86_64 -j\"\$2\"
-verify_linux_so \"/src/demo/addons/hego/bin/libhego.linux.\$1.x86_64.so\" x86_64 \"\$GLIBC_FLOOR\"" \
-        hego-linux-compat "$target" "$JOBS"
+scons platform=linux target=\"\$1\" arch=\"\$3\" -j\"\$2\"
+verify_linux_so \"/src/demo/addons/hego/bin/libhego.linux.\$1.\$3.so\" \"\$3\" \"\$GLIBC_FLOOR\"" \
+        hego-linux-compat "$target" "$JOBS" "$arch"
 }
 
 # Verify the actual ELF architecture, entry point, C++ runtime and optional glibc
@@ -253,7 +282,7 @@ for platform in "${PLATFORMS[@]}"; do
             command -v readelf >/dev/null || fail "readelf not found; install binutils."
             ;;
         linux-compat)
-            [[ "$arch" == "x86_64" ]] || fail "linux-compat currently supports ARCH=x86_64 only."
+            case "$arch" in arm64|x86_64) ;; *) fail "linux-compat ARCH must be arm64 or x86_64." ;; esac
             ;;
         windows)
             [[ "$arch" == "x86_64" ]] || fail "the Windows build currently supports ARCH=x86_64 only."
@@ -274,7 +303,7 @@ for platform in "${PLATFORMS[@]}"; do
     for target in "${TARGETS[@]}"; do
         echo "── $platform / $target / $arch ──"
         if [[ "$platform" == "linux-compat" ]]; then
-            build_linux_compat "$target"
+            build_linux_compat "$target" "$arch"
         else
             ( cd "$ROOT_DIR" && "$SCONS" "${build_args[@]}" "target=$target" -j"$JOBS" )
             case "$platform" in
@@ -288,24 +317,33 @@ for platform in "${PLATFORMS[@]}"; do
         fi
         output_platform="$platform"
         [[ "$output_platform" == "linux-compat" ]] && output_platform=linux
-        if [[ "$output_platform" == "windows" ]]; then
-            artifact="bin/hego.windows.${target}.x86_64.dll"
-            compiler="$(x86_64-w64-mingw32-g++ --version | head -n 1)"
-        elif [[ "$output_platform" == "linux" ]]; then
-            artifact="bin/libhego.linux.${target}.x86_64.so"
-            if [[ "$platform" == "linux-compat" ]]; then
-                compiler="$IMAGE"
-            else
-                compiler="$(c++ --version | head -n 1)"
-            fi
-        else
-            echo "error: receipt naming is not configured for platform $output_platform" >&2
-            exit 1
-        fi
+        case "$output_platform" in
+            windows)
+                artifact="bin/hego.windows.${target}.${arch}.dll"
+                compiler="$(x86_64-w64-mingw32-g++ --version | head -n 1)"
+                ;;
+            linux)
+                artifact="bin/libhego.linux.${target}.${arch}.so"
+                if [[ "$platform" == "linux-compat" ]]; then
+                    compiler="$IMAGE"
+                    [[ "$arch" == "x86_64" ]] || compiler="$IMAGE-$arch"
+                else
+                    compiler="$("${CXX:-c++}" --version | head -n 1)"
+                fi
+                ;;
+            macos)
+                # One dylib per target carries every built CPU (see ARCH=universal).
+                artifact="bin/libhego.macos.${target}.dylib"
+                compiler="$("$MACOS_COMPILER" --version | head -n 1)"
+                ;;
+            *)
+                fail "receipt naming is not configured for platform $output_platform"
+                ;;
+        esac
         hfs_version="$(cat "$HFS/houdini_version.txt" 2>/dev/null || basename "$HFS")"
         hapi_headers="$(find "$HFS/toolkit/include/HAPI" -maxdepth 1 -type f -name '*.h' -print0 \
             | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
-        context="platform=$output_platform,target=$target,arch=x86_64,compiler=$compiler,hfs=$hfs_version,hapi_headers_sha256=$hapi_headers"
+        context="platform=$output_platform,target=$target,arch=$arch,compiler=$compiler,hfs=$hfs_version,hapi_headers_sha256=$hapi_headers"
         python3 "$ROOT_DIR/scripts/native_build_manifest.py" record --addon hego \
             --artifact "$artifact" --context "$context"
     done

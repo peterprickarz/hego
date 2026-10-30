@@ -10,14 +10,19 @@ import filecmp
 # never reuse each other's godot-cpp object files.
 _platform = ARGUMENTS.get("platform", "linux")
 _terrain_profile = ARGUMENTS.pop("terrain_build_profile", "host")
-if _platform not in ("linux", "windows"):
-    raise RuntimeError(f"Strata supports Linux and Windows builds only, got {_platform!r}.")
-if _terrain_profile not in ("host", "linux-compat", "windows"):
+if _platform not in ("linux", "windows", "macos"):
+    raise RuntimeError(f"Strata supports Linux, Windows and macOS builds only, got {_platform!r}.")
+if _terrain_profile not in ("host", "linux-compat", "windows", "macos"):
     raise RuntimeError(f"Unknown Terrain build profile {_terrain_profile!r}.")
 if _terrain_profile == "linux-compat" and _platform != "linux":
     raise RuntimeError("The linux-compat profile must build platform=linux.")
-if _terrain_profile == "windows" and _platform != "windows":
-    raise RuntimeError("The windows profile must build platform=windows.")
+if _terrain_profile in ("windows", "macos") and _platform != _terrain_profile:
+    raise RuntimeError(f"The {_terrain_profile} profile must build platform={_terrain_profile}.")
+
+if _platform == "macos":
+    # macOS 11 is the first release with Apple Silicon support. The same target
+    # applies to godot-cpp and Strata, including OSXCross builds on Linux.
+    ARGUMENTS.setdefault("macos_deployment_target", "11.0")
 
 _sconsign_profile = "-linux-compat" if _terrain_profile == "linux-compat" else ""
 SConsignFile(f".sconsign-terrain-{_platform}{_sconsign_profile}.dblite")
@@ -72,10 +77,20 @@ if env["platform"] == "linux":
     # Keep statically linked libstdc++ symbols private to this extension. Exporting
     # them can interpose on the runtime already loaded by Godot or other extensions.
     env.Append(LINKFLAGS=["-Wl,--exclude-libs,ALL"])
-else:
+elif env["platform"] == "windows":
     # SCons' MinGW SharedLibrary builder defaults to a `lib` prefix. Godot's
     # Windows extension descriptor uses the platform-native basename.
     env.Replace(SHLIBPREFIX="")
+else:
+    # SCons defaults to its host's shared-library rules. Override them explicitly
+    # so Linux + OSXCross produces the same Mach-O dylib as native Apple Clang.
+    env["SHLIBPREFIX"] = "lib"
+    env["SHLIBSUFFIX"] = ".dylib"
+    env["SHLINKFLAGS"] = ["$LINKFLAGS", "-dynamiclib"]
+    if "-s" in env["LINKFLAGS"]:
+        env["LINKFLAGS"].remove("-s")
+        env.Append(LINKFLAGS=["-Wl,-S", "-Wl,-x", "-Wl,-dead_strip"])
+    env.Append(LINKFLAGS=[f"-Wl,-install_name,@rpath/libstrata.macos.{env['target']}.dylib"])
 
 src_dir = "terrain/src"
 build_dir = f"terrain/build/{env['platform']}.{env['target']}.{env['arch']}"
@@ -85,10 +100,16 @@ VariantDir(build_dir, src_dir, duplicate=0)
 env.Append(CPPPATH=[src_dir])
 
 sources = Glob(f"{build_dir}/*.cpp")
-library_prefix = "lib" if env["platform"] == "linux" else ""
 
-library = env.SharedLibrary(
-    f"demo/addons/strata/bin/{library_prefix}strata.{env['platform']}.{env['target']}.{env['arch']}{env['SHLIBSUFFIX']}",
-    source=sources,
-)
+if env["platform"] == "macos":
+    # Each architecture builds separately; the selected one (or the universal
+    # binary with arch=universal) is installed at the stable path Godot loads.
+    compiled_library = env.SharedLibrary(f"{build_dir}/strata{env['suffix']}.dylib", source=sources)
+    library = env.InstallAs(f"demo/addons/strata/bin/libstrata.macos.{env['target']}.dylib", compiled_library)
+else:
+    library_prefix = "lib" if env["platform"] == "linux" else ""
+    library = env.SharedLibrary(
+        f"demo/addons/strata/bin/{library_prefix}strata.{env['platform']}.{env['target']}.{env['arch']}{env['SHLIBSUFFIX']}",
+        source=sources,
+    )
 Default(library)
