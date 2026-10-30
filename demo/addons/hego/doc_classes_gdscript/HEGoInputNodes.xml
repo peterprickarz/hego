@@ -4,11 +4,24 @@
 		Turns the Godot nodes wired into a [HEGoNode3D] into HEGo input nodes.
 	</brief_description>
 	<description>
-		Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, a [HEGoGraphInput3D] becomes points and polyline primitives, and a Terrain3D becomes a heightfield input. The node path of the source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
+		Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, a [HEGoGraphInput3D] becomes points and polyline primitives, and a Terrain3D becomes a heightfield input. Other addons add kinds of their own through [HEGoInputHandler], which is consulted first. The node path of the source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
 	</description>
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="extension_handlers" qualifiers="static">
+			<return type="HEGoInputHandler[]" />
+			<description>
+				The input handlers other addons provide: one instance of every global class that extends [HEGoInputHandler]. Rescanned whenever the project's class list changes, so an addon installed in an open editor is picked up without a restart.
+			</description>
+		</method>
+		<method name="handler_for" qualifiers="static">
+			<return type="HEGoInputHandler" />
+			<param index="0" name="node" type="Node" />
+			<description>
+				The extension handler that sends [param node], or null when HEGo handles it itself.
+			</description>
+		</method>
 		<method name="resolve_paths" qualifiers="static">
 			<return type="Array" />
 			<param index="0" name="host" type="Node" />
@@ -32,7 +45,7 @@
 			<param index="2" name="input_node_path" type="Variant" />
 			<param index="3" name="settings" type="Dictionary" />
 			<description>
-				Creates or updates the input node for the Godot node at [param input_node_path].  Pass the previous input node as [param existing_node] to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is [param existing_node] itself when it was reused.  [param settings] is the per-input settings dictionary from the input stash. curve_sample_length optionally controls Path3D upload spacing in metres. Missing, non-finite or non-positive values use the one-metre default.
+				Creates or updates the input node for the Godot node at [param input_node_path].  Pass the previous input node as [param existing_node] to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is [param existing_node] itself when it was reused.  [param settings] is the per-input settings dictionary from the input stash. curve_sample_length optionally controls Path3D upload spacing in metres. Missing, non-finite or non-positive values use the one-metre default. During a strict cook it also carries [code]_strict[/code] and the [code]_errors[/code] array failures are collected in; see [method HEGoAssetAgent.sync_inputs].
 			</description>
 		</method>
 	</methods>
@@ -52,6 +65,9 @@
 		</constant>
 		<constant name="CURVE_SAMPLE_LENGTH" value="1.0">
 			Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
+		</constant>
+		<constant name="HANDLER_BASE" value="&amp;&quot;HEGoInputHandler&quot;">
+			Class every extension input handler extends.
 		</constant>
 	</constants>
 </class>

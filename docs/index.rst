@@ -29,6 +29,33 @@ want to drive Houdini from a script of your own.
    api/index
 
 .. toctree::
+   :maxdepth: 1
+   :caption: Strata terrain
+
+   terrain-runtime
+   terrain-houdini-integration
+   terrain-shading
+   terrain-material-blending
+   terrain-macro
+   terrain-bulk
+   terrain-prototype
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Island demo
+
+   island-showcase
+   island-hda
+   island-material-distribution
+   island-benchmark
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Packaging
+
+   next-packaging
+
+.. toctree::
    :maxdepth: 2
    :caption: Reference
 

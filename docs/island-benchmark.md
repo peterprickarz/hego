@@ -104,7 +104,7 @@ memory delta are whole-process synthetic-stress accounting, not terrain-only
 memory; the duplicated images do not represent 32 downloaded art sets.
 
 The corrected report and immutable uncompressed-baseline reports are saved in
-[`docs/benchmarks`](benchmarks/). The old mode-1 baseline's synthetic pass
+`docs/benchmarks` (`docs/benchmarks/`). The old mode-1 baseline's synthetic pass
 increased RenderingServer texture memory by 2,192,704,768 bytes, compared with
 582,092,032 bytes after BC7/BC5 import. The final capture was run with the
 portable Linux template-debug artifact; its SHA-256, native source fingerprint,
@@ -205,8 +205,8 @@ The cliff/grass view shows stronger rocky peaks and less uniform blending when
 height contrast is enabled. A second off/on capture at the softer sand/grass
 blend near XZ (508, 700) remained visually soft, with no obvious banding. At the
 384 m UV-variant boundary near X=-512, the paired captures showed no obvious
-material pop. Saved enabled captures: [rock/grass](../demo/island/screenshots/material-height-blend-rock.png)
-and [sand/grass](../demo/island/screenshots/material-height-blend-sand.png).
+material pop. Saved enabled captures: rock/grass (`demo/island/screenshots/material-height-blend-rock.png`, regenerated locally)
+and sand/grass (`demo/island/screenshots/material-height-blend-sand.png`, regenerated locally).
 Off/on hero and UV-boundary captures, plus per-frame distributions, are in
 `/tmp/hego-terrain-prototype/material-height-contrast/paired-captures/`.
 

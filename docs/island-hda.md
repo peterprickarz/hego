@@ -19,7 +19,7 @@ The new saved definitions have been validated on actual island inputs at draft s
 
 The consolidation into `demo/` changes builder filesystem defaults only. Saved HDA graphs and embedded builder provenance remain unchanged; source-metadata validation accepts the old directory spelling for this move and still rejects algorithm changes.
 
-The HDA is an ordinary editable subnet asset. `build_island_hda.py` is the reproducible source; rebuilding replaces the saved definition file, without recooking or adopting a user scene. After authoring unlocked contents, save the intended definition and finish with matching instances. Network edits follow the [root Houdini conventions](../AGENTS.md#houdini-network-conventions): dependency order, fitted stage boxes, local relative `OUT_`/`IN_` handoffs, semantic comments and independent HDA interfaces. The [layout helper](../scripts/houdini/graph_layout.py) supports these edits; numerical cook tests do not substitute for visual graph review.
+The HDA is an ordinary editable subnet asset. `build_island_hda.py` is the reproducible source; rebuilding replaces the saved definition file, without recooking or adopting a user scene. After authoring unlocked contents, save the intended definition and finish with matching instances. Network edits follow the root Houdini conventions (`AGENTS.md`, Houdini network conventions): dependency order, fitted stage boxes, local relative `OUT_`/`IN_` handoffs, semantic comments and independent HDA interfaces. The [layout helper](../scripts/houdini/graph_layout.py) supports these edits; numerical cook tests do not substitute for visual graph review.
 
 ## Build and cook
 

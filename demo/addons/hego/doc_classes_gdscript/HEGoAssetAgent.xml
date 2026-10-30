@@ -49,8 +49,9 @@ func cook() -&gt; void:
 			<return type="bool" />
 			<param index="0" name="asset" type="HEGoAssetNode" />
 			<param index="1" name="stashed_parameters" type="PackedByteArray" default="PackedByteArray()" />
+			<param index="2" name="strict" type="bool" default="false" />
 			<description>
-				Makes [param asset] exist in Houdini. False when it could not be created.  Pushes the owner's transform when it is spatial, and restores [param stashed_parameters] only when this call is what created the Houdini node. That condition is the subtle part: restoring on every cook would undo whatever the user has since changed in the panel.  Returns false on a license failure, which Houdini reports by completing successfully with an id of -1 rather than by failing. An unknown operator name is not caught here, because Houdini hands back a valid id for one; the cook is what rejects it.
+				Makes [param asset] exist in Houdini. False when it could not be created.  Pushes the owner's transform when it is spatial, and restores [param stashed_parameters] only when this call is what created the Houdini node. That condition is the subtle part: restoring on every cook would undo whatever the user has since changed in the panel.  Returns false on a license failure, which Houdini reports by completing successfully with an id of -1 rather than by failing. An unknown operator name is not caught here, because Houdini hands back a valid id for one; the cook is what rejects it.  With [param strict], a failed transform or parameter restore also returns false, rather than carrying on with an asset that is not in the state the stash describes.
 			</description>
 		</method>
 		<method name="save_parameters">
@@ -61,11 +62,12 @@ func cook() -&gt; void:
 			</description>
 		</method>
 		<method name="sync_inputs">
-			<return type="void" />
+			<return type="bool" />
 			<param index="0" name="asset" type="HEGoAssetNode" />
 			<param index="1" name="skip_indices" type="Array" default="[]" />
+			<param index="2" name="cook" type="Dictionary" default="{}" />
 			<description>
-				Feeds [param asset] the Godot nodes stored in the owner's input stash.  Every HDA input goes through a merge node, because one Houdini input can combine several Godot nodes, and the input nodes are kept between cooks so unchanged geometry is not re-sent. [param skip_indices] leaves inputs alone that something else fills, which is how an input fed by another HDA survives.
+				Feeds [param asset] the Godot nodes stored in the owner's input stash.  Every HDA input goes through a merge node, because one Houdini input can combine several Godot nodes, and the input nodes are kept between cooks so unchanged geometry is not re-sent. [param skip_indices] leaves inputs alone that something else fills, which is how an input fed by another HDA survives.  [param cook] is the dictionary a host's [HEGoCookExtension]s share, and its [code]errors[/code] collects what went wrong. An input an [HEGoInputHandler] could not send always counts as an error. When [code]strict[/code] is true, so does any input that is missing, incompatible or fails to upload, rather than being skipped with a warning. Returns false when the input names could not be read or any error was recorded.
 			</description>
 		</method>
 		<method name="set_input">
@@ -99,8 +101,9 @@ func cook() -&gt; void:
 		<method name="output_context">
 			<return type="HEGoOutputContext" />
 			<param index="0" name="asset" type="HEGoAssetNode" />
+			<param index="1" name="cook" type="Dictionary" default="{}" />
 			<description>
-				Fetches what [param asset]'s cook produced and wraps it for the output handlers.  Needed by anything in the output library: [method HEGoMeshOutput.fetch_meshes], [method HEGoMultiMeshOutput.setup_multimesh], and a handler's own [code]handle(context)[/code].
+				Fetches what [param asset]'s cook produced and wraps it for the output handlers.  Needed by anything in the output library: [method HEGoMeshOutput.fetch_meshes], [method HEGoMultiMeshOutput.setup_multimesh], and a handler's own [code]handle(context)[/code].  [param cook] becomes the context's [member HEGoOutputContext.cook_state].
 			</description>
 		</method>
 	</methods>

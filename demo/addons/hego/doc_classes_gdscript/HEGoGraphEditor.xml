@@ -4,6 +4,7 @@
 		Viewport editing for a selected [HEGoGraphInput3D].
 	</brief_description>
 	<description>
+		Point selection and the move/rotate/scale widget are Godot's built-in subgizmos. This object only handles Draw-mode clicks, connection picks, empty clicks that clear the selection, the right-click menu, and the attribute strip.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -20,11 +21,72 @@
 			<description>
 			</description>
 		</method>
+		<method name="held_point_selection">
+			<return type="PackedInt32Array" />
+			<description>
+			</description>
+		</method>
+		<method name="sync_point_selection">
+			<return type="void" />
+			<param index="0" name="ids" type="PackedInt32Array" />
+			<description>
+			</description>
+		</method>
 		<method name="handle_input">
 			<return type="int" />
 			<param index="0" name="camera" type="Camera3D" />
 			<param index="1" name="event" type="InputEvent" />
 			<description>
+			</description>
+		</method>
+		<method name="handle_key_anywhere">
+			<return type="bool" />
+			<param index="0" name="event" type="InputEvent" />
+			<description>
+				Key path that does not need the 3D viewport to have focus.  _forward_3d_gui_input only sees keys while the viewport surface has focus, which it loses to the attribute strip, the scene tree, or any other panel the user clicked last. The plugin feeds keys here from _input, and they count while the mouse is over a 3D viewport and no text field has focus.
+			</description>
+		</method>
+		<method name="cleanup">
+			<return type="void" />
+			<description>
+				Frees the right-click menu; the plugin calls this on exit.
+			</description>
+		</method>
+		<method name="connect_from_point">
+			<return type="int" />
+			<description>
+				Point a Ctrl+click connects from, or -1 when no point is selected.
+			</description>
+		</method>
+		<method name="on_gizmo_redraw">
+			<return type="void" />
+			<param index="0" name="gizmo" type="EditorNode3DGizmo" />
+			<description>
+			</description>
+		</method>
+		<method name="group_points">
+			<return type="PackedInt32Array" />
+			<description>
+				Points the group widget moves: the selected points plus both ends of every selected connection.
+			</description>
+		</method>
+		<method name="group_center">
+			<return type="Vector3" />
+			<description>
+				Local-space centre of [method group_points].
+			</description>
+		</method>
+		<method name="move_group_live">
+			<return type="void" />
+			<param index="0" name="center" type="Vector3" />
+			<description>
+				Moves the group so its centre sits at [param center]. Offsets are taken from where the points were when the drag began, so a point shared by two selected connections moves once.
+			</description>
+		</method>
+		<method name="take_group_start">
+			<return type="Dictionary" />
+			<description>
+				Ends a group drag. Returns the positions from before it, keyed by point.
 			</description>
 		</method>
 		<method name="draw_overlay">
@@ -65,26 +127,14 @@
 			<description>
 			</description>
 		</method>
-		<method name="handle_id_moved">
-			<return type="void" />
-			<param index="0" name="handle_id" type="int" />
-			<param index="1" name="local_position" type="Vector3" />
-			<description>
-			</description>
-		</method>
-		<method name="commit_handle">
-			<return type="void" />
-			<param index="0" name="handle_id" type="int" />
-			<param index="1" name="restore" type="Vector3" />
-			<param index="2" name="cancel" type="bool" />
-			<description>
-			</description>
-		</method>
 	</methods>
 	<members>
 		<member name="plugin" type="EditorPlugin" setter="" getter="">
 		</member>
 		<member name="gizmo_plugin" type="EditorNode3DGizmoPlugin" setter="" getter="">
+		</member>
+		<member name="active_gizmo" type="EditorNode3DGizmo" setter="" getter="">
+			Filled by the gizmo plugin on redraw. Node3D.get_gizmos() is empty on a scripted Node3D, so this is how we call set_subgizmo_selection.
 		</member>
 		<member name="toolbar" type="Control" setter="" getter="">
 		</member>
@@ -120,7 +170,16 @@
 		</constant>
 		<constant name="DRAW" value="1" enum="Mode">
 		</constant>
-		<constant name="CLICK_PIXELS" value="5.0">
+		<constant name="CLICK_PIXELS" value="8.0">
+		</constant>
+		<constant name="GROUP_SUBGIZMO" value="1073741823">
+			Subgizmo id standing for the whole selection when it is more than one point, or has connections. Scripts can only give Godot one subgizmo id, so this one carries the move widget for all of them: its transform is their centre, and moving it moves every point in [method group_points].
+		</constant>
+		<constant name="SELECT_ITEM" value="0" enum="MenuId">
+		</constant>
+		<constant name="SPLIT" value="1" enum="MenuId">
+		</constant>
+		<constant name="DELETE" value="2" enum="MenuId">
 		</constant>
 	</constants>
 </class>

@@ -22,7 +22,7 @@ const CLICK_PIXELS := 8.0
 const GROUP_SUBGIZMO := 0x3FFFFFFF
 
 enum MenuId {
-	SELECT,
+	SELECT_ITEM,
 	SPLIT,
 	DELETE,
 }
@@ -483,7 +483,7 @@ func _show_context_menu(camera: Camera3D, mouse: Vector2) -> void:
 		_context_menu.id_pressed.connect(_on_context_menu_id)
 		EditorInterface.get_base_control().add_child(_context_menu)
 	_context_menu.clear()
-	_context_menu.add_item("Select", MenuId.SELECT)
+	_context_menu.add_item("Select", MenuId.SELECT_ITEM)
 	if _menu_connection >= 0:
 		_context_menu.add_item("Split", MenuId.SPLIT)
 	_context_menu.add_item("Delete", MenuId.DELETE)
@@ -504,7 +504,7 @@ func _on_context_menu_id(id: int) -> void:
 		return
 	if point >= 0 and point < graph.points.size():
 		match id:
-			MenuId.SELECT:
+			MenuId.SELECT_ITEM:
 				selected_connections = PackedInt32Array()
 				_select_point_subgizmo(point)
 			MenuId.DELETE:
@@ -515,7 +515,7 @@ func _on_context_menu_id(id: int) -> void:
 				last_point = -1
 	elif conn >= 0 and conn < graph.connection_count():
 		match id:
-			MenuId.SELECT:
+			MenuId.SELECT_ITEM:
 				_clear_point_selection()
 				_select_connections(PackedInt32Array([conn]), false)
 			MenuId.SPLIT:

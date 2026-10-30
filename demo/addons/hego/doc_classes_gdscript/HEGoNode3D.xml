@@ -12,7 +12,7 @@
 		<method name="cook">
 			<return type="void" />
 			<description>
-				Instantiates the HDA if needed, pushes inputs and parameters, cooks it and rebuilds the [code]Outputs[/code] subtree from the result.
+				Instantiates the HDA if needed, pushes inputs and parameters, cooks it and rebuilds the [code]Outputs[/code] subtree from the result.  Children that extend [HEGoCookExtension] take part at each step; see [method cook_extensions]. Without any, this is the whole of a cook.
 			</description>
 		</method>
 		<method name="output_handlers">
@@ -21,10 +21,34 @@
 				The output handlers a cook runs, in the order it runs them.  Each is a script with [code]output_phase()[/code], [code]should_handle(summary)[/code] and [code]handle(context)[/code]. Override this in a subclass to add one of your own, to drop one this node does not need, or to change the order.  A function rather than a constant, because GDScript cannot build a constant out of other classes' references, and because the Terrain3D pair can then be left out entirely when that addon is absent rather than being asked on every cook.
 			</description>
 		</method>
+		<method name="cook_extensions">
+			<return type="HEGoCookExtension[]" />
+			<description>
+				The children that take part in this node's cooks, in child order: every direct child that extends [HEGoCookExtension].  This is how another addon adds to what a cook does without HEGo knowing about it. The HEGo Strata bridge, for example, adds a child that publishes the cook's heightfields into terrain layers.
+			</description>
+		</method>
 		<method name="hego_use_bottom_panel">
 			<return type="bool" />
 			<description>
 				Tells the plugin this node can be edited from the HEGo bottom panel.
+			</description>
+		</method>
+		<method name="hego_did_last_cook_succeed">
+			<return type="bool" />
+			<description>
+				Whether the last cook ran to the end. The panel only reads parameters back after one that did, so a failed cook cannot overwrite the stash with a half-restored asset.
+			</description>
+		</method>
+		<method name="hego_notify_cook_inputs_changed">
+			<return type="void" />
+			<description>
+				Tells this node's cook extensions that its inputs or parameters changed. The panel calls it on every edit, and [method hego_set_input_stash] calls it too.
+			</description>
+		</method>
+		<method name="hego_requires_explicit_cook">
+			<return type="bool" />
+			<description>
+				Whether recooking should wait for an explicit request rather than following every edit, because one of this node's cook extensions asks for that. The panel's auto recook is skipped while this is true.
 			</description>
 		</method>
 		<method name="hego_get_asset_node">

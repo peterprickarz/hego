@@ -17,6 +17,14 @@
 				Waits for [param task] to finish and returns its result, or [code]null[/code] if it failed or the host leaves the tree. This does not cancel the native task.
 			</description>
 		</method>
+		<method name="checked_task" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Variant" />
+			<param index="1" name="task" type="HEGoTask" />
+			<description>
+				Waits for [param task] like [method await_task], but reports the outcome rather than logging it: [code]{ok: true, value}[/code], or [code]{ok: false, message}[/code] when the task failed, was null, or [param host] left the scene tree while it waited.  Use this where failure has to be told apart from a task that legitimately completed with null, which is what HEGo returns for work it could skip.
+			</description>
+		</method>
 		<method name="output_has" qualifiers="static">
 			<return type="bool" />
 			<param index="0" name="summary" type="Dictionary" />
