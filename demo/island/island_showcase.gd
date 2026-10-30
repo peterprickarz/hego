@@ -730,7 +730,10 @@ func set_benchmark_time(seconds: float) -> void:
 	camera.teleport_to(terrain.to_global(Vector3(point.x, height, point.y)), terrain.to_global(Vector3(PAD.x, renderer.sample_render_height(PAD) + 4.0, PAD.y)))
 
 
+## The authoring scene the showcase inherits already carries the landmarks; this builds
+## them only for a scene that has none.
 func _make_landmarks() -> void:
+	if has_node("BuildingLandmarks"): return
 	var root := Node3D.new(); root.name = "BuildingLandmarks"; add_child(root)
 	var height := terrain.sample_height(PAD)
 	for offset in [-8.0, 8.0]:
