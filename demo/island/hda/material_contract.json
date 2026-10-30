@@ -62,7 +62,7 @@
       "authoring": "All registry fields remain in registry ID order. Generated habitat fields use the shared soft limiter (subtract fifth-largest, clamp and normalize, explicit tie fallback). Valid normalized <=4 inherited mixtures remain byte-exact; other covered mixtures use the shared soft limiter with redistribution/tie diagnostics. Native packing remains a mechanical safety cap."
     },
     "routing": "prim attributes only: name, hegostrata_layer_path = target_layer_path, hegostrata_role = value, hegostrata_channel = name, hegostrata_composition = replace",
-    "target_layer": "the existing mask-only procedural MaterialDistribution StrataLayer (declare every registry channel as channels and required_channels)",
+    "target_layer": "the existing mask-only procedural MaterialDistribution StrataLayer, named by target_layer_path (Godot publishes every channel emitted; emit every registry channel)",
     "diagnostics": "detail hego_material_{operator,registry_sha256,seconds,samples,spacing_a,spacing_b,seed,optional_masks,unavailable_masks,all_zero_masks,mode,prior_status(absent|all_zero|inherited|ignored),prior_covered_fraction,inherited_exact_fraction,generated_fraction,inherit_truncated_samples,max_sum_error,max_nonzero,top4_retained_mean/min,raw_max_nonzero,raw_top4_retained_mean/min,mean_weight[32],dominant_fraction[32],zones,zone_mean[10],limit_maximum,limit_assigned_voxels,limit_zero_voxels,limit_tie_fallback_voxels,limit_pre_max_nonzero,limit_post_max_nonzero,limit_pre_topk_retained_mean/min,limit_post_topk_retained_mean/min,limit_redistributed_mass_mean/max}; raw_* and limit_pre_* describe internal uncapped fields; all other weights describe limited output; never routed Inherit paths expose inherit_limited_samples, inherit_renormalized_samples, inherit_redistributed_mass_max and inherit_tie_fallback_voxels. inherit_truncated_samples is a compatibility alias counting samples handled by the shared soft limiter; it does not mean hard pruning.",
     "weight_limit": {
       "algorithm": "q_i = max(w_i - fifth_largest(w), 0); output_i = q_i / sum(q)",
@@ -230,11 +230,6 @@
     "determinism": "no clock, RNG state or lattice-order dependence; identical input and parameters cook bit-identically"
   },
   "cook_policy": "Explicit cook only (no auto cook). A mask-only stage above the height and tint stages; it never changes height.",
-  "terrain_target_declaration_example": {
-    "path": "../../Terrain/MaterialDistribution",
-    "channels": "the registry channels in id order",
-    "required_channels": "the same 32 channels"
-  },
   "final_pass": {
     "role": "The erosion stages author materials from their own simulation (Sop/HEGo_IslandErosion contract v2, outputs.materials). MaterialCook is the final publication pass: it must not erase stage results or apply the same erosion evidence again.",
     "modes": {

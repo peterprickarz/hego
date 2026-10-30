@@ -4,7 +4,7 @@
 		Scatters scenes onto an existing Terrain3D through its instancer.
 	</brief_description>
 	<description>
-		The point fetch groups points by terrain node path and then by scene path, so one HDA can populate several terrains with several scenes each. Slots HEGo generated on a previous cook are recognised by their [code]hegot3d_[/code] name prefix and reused, which keeps hand-authored mesh assets untouched.  HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. It does not report [method handles_heightfields]: it reads points, not volumes, and does nothing for a cook whose points lack [constant INSTANCING_FILTER_ATTRIB].
+		The point fetch groups points by terrain node path and then by scene path, so one HDA can populate several terrains with several scenes each. Slots HEGo generated on a previous cook are recognised by their [code]hegot3d_[/code] name prefix and reused, which keeps hand-authored mesh assets untouched.  HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. It reads points, not volumes, and does nothing for a cook whose points lack [constant INSTANCING_FILTER_ATTRIB].
 	</description>
 	<tutorials>
 	</tutorials>

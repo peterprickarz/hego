@@ -22,7 +22,15 @@ and what it does with them is :doc:`/api/node3d_modules`.
 The Terrain3D items need the HEGo Terrain3D bridge addon (``addons/hego_terrain3d``) next to
 HEGo and Terrain3D; it adds them through
 :ref:`HEGoInputHandler<class_HEGoInputHandler>` and
-:ref:`HEGoOutputHandler<class_HEGoOutputHandler>`. See :doc:`/api/node3d_modules`.
+:ref:`HEGoOutputHandler<class_HEGoOutputHandler>`. The HEGo Strata bridge
+(``addons/hego_strata``) adds Strata layers as inputs and publishes heightfields into them
+the same way, through :ref:`HEGoStrataInput<class_HEGoStrataInput>` and
+:ref:`HEGoStrataOutput<class_HEGoStrataOutput>`. Each output handler acts only on output
+that carries its own attributes, so both bridges can be installed together. An input
+handler can make a node's cooks explicit (the panel's auto recook skips the node) and strict
+(:ref:`requires_strict_cook<class_HEGoInputHandler_method_requires_strict_cook>`); the
+Strata bridge's terrain inputs do both. For extra steps in one node's cooks, add a
+:ref:`HEGoCookExtension<class_HEGoCookExtension>` child. See :doc:`/api/node3d_modules`.
 
 Usage
 -----
@@ -119,6 +127,14 @@ Cooking From Code
 This is the same entry point the bottom panel's **Recook** button uses. For reading the
 result yourself rather than letting the handlers build nodes, see
 :doc:`Reading Output in Code </api/geo_output>`.
+
+When the node's inputs or parameters change, it emits
+:ref:`cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>`, so anything built
+from the last cook can be marked out of date before the next one. The bottom panel triggers
+it on every edit, and so does ``hego_set_input_stash()``. Setting parameters on the asset
+node directly, as above, does not; call
+:ref:`hego_notify_cook_inputs_changed()<class_HEGoNode3D_method_hego_notify_cook_inputs_changed>`
+for that.
 
 For a node that does something ``HEGoNode3D`` does not -- its own attributes, its own output
 nodes, several HDAs chained together -- write your own rather than subclassing this one. It is

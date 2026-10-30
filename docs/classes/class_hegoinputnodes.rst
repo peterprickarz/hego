@@ -34,11 +34,15 @@ Methods
    +-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoInputHandler<class_HEGoInputHandler>` | :ref:`handler_for<class_HEGoInputNodes_method_handler_for>`\ (\ node\: ``Node``\ ) |static|                                                                          |
    +-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Array``                                       | :ref:`row_handlers<class_HEGoInputNodes_method_row_handlers>`\ (\ host\: ``Node``, row\: ``Dictionary``\ ) |static|                                                  |
+   +-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Array``                                       | :ref:`resolve_paths<class_HEGoInputNodes_method_resolve_paths>`\ (\ host\: ``Node``, paths\: ``Array``, settings\: ``Dictionary``\ ) |static|                        |
    +-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``bool``                                        | :ref:`is_compatible_source<class_HEGoInputNodes_method_is_compatible_source>`\ (\ node\: ``Node``\ ) |static|                                                        |
    +-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Variant``                                     | :ref:`sync<class_HEGoInputNodes_method_sync>`\ (\ host\: ``Node``, existing_node\: ``Variant``, input_node_path\: ``Variant``, settings\: ``Dictionary``\ ) |static| |
+   +-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Node``                                        | :ref:`resolve_input_node<class_HEGoInputNodes_method_resolve_input_node>`\ (\ host\: ``Node``, input_node_path\: ``Variant``\ ) |static|                             |
    +-------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
@@ -155,6 +159,18 @@ The extension handler that sends ``node``, or null when HEGo handles it itself.
 
 ----
 
+.. _class_HEGoInputNodes_method_row_handlers:
+
+.. rst-class:: classref-method
+
+``Array`` **row_handlers**\ (\ host\: ``Node``, row\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_row_handlers>`
+
+The extension handlers input row ``row`` of ``host`` uses: those that send one of the nodes it names, and those whose kind of settings it stores, so a row keeps its handler's rules while its node is renamed or deleted. ``row`` is one entry of the input stash, ``{inputs, settings}``.
+
+.. rst-class:: classref-item-separator
+
+----
+
 .. _class_HEGoInputNodes_method_resolve_paths:
 
 .. rst-class:: classref-method
@@ -186,6 +202,18 @@ Whether a node supplies one of HEGo's supported input kinds. CSG assemblies bake
 ``Variant`` **sync**\ (\ host\: ``Node``, existing_node\: ``Variant``, input_node_path\: ``Variant``, settings\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_sync>`
 
 Creates or updates the input node for the Godot node at ``input_node_path``.  Pass the previous input node as ``existing_node`` to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is ``existing_node`` itself when it was reused.  ``settings`` is the per-input settings dictionary from the input stash. curve_sample_length optionally controls Path3D upload spacing in metres. Missing, non-finite or non-positive values use the one-metre default. During a strict cook it also carries ``_strict`` and the ``_errors`` array failures are collected in; see :ref:`HEGoAssetAgent.sync_inputs()<class_HEGoAssetAgent_method_sync_inputs>`.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoInputNodes_method_resolve_input_node:
+
+.. rst-class:: classref-method
+
+``Node`` **resolve_input_node**\ (\ host\: ``Node``, input_node_path\: ``Variant``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_resolve_input_node>`
+
+The node ``input_node_path`` names, resolved the way input paths are: against the edited scene in the editor, against the running scene at runtime, and finally relative to ``host``. Null when nothing is there. Extensions use this to resolve paths an HDA writes into its output, so those behave exactly like the paths in the input stash.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |const| replace:: :abbr:`const (This method has no side effects. It doesn't modify any of the instance's member variables.)`

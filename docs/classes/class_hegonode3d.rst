@@ -83,6 +83,23 @@ Methods
 
 .. rst-class:: classref-descriptions-group
 
+Signals
+-------
+
+.. _class_HEGoNode3D_signal_cook_inputs_changed:
+
+.. rst-class:: classref-signal
+
+**cook_inputs_changed**\ (\ ) :ref:`🔗<class_HEGoNode3D_signal_cook_inputs_changed>`
+
+Emitted by :ref:`hego_notify_cook_inputs_changed()<class_HEGoNode3D_method_hego_notify_cook_inputs_changed>`: this node's inputs or parameters changed since its last cook, so anything built from that cook may be out of date. Lets another addon react at once without HEGo knowing about it; the HEGo Strata bridge, for example, marks the terrain layers this node published as stale.
+
+.. rst-class:: classref-section-separator
+
+----
+
+.. rst-class:: classref-descriptions-group
+
 Constants
 ---------
 
@@ -200,7 +217,7 @@ The output handlers a cook runs, in the order it runs them: HEGo's mesh, multime
 
 ``Array`` **cook_extensions**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_cook_extensions>`
 
-The children that take part in this node's cooks, in child order: every direct child that extends :ref:`HEGoCookExtension<class_HEGoCookExtension>`.  This is how another addon adds to what a cook does without HEGo knowing about it. The HEGo Strata bridge, for example, adds a child that publishes the cook's heightfields into terrain layers.
+The children that take part in this node's cooks, in child order: every direct child that extends :ref:`HEGoCookExtension<class_HEGoCookExtension>`.  This is how another addon adds to what a cook does without HEGo knowing about it, for example by checking or publishing the cook's result before the ``Outputs`` subtree is replaced.
 
 .. rst-class:: classref-item-separator
 
@@ -236,7 +253,7 @@ Whether the last cook ran to the end. The panel only reads parameters back after
 
 |void| **hego_notify_cook_inputs_changed**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_hego_notify_cook_inputs_changed>`
 
-Tells this node's cook extensions that its inputs or parameters changed. The panel calls it on every edit, and :ref:`hego_set_input_stash()<class_HEGoNode3D_method_hego_set_input_stash>` calls it too.
+Tells this node's cook extensions that its inputs or parameters changed, and emits :ref:`cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>`. The panel calls it on every edit, and :ref:`hego_set_input_stash()<class_HEGoNode3D_method_hego_set_input_stash>` calls it too.
 
 .. rst-class:: classref-item-separator
 
@@ -248,7 +265,7 @@ Tells this node's cook extensions that its inputs or parameters changed. The pan
 
 ``bool`` **hego_requires_explicit_cook**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_hego_requires_explicit_cook>`
 
-Whether recooking should wait for an explicit request rather than following every edit, because one of this node's cook extensions asks for that. The panel's auto recook is skipped while this is true.
+Whether recooking should wait for an explicit request rather than following every edit, because one of this node's cook extensions, or the input handler of one of its input rows (see :ref:`HEGoInputHandler.requires_explicit_cook()<class_HEGoInputHandler_method_requires_explicit_cook>`), asks for that. The panel's auto recook is skipped while this is true.
 
 .. rst-class:: classref-item-separator
 

@@ -13,11 +13,23 @@ Three addons, with dependencies pointing one way:
 The bridge is the only code that names classes from both sides. HEGo picks it up through
 two generic extension points it exposes, without naming it: `HEGoInputHandler`, which the
 bridge's `HEGoStrataInput` extends so terrain layers can feed HDA inputs, and
-`HEGoCookExtension`, which the bridge's `HEGoStrataTargets` node extends to publish a
-cook's heightfields into terrain layers. Enabling the bridge plugin checks that both other
-addons are installed. `scripts/tests/test_addon_boundaries.py` fails if any addon names a
-class from one it does not depend on, and `demo/tests/addon_split_runner.py` runs HEGo
-alone and all three together in disposable projects.
+`HEGoOutputHandler`, which `HEGoStrataOutput` extends to publish a cook's heightfields into
+terrain layers. HEGo finds both through the project's global class list, so nothing is
+added to the scene: a host needs no child node or target list. Enabling the bridge plugin
+checks that both other addons are installed; in the editor the plugin also keeps published
+layers honest about their producer (see [Freshness](#freshness)).
+`scripts/tests/test_addon_boundaries.py` fails if any addon names a class from one it does
+not depend on, and `demo/tests/addon_split_runner.py` runs HEGo alone and all three together
+in disposable projects.
+
+The HEGo Terrain3D bridge (`addons/hego_terrain3d`) has the same shape: `HEGoTerrain3DInput`
+is an input handler, `HEGoTerrain3DOutput` and `HEGoTerrain3DInstancer` are output handlers.
+Each output handler acts only on cook output that carries its own attributes
+(`hegostrata_layer_path` on a volume for Strata, `hegot3d_spawn_terrain` on the height layer
+or `hegot3d_use_terrain3d_instancer` on points for Terrain3D) and leaves everything else
+alone. One HDA can therefore feed both bridges, and neither needs a rule about which of them
+owns the heightfields. `HEGoCookExtension` remains HEGo's generic per-node hook, a child of
+one HEGo node that takes part in its cooks; neither bridge uses it.
 
 ## Integration check
 
@@ -59,13 +71,13 @@ It then exercises this ordered terrain stack:
 
 The fixture recooks the coarse layer and verifies that its cache is replaced without changing either manual layer. The detail output remains cached until the second cook is explicitly refreshed. It also verifies that a stale read set and a partial two-target result are rejected without partial cache publication, and that raw mask/ownership companion fields and a separate later `constraint` channel survive a second native upload and Houdini fetch.
 
-Finally, a runtime `HEGoNode3D.cook()` drives a built-in primitive `Sop/attribwrangle` from the cumulative manual-fine layer. The wrangle adds target path, channel, role and composition primitive attributes; the bridge's `HEGoStrataInput` handler and `HEGoStrataTargets` binding upload, fetch, route and commit the result. A second cook deliberately routes to a missing target and checks that the earlier committed cache remains intact and the host reports a stale error.
+Finally, a runtime `HEGoNode3D.cook()` drives a built-in primitive `Sop/attribwrangle` from the cumulative manual-fine layer. The wrangle adds target path, channel, role and composition primitive attributes; the bridge's `HEGoStrataInput` and `HEGoStrataOutput` handlers upload, fetch, route and commit the result. A cook with an incompatible extra input row and a cook that deliberately routes to a missing target are then both rejected: the earlier committed cache remains intact, and the target layer is marked stale with the reason in its `procedural_status`.
 
 The two Volume Wrangle snippets add fixed offsets to `height`; they are deterministic bridge fixtures, not erosion, terrain generation, or a production HDA. The test validates native transport, the standalone atomic transaction API, and the runtime `HEGoNode3D.cook()` adapter route. It does not validate the editor panel or reusable production-HDA packaging. See [next-packaging.md](next-packaging.md) for how the three addons are published.
 
 ## Verification record
 
-Verified 2026-10-28 on Linux x86_64 with Godot 4.4.1 and Houdini Engine 22.0.429. The runner command above completed with these markers: `HEGO_TERRAIN_STANDALONE_CACHE_PASS`, `PROCEDURAL_TRANSACTION_TEST: PASS (0 failures)`, `TERRAIN_TRANSPORT_LIFETIME_TEST: PASS (0 failures)`, `HEGO_HEIGHTFIELD_FIELDS_NATIVE_PASS`, `HEGO_TERRAIN_HOUDINI_ROUNDTRIP_PASS`, and `HEGO_TERRAIN_HOUDINI_INTEGRATION_PASS`. The final captured run is `/tmp/hego-terrain-prototype/final-integration.log`.
+Verified 2026-10-30 on Linux x86_64 with Godot 4.4.1 and Houdini Engine 22.0.429, after the switch to `HEGoStrataOutput`: the runner command above completed with `TERRAIN_TRANSPORT_LIFETIME_TEST: PASS`, `HEGO_HEIGHTFIELD_FIELDS_NATIVE_PASS`, `HEGO_TERRAIN_HOUDINI_ROUNDTRIP_PASS` and `HEGO_TERRAIN_HOUDINI_INTEGRATION_PASS`.
 
 A fresh Godot 4.4.1 import can emit the existing `asset_picker_dialog.tscn` `Busy` warning; the runner repeats the import after the first scan. Test processes also emit ObjectDB leak warnings at exit. These test results do not establish production lifetime or cleanup guarantees.
 
@@ -77,18 +89,15 @@ No user scene, HDA, GUI Houdini session, or Terrain3D installation is read or mo
 
 Keep hand-authored work in ordinary child layers with `procedural = false`. Each stores its own sparse `StrataLayerData`; use Add for deltas such as fine sculpting, or Replace for a locally authored surface. Put each generated stage in its own child layer with `procedural = true` and no manual samples. A procedural layer is replaced by a complete cook result, while manual layers remain independent and editable.
 
-Give the `HEGoNode3D` host a `HEGoStrataTargets` child (Add Child Node, or `HEGoStrataTargets.ensure(host)` from a script) and declare every procedural target by path and allowed channels. Paths are relative to the host, the same as its input paths:
+The HDA names its own targets. Give it a string parameter `target_layer_path` and write that value verbatim to `hegostrata_layer_path` on every volume it outputs (see below). The parameter is saved with the host's other parameters in `parm_stash`, so it is the only binding between a `HEGoNode3D` host and the layer it publishes into; there is no child node or target list on the Godot side. The path is resolved like an input path (`HEGoInputNodes.resolve_input_node()`), normally relative to the host, and must name a procedural `StrataLayer` that is a direct child of a `StrataTerrain3D`:
 
 ```gdscript
-var binding := HEGoStrataTargets.ensure(host)
-binding.targets = [{
-    "path": "../Terrain/ProceduralDetail",
-    "channels": PackedStringArray(["height", "mask", "constraint"]),
-    "required_channels": PackedStringArray(["height"]),
-}]
+var asset := host.hego_get_asset_node()
+await host.agent.task(asset.set_parm("target_layer_path", String(host.get_path_to(layer))))
+await host.cook()
 ```
 
-The binding also holds the producer identity recorded on published layers (`producer_id`) and the last cook's `status` and `stale` flag. With targets declared, the host only cooks on request: the HEGo panel's auto recook skips it.
+Every channel the HDA emits for a target is accepted. Godot keeps no channel allowlist and no required channels; the HDA's own contract decides what a complete result is. Volumes without `hegostrata_layer_path` are not Strata's and are left to the other output handlers.
 
 Input rows use the same source paths as the HEGo input panel. Their `settings` select the source view and channels:
 
@@ -101,6 +110,8 @@ input_stash = [{
     },
 }]
 ```
+
+A Strata layer in any input row makes the host's cooks explicit and strict. The HEGo panel's auto recook skips the host (`HEGoInputHandler.requires_explicit_cook()`), and an input that is missing, incompatible or fails to upload fails the whole cook instead of being skipped (`HEGoInputHandler.requires_strict_cook()`). A host without terrain inputs follows HEGo's usual cook rules.
 
 `cumulative` supplies the composed terrain through the selected input layer, plus a fractional coverage companion describing where source data contributes. `raw` supplies that layer's native scalar samples and a binary `<channel>__ownership` companion. Coverage is informational for validity and does not become editable ownership. Keep the channel grids at their own native sample spacing and basis; the bridge does not resample channels to make their grids match.
 
@@ -125,13 +136,32 @@ s@hegostrata_channel = "height";
 s@hegostrata_composition = "replace";
 ```
 
-Return one `value` volume for each required channel. Optional channels can be omitted on a later complete result and are removed from that target's prior cache. To deliberately clear every channel in one target, emit exactly one marker volume with `hegostrata_role="empty"`, `hegostrata_empty=1`, and the declared target path; emit no value volumes for that target. Multiple targets can each return a volume named `height`; the target path disambiguates them.
+Each cook's result for a target is complete: a channel the HDA no longer emits is removed from that target's cache. A value volume may have an ownership companion with `hegostrata_role="ownership"` and `hegostrata_channel` naming the value channel, on exactly the same grid: a binary mask of the samples the result owns. Without one, the output owns its whole grid. A `coverage` companion is accepted and ignored, and value volumes may not use the reserved `__ownership` name suffix. To deliberately clear every channel in one target, emit exactly one marker volume with `hegostrata_role="empty"`, `hegostrata_empty=1`, and the target path; emit no value volumes for that target. Multiple targets can each return a volume named `height`; the target path disambiguates them.
 
-The binding starts a terrain transaction before the host uploads its inputs, checks the HDA bindings and read set again before publication, then commits all routed targets together. An explicit host cook is required to refresh generated data. If the cook fails, changes its bindings, returns an unknown path or channel, omits a required channel, or goes stale while cooking, the last complete cache stays visible and the binding's `status` reports the rejection. A dependency change does not silently run downstream HDAs.
+`HEGoStrataOutput` runs after the HDA has cooked. It fetches only the volumes that carry `hegostrata_layer_path`, groups them by target and publishes all of them as one `StrataProcedural` transaction: every target receives its complete result, or none does. The Strata layers the host read as inputs form the transaction's read set, so a result is rejected when one of them changed while Houdini cooked, or when a target is also one of its own inputs. A result is also rejected when it routes to a missing or non-procedural layer, when the host's parameters, input rows or transform changed during the cook, or when the host or terrain is not a translation/yaw transform with unit scale. A layer belongs to the host that last published it: another host's publication into it is refused while that producer is still in the scene, and renaming or deleting the producer releases it.
+
+A rejected publication keeps every target's previous fields, marks the layers it was meant for stale (or, when no target could be resolved, the layers the host published before) with the reason in `procedural_status`, and logs a warning in the `terrain` category. It does not fail the HEGo cook itself. An explicit host cook is required to refresh generated data, and a dependency change never runs downstream HDAs on its own.
+
+### Freshness
+
+A committed layer records what it was built from:
+
+- `producer_path`: the host, as a path relative to the layer, so it still resolves when the scene is instanced elsewhere.
+- `producer_id`: the host's path from its scene root, for example `HDA/CoarseCook`.
+- `producer_signature`: an opaque digest of the host's HDA, parameters, input rows and transform. Strata never interprets it.
+- `source_tokens`: the revision tokens of the input snapshots. They hold weak references to live layers, so they are not saved.
+
+Three checks use these to mark a current result stale without cooking anything:
+
+- `StrataTerrain3D` polls its procedural layers' `source_tokens` every `SOURCE_POLL_INTERVAL` (0.25 s), in the editor and at runtime, and marks a layer stale once an input layer it was built from has changed. `check_procedural_sources()` runs the same check at once.
+- In the editor, the bridge plugin runs `HEGoStrataOutput.poll()` over the edited scene at the same interval and marks a layer stale when its producer's current signature no longer matches `producer_signature`.
+- The plugin also connects every HEGo node's `cook_inputs_changed` signal, which the HEGo panel emits on each parameter or input edit, so such an edit marks that host's layers stale immediately.
+
+A stale result stays visible and usable until the next successful cook. `StrataLayer.mark_stale()` also records new producer intent, so a runtime bake built from the result goes stale too. A loaded procedural layer has no `source_tokens` and starts stale until its host is cooked again explicitly.
 
 The prototype accepts dense uncompressed RF images with positive rectangular dimensions, finite scalar values, finite sample origins and nonzero orthogonal horizontal sample steps. Sheared, tapered, non-dense, non-scalar and multi-slice volumes are rejected. The generic snapshot helper defaults to a 64 Mi-sample aggregate budget, including value and companion images. An input may explicitly request `terrain_max_samples = 128 * 1024 * 1024`; this is the hard aggregate cap, while each image remains limited to 20 Mi samples. Every channel lattice is checked against the aggregate count before any images are allocated. For example, a full 32-material registry's height, four simulation fields and 32 material fields at 1025² would need 77,746,250 samples including coverage, so such a cook requires that explicit opt-in; the demo's four materials stay far below the default budget. This is a bounded prototype bridge, not a promise of production HDA compatibility or large-terrain throughput.
 
-`demo/tests/stage_material_transport_test.gd` uses small artificial scalar fields in a disposable project. It checks transport of simulation fields and all 32 stable material channels through independent hand height edits, common endpoint-aligned resampling, owned zero versus unassigned zero, raw binary ownership, atomic height/material publication, stale material inputs, stage preview IDs and bounded rejection at production dimensions. It never cooks Houdini or inserts fixtures into the normal showcase. The fixture also checks mixed 2 m height/4 m material grids, binary persistence and explicit binding migration using the existing native libraries. The final isolated run passed 114 checks.
+`demo/tests/stage_material_transport_test.gd` uses small artificial scalar fields in a disposable project. It checks transport of simulation fields and all 32 stable material channels through independent hand height edits, common endpoint-aligned resampling, owned zero versus unassigned zero, raw binary ownership, atomic height/material publication, stale material inputs, stage preview IDs and bounded rejection at production dimensions. It never cooks Houdini or inserts fixtures into the normal showcase. The fixture also checks mixed 2 m height/4 m material grids, binary persistence and the explicit input-row migration using the existing native libraries. The final isolated run passed 114 checks.
 
 ## Terrain-wide tint and cavity AO
 

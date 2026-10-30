@@ -180,20 +180,33 @@ dependency only ever points from that addon to HEGo:
   extends it, in the editor and in exported games, and asks each through ``handles(node)``
   before trying its own input kinds. ``sync()`` sends the node and returns
   ``{ok, node}`` or ``{ok: false, message}``. A handler can also supply a settings editor
-  for the bottom panel's input row and ask for explicit recooks.
+  for the bottom panel's input row, ask for explicit recooks through
+  ``requires_explicit_cook(settings)``, and make the cook *strict* through
+  :ref:`requires_strict_cook(settings)<class_HEGoInputHandler_method_requires_strict_cook>`,
+  so an input that is missing or cannot be sent fails the whole cook rather than being
+  skipped. HEGo asks both for every input row of the node.
 - :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` adds a kind of output, found the same
   way through the project's global class list. It has the three entry points above,
   ``output_phase()``, ``should_handle(summary)`` and ``handle(context)``, as instance
-  methods. A handler that turns the cook's heightfields into terrain says so through
-  ``handles_heightfields()``, so a cook extension that publishes the heightfields itself can
-  skip it without naming it.
-- :ref:`HEGoCookExtension<class_HEGoCookExtension>` is a node you add as a direct child of
-  an :ref:`HEGoNode3D<class_HEGoNode3D>`. Its hooks run at each step of the cook:
-  ``cook_prepare()`` before anything reaches Houdini, ``cook_before()`` before the HDA
-  cooks, ``cook_commit()`` before ``Outputs`` is replaced, and ``cook_failed()`` when the
+  methods. Several handlers may look at the same kind of output, such as heightfield
+  volumes; each acts only on the parts that carry its own attributes and leaves the rest
+  alone, so they need no rule about which of them goes first or owns the heightfields.
+  ``context.cook_state`` is the dictionary the cook shares with the input handlers and cook
+  extensions; it also records what the cook started from (``input_stash``, ``transform``
+  and ``parm_stash``), so a handler can tell whether the node changed while Houdini cooked.
+- :ref:`HEGoCookExtension<class_HEGoCookExtension>` is the per-node hook: a node you add as
+  a direct child of one :ref:`HEGoNode3D<class_HEGoNode3D>`. Its hooks run at each step of
+  the cook: ``cook_prepare()`` before anything reaches Houdini, ``cook_before()`` before the
+  HDA cooks, ``cook_commit()`` before ``Outputs`` is replaced, and ``cook_failed()`` when the
   cook stops early. Any hook returning ``ok: false`` stops the cook with every previous
-  output left in place. An extension can make the cook *strict*, so an input that cannot be
-  sent fails it rather than being skipped.
+  output left in place. An extension can also make the cook strict. To turn a kind of cook
+  result into something, write an output handler instead; it needs no child node.
+
+When a node's inputs or parameters change, it emits
+:ref:`cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>`. The bottom panel
+triggers it on every edit, and so does ``hego_set_input_stash()``; a script that sets
+parameters on the asset node itself calls ``hego_notify_cook_inputs_changed()``. Another addon can connect
+to it to react at once, for example by marking what the last cook produced as out of date.
 
 .. code-block:: gdscript
 
@@ -214,16 +227,20 @@ dependency only ever points from that addon to HEGo:
             return sent
         return {"ok": true, "node": input}
 
-The two bridge addons are the worked examples. The HEGo Strata bridge
-(``addons/hego_strata``) uses an input handler and a cook extension:
-``HEGoStrataInput`` sends terrain layers, and ``HEGoStrataTargets`` publishes a
-cook's heightfields into terrain layers in one transaction. See
+The two bridge addons are the worked examples, and both have the same shape: input and
+output handlers, no cook extension. The HEGo Strata bridge (``addons/hego_strata``) uses
+:ref:`HEGoStrataInput<class_HEGoStrataInput>` to send terrain layers and
+:ref:`HEGoStrataOutput<class_HEGoStrataOutput>` to publish the heightfield volumes that
+carry ``hegostrata_layer_path`` into Strata layers, all targets of one cook in one
+transaction. Its terrain inputs make the cook explicit and strict, and its editor plugin
+listens to ``cook_inputs_changed`` to mark published layers stale. See
 ``docs/terrain-houdini-integration.md`` in the repository. The HEGo Terrain3D bridge
-(``addons/hego_terrain3d``) uses an input handler and two output handlers:
-:ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>` sends a Terrain3D node, and
+(``addons/hego_terrain3d``) uses
+:ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>` to send a Terrain3D node, and
 :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>` and
-:ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>` build terrains and instances;
-the output reports ``handles_heightfields()``.
+:ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>` to build terrains and instances
+from output that carries ``hegot3d_*`` attributes. A heightfield the Strata bridge publishes
+lacks those, so the two coexist without either naming the other.
 
 Shared helpers
 --------------

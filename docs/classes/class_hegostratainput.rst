@@ -19,7 +19,7 @@ Sends Strata layers to HDA inputs as heightfield volumes.
 Description
 -----------
 
-HEGo finds this handler because it extends :ref:`HEGoInputHandler<class_HEGoInputHandler>`; neither HEGo nor the terrain addon names the other. A layer is sent either cumulatively (the composed terrain through that layer) or raw (its own values plus separate binary ownership), with the channels and spacing set in the input's settings: terrain_mode, terrain_channels, terrain_spacing, terrain_channel_spacings, terrain_max_samples and terrain_compact_empty.
+HEGo finds this handler because it extends :ref:`HEGoInputHandler<class_HEGoInputHandler>`; neither HEGo nor the terrain addon names the other. A layer is sent either cumulatively (the composed terrain through that layer) or raw (its own values plus separate binary ownership), with the channels and spacing set in the input's settings: terrain_mode, terrain_channels, terrain_spacing, terrain_channel_spacings, terrain_max_samples and terrain_compact_empty. A host with a terrain input cooks only on request, and strictly: an input that cannot be sent fails the cook.
 
 .. rst-class:: classref-reftable-group
 
@@ -37,6 +37,8 @@ Methods
    | ``bool``       | :ref:`claims_settings<class_HEGoStrataInput_method_claims_settings>`\ (\ settings\: ``Dictionary``\ )                                                        |
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``bool``       | :ref:`requires_explicit_cook<class_HEGoStrataInput_method_requires_explicit_cook>`\ (\ _settings\: ``Dictionary``\ )                                         |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``       | :ref:`requires_strict_cook<class_HEGoStrataInput_method_requires_strict_cook>`\ (\ _settings\: ``Dictionary``\ )                                             |
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Control``    | :ref:`create_settings_editor<class_HEGoStrataInput_method_create_settings_editor>`\ (\ )                                                                     |
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -91,9 +93,7 @@ Method Descriptions
 
 ``Dictionary`` **sync**\ (\ host\: ``Node``, existing_node\: ``Variant``, node\: ``Node``, settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoStrataInput_method_sync>`
 
-.. container:: contribute
-
-	There is currently no description for this method. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
+Takes a snapshot of ``node`` and uploads it. The snapshot is recorded in the cook dictionary (:ref:`HEGoStrataOutput.COOK_KEY<class_HEGoStrataOutput_constant_COOK_KEY>`), so the cook's terrain publication can tell whether this input changed while Houdini cooked.
 
 .. rst-class:: classref-item-separator
 
@@ -120,6 +120,18 @@ Method Descriptions
 ``bool`` **requires_explicit_cook**\ (\ _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoStrataInput_method_requires_explicit_cook>`
 
 Terrain stages are expensive and publish into layers, so they cook only on request.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataInput_method_requires_strict_cook:
+
+.. rst-class:: classref-method
+
+``bool`` **requires_strict_cook**\ (\ _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoStrataInput_method_requires_strict_cook>`
+
+A terrain result is published all-or-nothing, so no input may be silently skipped.
 
 .. rst-class:: classref-item-separator
 

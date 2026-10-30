@@ -4,7 +4,7 @@
 		Builds a Terrain3D node from the heightfield layers of a cooked HDA.
 	</brief_description>
 	<description>
-		The [code]height[/code] layer drives the terrain itself; the optional [code]hegot3d_*[/code] layers add region masks, holes, per-texture weights and colour maps. Everything is driven by detail attributes on the height layer, so an HDA that does not set [code]hegot3d_spawn_terrain[/code] is skipped entirely.  HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. It reports [method handles_heightfields], so a cook extension that publishes the heightfields elsewhere, such as the HEGo Strata bridge's targets, skips it.
+		The [code]height[/code] layer drives the terrain itself; the optional [code]hegot3d_*[/code] layers add region masks, holes, per-texture weights and colour maps. Everything is driven by detail attributes on the height layer, so an HDA that does not set [code]hegot3d_spawn_terrain[/code] is skipped entirely.  HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. Heightfields another handler publishes, such as the HEGo Strata bridge's, lack [code]hegot3d_spawn_terrain[/code] and are left alone.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -20,12 +20,6 @@
 			<param index="0" name="summary" type="Dictionary" />
 			<description>
 				Whether the cook produced heightfield volumes, and Terrain3D is there to receive them.
-			</description>
-		</method>
-		<method name="handles_heightfields">
-			<return type="bool" />
-			<description>
-				This handler turns heightfield volumes into terrain.
 			</description>
 		</method>
 		<method name="handle">

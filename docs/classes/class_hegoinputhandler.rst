@@ -40,6 +40,8 @@ Methods
    +----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``bool``       | :ref:`requires_explicit_cook<class_HEGoInputHandler_method_requires_explicit_cook>`\ (\ _settings\: ``Dictionary``\ )                               |
    +----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``       | :ref:`requires_strict_cook<class_HEGoInputHandler_method_requires_strict_cook>`\ (\ _settings\: ``Dictionary``\ )                                   |
+   +----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Control``    | :ref:`create_settings_editor<class_HEGoInputHandler_method_create_settings_editor>`\ (\ )                                                           |
    +----------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
 
@@ -70,7 +72,7 @@ Whether this handler turns ``node`` into an input. Also decides whether the node
 
 ``Dictionary`` **sync**\ (\ _host\: ``Node``, _existing_node\: ``Variant``, _node\: ``Node``, _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoInputHandler_method_sync>`
 
-Creates or updates the HEGo input node for ``node``.  ``existing_node`` is the input node this HDA input used last cook, possibly of another type; reuse it when it fits. ``settings`` is the input's settings dictionary from the input stash. During a cook it also carries ``_cook``, the dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s share, so a handler can pick up what an extension prepared for this cook, and ``_input_path`` (:ref:`HEGoInputNodes.INPUT_PATH_KEY<class_HEGoInputNodes_constant_INPUT_PATH_KEY>`), the path the input was resolved from, which HEGo's own inputs send as ``_hego_node_path``.  Returns ``{ok: true, node}``, or ``{ok: false, message}`` when the input could not be sent, which stops the cook with the previous output left in place.
+Creates or updates the HEGo input node for ``node``.  ``existing_node`` is the input node this HDA input used last cook, possibly of another type; reuse it when it fits. ``settings`` is the input's settings dictionary from the input stash. During a cook it also carries ``_cook``, the dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s and output handlers share (:ref:`HEGoOutputContext.cook_state<class_HEGoOutputContext_property_cook_state>`), so a handler can pick up what an extension prepared for this cook or leave something for an output handler, and ``_input_path`` (:ref:`HEGoInputNodes.INPUT_PATH_KEY<class_HEGoInputNodes_constant_INPUT_PATH_KEY>`), the path the input was resolved from, which HEGo's own inputs send as ``_hego_node_path``.  Returns ``{ok: true, node}``, or ``{ok: false, message}`` when the input could not be sent, which stops the cook with the previous output left in place.
 
 .. rst-class:: classref-item-separator
 
@@ -94,7 +96,19 @@ Whether stored ``settings`` were written for this handler's kind of input, even 
 
 ``bool`` **requires_explicit_cook**\ (\ _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoInputHandler_method_requires_explicit_cook>`
 
-Whether an input of this kind should wait for an explicit recook rather than recooking automatically whenever the panel changes it.
+Whether an input of this kind should wait for an explicit recook rather than recooking automatically whenever the panel changes it. :ref:`HEGoNode3D.hego_requires_explicit_cook()<class_HEGoNode3D_method_hego_requires_explicit_cook>` asks this for every input row, so the node itself follows the rule too.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoInputHandler_method_requires_strict_cook:
+
+.. rst-class:: classref-method
+
+``bool`` **requires_strict_cook**\ (\ _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoInputHandler_method_requires_strict_cook>`
+
+Whether a cook with an input of this kind must be strict: any input that is missing, incompatible or fails to upload then fails the whole cook, rather than being skipped with a warning. For inputs whose result is published all-or-nothing, where a partial set of inputs would produce a wrong result rather than an incomplete one. See :ref:`HEGoAssetAgent.sync_inputs()<class_HEGoAssetAgent_method_sync_inputs>`.
 
 .. rst-class:: classref-item-separator
 

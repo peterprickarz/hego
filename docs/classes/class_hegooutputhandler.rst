@@ -12,7 +12,7 @@ HEGoOutputHandler
 
 **Inherits:** ``RefCounted``
 
-**Inherited By:** :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`, :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
+**Inherited By:** :ref:`HEGoStrataOutput<class_HEGoStrataOutput>`, :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`, :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
 
 Teaches HEGo to turn another kind of cook result into Godot nodes.
 
@@ -21,7 +21,7 @@ Teaches HEGo to turn another kind of cook result into Godot nodes.
 Description
 -----------
 
-HEGo itself builds meshes, multimeshes, spawned objects and curves. Another addon adds a kind by extending this class and giving it a ``class_name``: HEGo finds every global class that extends it, in the editor and in exported games alike, so installing that addon is all it takes. The dependency only runs one way. The extending addon names HEGo's classes; HEGo never names the addon's. The HEGo Terrain3D bridge, for example, builds Terrain3D terrains and instances this way.  :ref:`HEGoNode3D.output_handlers()<class_HEGoNode3D_method_output_handlers>` runs these after HEGo's own mesh, multimesh and object output and before its curve output, sorted by class name. Every method has a default that handles nothing, so a handler overrides only what it needs. Handlers are created once and reused, so keep per-cook state in the :ref:`HEGoOutputContext<class_HEGoOutputContext>` :ref:`handle()<class_HEGoOutputHandler_method_handle>` is given, not on the handler.
+HEGo itself builds meshes, multimeshes, spawned objects and curves. Another addon adds a kind by extending this class and giving it a ``class_name``: HEGo finds every global class that extends it, in the editor and in exported games alike, so installing that addon is all it takes. The dependency only runs one way. The extending addon names HEGo's classes; HEGo never names the addon's. The HEGo Terrain3D bridge, for example, builds Terrain3D terrains and instances this way, and the HEGo Strata bridge publishes heightfields into Strata layers.  Several handlers may look at the same kind of output. Each one acts only on the parts that carry its own attributes and leaves the rest alone, so they need no rule about which of them goes first or which one owns, say, the heightfields.  :ref:`HEGoNode3D.output_handlers()<class_HEGoNode3D_method_output_handlers>` runs these after HEGo's own mesh, multimesh and object output and before its curve output, sorted by class name. Every method has a default that handles nothing, so a handler overrides only what it needs. Handlers are created once and reused, so keep per-cook state in the :ref:`HEGoOutputContext<class_HEGoOutputContext>` :ref:`handle()<class_HEGoOutputHandler_method_handle>` is given, not on the handler.
 
 .. rst-class:: classref-reftable-group
 
@@ -37,8 +37,6 @@ Methods
    | ``bool``   | :ref:`should_handle<class_HEGoOutputHandler_method_should_handle>`\ (\ _summary\: ``Dictionary``\ )                      |
    +------------+--------------------------------------------------------------------------------------------------------------------------+
    | |void|     | :ref:`handle<class_HEGoOutputHandler_method_handle>`\ (\ _context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |
-   +------------+--------------------------------------------------------------------------------------------------------------------------+
-   | ``bool``   | :ref:`handles_heightfields<class_HEGoOutputHandler_method_handles_heightfields>`\ (\ )                                   |
    +------------+--------------------------------------------------------------------------------------------------------------------------+
    | ``Array``  | :ref:`extension_handlers<class_HEGoOutputHandler_method_extension_handlers>`\ (\ ) |static|                              |
    +------------+--------------------------------------------------------------------------------------------------------------------------+
@@ -100,18 +98,6 @@ Whether the cook has anything for this handler, judged from ``summary``, what :r
 |void| **handle**\ (\ _context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) :ref:`🔗<class_HEGoOutputHandler_method_handle>`
 
 Builds this handler's output for the cook in ``context``. May await. Runs after the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s have committed and the previous ``Outputs`` subtree has been cleared.
-
-.. rst-class:: classref-item-separator
-
-----
-
-.. _class_HEGoOutputHandler_method_handles_heightfields:
-
-.. rst-class:: classref-method
-
-``bool`` **handles_heightfields**\ (\ ) :ref:`🔗<class_HEGoOutputHandler_method_handles_heightfields>`
-
-Whether this handler turns the cook's heightfield volumes into terrain. A :ref:`HEGoCookExtension<class_HEGoCookExtension>` that consumes the heightfields itself skips such handlers through :ref:`HEGoCookExtension.skips_output_handler()<class_HEGoCookExtension_method_skips_output_handler>` without having to name them.
 
 .. rst-class:: classref-item-separator
 

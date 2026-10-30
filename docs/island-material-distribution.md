@@ -18,6 +18,8 @@ python3 scripts/run_terrain_island.py --cook-materials
 
 cooks only the material distribution against the saved layers and writes `island/terrain/material_distribution/material_<name>.res` plus the control maps and bake.
 
+Each host publishes into the layer its HDA's `target_layer_path` parameter names, and every channel the HDA emits is published; the Godot side keeps no channel list. Scenes whose stages still read height only are upgraded with the **Configure Stage Material Inputs** button on the scene root (`HEGoIslandStageMaterials.migrate()`). It rewrites only the input rows of `CoarseCook`, `DetailCook` and `MaterialCook` so each stage reads height, the simulation fields and the material weights on bounded grids. It recognizes only the shipped rows and checks every host before changing any, so custom rows stay as they are. It never touches parameters, `target_layer_path` or cached fields, and it neither cooks nor saves: cook the three hosts in that order afterwards and save the scene.
+
 ## Reusable Houdini material weight limiter
 
 `Sop/util_MaterialWeightLimit` (`otls/util_MaterialWeightLimit.hda`) limits any set of material weight volumes to four positive contributions per voxel. For each voxel, with `t` the fifth-largest weight, it keeps `q_i = max(w_i - t, 0)` and normalizes, so a changing fourth contribution fades out continuously; ties with five or more equal maxima fall back to the first four in channel order and are counted in `hego_material_limit_tie_fallback_voxels`. Only the selected volumes change. The shared source is `scripts/houdini/material_weight_limit.py`, embedded by both HDAs so cooks need no project imports.

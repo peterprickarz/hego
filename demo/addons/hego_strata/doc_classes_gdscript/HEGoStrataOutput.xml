@@ -1,13 +1,110 @@
 <?xml version='1.0' encoding='utf-8'?>
-<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoStrataOutput" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoStrataOutput" inherits="HEGoOutputHandler" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 	<brief_description>
-		Routes a cook's heightfields into the terrain layers an [HEGoStrataTargets] binds, and publishes them in one transaction. A volume names its target with the primitive attribute hegostrata_layer_path; the other attributes below describe its role.
+		Publishes the heightfields a cook outputs into Strata terrain layers.
 	</brief_description>
 	<description>
+		HEGo runs it because it extends [HEGoOutputHandler]; neither HEGo nor Strata names it. A volume names its target with the primitive attribute hegostrata_layer_path, a path resolved like an input path (relative to the HEGo node, or to the edited or running scene); the HDA usually writes it from a target_layer_path parameter. Volumes without it belong to other handlers and are left alone. Every target must be a procedural [StrataLayer] of a [StrataTerrain3D], and every channel the HDA emits for it is accepted.  One cook is one [StrataProcedural] transaction over all its targets: every target receives a complete validated result, or none does and each keeps its previous one. The Strata layers the host read as inputs ([HEGoStrataInput]) are the transaction's read set, so a result built from an input that changed while Houdini cooked is rejected, as is one whose target is also one of its inputs. A committed layer records the host in [member StrataLayer.producer_path] and [member StrataLayer.producer_id], the inputs it was built from, and the host's [method signature]; the bridge's editor plugin uses these to mark it stale when the host changes ([method poll]), and Strata itself when an input does.
 	</description>
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="output_phase">
+			<return type="String" />
+			<description>
+			</description>
+		</method>
+		<method name="should_handle">
+			<return type="bool" />
+			<param index="0" name="summary" type="Dictionary" />
+			<description>
+				Any cook with volumes may carry Strata targets; [method handle] looks for them.
+			</description>
+		</method>
+		<method name="handle">
+			<return type="void" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+				Fetches the volumes that name a Strata layer and publishes them as one transaction. A rejected result is logged and recorded on the layers it was meant for, or the layers this host published before when none could be resolved; their previous results stay in place.
+			</description>
+		</method>
+		<method name="publish" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="fields" type="Array" />
+			<param index="2" name="inputs" type="Array" />
+			<param index="3" name="host_signature" type="Dictionary" default="{}" />
+			<param index="4" name="guard" type="Callable" default="Callable()" />
+			<description>
+				Routes [param fields], as [method HEGoAssetNode.get_heightfield_fields] returns them, to the layers their hegostrata_layer_path names and publishes them in one transaction by [param host]. [param inputs] are the snapshots the result was built from ([method HEGoStrataInput.snapshot]); [param host_signature] is recorded on every published layer; [param guard], when valid, must still return true at commit. Fields without a target path are ignored. Needs no Houdini session, so tests and fixtures publish through it with fields of their own. Returns the transaction's [code]{ok, message}[/code].
+			</description>
+		</method>
+		<method name="route_fields" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="fields" type="Array" />
+			<description>
+				Groups [param fields] per target layer and converts each to the target terrain's frame. Returns [code]{ok, targets, results}[/code]: [code]targets[/code] as [method StrataProcedural.begin_transaction] takes them, [code]results[/code] as [method StrataProcedural.commit_fields] takes them; or [code]{ok: false, message}[/code].
+			</description>
+		</method>
+		<method name="record_input" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="cook" type="Dictionary" />
+			<param index="1" name="snapshot" type="Dictionary" />
+			<description>
+				Records [param snapshot], one Strata input uploaded for this cook, in the shared cook dictionary, so the transaction checks it is still current when it commits.
+			</description>
+		</method>
+		<method name="producer_id" qualifiers="static">
+			<return type="String" />
+			<param index="0" name="host" type="Node" />
+			<description>
+				The producer identity a publication by [param host] records on its layers: the host's path from the root of the scene it belongs to, or its absolute path when it belongs to none.
+			</description>
+		</method>
+		<method name="signature" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<description>
+				What a published result depends on in [param host] besides its terrain inputs: the HDA, its parameters (as a hash of [member HEGoNode3D.parm_stash]), its input rows and its transform. Recorded on the layers it publishes as [member StrataLayer.producer_signature].
+			</description>
+		</method>
+		<method name="producer_changed" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="layer" type="StrataLayer" />
+			<description>
+				Whether the HEGo node that published [param layer] has changed since: its [method signature] differs from the one recorded on the layer. False when the layer records no producer or its producer is not an HEGo node in the tree.
+			</description>
+		</method>
+		<method name="published_layers" qualifiers="static">
+			<return type="StrataLayer[]" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="root" type="Node" default="null" />
+			<description>
+				The procedural layers under [param root] whose recorded producer is [param host].
+			</description>
+		</method>
+		<method name="watch" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="host" type="Node" />
+			<description>
+				Makes [param host]'s [signal HEGoNode3D.cook_inputs_changed] mark the layers it published stale at once, rather than at the next [method poll]. Connecting twice does nothing.
+			</description>
+		</method>
+		<method name="inputs_changed" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="host" type="Node" />
+			<description>
+				Marks every layer [param host] published stale, with new producer intent, because its inputs or parameters changed. Also for layers that are already stale, so a runtime bake of them goes stale too.
+			</description>
+		</method>
+		<method name="poll" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="root" type="Node" />
+			<description>
+				One pass of the bridge's editor watch over the scene under [param root]: [method watch]es every HEGo node, and marks every current procedural layer stale whose producer changed since it published ([method producer_changed]). The bridge's editor plugin runs this a few times a second; a changed input layer is Strata's own check ([method StrataTerrain3D.check_procedural_sources]).
+			</description>
+		</method>
 		<method name="to_houdini_attrs" qualifiers="static">
 			<return type="Dictionary" />
 			<param index="0" name="attrs" type="Dictionary" />
@@ -20,49 +117,6 @@
 			<param index="0" name="attrs" type="Dictionary" />
 			<description>
 				Fetched primitive attributes as Strata stores them, with the prefix removed.
-			</description>
-		</method>
-		<method name="prepare" qualifiers="static">
-			<return type="Dictionary" />
-			<param index="0" name="host" type="Node" />
-			<param index="1" name="rows" type="Array" />
-			<param index="2" name="declarations" type="Array" />
-			<param index="3" name="producer" type="String" />
-			<param index="4" name="guard" type="Callable" default="Callable()" />
-			<description>
-				Prebind every target to an instance and stable layer ID before asynchronous upload/cooking. Missing terrain input references fail a procedural cook.
-			</description>
-		</method>
-		<method name="fail" qualifiers="static">
-			<return type="Dictionary" />
-			<param index="0" name="state" type="Dictionary" />
-			<param index="1" name="message" type="String" />
-			<description>
-			</description>
-		</method>
-		<method name="capture_preset" qualifiers="static">
-			<return type="Dictionary" />
-			<param index="0" name="host" type="Node" />
-			<param index="1" name="asset" type="HEGoAssetNode" />
-			<param index="2" name="state" type="Dictionary" />
-			<description>
-			</description>
-		</method>
-		<method name="handle" qualifiers="static">
-			<return type="Dictionary" />
-			<param index="0" name="context" type="HEGoOutputContext" />
-			<param index="1" name="state" type="Dictionary" />
-			<description>
-				[param state] is what [method prepare] returned for this cook.
-			</description>
-		</method>
-		<method name="route_fields" qualifiers="static">
-			<return type="Dictionary" />
-			<param index="0" name="host" type="Node" />
-			<param index="1" name="state" type="Dictionary" />
-			<param index="2" name="fields" type="Array" />
-			<description>
-				This function also supports fixture/tests without starting a Houdini session.
 			</description>
 		</method>
 	</methods>
@@ -81,6 +135,18 @@
 		<constant name="ROLE_ATTR" value="&quot;hegostrata_role&quot;">
 		</constant>
 		<constant name="CHANNEL_ATTR" value="&quot;hegostrata_channel&quot;">
+		</constant>
+		<constant name="FETCHED_ATTRS" value="[&quot;hegostrata_layer_path&quot;, &quot;hegostrata_empty&quot;, &quot;hegostrata_composition&quot;, &quot;hegostrata_role&quot;, &quot;hegostrata_channel&quot;]">
+			Primitive attributes fetched with every field.
+		</constant>
+		<constant name="COOK_KEY" value="&quot;hego_strata&quot;">
+			Key the bridge keeps its per-cook state under in the shared cook dictionary ([member HEGoOutputContext.cook_state]): [code]inputs[/code], the snapshots [HEGoStrataInput] uploaded.
+		</constant>
+		<constant name="LOG_CATEGORY" value="&quot;terrain&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="STALE_PRODUCER" value="&quot;Producer inputs/parameters changed; explicit recook required&quot;">
+			Status a published layer gets when its producer's inputs or parameters change.
 		</constant>
 	</constants>
 </class>

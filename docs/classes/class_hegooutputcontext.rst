@@ -114,7 +114,7 @@ What the cook produced, as :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAs
 
 ``Dictionary`` **cook_state** = ``{}`` :ref:`🔗<class_HEGoOutputContext_property_cook_state>`
 
-The dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s share for this one cook, or empty when the cook was not run through them.
+The dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s and input handlers share for this one cook, or empty when the cook was not run through :ref:`HEGoNode3D.cook()<class_HEGoNode3D_method_cook>`. Besides their own keys it holds what the cook started from; see :ref:`HEGoCookExtension<class_HEGoCookExtension>`.
 
 .. rst-class:: classref-section-separator
 

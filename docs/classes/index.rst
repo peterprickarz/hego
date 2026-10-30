@@ -93,10 +93,9 @@ What HEGo saves to disk.
 HEGo Strata bridge
 ------------------
 
-The separate ``addons/hego_strata`` addon, which depends on HEGo and Strata: Strata layers as HDA inputs, and a cook's heightfields published into Strata layers. It plugs into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` and :ref:`HEGoCookExtension<class_HEGoCookExtension>`.
+The separate ``addons/hego_strata`` addon, which depends on HEGo and Strata: Strata layers as HDA inputs, and a cook's heightfields published into Strata layers. It plugs into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`.
 
 - :ref:`HEGoStrataInput<class_HEGoStrataInput>`
-- :ref:`HEGoStrataTargets<class_HEGoStrataTargets>`
 - :ref:`HEGoStrataOutput<class_HEGoStrataOutput>`
 
 HEGo Terrain3D bridge

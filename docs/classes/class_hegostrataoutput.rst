@@ -10,9 +10,16 @@
 HEGoStrataOutput
 ================
 
-**Inherits:** ``RefCounted``
+**Inherits:** :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` **<** ``RefCounted``
 
-Routes a cook's heightfields into the terrain layers an :ref:`HEGoStrataTargets<class_HEGoStrataTargets>` binds, and publishes them in one transaction. A volume names its target with the primitive attribute hegostrata_layer_path; the other attributes below describe its role.
+Publishes the heightfields a cook outputs into Strata terrain layers.
+
+.. rst-class:: classref-introduction-group
+
+Description
+-----------
+
+HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; neither HEGo nor Strata names it. A volume names its target with the primitive attribute hegostrata_layer_path, a path resolved like an input path (relative to the HEGo node, or to the edited or running scene); the HDA usually writes it from a target_layer_path parameter. Volumes without it belong to other handlers and are left alone. Every target must be a procedural ``StrataLayer`` of a ``StrataTerrain3D``, and every channel the HDA emits for it is accepted.  One cook is one ``StrataProcedural`` transaction over all its targets: every target receives a complete validated result, or none does and each keeps its previous one. The Strata layers the host read as inputs (:ref:`HEGoStrataInput<class_HEGoStrataInput>`) are the transaction's read set, so a result built from an input that changed while Houdini cooked is rejected, as is one whose target is also one of its inputs. A committed layer records the host in ``StrataLayer.producer_path`` and ``StrataLayer.producer_id``, the inputs it was built from, and the host's :ref:`signature()<class_HEGoStrataOutput_method_signature>`; the bridge's editor plugin uses these to mark it stale when the host changes (:ref:`poll()<class_HEGoStrataOutput_method_poll>`), and Strata itself when an input does.
 
 .. rst-class:: classref-reftable-group
 
@@ -22,21 +29,37 @@ Methods
 .. table::
    :widths: auto
 
-   +----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`to_houdini_attrs<class_HEGoStrataOutput_method_to_houdini_attrs>`\ (\ attrs\: ``Dictionary``\ ) |static|                                                                              |
-   +----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`from_houdini_attrs<class_HEGoStrataOutput_method_from_houdini_attrs>`\ (\ attrs\: ``Dictionary``\ ) |static|                                                                          |
-   +----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`prepare<class_HEGoStrataOutput_method_prepare>`\ (\ host\: ``Node``, rows\: ``Array``, declarations\: ``Array``, producer\: ``String``, guard\: ``Callable`` = Callable()\ ) |static| |
-   +----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`fail<class_HEGoStrataOutput_method_fail>`\ (\ state\: ``Dictionary``, message\: ``String``\ ) |static|                                                                                |
-   +----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`capture_preset<class_HEGoStrataOutput_method_capture_preset>`\ (\ host\: ``Node``, asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, state\: ``Dictionary``\ ) |static|              |
-   +----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`handle<class_HEGoStrataOutput_method_handle>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`, state\: ``Dictionary``\ ) |static|                                     |
-   +----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`route_fields<class_HEGoStrataOutput_method_route_fields>`\ (\ host\: ``Node``, state\: ``Dictionary``, fields\: ``Array``\ ) |static|                                                 |
-   +----------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``String``     | :ref:`output_phase<class_HEGoStrataOutput_method_output_phase>`\ (\ )                                                                                                                                  |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``       | :ref:`should_handle<class_HEGoStrataOutput_method_should_handle>`\ (\ summary\: ``Dictionary``\ )                                                                                                      |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|         | :ref:`handle<class_HEGoStrataOutput_method_handle>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ )                                                                                 |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`publish<class_HEGoStrataOutput_method_publish>`\ (\ host\: ``Node``, fields\: ``Array``, inputs\: ``Array``, host_signature\: ``Dictionary`` = {}, guard\: ``Callable`` = Callable()\ ) |static| |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`route_fields<class_HEGoStrataOutput_method_route_fields>`\ (\ host\: ``Node``, fields\: ``Array``\ ) |static|                                                                                    |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|         | :ref:`record_input<class_HEGoStrataOutput_method_record_input>`\ (\ cook\: ``Dictionary``, snapshot\: ``Dictionary``\ ) |static|                                                                       |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``String``     | :ref:`producer_id<class_HEGoStrataOutput_method_producer_id>`\ (\ host\: ``Node``\ ) |static|                                                                                                          |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`signature<class_HEGoStrataOutput_method_signature>`\ (\ host\: ``Node``\ ) |static|                                                                                                              |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``       | :ref:`producer_changed<class_HEGoStrataOutput_method_producer_changed>`\ (\ layer\: ``StrataLayer``\ ) |static|                                                                                        |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Array``      | :ref:`published_layers<class_HEGoStrataOutput_method_published_layers>`\ (\ host\: ``Node``, root\: ``Node`` = null\ ) |static|                                                                        |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|         | :ref:`watch<class_HEGoStrataOutput_method_watch>`\ (\ host\: ``Node``\ ) |static|                                                                                                                      |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|         | :ref:`inputs_changed<class_HEGoStrataOutput_method_inputs_changed>`\ (\ host\: ``Node``\ ) |static|                                                                                                    |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|         | :ref:`poll<class_HEGoStrataOutput_method_poll>`\ (\ root\: ``Node``\ ) |static|                                                                                                                        |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`to_houdini_attrs<class_HEGoStrataOutput_method_to_houdini_attrs>`\ (\ attrs\: ``Dictionary``\ ) |static|                                                                                         |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`from_houdini_attrs<class_HEGoStrataOutput_method_from_houdini_attrs>`\ (\ attrs\: ``Dictionary``\ ) |static|                                                                                     |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -127,6 +150,38 @@ Strata stores its field metadata under plain keys (role, channel, ...). In Houdi
 
 
 
+.. _class_HEGoStrataOutput_constant_FETCHED_ATTRS:
+
+.. rst-class:: classref-constant
+
+**FETCHED_ATTRS** = ``["hegostrata_layer_path", "hegostrata_empty", "hegostrata_composition", "hegostrata_role", "hegostrata_channel"]`` :ref:`🔗<class_HEGoStrataOutput_constant_FETCHED_ATTRS>`
+
+Primitive attributes fetched with every field.
+
+.. _class_HEGoStrataOutput_constant_COOK_KEY:
+
+.. rst-class:: classref-constant
+
+**COOK_KEY** = ``"hego_strata"`` :ref:`🔗<class_HEGoStrataOutput_constant_COOK_KEY>`
+
+Key the bridge keeps its per-cook state under in the shared cook dictionary (:ref:`HEGoOutputContext.cook_state<class_HEGoOutputContext_property_cook_state>`): ``inputs``, the snapshots :ref:`HEGoStrataInput<class_HEGoStrataInput>` uploaded.
+
+.. _class_HEGoStrataOutput_constant_LOG_CATEGORY:
+
+.. rst-class:: classref-constant
+
+**LOG_CATEGORY** = ``"terrain"`` :ref:`🔗<class_HEGoStrataOutput_constant_LOG_CATEGORY>`
+
+Category this file logs under, shown in the session panel filter.
+
+.. _class_HEGoStrataOutput_constant_STALE_PRODUCER:
+
+.. rst-class:: classref-constant
+
+**STALE_PRODUCER** = ``"Producer inputs/parameters changed; explicit recook required"`` :ref:`🔗<class_HEGoStrataOutput_constant_STALE_PRODUCER>`
+
+Status a published layer gets when its producer's inputs or parameters change.
+
 .. rst-class:: classref-section-separator
 
 ----
@@ -135,6 +190,164 @@ Strata stores its field metadata under plain keys (role, channel, ...). In Houdi
 
 Method Descriptions
 -------------------
+
+.. _class_HEGoStrataOutput_method_output_phase:
+
+.. rst-class:: classref-method
+
+``String`` **output_phase**\ (\ ) :ref:`🔗<class_HEGoStrataOutput_method_output_phase>`
+
+.. container:: contribute
+
+	There is currently no description for this method. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_should_handle:
+
+.. rst-class:: classref-method
+
+``bool`` **should_handle**\ (\ summary\: ``Dictionary``\ ) :ref:`🔗<class_HEGoStrataOutput_method_should_handle>`
+
+Any cook with volumes may carry Strata targets; :ref:`handle()<class_HEGoStrataOutput_method_handle>` looks for them.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_handle:
+
+.. rst-class:: classref-method
+
+|void| **handle**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) :ref:`🔗<class_HEGoStrataOutput_method_handle>`
+
+Fetches the volumes that name a Strata layer and publishes them as one transaction. A rejected result is logged and recorded on the layers it was meant for, or the layers this host published before when none could be resolved; their previous results stay in place.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_publish:
+
+.. rst-class:: classref-method
+
+``Dictionary`` **publish**\ (\ host\: ``Node``, fields\: ``Array``, inputs\: ``Array``, host_signature\: ``Dictionary`` = {}, guard\: ``Callable`` = Callable()\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_publish>`
+
+Routes ``fields``, as ``HEGoAssetNode.get_heightfield_fields()`` returns them, to the layers their hegostrata_layer_path names and publishes them in one transaction by ``host``. ``inputs`` are the snapshots the result was built from (:ref:`HEGoStrataInput.snapshot()<class_HEGoStrataInput_method_snapshot>`); ``host_signature`` is recorded on every published layer; ``guard``, when valid, must still return true at commit. Fields without a target path are ignored. Needs no Houdini session, so tests and fixtures publish through it with fields of their own. Returns the transaction's ``{ok, message}``.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_route_fields:
+
+.. rst-class:: classref-method
+
+``Dictionary`` **route_fields**\ (\ host\: ``Node``, fields\: ``Array``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_route_fields>`
+
+Groups ``fields`` per target layer and converts each to the target terrain's frame. Returns ``{ok, targets, results}``: ``targets`` as ``StrataProcedural.begin_transaction()`` takes them, ``results`` as ``StrataProcedural.commit_fields()`` takes them; or ``{ok: false, message}``.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_record_input:
+
+.. rst-class:: classref-method
+
+|void| **record_input**\ (\ cook\: ``Dictionary``, snapshot\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_record_input>`
+
+Records ``snapshot``, one Strata input uploaded for this cook, in the shared cook dictionary, so the transaction checks it is still current when it commits.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_producer_id:
+
+.. rst-class:: classref-method
+
+``String`` **producer_id**\ (\ host\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_producer_id>`
+
+The producer identity a publication by ``host`` records on its layers: the host's path from the root of the scene it belongs to, or its absolute path when it belongs to none.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_signature:
+
+.. rst-class:: classref-method
+
+``Dictionary`` **signature**\ (\ host\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_signature>`
+
+What a published result depends on in ``host`` besides its terrain inputs: the HDA, its parameters (as a hash of :ref:`HEGoNode3D.parm_stash<class_HEGoNode3D_property_parm_stash>`), its input rows and its transform. Recorded on the layers it publishes as ``StrataLayer.producer_signature``.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_producer_changed:
+
+.. rst-class:: classref-method
+
+``bool`` **producer_changed**\ (\ layer\: ``StrataLayer``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_producer_changed>`
+
+Whether the HEGo node that published ``layer`` has changed since: its :ref:`signature()<class_HEGoStrataOutput_method_signature>` differs from the one recorded on the layer. False when the layer records no producer or its producer is not an HEGo node in the tree.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_published_layers:
+
+.. rst-class:: classref-method
+
+``Array`` **published_layers**\ (\ host\: ``Node``, root\: ``Node`` = null\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_published_layers>`
+
+The procedural layers under ``root`` whose recorded producer is ``host``.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_watch:
+
+.. rst-class:: classref-method
+
+|void| **watch**\ (\ host\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_watch>`
+
+Makes ``host``'s :ref:`HEGoNode3D.cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>` mark the layers it published stale at once, rather than at the next :ref:`poll()<class_HEGoStrataOutput_method_poll>`. Connecting twice does nothing.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_inputs_changed:
+
+.. rst-class:: classref-method
+
+|void| **inputs_changed**\ (\ host\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_inputs_changed>`
+
+Marks every layer ``host`` published stale, with new producer intent, because its inputs or parameters changed. Also for layers that are already stale, so a runtime bake of them goes stale too.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_poll:
+
+.. rst-class:: classref-method
+
+|void| **poll**\ (\ root\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_poll>`
+
+One pass of the bridge's editor watch over the scene under ``root``: :ref:`watch()<class_HEGoStrataOutput_method_watch>`\ es every HEGo node, and marks every current procedural layer stale whose producer changed since it published (:ref:`producer_changed()<class_HEGoStrataOutput_method_producer_changed>`). The bridge's editor plugin runs this a few times a second; a changed input layer is Strata's own check (``StrataTerrain3D.check_procedural_sources()``).
+
+.. rst-class:: classref-item-separator
+
+----
 
 .. _class_HEGoStrataOutput_method_to_houdini_attrs:
 
@@ -155,70 +368,6 @@ Strata field metadata as Houdini primitive attributes. Other keys pass through a
 ``Dictionary`` **from_houdini_attrs**\ (\ attrs\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_from_houdini_attrs>`
 
 Fetched primitive attributes as Strata stores them, with the prefix removed.
-
-.. rst-class:: classref-item-separator
-
-----
-
-.. _class_HEGoStrataOutput_method_prepare:
-
-.. rst-class:: classref-method
-
-``Dictionary`` **prepare**\ (\ host\: ``Node``, rows\: ``Array``, declarations\: ``Array``, producer\: ``String``, guard\: ``Callable`` = Callable()\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_prepare>`
-
-Prebind every target to an instance and stable layer ID before asynchronous upload/cooking. Missing terrain input references fail a procedural cook.
-
-.. rst-class:: classref-item-separator
-
-----
-
-.. _class_HEGoStrataOutput_method_fail:
-
-.. rst-class:: classref-method
-
-``Dictionary`` **fail**\ (\ state\: ``Dictionary``, message\: ``String``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_fail>`
-
-.. container:: contribute
-
-	There is currently no description for this method. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
-
-.. rst-class:: classref-item-separator
-
-----
-
-.. _class_HEGoStrataOutput_method_capture_preset:
-
-.. rst-class:: classref-method
-
-``Dictionary`` **capture_preset**\ (\ host\: ``Node``, asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, state\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_capture_preset>`
-
-.. container:: contribute
-
-	There is currently no description for this method. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
-
-.. rst-class:: classref-item-separator
-
-----
-
-.. _class_HEGoStrataOutput_method_handle:
-
-.. rst-class:: classref-method
-
-``Dictionary`` **handle**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`, state\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_handle>`
-
-``state`` is what :ref:`prepare()<class_HEGoStrataOutput_method_prepare>` returned for this cook.
-
-.. rst-class:: classref-item-separator
-
-----
-
-.. _class_HEGoStrataOutput_method_route_fields:
-
-.. rst-class:: classref-method
-
-``Dictionary`` **route_fields**\ (\ host\: ``Node``, state\: ``Dictionary``, fields\: ``Array``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_route_fields>`
-
-This function also supports fixture/tests without starting a Houdini session.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |const| replace:: :abbr:`const (This method has no side effects. It doesn't modify any of the instance's member variables.)`

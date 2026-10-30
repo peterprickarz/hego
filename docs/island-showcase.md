@@ -43,7 +43,7 @@ which a user-level package does once per checkout, e.g. `~/houdini22.0/packages/
 
 After that every cook is an explicit action:
 
-In the editor, select an `HDA/*Cook` node and press **Cook** in the HEGo panel: `CoarseCook` and `DetailCook` run `HEGo_IslandErosion.hda`, `TintCook` runs `HEGo_TerrainTint.hda`, `MaterialCook` runs `HEGo_MaterialDistribution.hda`. Each writes its layer's channel files and marks the scene unsaved; save the scene to keep the updated references. The material binding on the scene root repacks the control maps whenever the material distribution commits.
+In the editor, select an `HDA/*Cook` node and press **Cook** in the HEGo panel: `CoarseCook` and `DetailCook` run `HEGo_IslandErosion.hda`, `TintCook` runs `HEGo_TerrainTint.hda`, `MaterialCook` runs `HEGo_MaterialDistribution.hda`. Each publishes into the layer its HDA's `target_layer_path` parameter names, writes that layer's channel files and marks the scene unsaved; save the scene to keep the updated references. The material binding on the scene root repacks the control maps whenever the material distribution commits.
 
 Headless, from the repository root:
 
