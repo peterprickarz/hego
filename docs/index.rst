@@ -6,7 +6,8 @@ your HDAs cook there, and what they produce becomes ordinary Godot nodes in your
 
 Start with :doc:`about/getting_started`, then :doc:`node_reference/hego_node_3d`, which is
 the node most projects only ever need. Everything under :doc:`api/index` is for when you
-want to drive Houdini from a script of your own.
+want to drive Houdini from a script of your own. For layered terrain, with or without
+Houdini, see :doc:`strata/index`.
 
 .. toctree::
    :maxdepth: 1
@@ -29,31 +30,31 @@ want to drive Houdini from a script of your own.
    api/index
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: Strata terrain
 
-   terrain-runtime
-   terrain-houdini-integration
-   terrain-shading
-   terrain-material-blending
-   terrain-macro
-   terrain-bulk
-   terrain-prototype
+   strata/index
+   strata/getting_started
+   strata/houdini
+   strata/example_island
+   strata/reference
 
 .. toctree::
    :maxdepth: 1
-   :caption: Island demo
+   :caption: Development notes
 
-   island-showcase
-   island-hda
-   island-material-distribution
-   island-benchmark
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Packaging
-
-   next-packaging
+   development/testing
+   development/packaging
+   development/terrain_runtime
+   development/terrain_bulk
+   development/strata_integration_tests
+   development/terrain_shading
+   development/terrain_material_blending
+   development/terrain_macro
+   development/island_hda
+   development/island_material_distribution
+   development/island_benchmark
+   development/terrain_prototype
 
 .. toctree::
    :maxdepth: 2

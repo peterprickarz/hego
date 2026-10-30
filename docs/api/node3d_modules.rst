@@ -234,7 +234,7 @@ output handlers, no cook extension. The HEGo Strata bridge (``addons/hego_strata
 carry ``hegostrata_layer_path`` into Strata layers, all targets of one cook in one
 transaction. Its terrain inputs make the cook explicit and strict, and its editor plugin
 listens to ``cook_inputs_changed`` to mark published layers stale. See
-``docs/terrain-houdini-integration.md`` in the repository. The HEGo Terrain3D bridge
+:doc:`/strata/houdini`. The HEGo Terrain3D bridge
 (``addons/hego_terrain3d``) uses
 :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>` to send a Terrain3D node, and
 :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>` and

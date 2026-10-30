@@ -25,7 +25,7 @@ HEGo and Terrain3D; it adds them through
 :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`. The HEGo Strata bridge
 (``addons/hego_strata``) adds Strata layers as inputs and publishes heightfields into them
 the same way, through :ref:`HEGoStrataInput<class_HEGoStrataInput>` and
-:ref:`HEGoStrataOutput<class_HEGoStrataOutput>`. Each output handler acts only on output
+:ref:`HEGoStrataOutput<class_HEGoStrataOutput>`; see :doc:`/strata/houdini`. Each output handler acts only on output
 that carries its own attributes, so both bridges can be installed together. An input
 handler can make a node's cooks explicit (the panel's auto recook skips the node) and strict
 (:ref:`requires_strict_cook<class_HEGoInputHandler_method_requires_strict_cook>`); the

@@ -38,20 +38,25 @@ separately, each with a one-way dependency:
 | Addon | Folder | Depends on | What it does |
 | --- | --- | --- | --- |
 | **HEGo** | `addons/hego` | – | Houdini Engine integration (this addon) |
-| **Strata** | `addons/strata` | – | Layered terrain: hand and procedural layers, quadtree mesher, material renderer, bake, collision and navigation. Works without Houdini. |
-| **HEGo Strata** | `addons/hego_strata` | HEGo + Strata | Routes HDA heightfield volumes carrying `hegostrata_*` attributes into Strata layers |
+| **Strata** | `addons/strata` | – | Layered terrain: paint layers in the editor or cook them in Houdini, then bake for collision and navigation. Works without Houdini. |
+| **HEGo Strata** | `addons/hego_strata` | HEGo + Strata | Lets a `HEGoNode3D` read Strata layers and cook its result into one |
 | **HEGo Terrain3D** | `addons/hego_terrain3d` | HEGo + [Terrain3D](https://github.com/TokisanGames/Terrain3D) | Sends Terrain3D nodes to HDAs as heightfield inputs, and turns heightfields and points carrying `hegot3d_*` attributes into Terrain3D terrains and instances |
 
 Terrain3D is TokisanGames' addon, not part of this repository: install it yourself at
 `addons/terrain_3d` (the demo vendors and is tested with 1.0.1). Neither HEGo nor
 Terrain3D depends on HEGo Terrain3D, and it contains no native code.
 
-The `next` channel publishes them as `release-next` (HEGo), `strata-release-next`,
+Strata documentation:
+
+- [Strata terrain](docs/strata/index.md): what it is and how it works
+- [Getting started](docs/strata/getting_started.md): install, paint, materials, bake, collision and navigation
+- [Strata and Houdini](docs/strata/houdini.md): cook layers with an HDA through a `HEGoNode3D`
+- [Example: Bracken Isle](docs/strata/example_island.md): the demo island
+- [Reference](docs/strata/reference.md): channels, attributes, files and bake options
+
+The `next` channel publishes the addons as `release-next` (HEGo), `strata-release-next`,
 `hego-strata-release-next`, `hego-terrain3d-release-next` and `release-next-bundle`
-(all four of ours); see
-[docs/next-packaging.md](docs/next-packaging.md). Cooking a terrain is covered in
-[docs/terrain-houdini-integration.md](docs/terrain-houdini-integration.md), the terrain
-itself in [docs/terrain-runtime.md](docs/terrain-runtime.md).
+(all four of ours).
 
 > **Note**: The demo island's cooked terrain data and textures are stored with
 > [Git LFS](https://git-lfs.com). Run `git lfs install` once before cloning (or
@@ -78,16 +83,12 @@ itself in [docs/terrain-runtime.md](docs/terrain-runtime.md).
 
 ### Terrain island in the main demo
 
-Open `demo/project.godot` and select `res://scenes/terrain_island.tscn` to edit or
-play the saved island normally. The scene uses the installed addons in
-`demo/addons`; no launcher, addon staging or automatic Houdini cook is required.
-The terrain's layers and cooked channels live as one file each under
-`demo/island/terrain/` and are committed; a cook overwrites its files in place,
-and the bake and material control maps are rebuilt on open. Island assets, scripts
-and HDAs are in `demo/island/`, tests in `demo/tests/`. See the
-[island workflow](docs/island-showcase.md) for explicit cooking.
-Artificial prototype scenes remain under `demo/scenes/terrain_prototype/`;
-automated standalone/integration tests use disposable projects.
+Open `demo/project.godot`; its main scene, `res://scenes/terrain_island.tscn`, is the
+Strata demo island, which opens and plays without Houdini. See
+[Example: Bracken Isle](docs/strata/example_island.md), and
+[Testing and maintenance](docs/development/testing.md) for the test suites, HDA rebuilds and
+headless island commands. Artificial prototype scenes remain under
+`demo/scenes/terrain_prototype/`.
 
 ### Testing HEGo in another project
 
@@ -102,7 +103,7 @@ source revision. HEGo Terrain3D also names Terrain3D as an external requirement.
 Every package records `SOURCE_COMMIT`; native build receipts must match the
 selected source revision before staging. Each publication is a child of its
 previous publication, uses an atomic non-force push, and does not
-modify the source checkout. See [the package layout and build guide](docs/next-packaging.md).
+modify the source checkout. See [the package layout and build guide](docs/development/packaging.md).
 
 The HEGo-only submodule package can be installed with:
 

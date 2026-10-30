@@ -12,6 +12,6 @@ HEGo or Houdini; the native extension needs only godot-cpp.
 - `StrataBake`, `StrataCollision` and `StrataNavigation` turn the compiled stack into
   gameplay data; the `strata_runtime_*` scripts load that data without the extension.
 
-Documentation: `docs/terrain-runtime.md`, `docs/terrain-shading.md`,
-`docs/terrain-material-blending.md` and `docs/terrain-macro.md` in the HEGo repository.
+Documentation: `docs/development/terrain_runtime.md`, `docs/development/terrain_shading.md`,
+`docs/development/terrain_material_blending.md` and `docs/development/terrain_macro.md` in the HEGo repository.
 Native binaries are receipted in `native-build.json`.

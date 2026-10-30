@@ -14,5 +14,5 @@ cumulative) from the host's ordinary input rows and makes its cooks explicit and
 Published layers record their producer and inputs; Strata and this plugin's editor watch
 mark them stale when either changes, until the host is cooked again.
 
-Attribute contract and examples: `docs/terrain-houdini-integration.md`; the island
-demo's HDAs are documented in `docs/island-hda.md`.
+Attribute contract and examples: `docs/strata/houdini.md`; the island
+demo's HDAs are documented in `docs/development/island_hda.md`.

@@ -31,7 +31,7 @@ For the editable level, open `demo/project.godot` and `res://scenes/terrain_isla
 
 The HDA produces the four fields on the input height lattice. It derives broad ridge brightening, low-amplitude world-space color variation, and cavity occlusion. Cavity AO is a height-neighborhood approximation, not ray-traced visibility or horizon occlusion. The HDA does not bake directional sunlight, and it never darkens the tint based on cavity depth; cavity darkening comes from `terrain_ao` alone. Its controls include relief radius/strength, AO radius/strength, variation scale/strength, and deterministic seed. Parameter values are checked before the cook.
 
-The source generator and contract are [build_tint_hda.py](../scripts/houdini/build_tint_hda.py) and `demo/island/hda/tint_contract.json`. With Houdini 22.0 installed, build or run the standalone HDA regression with:
+The source generator and contract are [build_tint_hda.py](../../scripts/houdini/build_tint_hda.py) and `demo/island/hda/tint_contract.json`. With Houdini 22.0 installed, build or run the standalone HDA regression with:
 
 ```sh
 HFS=/opt/hfs22.0

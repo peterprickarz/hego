@@ -13,7 +13,7 @@ The same weight kernel is used for vertex detail and fragment shading. Fragment 
 
 ## Island profiles and editing
 
-The first six source resources retain these tuning profiles. The island now uses32 distinct sources and a Houdini-authored distribution; see [island material distribution](island-material-distribution.md). IDs are no longer aliases of this table:
+These are the tuning profiles of the original six source resources, kept for reference. The island now uses the four sources of its material registry and a Houdini-authored distribution; see [island material distribution](island_material_distribution.md). IDs are no longer aliases of this table:
 
 | Source | Contrast | Bias |
 | --- | ---: | ---: |
@@ -26,9 +26,9 @@ The first six source resources retain these tuning profiles. The island now uses
 
 The stronger cliff/gravel profiles let rock texture peaks emerge through softer vegetation and sand. Biases approximately center the measured alpha medians at 0.5, so a source such as snow is not favored merely because its displacement map is globally brighter. The source images and their import settings remain unchanged.
 
-Edit and save these `.tres` resources in the Resource Inspector to retain adjustments. `make_variant(uv_multiplier)` shares source textures and follows source texture/UV/triplanar-sharpness/displacement/contrast/bias/roughness edits. The active renderer coalesces material `changed` notifications into a refresh. The island binds32 independent registered resources directly; it does not create linked variants or repeat the first six. A separately running game does not watch editor file saves; reopening it loads the saved profiles.
+Edit and save these `.tres` resources in the Resource Inspector to retain adjustments. `make_variant(uv_multiplier)` shares source textures and follows source texture/UV/triplanar-sharpness/displacement/contrast/bias/roughness edits. The active renderer coalesces material `changed` notifications into a refresh. The island binds its registered resources directly; it does not create linked variants. A separately running game does not watch editor file saves; reopening it loads the saved profiles.
 
-Saving a material or variant as `.tres`/`.res`, or inside a `PackedScene`, preserves its exported controls and texture references. A saved variant is an independent snapshot; its private live source connection is not serialized. The island compiled-runtime bootstrap loads the 32 registered distinct resources, which are included in the runtime-only project. Material tuning requires no terrain bake or Houdini cook.
+Saving a material or variant as `.tres`/`.res`, or inside a `PackedScene`, preserves its exported controls and texture references. A saved variant is an independent snapshot; its private live source connection is not serialized. The island compiled-runtime bootstrap loads every registered resource, which are included in the runtime-only project. Material tuning requires no terrain bake or Houdini cook.
 
 The asset generator reproduces these defaults without downloading or rewriting textures:
 

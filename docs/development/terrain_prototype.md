@@ -1,12 +1,6 @@
-# Strata prototype
-
-Strata is the layered terrain addon at `demo/addons/strata`. It works on its own, without HEGo or Houdini; `demo/addons/hego_strata` is the separate bridge that cooks HDAs into Strata layers.
+# Prototype scenes and render lab
 
 These dedicated prototype fixtures demonstrate layered terrain data and sculpting, plus a Forward+ renderer with stitched LOD patches and material displacement. They live in `demo/scenes/terrain_prototype/` in the main demo project and use artificial terrain/material inputs. The real island remains the ordinary `demo/scenes/terrain_island.tscn` scene; prototype fixtures are not its production assets. Automated prototype suites run in disposable projects containing only the standalone Strata addon, without HEGo or Houdini.
-
-## Earlier name
-
-Strata was called HEGo Terrain (`addons/hego_terrain`, `HEGoTerrain*` classes, `hego_terrain_*` Houdini attributes) until 2026-10-30. The demo's saved data was converted when it was renamed, and Strata no longer loads files saved under the old names.
 
 ## Build and run
 
@@ -63,7 +57,7 @@ One pair was measured on Godot 4.4.1 official, Forward+/Vulkan 1.4.354, AMD Rade
 | Displacement off | 0.003 / 1.863 | 0.123 / 0.410 | 1.181 / 1.612 |
 | Displacement on | 0.003 / 1.795 | 0.122 / 0.400 | 1.188 / 1.593 |
 
-The renderer-process p95 is above the 1 ms planning target, so CPU work still needs tuning. These two single runs show no meaningful GPU difference between displacement settings and do not establish an incremental displacement cost. Treat the values as one machine-specific fixture measurement, not a performance claim. The [full paired results](benchmarks/terrain-2026-10-28.json) are saved with this prototype.
+The renderer-process p95 is above the 1 ms planning target, so CPU work still needs tuning. These two single runs show no meaningful GPU difference between displacement settings and do not establish an incremental displacement cost. Treat the values as one machine-specific fixture measurement, not a performance claim. The [full paired results](../benchmarks/terrain-2026-10-28.json) are saved with this prototype.
 
 ## Editor fixture
 
@@ -102,14 +96,12 @@ godot --path demo --script res://tests/frontend_smoke_test.gd -- --capture=/tmp/
 
 Initial Compatibility sculpt verification used a Ryzen 7 5800X3D, approximately 64 GB system memory, and Radeon RX 9070 XT with Mesa 26.2.5. The separate Forward+ fixture measurements above use the same machine. They are not the planned 4 km performance benchmark and do not support production performance claims.
 
-## Scope
+## Renderer constraints and open work
 
-The direct material backend binds 32 sets of Color, Normal and ORMH textures plus three terrain maps (99 texture bindings). It currently requires a conservative 256 per-stage texture/sampler limit to leave room for engine bindings. Material resource edits require explicit reconfiguration; terrain data edits require an explicit heightfield refresh. Terrain-local coordinates must retain float32 vertex precision at the selected resolution; translation and yaw belong on the parent terrain node.
+The direct material backend binds 32 sets of Color, Normal and ORMH textures plus three terrain maps (99 texture bindings), so it requires a per-stage texture/sampler limit of 256 to leave room for engine bindings. Compiled height fields are limited to 4097 samples per axis (2049 on the GDScript fallback without the native compiler) and control maps to 1025. Terrain-local coordinates must retain float32 vertex precision at the selected resolution; translation and yaw belong on the parent terrain node. The geometry selector is a bounded distance quadtree without geomorphing or a measured pixel-error guarantee, and there is no streaming or paging.
 
-Four material slots per control texel can still produce sixteen candidate IDs in a bilinear neighborhood. Before sampling source materials, the shared vertex/fragment control kernel subtracts the fifth aggregate weight from the leading four and renormalizes them. Ordinary fourth/fifth exchanges fade to zero instead of switching a nonzero contribution. One-to-four input ratios and empty assignments are preserved; equal leading palettes retain a deterministic hard fallback and can still be discontinuous. The raw dropped-mass diagnostic excludes the additional threshold subtraction. See [material blending](terrain-material-blending.md#soft-material-cap-across-control-texels) for the exact rule and focused synthetic GPU verification.
+Four material slots per control texel can still produce sixteen candidate IDs in a bilinear neighborhood. Before sampling source materials, the shared vertex/fragment control kernel subtracts the fifth aggregate weight from the leading four and renormalizes them. Ordinary fourth/fifth exchanges fade to zero instead of switching a nonzero contribution. One-to-four input ratios and empty assignments are preserved; equal leading palettes retain a deterministic hard fallback and can still be discontinuous. The raw dropped-mass diagnostic excludes the additional threshold subtraction. See [material blending](terrain_material_blending.md#soft-material-cap-across-control-texels) for the exact rule and focused synthetic GPU verification.
 
-The Compatibility sculpt demo demonstrates sparse per-layer sample ownership, independent channel composition, Replace and Add sculpting, base regeneration, erase-to-reveal, and a finite mesh preview. The separate render lab adds experimental native patch LOD and synthetic multi-material shading; it does not add material authoring. Its current shader uses direct `Texture2D[32]` bindings, with height images capped at 2049×2049 samples and control maps at 1025×1025. This is one tested rendering backend, not broad device coverage. It does not prove Godot 4.8 streaming, LOD geomorphing, or terrain paging/streaming. Production HDA/erosion workflows, collision, navigation, and runtime baking remain out of scope; the current focused bridge is documented in [terrain-houdini-integration.md](terrain-houdini-integration.md). The Compatibility preview mesh is intentionally small and capped for interactive use. Large Forward+ authoring scenes can instead enable `StrataTerrain3D.textured_editor_preview` and supply material/control resources; the terrain plugin uses the native compiled live stack and actual editor camera. The saved canonical island scene already contains this wiring and separate editable manual resources; see [the island editor workflow](island-showcase.md). `StrataRenderSettings` persists High/Ultra/Custom geometry density, screen-relative refinement and material distance/macro controls. The geometry selector remains a bounded distance quadtree without geomorphing or a measured pixel-error guarantee.
+The Compatibility sculpt demo demonstrates sparse per-layer sample ownership, independent channel composition, Replace and Add sculpting, base regeneration, erase-to-reveal, and a finite mesh preview; its preview mesh is intentionally small. The render lab adds native patch LOD and synthetic multi-material shading. Production scenes instead enable `StrataTerrain3D.textured_editor_preview`, as the [island](../strata/example_island.md) does.
 
-Implemented brushes are raise/lower, flatten, smooth and erase. Ramp/stamp tools, advanced stroke controls, material blending and channel-type-specific filtering remain planned. Undo currently copies full allocated layer tiles. The native resource uses a versioned serialized payload; a rejected payload produces diagnostics, but Godot can still instantiate an empty resource, so production migration/error presentation needs further work. A production HDA/erosion workflow and release packaging remain future work.
-
-Design reference: [Strata plan](https://chatgpt.com/space/page_6f4ee2b33cd08191b46bb10e335724f8).
+Implemented brushes are raise/lower, flatten, smooth and erase. Ramp/stamp tools, advanced stroke controls and channel-type-specific filtering remain planned. The native resource uses a versioned serialized payload; a rejected payload produces diagnostics, but Godot can still instantiate an empty resource, so migration and error presentation need further work.

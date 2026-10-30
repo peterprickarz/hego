@@ -1,6 +1,6 @@
-# Strata runtime bake, collision, holes and navigation
+# Runtime bake, collision and navigation internals
 
-This prototype compiles an authoring `StrataTerrain3D` layer stack into a versioned runtime resource. Bounded static collision and tiled navigation for selected gameplay areas are built from that resource. The runtime resource and its collision and navigation nodes use only built-in Godot types. A saved runtime scene loads, collides and navigates without the native terrain extension, the authoring scripts, HEGo or Houdini.
+How Strata compiles an authoring `StrataTerrain3D` layer stack into a versioned runtime resource, and how bounded static collision and tiled navigation for selected gameplay areas are built from it. The user-facing workflow is in [Getting started](../strata/getting_started.md). The runtime resource and its collision and navigation nodes use only built-in Godot types. A saved runtime scene loads, collides and navigates without the native terrain extension, the authoring scripts, HEGo or Houdini.
 
 | File | Class | Depends on |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ This prototype compiles an authoring `StrataTerrain3D` layer stack into a versio
 - Optional material controls (`material_ids` RGBA8, `material_weights` RGBAF), stored as validated.
 - `format_version`, `bake_revision` and `get_manifest()`, which gives byte counts per payload.
 
-Heights, channels, bounds and the height range are saved as raw bytes through storage-only properties. Godot 4.4 text resources write floats with about six significant digits. Without byte storage, a bake in a `.tres`/`.tscn` would silently drift from its collision and render data. The tests check that payload SHA-256 hashes are bit-identical across `.res`, `.scn` and `.tres`. Text scenes still encode bytes as decimal lists, so keep large bakes in an external binary `.res`.
+Heights, channels, bounds and the height range are saved as raw bytes through storage-only properties. Godot 4.4 text resources write floats with about six significant digits. Without byte storage, a bake in a `.tres`/`.tscn` would silently drift from its collision and render data. The runtime suites check that payload SHA-256 hashes are bit-identical across `.res`, `.scn` and `.tres`. Text scenes still encode bytes as decimal lists, so keep large bakes in an external binary `.res`.
 
 The runtime resource contains no layers, ownership, layer IDs, producer IDs or Houdini state.
 
@@ -224,36 +224,14 @@ Publishing:
   Agent/cell changes leave old regions visible until the next bake; a
   `keep_existing` bake rebuilds every retained tile with the new configuration.
 
-## Running the tests
+## Tests
 
-```sh
-python3 demo/tests/runtime_test_runner.py --godot /home/peter/Godot/Godot_v4.4.1-stable_linux.x86_64 [--large]
-```
-
-The runner copies the add-on into a disposable `/tmp/hego-runtime-test/authoring` project (never into the tracked `demo/addons/` directory), imports it and runs:
-
-Output streams during each process. Script/parse errors terminate only the
-owned test process group immediately; suites also have an internal 120-second
-watchdog and a bounded external timeout. Isolated test maps explicitly use the
-validated 0.01 merge scale.
-
-| Suite | Coverage |
-| --- | --- |
-| `runtime_data_test.gd` | Lattice, statuses, holes, thresholds, channels, conversions, 4097² payload |
-| `runtime_collision_test.gd` | Real raycasts: signed heights, rectangular grid, chunk edges and cell interiors, a 5-yaw seam sweep, true holes over a floor, 2 m spacing, camera independence, bounded residency, tracking, atomic replacement, teardown |
-| `runtime_navigation_test.gd` | Real `NavigationServer3D` paths around a hole and an exclusion and across adjacent tiles, slope/climb settings, async publication, supersession and teardown |
-| `runtime_bake_test.gd` | Five-layer stack (`RoughBase`, `CoarseErosion`, `ManualFine`, `DetailErosion`, `BuildingFlatten`) using real procedural transactions: stale rejection, preview cutoff, failure retention, stale tracking, export and save/reload |
-| `runtime_roundtrip_test.gd` | Runs in a second project with only the three runtime scripts: loads the exported scene, checks hashes and queries, collides, navigates, resaves `.res`/`.tres` |
-| `runtime_large_bake_test.gd` (`--large`) | 4097² 1 m bake, bounded collision and navigation |
-
-Recorded on Godot 4.4.1 (Linux, Ryzen 7 5800X3D):
-
-- 4097² 1 m bake: about 2.1 s.
-- Resident memory retained by the 64 MiB height payload: +64.3 MiB RSS. Godot's static allocation counter shows +128 MiB because 4.4 `CowData` rounds buffers up to a power of two.
-- Collision around the player (radius 96 m, 4 chunks): about 75 ms.
-- 128 m navigation area (4 tiles): about 170–380 ms.
-
-These are single fixture measurements, not performance claims.
+The runtime suites run in disposable projects through `demo/tests/runtime_test_runner.py`;
+see [Testing](testing.md#runtime-suites). Single-fixture measurements on a Ryzen 7 5800X3D
+with Godot 4.4.1: a 4097² 1 m bake took about 2.1 s, collision around the player (radius
+96 m, 4 chunks) about 75 ms, and a 128 m navigation area (4 tiles) 170–380 ms. The 64 MiB
+height payload retained +64.3 MiB RSS; Godot's static allocation counter shows +128 MiB
+because 4.4 `CowData` rounds buffers up to a power of two.
 
 ## Known limitations
 
@@ -264,17 +242,18 @@ These are single fixture measurements, not performance claims.
 - **Physics engines.** Only GodotPhysics3D was verified. Jolt's heightfield triangulation was not tested.
 - **Async navigation.** Re-parenting the navigation node discards in-flight async bakes.
 
-## Proposed native API (for the bulk-data owner)
+## Open native API proposals
 
-1. Done by the data agent as `StrataProcedural.compile_cell_masks()`; the bake uses it through `cell_masks`.
-2. `compile_channel(terrain, channel, through_layer = null, spacing, options) -> {ok, image, coverage, min, max, token}`. This is the public form of the descriptor capture the bake now mirrors from `compile_heightfield`.
-3. Optional: a native `build_terrain_faces(heights, width, cell_rect, holes, exclusions, origin, spacing) -> PackedVector3Array` for concave collision and navigation sources over large areas.
+`StrataProcedural.compile_cell_masks()` now provides the masks the bake reads through
+`cell_masks`. Two proposals remain:
 
+1. `compile_channel(terrain, channel, through_layer = null, spacing, options) -> {ok, image, coverage, min, max, token}`, the public form of the descriptor capture the bake mirrors from `compile_heightfield`.
+2. Optionally, a native `build_terrain_faces(heights, width, cell_rect, holes, exclusions, origin, spacing) -> PackedVector3Array` for concave collision and navigation sources over large areas.
 
 ## Persisted render quality
 
 `StrataTerrain3D.render_settings` is an editable `StrataRenderSettings` resource. High defaults to 64-cell patches, an 8 m minimum patch, split ratio 3 and a 1,024-patch budget; lower-cost and Ultra presets plus custom controls are available. The editor camera drives the same textured renderer used for runtime. Its screen-relative refinement responds to viewport size, perspective field of view/KEEP_WIDTH and orthographic zoom. These settings govern visual geometry only: the compiled heightfield, collision, navigation and ownership are unchanged. Hard LOD switches remain; the density heuristic is not a terrain error bound.
 
-Runtime baking snapshots the quality/appearance resource into the compiled artifact, and `configure_runtime()` uses that saved copy. Older resources with no render settings use the current High default. Material physical UV/roughness/height competition stay in material resources; optional distance-dependent UV scaling and terrain macro tint/AO strength are in the render settings. See [the saved island editor workflow](island-showcase.md) for opening the actual authoring level without reloading over manual edits or starting Houdini.
+Runtime baking snapshots the quality/appearance resource into the compiled artifact, and `configure_runtime()` uses that saved copy. Resources with no render settings use the High default. Material physical UV/roughness/height competition stay in material resources; optional distance-dependent UV scaling and terrain macro tint/AO strength are in the render settings. See [Example: Bracken Isle](../strata/example_island.md) for the saved island.
 
-Runtime render settings also retain the independent near-displacement geometry controls: enabled, desired vertex spacing (0.0625 m), shared detail radius (32 m), and extra patch budget (1,024). `configure_runtime()` requires the matching native `select_refined_patches` API when this feature and visual displacement are enabled. The base quality budget is preserved; refinement and 2:1 balancing spend only the separate extra budget, subject to a 4,096-leaf total cap. Effective spacing may be coarser under budget/depth constraints and is reported by the renderer. Turning off subdivision changes geometry density alone; the shared shader fade radius is unchanged. See [the island near-displacement controls](island-showcase.md) for the Inspector workflow and prototype limitations.
+Runtime render settings also retain the independent near-displacement geometry controls: enabled, desired vertex spacing (0.0625 m), shared detail radius (32 m), and extra patch budget (1,024). `configure_runtime()` requires the matching native `select_refined_patches` API when this feature and visual displacement are enabled. The base quality budget is preserved; refinement and 2:1 balancing spend only the separate extra budget, subject to a 4,096-leaf total cap. Effective spacing may be coarser under budget/depth constraints and is reported by the renderer. Turning off subdivision changes geometry density alone; the shared shader fade radius is unchanged. The Inspector exposes these as the terrain's *Near displacement geometry* render settings.

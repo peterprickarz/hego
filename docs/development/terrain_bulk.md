@@ -95,9 +95,10 @@ imported native data cannot alias caller-owned image mutations.
 
 ## Allocation and work limits
 
-Each dense RF image is limited to 20*1024*1024 samples. A snapshot or procedural
-transaction has a 64*1024*1024 aggregate image-sample budget, including ownership
-companions and all target results. Composition accepts at most 64 descriptors.
+Each dense RF image is limited to 20*1024*1024 samples. A snapshot has a default
+64*1024*1024 aggregate image-sample budget, including its companions, which
+`max_samples` can raise to 128*1024*1024; a procedural transaction's complete result,
+including ownership companions and all targets, is limited to 128*1024*1024 samples. Composition accepts at most 64 descriptors.
 Tile lookup acceleration is independently bounded at 262144 pointers per source.
 
 `replace_dense` rejects a resulting resource with more than 512 MiB of retained

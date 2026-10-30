@@ -9,7 +9,7 @@ Cooks only the saved .hda in a fresh hython session on small synthetic fixtures
 
 With --baseline FILE (written by an older HDA build) the disabled/absent cases
 are also compared bit for bit with the previous HDA's genuine erosion output.
-Optional --actual DIR runs the transition on exported actual fields (see docs/island-hda.md).
+Optional --actual DIR runs the transition on exported actual fields (see docs/development/island_hda.md).
 Any failed check raises; metrics go to <out-dir>/transition-metrics.json.
 """
 
@@ -686,8 +686,11 @@ def main():
     if args.baseline:
         ref = np.load(args.baseline)
         for label, out in (("free_s0", free), ("free_s1", free1), ("constraint_s1", con1)):
-            same = all(np.array_equal(ref[f"{label}/{name}"], out[name]["data"]) for name in out)
-            check(same, "differs from previous HDA", results, f"previous_hda_bitwise_{label}")
+            # Baselines from HDAs before the footpath channel lack it; every channel they have must match.
+            missing = [name for name in out if f"{label}/{name}" not in ref]
+            same = set(missing) <= {"footpath"} and all(np.array_equal(ref[f"{label}/{name}"], out[name]["data"])
+                                                        for name in out if name not in missing)
+            check(same, f"differs from previous HDA (missing {missing})", results, f"previous_hda_bitwise_{label}")
         metrics["baseline"] = args.baseline
 
     log("[metrics] emulated runtime composition (2 m HDA -> 1 m and 0.25 m lattice + 0.25 m manual Replace)")
