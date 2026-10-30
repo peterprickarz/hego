@@ -254,6 +254,22 @@ static func _target_order(layer: StrataLayer) -> Array:
 	for entry in (layer.get_parent() as StrataTerrain3D).get_layers(): result.append(entry.get_instance_id())
 	return result
 
+## Whether [param layer] is claimed by a producer other than [param host] and
+## [param producer]. With a recorded [member StrataLayer.producer_path] the claim lasts only
+## while that path names another node, so a renamed or deleted producer does not lock its
+## layers; without one the recorded identity alone decides.
+static func _claimed_by_other(layer: StrataLayer, host: Node, producer: String) -> bool:
+	if layer.producer_id.is_empty() or layer.producer_id == producer: return false
+	if layer.producer_path.is_empty(): return true
+	var recorded := layer.get_node_or_null(layer.producer_path)
+	return recorded != null and recorded != host
+
+## Prepares one all-or-nothing publication by [param producer], a live [param host], into
+## [param targets] ([code]{layer, channels, required_channels}[/code] each; with no
+## [code]channels[/code] every channel is accepted and none is required) from [param inputs],
+## the snapshots it read. [param context] may hold a [code]guard[/code] Callable that must
+## still return true at commit, and a [code]signature[/code] Dictionary recorded on every
+## published layer as [member StrataLayer.producer_signature].
 static func begin_transaction(host: Node, producer: String, targets: Array, inputs: Array, context: Dictionary = {}) -> Dictionary:
 	if not is_instance_valid(host) or not host.is_inside_tree() or producer.is_empty() or targets.is_empty(): return _error("Declare a live scene host, producer and expected procedural targets")
 	var key := "%d/%s" % [host.get_instance_id(), producer]
@@ -268,16 +284,15 @@ static func begin_transaction(host: Node, producer: String, targets: Array, inpu
 		for sibling in (layer.get_parent() as StrataTerrain3D).get_layers():
 			if sibling != layer and sibling.ensure_identity() == identity: return _error("Duplicate persistent layer identity in one terrain")
 		if declared.has(identity): return _error("Ambiguous/duplicate target identity")
-		if not layer.producer_id.is_empty() and layer.producer_id != producer: return _error("A target already belongs to another producer")
+		if _claimed_by_other(layer, host, producer): return _error("A target already belongs to another producer")
 		var owner: Dictionary = _owners.get(layer.get_instance_id(), {})
 		if not owner.is_empty() and is_instance_valid(owner.host.get_ref()) and owner.key != key: return _error("One live producer already owns this target")
 		var channels := PackedStringArray(target.get("channels", []))
-		if channels.is_empty(): return _error("Predeclare each target's permitted channels")
 		for name in channels:
 			if name.strip_edges().is_empty() or name.ends_with(OWNERSHIP_SUFFIX): return _error("Target channel names cannot be blank or reserved ownership names")
 		var required := PackedStringArray(target.get("required_channels", ["height"] if channels.has("height") else []))
 		for name in required:
-			if not channels.has(name): return _error("Required channels must be declared as permitted channels")
+			if name.strip_edges().is_empty() or not channels.is_empty() and not channels.has(name): return _error("Required channels must be declared as permitted channels")
 		var terrain := layer.get_parent() as StrataTerrain3D
 		declared[identity] = {"ref": weakref(layer), "state": _fingerprint(layer), "order": _target_order(layer), "channels": channels, "required": required, "terrain_bounds": terrain.base_bounds, "terrain_transform": terrain.global_transform}
 		target_instances.append(layer.get_instance_id())
@@ -371,7 +386,8 @@ static func commit_fields(ticket: Dictionary, results: Array) -> Dictionary:
 			var validation := validate_field(field)
 			if not validation.ok: return reject(ticket, validation.message)
 			var name := String(field.name)
-			if not state.targets[identity].channels.has(name) or candidate.has(name): return reject(ticket, "Unexpected or duplicate result channel")
+			var permitted: PackedStringArray = state.targets[identity].channels
+			if candidate.has(name) or not permitted.is_empty() and not permitted.has(name): return reject(ticket, "Unexpected or duplicate result channel")
 			sample_count += field.image.get_width() * field.image.get_height()
 			complete_samples += field.image.get_width() * field.image.get_height() * (2 if field.get("ownership") != null else 1)
 			if sample_count > MAX_SAMPLES or complete_samples > MAX_SAMPLES: return reject(ticket, "Complete result exceeds sample budget")
@@ -386,6 +402,8 @@ static func commit_fields(ticket: Dictionary, results: Array) -> Dictionary:
 	# Final check and publication have no awaits or notifications in between.
 	if not _current(state): return reject(ticket, "Cook became stale during result validation")
 	var notifications: Array = []
+	var host: Node = state.host.get_ref()
+	var signature: Dictionary = state.context.get("signature", {})
 	for identity in prepared:
 		var layer: StrataLayer = state.targets[identity].ref.get_ref()
 		var next_fields: Dictionary = prepared[identity].fields
@@ -394,6 +412,9 @@ static func commit_fields(ticket: Dictionary, results: Array) -> Dictionary:
 		layer.procedural_fields = next_fields
 		layer.composition_modes = prepared[identity].modes
 		layer.producer_id = state.producer
+		layer.producer_path = layer.get_path_to(host)
+		layer.producer_signature = signature.duplicate(true)
+		layer.source_tokens.assign(state.inputs)
 		layer.procedural_revision += 1
 		layer.procedural_stale = false
 		layer.procedural_status = "Committed generation %d; %d native channel fields" % [state.generation, next_fields.size()]

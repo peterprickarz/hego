@@ -25,6 +25,12 @@ class_name HEGoNode3D
 ## References to the Godot nodes wired into the HDA's inputs, one entry per input.
 @export var input_stash: Array
 
+## Emitted by [method hego_notify_cook_inputs_changed]: this node's inputs or parameters
+## changed since its last cook, so anything built from that cook may be out of date. Lets
+## another addon react at once without HEGo knowing about it; the HEGo Strata bridge, for
+## example, marks the terrain layers this node published as stale.
+signal cook_inputs_changed
+
 # Whether the last cook ran to the end, for the bottom panel; see hego_did_last_cook_succeed().
 var _last_cook_succeeded := false
 
@@ -50,10 +56,17 @@ func cook() -> void:
 	if asset_name.is_empty():
 		return
 
-	# The extensions share one dictionary for the whole cook. One of them can make the
-	# cook strict, so that an input that cannot be sent fails it instead of being skipped.
+	# The extensions and input handlers share one dictionary for the whole cook. An input
+	# handler or an extension can make the cook strict, so that an input that cannot be sent
+	# fails it instead of being skipped. It also records what the cook started from, so a
+	# handler can tell whether the node changed while Houdini was cooking.
 	var extensions := cook_extensions()
-	var cook_state := {"strict": false, "errors": []}
+	var cook_state := {
+		"strict": _input_rows_require(&"requires_strict_cook"),
+		"errors": [],
+		"input_stash": input_stash.duplicate(true),
+		"transform": global_transform if is_inside_tree() else transform,
+	}
 	for extension in extensions:
 		var prepared: Dictionary = await extension.cook_prepare(self, cook_state)
 		if not prepared.get("ok", false):
@@ -83,6 +96,7 @@ func cook() -> void:
 
 	timings.begin_phase()
 	parm_stash = await agent.save_parameters(asset)
+	cook_state.parm_stash = parm_stash
 	timings.end_phase("parm_stash")
 	for extension in extensions:
 		var primed: Dictionary = await extension.cook_before(self, asset, cook_state)
@@ -164,9 +178,9 @@ func output_handlers() -> Array:
 ## The children that take part in this node's cooks, in child order: every direct child
 ## that extends [HEGoCookExtension].
 ##
-## This is how another addon adds to what a cook does without HEGo knowing about it. The
-## HEGo Strata bridge, for example, adds a child that publishes the cook's heightfields into
-## terrain layers.
+## This is how another addon adds to what a cook does without HEGo knowing about it, for
+## example by checking or publishing the cook's result before the [code]Outputs[/code]
+## subtree is replaced.
 func cook_extensions() -> Array[HEGoCookExtension]:
 	var result: Array[HEGoCookExtension] = []
 	for child in get_children():
@@ -208,20 +222,36 @@ func hego_did_last_cook_succeed() -> bool:
 	return _last_cook_succeeded
 
 
-## Tells this node's cook extensions that its inputs or parameters changed. The panel calls
-## it on every edit, and [method hego_set_input_stash] calls it too.
+## Tells this node's cook extensions that its inputs or parameters changed, and emits
+## [signal cook_inputs_changed]. The panel calls it on every edit, and
+## [method hego_set_input_stash] calls it too.
 func hego_notify_cook_inputs_changed() -> void:
 	for extension in cook_extensions():
 		extension.inputs_changed()
+	cook_inputs_changed.emit()
 
 
 ## Whether recooking should wait for an explicit request rather than following every edit,
-## because one of this node's cook extensions asks for that. The panel's auto recook is
-## skipped while this is true.
+## because one of this node's cook extensions, or the input handler of one of its input rows
+## (see [method HEGoInputHandler.requires_explicit_cook]), asks for that. The panel's auto
+## recook is skipped while this is true.
 func hego_requires_explicit_cook() -> bool:
 	for extension in cook_extensions():
 		if extension.requires_explicit_cook():
 			return true
+	return _input_rows_require(&"requires_explicit_cook")
+
+
+# Whether the input handler of any input row answers true to [param rule], one of the
+# HEGoInputHandler methods that take the row's settings.
+func _input_rows_require(rule: StringName) -> bool:
+	for row in input_stash:
+		if not row is Dictionary:
+			continue
+		var settings: Variant = row.get("settings", {})
+		for handler in HEGoInputNodes.row_handlers(self, row):
+			if handler.call(rule, settings if settings is Dictionary else {}):
+				return true
 	return false
 
 

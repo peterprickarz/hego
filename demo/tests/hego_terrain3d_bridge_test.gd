@@ -3,9 +3,7 @@ extends SceneTree
 ## and reaches HEGo only through its extension points. Never starts Houdini.
 ##
 ## Needs addons/hego, addons/terrain_3d and addons/hego_terrain3d: the demo project, or the
-## hego_terrain3d project demo/tests/addon_split_runner.py stages. When addons/hego_strata
-## is present too, also checks that a Strata terrain cook skips the Terrain3D output; the
-## bridge classes are looked up by name, so this script parses without Strata.
+## hego_terrain3d project demo/tests/addon_split_runner.py stages.
 
 var checks := 0
 var failures := 0
@@ -61,7 +59,6 @@ func run() -> void:
 		return
 	var terrain_output: HEGoTerrain3DOutput = outputs[0]
 	var instancer: HEGoTerrain3DInstancer = instancers[0]
-	check(terrain_output.handles_heightfields() and not instancer.handles_heightfields(), "only the terrain output claims the heightfields")
 	check(terrain_output.output_phase() == "terrain3d_output" and instancer.output_phase() == "terrain3d_instancer_output", "the handlers keep their cook phase names")
 
 	# --- which cooks the handlers act on (an unreadable summary runs them) -------
@@ -83,21 +80,6 @@ func run() -> void:
 	check(HEGoInputNodes.is_compatible_source(terrain), "a Terrain3D node is a compatible input source")
 	var mesh := MeshInstance3D.new(); mesh.mesh = BoxMesh.new(); scene.add_child(mesh)
 	check(HEGoInputNodes.handler_for(mesh) == null and HEGoInputNodes.is_compatible_source(mesh), "built-in input kinds are unaffected")
-
-	# --- a Strata terrain cook skips the Terrain3D output, not the instancer ---
-	var targets_script: Script = null
-	for entry in ProjectSettings.get_global_class_list():
-		if entry["class"] == &"HEGoStrataTargets":
-			targets_script = load(entry["path"])
-	if targets_script == null:
-		print("  note: hego_strata is not installed, the Strata skip was not exercised")
-	else:
-		var binding: Node = targets_script.new()
-		var active := {String(targets_script.get_script_constant_map()["COOK_KEY"]): {"active": true}}
-		check(binding.skips_output_handler(terrain_output, active), "an active Strata terrain cook skips the Terrain3D output")
-		check(not binding.skips_output_handler(instancer, active), "an active Strata terrain cook still runs the Terrain3D instancer")
-		check(not binding.skips_output_handler(terrain_output, {}), "an inactive binding skips nothing")
-		binding.free()
 
 	# --- the demo scene built on this output still loads -----------------------
 	const DEMO_SCENE := "res://scenes/Terrain3DOutput.tscn"

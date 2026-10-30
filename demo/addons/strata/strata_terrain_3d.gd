@@ -102,6 +102,9 @@ signal runtime_bake_stale_changed(stale: bool)
 @export var runtime_data: StrataRuntimeData
 @export var runtime_bake_stale := true
 var _runtime_signature: Variant = null
+## Seconds between checks of the procedural layers' [member StrataLayer.source_tokens].
+const SOURCE_POLL_INTERVAL := 0.25
+var _source_poll_elapsed := 0.0
 
 func _ready() -> void:
 	set_notify_transform(true)
@@ -309,6 +312,20 @@ func raycast_surface(origin: Vector3, direction: Vector3, max_distance: float = 
 				closest = distance
 				result = {"position": world_hit, "local_position": Vector2(hit.x, hit.z), "distance": distance}
 	return result
+
+func _process(delta: float) -> void:
+	_source_poll_elapsed += delta
+	if _source_poll_elapsed < SOURCE_POLL_INTERVAL: return
+	_source_poll_elapsed = 0.0
+	check_procedural_sources()
+
+## Marks every current procedural layer stale whose result was built from an input that
+## has changed since (see [member StrataLayer.source_tokens]). Runs a few times a second in
+## the editor and at runtime alike; call it directly to check at once.
+func check_procedural_sources() -> void:
+	for layer in get_layers():
+		if layer.procedural and not layer.procedural_stale and not layer.source_tokens.is_empty() and not layer.sources_current():
+			layer.mark_stale("An input layer changed since this result was cooked; explicit recook required")
 
 ## Runtime bake state. Layer edits, enable/composition changes, reordering and
 ## bounds changes reach queue_preview_update(); preview cutoff and overlay

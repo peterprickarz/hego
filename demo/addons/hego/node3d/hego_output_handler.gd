@@ -9,7 +9,12 @@ extends RefCounted
 ## global class that extends it, in the editor and in exported games alike, so installing
 ## that addon is all it takes. The dependency only runs one way. The extending addon names
 ## HEGo's classes; HEGo never names the addon's. The HEGo Terrain3D bridge, for example,
-## builds Terrain3D terrains and instances this way.
+## builds Terrain3D terrains and instances this way, and the HEGo Strata bridge publishes
+## heightfields into Strata layers.
+##
+## Several handlers may look at the same kind of output. Each one acts only on the parts that
+## carry its own attributes and leaves the rest alone, so they need no rule about which of
+## them goes first or which one owns, say, the heightfields.
 ##
 ## [method HEGoNode3D.output_handlers] runs these after HEGo's own mesh, multimesh and object
 ## output and before its curve output, sorted by class name. Every method has a default that
@@ -46,13 +51,6 @@ func should_handle(_summary: Dictionary) -> bool:
 ## has been cleared.
 func handle(_context: HEGoOutputContext) -> void:
 	pass
-
-
-## Whether this handler turns the cook's heightfield volumes into terrain. A
-## [HEGoCookExtension] that consumes the heightfields itself skips such handlers through
-## [method HEGoCookExtension.skips_output_handler] without having to name them.
-func handles_heightfields() -> bool:
-	return false
 
 
 ## The output handlers other addons provide: one instance of every global class that extends

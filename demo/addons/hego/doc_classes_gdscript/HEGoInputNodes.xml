@@ -22,6 +22,14 @@
 				The extension handler that sends [param node], or null when HEGo handles it itself.
 			</description>
 		</method>
+		<method name="row_handlers" qualifiers="static">
+			<return type="HEGoInputHandler[]" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="row" type="Dictionary" />
+			<description>
+				The extension handlers input row [param row] of [param host] uses: those that send one of the nodes it names, and those whose kind of settings it stores, so a row keeps its handler's rules while its node is renamed or deleted. [param row] is one entry of the input stash, [code]{inputs, settings}[/code].
+			</description>
+		</method>
 		<method name="resolve_paths" qualifiers="static">
 			<return type="Array" />
 			<param index="0" name="host" type="Node" />
@@ -46,6 +54,14 @@
 			<param index="3" name="settings" type="Dictionary" />
 			<description>
 				Creates or updates the input node for the Godot node at [param input_node_path].  Pass the previous input node as [param existing_node] to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is [param existing_node] itself when it was reused.  [param settings] is the per-input settings dictionary from the input stash. curve_sample_length optionally controls Path3D upload spacing in metres. Missing, non-finite or non-positive values use the one-metre default. During a strict cook it also carries [code]_strict[/code] and the [code]_errors[/code] array failures are collected in; see [method HEGoAssetAgent.sync_inputs].
+			</description>
+		</method>
+		<method name="resolve_input_node" qualifiers="static">
+			<return type="Node" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="input_node_path" type="Variant" />
+			<description>
+				The node [param input_node_path] names, resolved the way input paths are: against the edited scene in the editor, against the running scene at runtime, and finally relative to [param host]. Null when nothing is there. Extensions use this to resolve paths an HDA writes into its output, so those behave exactly like the paths in the input stash.
 			</description>
 		</method>
 	</methods>

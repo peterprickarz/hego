@@ -70,8 +70,8 @@ func run() -> void:
 	host.parm_stash = coarse_preset
 	host.input_stash = [{"inputs": ["../../Terrain/RoughBase"], "settings": {"terrain_mode": "cumulative", "terrain_channels": "height"}}]
 	group.add_child(host)
-	var binding := HEGoStrataTargets.ensure(host); binding.producer_id = "panel-test-producer"
-	binding.targets = [{"path": "../../Terrain/CoarseErosion", "channels": HEGoIslandStageMaterials.output_channels(), "required_channels": PackedStringArray(["height"])}]
+	# The saved preset's target_layer_path, ../../Terrain/CoarseErosion, is the only binding.
+	check(host.get_child_count() == 0 and host.hego_requires_explicit_cook(), "a host reading a terrain layer cooks only on request, with no binding child")
 	ui = (load("res://addons/hego/hego_control.tscn") as PackedScene).instantiate(); root.add_child(ui)
 	await process_frame
 	var panel := ui.get_node("TabContainer/HDA")
@@ -98,6 +98,7 @@ func run() -> void:
 	await panel._on_recook_button_pressed()
 	check(host.hego_did_last_cook_succeed() and not target.procedural_stale and target.procedural_revision > 3, "real bottom-panel coarse cook succeeds in the already active private session")
 	check(target.procedural_fields.has("height") and target.procedural_fields.height.resolution == Vector2i(513, 513), "actual coarse result has its native 8m lattice")
+	check(target.producer_path == target.get_path_to(host) and target.source_tokens.size() == 1 and not HEGoStrataOutput.producer_changed(target), "the published layer records its producer and inputs, and still matches the host after the panel's readback")
 	check(HEGoIslandMaterials.layer_content_hash(rough) == source_before, "cooking leaves the cloned authoritative input unchanged")
 	var first = installed_operators()
 	check(first.has("Sop/HEGo_IslandErosion") and first.has("Sop/HEGo_TerrainTint") and first.has("Sop/HEGo_MaterialDistribution"), "all three HDAs are present from the Houdini startup package")

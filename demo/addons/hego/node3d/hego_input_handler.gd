@@ -26,8 +26,10 @@ func handles(_node: Node) -> bool:
 ## [param existing_node] is the input node this HDA input used last cook, possibly of
 ## another type; reuse it when it fits. [param settings] is the input's settings dictionary
 ## from the input stash. During a cook it also carries [code]_cook[/code], the dictionary
-## the host's [HEGoCookExtension]s share, so a handler can pick up what an extension
-## prepared for this cook, and [code]_input_path[/code]
+## the host's [HEGoCookExtension]s and output handlers share
+## ([member HEGoOutputContext.cook_state]), so a handler can pick up what an extension
+## prepared for this cook or leave something for an output handler, and
+## [code]_input_path[/code]
 ## ([constant HEGoInputNodes.INPUT_PATH_KEY]), the path the input was resolved from, which
 ## HEGo's own inputs send as [code]_hego_node_path[/code].
 ##
@@ -45,8 +47,18 @@ func claims_settings(_settings: Dictionary) -> bool:
 
 
 ## Whether an input of this kind should wait for an explicit recook rather than recooking
-## automatically whenever the panel changes it.
+## automatically whenever the panel changes it. [method HEGoNode3D.hego_requires_explicit_cook]
+## asks this for every input row, so the node itself follows the rule too.
 func requires_explicit_cook(_settings: Dictionary) -> bool:
+	return false
+
+
+## Whether a cook with an input of this kind must be strict: any input that is missing,
+## incompatible or fails to upload then fails the whole cook, rather than being skipped with
+## a warning. For inputs whose result is published all-or-nothing, where a partial set of
+## inputs would produce a wrong result rather than an incomplete one. See
+## [method HEGoAssetAgent.sync_inputs].
+func requires_strict_cook(_settings: Dictionary) -> bool:
 	return false
 
 

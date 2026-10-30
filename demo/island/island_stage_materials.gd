@@ -1,7 +1,7 @@
 @tool
 class_name HEGoIslandStageMaterials
 extends RefCounted
-## Explicit binding migration only. No HAPI, field edits, scene saves or cache IO.
+## Explicit input migration only. No HAPI, field edits, scene saves or cache IO.
 const EROSION_OPERATOR := "Sop/HEGo_IslandErosion"
 const MATERIAL_OPERATOR := "Sop/HEGo_MaterialDistribution"
 const LEGACY_OUTPUTS := ["height", "erosion_delta", "sediment", "debris", "flow", "grass", "rock", "sand", "scree"]
@@ -39,10 +39,13 @@ static func input_settings(mask_spacing: float, previous: Dictionary = {}, final
 	return settings
 
 static func _error(message: String) -> Dictionary:
-	return {"ok": false, "message": message + "; no bindings were changed"}
+	return {"ok": false, "message": message + "; no input rows were changed"}
 
-## Recognize only the shipped legacy or current contract. Preflight every host
-## before changing any; conflicting user bindings remain available for review.
+## Upgrades the input rows of the shipped island hosts so every stage reads height, the
+## simulation fields and the material weights on bounded grids. Recognizes only the shipped
+## legacy or current rows and preflights every host before changing any, so conflicting user
+## rows stay available for review. Each host's output is its HDA's target_layer_path
+## parameter, which this never touches; every channel the HDA emits is published.
 static func migrate(scene: Node3D) -> Dictionary:
 	if HEGoIslandMaterialRegistry.channels().is_empty(): return _error("The material registry is unavailable")
 	var terrain := scene.get_node_or_null("Terrain") as StrataTerrain3D
@@ -52,19 +55,9 @@ static func migrate(scene: Node3D) -> Dictionary:
 		var label: String = ["CoarseCook", "DetailCook", "MaterialCook"][index]
 		var host := scene.get_node_or_null("HDA/" + label) as HEGoNode3D
 		var target_name: String = ["CoarseErosion", "DetailErosion", "MaterialDistribution"][index]
-		var producer: String = ["bracken-isle-coarse-cook-v1", "bracken-isle-detail-cook-v1", "bracken-isle-material-cook-v1"][index]
 		var target := terrain.get_node_or_null(target_name) as StrataLayer
-		var targets_node := HEGoStrataTargets.of(host)
-		if host == null or target == null or not target.procedural or targets_node == null or targets_node.producer_id != producer: return _error(label + " identity/target conflicts with the island contract")
+		if host == null or target == null or not target.procedural: return _error(label + " or its procedural layer %s is missing" % target_name)
 		if host.asset_name != (EROSION_OPERATOR if index < 2 else MATERIAL_OPERATOR): return _error(label + " uses a different HDA")
-		if targets_node.targets.size() != 1: return _error(label + " has custom target bindings")
-		var binding: Dictionary = targets_node.targets[0]
-		if host.get_node_or_null(NodePath(String(binding.get("path", "")))) != target: return _error(label + " targets a different authored layer")
-		var names := output_channels() if index < 2 else HEGoIslandMaterialRegistry.channels()
-		var permitted := channel_names(binding.get("channels", []))
-		var required := channel_names(binding.get("required_channels", ["height"] if index < 2 else []))
-		if permitted != names and (index == 2 or permitted != PackedStringArray(LEGACY_OUTPUTS)): return _error(label + " declares custom output channels")
-		if required != names and (index == 2 or required != PackedStringArray(["height"])): return _error(label + " declares custom required channels")
 		var rows: Array = host.input_stash.duplicate(true)
 		if rows.size() != (2 if index == 1 else 1) or not rows[0] is Dictionary or not rows[0].get("settings", {}) is Dictionary: return _error(label + " has custom input rows")
 		var below := terrain.get_layers()[-2] if index == 2 and terrain.get_layers().size() > 1 else terrain.get_node_or_null("RoughBase" if index == 0 else "ManualFine")
@@ -77,15 +70,12 @@ static func migrate(scene: Node3D) -> Dictionary:
 		if settings.has("terrain_channel_spacings") and settings.terrain_channel_spacings != next_settings.get("terrain_channel_spacings", {}): return _error(label + " has custom channel spacing overrides")
 		if index == 2 and float(settings.get("terrain_spacing", 0.0)) != 4.0: return _error("MaterialCook requires its existing 4 m input lattice")
 		rows[0].settings = next_settings
-		var targets := targets_node.targets.duplicate(true)
-		targets[0].channels = names; targets[0].required_channels = names
-		pending.append({"host": host, "binding": targets_node, "rows": rows, "targets": targets})
+		pending.append({"host": host, "rows": rows})
 	var changed := false
 	for entry in pending:
 		var host: HEGoNode3D = entry.host
-		var targets_node: HEGoStrataTargets = entry.binding
-		if host.input_stash == entry.rows and targets_node.targets == entry.targets: continue
-		host.input_stash = entry.rows; targets_node.targets = entry.targets
+		if host.input_stash == entry.rows: continue
+		host.input_stash = entry.rows
 		host.hego_notify_cook_inputs_changed()
 		changed = true
-	return {"ok": true, "changed": changed, "message": "Stage material bindings configured; cached fields retained. Explicitly cook CoarseCook, DetailCook, then MaterialCook; save the scene to retain bindings."}
+	return {"ok": true, "changed": changed, "message": "Stage material inputs configured; cached fields retained. Explicitly cook CoarseCook, DetailCook, then MaterialCook; save the scene to retain the inputs."}

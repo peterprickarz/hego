@@ -11,6 +11,9 @@ signal showcase_ready
 const PAD := Vector2(-1008.0, 592.0)
 const TINT_LAYER := "TerrainTint"
 const TINT_CHANNELS := ["terrain_tint_r", "terrain_tint_g", "terrain_tint_b", "terrain_ao"]
+## The layer each erosion stage publishes into, as the HDA's target_layer_path parameter
+## names it: the only binding between a host and its layer.
+const STAGE_LAYERS := ["CoarseErosion", "DetailErosion"]
 ## Rough base cache written by scripts/houdini/build_island_hda.py.
 const BASE_HEIGHT := "res://island/cache/base_height"
 
@@ -151,8 +154,9 @@ static func _read_json(path: String) -> Dictionary:
 func _layers() -> Array[StrataLayer]: return terrain.get_layers()
 
 
-## The HDA hosts' targets and inputs follow the layer stack, so a renamed or reordered
-## layer cannot leave a host pointing at the wrong stage.
+## The HDA hosts' inputs follow the layer stack, so a renamed or reordered layer cannot
+## leave a host reading the wrong stage. Each host's target is its HDA's target_layer_path
+## parameter, set on every cook.
 func _configure_hosts() -> void:
 	var tint := terrain.get_node_or_null(TINT_LAYER) as StrataLayer
 	if tint_host != null and tint != null and not _tint_contract.is_empty():
@@ -160,13 +164,11 @@ func _configure_hosts() -> void:
 		# resampled at 4 m so the 0.25 m BuildingFlatten lattice is never sent.
 		var below := _layers()[tint.get_index() - 1] if tint.get_index() > 0 else null
 		tint_host.asset_name = _tint_contract.operator
-		HEGoStrataTargets.ensure(tint_host).targets = [{"path": "../../Terrain/" + TINT_LAYER, "channels": PackedStringArray(TINT_CHANNELS), "required_channels": PackedStringArray(TINT_CHANNELS)}]
 		tint_host.input_stash = [{"inputs": ["../../Terrain/" + String(below.name)] if below != null else [], "settings": {"terrain_mode": "cumulative", "terrain_channels": "height", "terrain_spacing": StrataMacro.DEFAULT_SPACING}}]
 	if _contract.is_empty(): return
 	for index in range(2):
 		var host: HEGoNode3D = hosts[index]
 		host.asset_name = _contract.operator
-		HEGoStrataTargets.ensure(host).targets = [{"path": "../../Terrain/" + ("CoarseErosion" if index == 0 else "DetailErosion"), "channels": HEGoIslandStageMaterials.output_channels(), "required_channels": HEGoIslandStageMaterials.output_channels()}]
 		var rows: Array = [{"inputs": ["../../Terrain/" + ("RoughBase" if index == 0 else "ManualFine")], "settings": HEGoIslandStageMaterials.input_settings(8.0 if index == 0 else 4.0)}]
 		if index == 1 and not _layers()[4].data.get_owned_rect(&"height").has_area() and not _layers()[4].data.get_owned_rect(&"constraint").has_area():
 			rows.append({"inputs": [], "settings": {}})
@@ -207,17 +209,17 @@ func _cook(index: int, changes: Dictionary = {}) -> bool:
 		for key in parms.keys():
 			if not _contract.parameters.has(key): parms.erase(key)
 		parms.seed = 7; parms.erosion_strength = 1.0; parms.constraint_channel = "constraint"; parms.sea_level = 0.0
-	parms.target_layer_path = HEGoStrataTargets.of(host).targets[0].path
+	parms.target_layer_path = "../../Terrain/" + String(STAGE_LAYERS[index])
 	parms.merge(changes, true)
 	if not await _apply_parameters(asset, parms, _contract.parameters, preserved_parameters): return false
 	host.hego_notify_cook_inputs_changed()
-	var target := _layers()[1 if index == 0 else 3]
+	var target := terrain.get_node(String(STAGE_LAYERS[index])) as StrataLayer
 	var before := target.procedural_revision
 	var started := Time.get_ticks_usec()
 	_set_message("Cooking Houdini %s erosion… the saved terrain remains visible" % preset_name)
 	await host.cook()
 	var ok := target.procedural_revision > before and not target.procedural_stale
-	_set_message("%s erosion committed in %.1f s" % [preset_name.capitalize(), (Time.get_ticks_usec() - started) / 1000000.0] if ok else HEGoStrataTargets.of(host).status)
+	_set_message("%s erosion committed in %.1f s" % [preset_name.capitalize(), (Time.get_ticks_usec() - started) / 1000000.0] if ok else target.procedural_status)
 	return ok
 
 
@@ -273,7 +275,7 @@ func _cook_tint(changes: Dictionary = {}) -> bool:
 	if initialize:
 		for key in parameters:
 			if parameters[key].has("default") and key != "target_layer_path": parms[key] = parameters[key].default
-	parms.target_layer_path = HEGoStrataTargets.of(tint_host).targets[0].path
+	parms.target_layer_path = "../../Terrain/" + TINT_LAYER
 	parms.merge(changes, true)
 	if not await _apply_parameters(asset, parms, parameters): return false
 	tint_host.hego_notify_cook_inputs_changed()
@@ -282,7 +284,7 @@ func _cook_tint(changes: Dictionary = {}) -> bool:
 	_set_message("Cooking terrain tint/AO in Houdini… height stages are not cooked")
 	await tint_host.cook()
 	var ok := target.procedural_revision > before and not target.procedural_stale
-	_set_message("Terrain tint/AO committed in %.1f s" % ((Time.get_ticks_usec() - started) / 1000000.0) if ok else HEGoStrataTargets.of(tint_host).status)
+	_set_message("Terrain tint/AO committed in %.1f s" % ((Time.get_ticks_usec() - started) / 1000000.0) if ok else target.procedural_status)
 	return ok
 
 

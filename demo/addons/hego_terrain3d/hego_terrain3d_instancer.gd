@@ -9,9 +9,9 @@ extends HEGoOutputHandler
 ## a previous cook are recognised by their [code]hegot3d_[/code] name prefix and reused,
 ## which keeps hand-authored mesh assets untouched.
 ##
-## HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. It does not
-## report [method handles_heightfields]: it reads points, not volumes, and does nothing
-## for a cook whose points lack [constant INSTANCING_FILTER_ATTRIB].
+## HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. It reads
+## points, not volumes, and does nothing for a cook whose points lack
+## [constant INSTANCING_FILTER_ATTRIB].
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "terrain3d"

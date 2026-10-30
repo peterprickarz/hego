@@ -9,9 +9,9 @@ extends HEGoOutputHandler
 ## colour maps. Everything is driven by detail attributes on the height layer, so an
 ## HDA that does not set [code]hegot3d_spawn_terrain[/code] is skipped entirely.
 ##
-## HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. It reports
-## [method handles_heightfields], so a cook extension that publishes the heightfields
-## elsewhere, such as the HEGo Strata bridge's targets, skips it.
+## HEGo runs it because it extends [HEGoOutputHandler]; HEGo never names it. Heightfields
+## another handler publishes, such as the HEGo Strata bridge's, lack
+## [code]hegot3d_spawn_terrain[/code] and are left alone.
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "terrain3d"
@@ -70,11 +70,6 @@ func output_phase() -> String:
 ## Whether the cook produced heightfield volumes, and Terrain3D is there to receive them.
 func should_handle(summary: Dictionary) -> bool:
 	return HEGoTerrain3DUtil.is_available() and HEGoNodeUtil.output_has(summary, "has_volumes")
-
-
-## This handler turns heightfield volumes into terrain.
-func handles_heightfields() -> bool:
-	return true
 
 
 ## Fetches the cook's heightfield layers and builds the terrain.

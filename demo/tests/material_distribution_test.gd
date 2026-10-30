@@ -135,8 +135,7 @@ func run() -> void:
 	check(attached.ok and terrain.get_layers().size() == 2, "only adds a mask stage/producer")
 	if attached.ok:
 		check(attached.host.input_stash[0].inputs == ["../../Terrain/UserHand"] and attached.host.input_stash[0].settings.terrain_spacing == 4.0, "final cumulative input explicitly4m")
-		var attached_binding := HEGoStrataTargets.of(attached.host)
-		check(attached_binding.targets[0].channels.size() == count and attached_binding.targets[0].required_channels.size() == count, "all registry outputs required")
+		check(attached.host.get_child_count() == 0 and attached.host.hego_requires_explicit_cook(), "the producer needs no binding child; its terrain input makes it cook only on request")
 		attached.host.parm_stash = PackedByteArray([1, 2, 3])
 		var again := HEGoIslandMaterials.attach(scene, {"operator": "Sop/test_materials::1.0"})
 		check(again.ok and again.host == attached.host and again.host.parm_stash == PackedByteArray([1, 2, 3]) and terrain.get_layers().size() == 2, "repeat preserves host/preset and target")
@@ -146,8 +145,9 @@ func run() -> void:
 		check(legacy.ok and legacy.host.input_stash[0].settings.terrain_channels == "height", "ordinary attachment preserves saved legacy input until an explicit migration")
 		var upgraded := HEGoIslandMaterials.attach(scene, {"operator": "Sop/test_materials::1.0"}, true)
 		check(upgraded.ok and upgraded.host.input_stash[0].settings.terrain_channels.size() == 5 + count and upgraded.host.input_stash[0].settings.terrain_max_samples == StrataProcedural.MAX_SAMPLES and upgraded.host.parm_stash == PackedByteArray([1, 2, 3]), "explicit material-only migration transports masks/priorweights without resetting parameters")
-		attached_binding.targets[0].path = "../../Terrain/UserHand"
-		check(not HEGoIslandMaterials.attach(scene, {"operator": "Sop/test_materials::1.0"}).ok and attached_binding.targets[0].path == "../../Terrain/UserHand", "conflicting user binding rejected without overwriting it")
+		check(upgraded.target.procedural_stale and upgraded.target.procedural_status == "Inputs changed; explicit recook required", "an upgraded input marks the cached distribution stale until an explicit recook")
+		attached.host.input_stash[0].inputs = ["../../Terrain/" + HEGoIslandMaterials.LAYER]
+		check(not HEGoIslandMaterials.attach(scene, {"operator": "Sop/test_materials::1.0"}).ok and attached.host.input_stash[0].inputs == ["../../Terrain/" + HEGoIslandMaterials.LAYER], "conflicting user input row rejected without overwriting it")
 	base.data.set_sample(&"height", Vector2i.ZERO, 42.0)
 	base.composition_modes = {"terrain_tint_r": 0, "terrain_ao": 1}
 	var layer_hash := HEGoIslandMaterials.layer_content_hash(base)
@@ -161,9 +161,8 @@ func run() -> void:
 	var hand := StrataLayer.new(); hand.name = "ExistingHand"; scaffold_terrain.add_child(hand)
 	var scaffold_group := Node3D.new(); scaffold_group.name = "HDA"; scaffold_scene.add_child(scaffold_group)
 	var scaffold := HEGoNode3D.new(); scaffold.name = "MaterialCook"; scaffold_group.add_child(scaffold)
-	HEGoStrataTargets.ensure(scaffold).producer_id = HEGoIslandMaterials.PRODUCER_ID
 	var initialized := HEGoIslandMaterials.attach(scaffold_scene, {"operator": "Sop/test_materials::1.0"})
-	check(initialized.ok and initialized.host == scaffold and scaffold.asset_name == "Sop/test_materials::1.0" and scaffold.input_stash.size() == 1 and HEGoStrataTargets.of(scaffold).targets.size() == 1, "an existing identified blank MaterialCook scaffold initializes safely")
+	check(initialized.ok and initialized.host == scaffold and scaffold.asset_name == "Sop/test_materials::1.0" and scaffold.input_stash.size() == 1 and scaffold.get_child_count() == 0, "an existing blank MaterialCook scaffold initializes safely")
 	scaffold_scene.free()
 	print("MATERIAL_DISTRIBUTION checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)

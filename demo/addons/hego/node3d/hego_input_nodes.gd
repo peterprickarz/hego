@@ -69,6 +69,24 @@ static func handler_for(node: Node) -> HEGoInputHandler:
 	return null
 
 
+## The extension handlers input row [param row] of [param host] uses: those that send one of
+## the nodes it names, and those whose kind of settings it stores, so a row keeps its
+## handler's rules while its node is renamed or deleted. [param row] is one entry of the
+## input stash, [code]{inputs, settings}[/code].
+static func row_handlers(host: Node, row: Dictionary) -> Array[HEGoInputHandler]:
+	var result: Array[HEGoInputHandler] = []
+	for path in row.get("inputs", []):
+		var handler := handler_for(resolve_input_node(host, path))
+		if handler != null and not result.has(handler):
+			result.append(handler)
+	var settings: Variant = row.get("settings", {})
+	if settings is Dictionary:
+		for handler in extension_handlers():
+			if not result.has(handler) and handler.claims_settings(settings):
+				result.append(handler)
+	return result
+
+
 ## Expands input roots when settings.include_children is enabled. The stored paths
 ## remain compact; descendants are discovered again on every cook in scene order.
 ## Overlapping selections contribute each source once. Hidden authoring nodes are
@@ -237,13 +255,21 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 	return existing_node
 
 
+## The node [param input_node_path] names, resolved the way input paths are: against the
+## edited scene in the editor, against the running scene at runtime, and finally relative to
+## [param host]. Null when nothing is there. Extensions use this to resolve paths an HDA
+## writes into its output, so those behave exactly like the paths in the input stash.
+static func resolve_input_node(host: Node, input_node_path: Variant) -> Node:
+	return _resolve_input_node(host, input_node_path)
+
+
 ## Resolves an input path against the edited scene in the editor and against the
 ## running scene at runtime, so cooking works in both.
 static func _resolve_input_node(host: Node, input_node_path: Variant) -> Node:
 	if input_node_path == null or str(input_node_path).is_empty():
 		return null
 
-	var tree := host.get_tree()
+	var tree := host.get_tree() if host.is_inside_tree() else null
 	if tree != null:
 		if tree.edited_scene_root != null:
 			var edited_node := tree.edited_scene_root.get_node_or_null(input_node_path)

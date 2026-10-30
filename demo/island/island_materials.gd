@@ -5,7 +5,6 @@ const CONTRACT := "res://island/hda/material_contract.json"
 const LAYER := "MaterialDistribution"
 const HOST := "HDA/MaterialCook"
 const LAYER_ID := "bracken-isle-material-distribution-v1"
-const PRODUCER_ID := "bracken-isle-material-cook-v1"
 
 ## Includes every stored property, including appearance controls omitted by
 ## the geometry-only parameters() snapshot. No Resource identity/RID hashing.
@@ -25,11 +24,10 @@ static func bytes_hash(bytes: PackedByteArray) -> String:
 	context.update(bytes)
 	return context.finish().hex_encode()
 
+## Everything a host's cook depends on besides its inputs' content: HDA, parameters (which
+## include the target layer path), input rows and transform.
 static func host_state_hash(host: HEGoNode3D) -> String:
-	var binding := HEGoStrataTargets.of(host)
-	var targets: Array = binding.targets if binding != null else []
-	var producer := binding.producer_id if binding != null else ""
-	return bytes_hash(var_to_bytes([host.asset_name, host.parm_stash, host.input_stash, targets, producer, host.transform]))
+	return bytes_hash(var_to_bytes([host.asset_name, host.parm_stash, host.input_stash, host.transform]))
 
 ## Content identity of one stage: native samples/ownership, composition and,
 ## for procedural stages, every cached field's values, ownership and basis.
@@ -93,8 +91,9 @@ static func pack(layer: StrataLayer) -> Dictionary:
 	packed["pack_cpu_ms"] = (Time.get_ticks_usec() - started) / 1000.0
 	return packed
 
-## Adds only a missing mask stage/producer. Existing layer identity, bindings,
-## user material edits, parameters and every preexisting node are retained.
+## Adds only a missing mask stage/producer. Existing layer identity, input rows,
+## user material edits, parameters and every preexisting node are retained. The host's
+## target is its HDA's target_layer_path parameter, which [method cook_explicit] sets.
 static func attach(scene: Node3D, contract: Dictionary, upgrade_legacy_input: bool = false) -> Dictionary:
 	var terrain := scene.get_node_or_null("Terrain") as StrataTerrain3D
 	if terrain == null or not contract.get("operator") is String or String(contract.operator).is_empty(): return {"ok": false, "message": "Material HDA contract or terrain is missing"}
@@ -113,28 +112,20 @@ static func attach(scene: Node3D, contract: Dictionary, upgrade_legacy_input: bo
 		if scene.get_node_or_null(HOST) != null: return {"ok": false, "message": "MaterialCook path is occupied"}
 		host = HEGoNode3D.new(); host.name = "MaterialCook"
 		group.add_child(host); host.owner = scene
-		HEGoStrataTargets.ensure(host).producer_id = PRODUCER_ID
-	var binding := HEGoStrataTargets.of(host)
-	if binding == null or binding.producer_id != PRODUCER_ID: return {"ok": false, "message": "MaterialCook producer identity conflicts"}
 	if host.asset_name.is_empty(): host.asset_name = contract.operator
 	elif host.asset_name != contract.operator: return {"ok": false, "message": "MaterialCook uses a different HDA"}
 	if target != terrain.get_layers()[-1]: return {"ok": false, "message": "MaterialDistribution must follow the final authored stack"}
 	var layers := terrain.get_layers()
 	if layers.size() < 2: return {"ok": false, "message": "MaterialDistribution needs an earlier cumulative height source"}
 	var below: StrataLayer = layers[-2]
-	if binding.targets.is_empty(): binding.targets = [{"path": "../../Terrain/" + LAYER, "channels": names, "required_channels": names}]
 	if host.input_stash.is_empty(): host.input_stash = [{"inputs": ["../../Terrain/" + String(below.name)], "settings": {"terrain_mode": "cumulative", "terrain_channels": HEGoIslandStageMaterials.input_channels(), "terrain_spacing": 4.0, "terrain_max_samples": StrataProcedural.MAX_SAMPLES}}]
-	if binding.targets.size() != 1 or host.get_node_or_null(NodePath(String(binding.targets[0].get("path", "")))) != target or PackedStringArray(binding.targets[0].get("channels", [])) != names or PackedStringArray(binding.targets[0].get("required_channels", [])) != names: return {"ok": false, "message": "Existing MaterialCook bindings conflict with the complete 32-channel target; no bindings were overwritten"}
-	if host.input_stash.size() != 1 or host.input_stash[0].get("inputs", []) != ["../../Terrain/" + String(below.name)] or host.input_stash[0].get("settings", {}).get("terrain_mode") != "cumulative" or HEGoIslandStageMaterials.channel_names(host.input_stash[0].get("settings", {}).get("terrain_channels", [])) not in [PackedStringArray(["height"]), HEGoIslandStageMaterials.input_channels()] or host.input_stash[0].get("settings", {}).get("terrain_spacing", 0.0) != 4.0: return {"ok": false, "message": "MaterialCook requires the final cumulative height/material/simulation input at 4 m (or the saved legacy height-only binding); use the explicit stage binding migration to upgrade"}
+	if host.input_stash.size() != 1 or host.input_stash[0].get("inputs", []) != ["../../Terrain/" + String(below.name)] or host.input_stash[0].get("settings", {}).get("terrain_mode") != "cumulative" or HEGoIslandStageMaterials.channel_names(host.input_stash[0].get("settings", {}).get("terrain_channels", [])) not in [PackedStringArray(["height"]), HEGoIslandStageMaterials.input_channels()] or host.input_stash[0].get("settings", {}).get("terrain_spacing", 0.0) != 4.0: return {"ok": false, "message": "MaterialCook requires the final cumulative height/material/simulation input at 4 m (or the saved legacy height-only binding); use the explicit stage input migration to upgrade"}
 	if upgrade_legacy_input and HEGoIslandStageMaterials.channel_names(host.input_stash[0].settings.terrain_channels) == PackedStringArray(["height"]):
 		var rows := host.input_stash.duplicate(true)
 		rows[0].settings = HEGoIslandStageMaterials.input_settings(4.0, rows[0].settings, true)
 		host.input_stash = rows
-		if host.is_inside_tree(): host.hego_notify_cook_inputs_changed()
-		else:
-			binding.stale = true; target.procedural_stale = true
-			binding.status = "Inputs changed; explicit recook required"
-			target.procedural_status = binding.status
+		host.hego_notify_cook_inputs_changed()
+		target.mark_stale("Inputs changed; explicit recook required")
 	return {"ok": true, "terrain": terrain, "target": target, "host": host}
 
 ## HAPI integer menus store item indices, while the contract names tokens.
@@ -159,9 +150,8 @@ static func cook_explicit(owner: Node, host: HEGoNode3D, target: StrataLayer, co
 	if initialize:
 		for key in parameters:
 			if parameters[key].has("default"): changes[key] = parameters[key].default
-	var binding := HEGoStrataTargets.of(host)
-	if binding == null or binding.targets.is_empty(): return {"ok": false, "message": "MaterialCook has no terrain target binding"}
-	changes.target_layer_path = binding.targets[0].path; changes.merge(overrides, true)
+	changes.target_layer_path = String(host.get_path_to(target)) if host.is_inside_tree() and target.is_inside_tree() else "../../Terrain/" + LAYER
+	changes.merge(overrides, true)
 	for key in changes:
 		if not parameters.has(key): return {"ok": false, "message": "Unknown material parameter " + key}
 		var kind := String(parameters[key].get("type", ""))
@@ -183,7 +173,7 @@ static func cook_explicit(owner: Node, host: HEGoNode3D, target: StrataLayer, co
 	var before := target.procedural_revision
 	var started := Time.get_ticks_usec()
 	await host.cook()
-	return {"ok": target.procedural_revision > before and not target.procedural_stale, "message": binding.status, "parameters": actual, "cook_ms": (Time.get_ticks_usec() - started) / 1000.0}
+	return {"ok": target.procedural_revision > before and not target.procedural_stale, "message": target.procedural_status, "parameters": actual, "cook_ms": (Time.get_ticks_usec() - started) / 1000.0}
 
 static func _collect_parms(value: Variant, result: Dictionary, parameters: Dictionary) -> void:
 	if value is Dictionary:

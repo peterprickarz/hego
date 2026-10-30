@@ -372,27 +372,19 @@ func _exercise() -> bool:
 		return false
 
 	# Two targets may each return the ordinary channel name `height`. Routing is
-	# keyed by the declared target path and stable layer ID, not a global name map.
+	# keyed by the routed target path and stable layer ID, not a global name map.
 	var multi_a := StrataLayer.new(); multi_a.name = "MultiRouteA"; multi_a.procedural = true; terrain.add_child(multi_a)
 	var multi_b := StrataLayer.new(); multi_b.name = "MultiRouteB"; multi_b.procedural = true; terrain.add_child(multi_b)
 	var multi_host := Node3D.new(); multi_host.name = "MultiRouteHost"; multi_host.transform = terrain.transform; root.add_child(multi_host)
-	var multi_declarations := [
-		{"path": String(multi_host.get_path_to(multi_a)), "channels": PackedStringArray(["height"])},
-		{"path": String(multi_host.get_path_to(multi_b)), "channels": PackedStringArray(["height"])},
-	]
-	var multi_state := await HEGoStrataOutput.prepare(multi_host, [], multi_declarations, "duplicate-height-route")
-	if not _check(multi_state.get("ok", false), "Could not bind two-target same-channel route fixture"):
-		return false
 	var multi_field_a := _field("height", _rf(2, 2, 8.0), Vector3(-1, 0, -1), Vector3.RIGHT, Vector3(0, 0, 1), {
-		"hegostrata_layer_path": multi_declarations[0].path, "hegostrata_role": "value", "hegostrata_channel": "height",
+		"hegostrata_layer_path": String(multi_host.get_path_to(multi_a)), "hegostrata_role": "value", "hegostrata_channel": "height",
 	})
 	var multi_field_b := _field("height", _rf(2, 2, 12.0), Vector3(-1, 0, -1), Vector3.RIGHT, Vector3(0, 0, 1), {
-		"hegostrata_layer_path": multi_declarations[1].path, "hegostrata_role": "value", "hegostrata_channel": "height",
+		"hegostrata_layer_path": String(multi_host.get_path_to(multi_b)), "hegostrata_role": "value", "hegostrata_channel": "height",
 	})
 	multi_field_a["coordinate_space"] = "sop_local"
 	multi_field_b["coordinate_space"] = "sop_local"
-	var routed_multi := HEGoStrataOutput.route_fields(multi_host, multi_state, [multi_field_a, multi_field_b])
-	var committed_multi := StrataProcedural.commit_fields(multi_state.ticket, routed_multi.results) if routed_multi.get("ok", false) else routed_multi
+	var committed_multi := HEGoStrataOutput.publish(multi_host, [multi_field_a, multi_field_b], [])
 	if not _check(committed_multi.get("ok", false) and is_equal_approx(_sample_height(multi_a, Vector2.ZERO), 8.0)
 			and is_equal_approx(_sample_height(multi_b, Vector2.ZERO), 12.0), "Same-name height volumes did not route independently to their two procedural targets"):
 		return false
@@ -421,7 +413,7 @@ func _exercise() -> bool:
 
 	# Exercise the actual HEGoNode3D.cook orchestration: the terrain source is
 	# uploaded by its input agent, and returned volume primitive attributes route
-	# both fields to the predeclared target in one atomic commit.
+	# both fields to the target they name in one atomic commit.
 	var host_target := StrataLayer.new()
 	host_target.name = "HostCookOutput"
 	host_target.procedural = true
@@ -435,12 +427,10 @@ func _exercise() -> bool:
 	cook_host.asset_name = "Sop/attribwrangle"
 	cook_host.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(-17.0)), Vector3(15.0, 2.0, 3.0))
 	root.add_child(cook_host)
-	var cook_binding := HEGoStrataTargets.ensure(cook_host)
-	cook_binding.producer_id = "terrain-integration-host"
+	# The bridge's editor plugin does this for every HEGo node in the edited scene.
+	HEGoStrataOutput.watch(cook_host)
 	var target_path := String(cook_host.get_path_to(host_target))
 	var input_path := String(cook_host.get_path_to(fine))
-	var host_targets: Array[Dictionary] = [{"path": target_path, "channels": PackedStringArray(["height", "mask"])}]
-	cook_binding.targets = host_targets
 	cook_host.hego_set_input_stash([{
 		"inputs": [input_path],
 		"settings": {"terrain_mode": "cumulative", "terrain_channels": PackedStringArray(["height", "mask"])},
@@ -502,7 +492,7 @@ func _exercise() -> bool:
 	await cook_host.cook()
 	if not _check(host_target.procedural_fields["height"] == host_field_ref and host_target.procedural_revision == host_published_revision and is_equal_approx(_sample_height(host_target, Vector2(0, 0)), host_published_value), "Rejected host cook partially replaced its previous procedural cache"):
 		return false
-	if not _check(host_target.procedural_stale and host_target.procedural_status.contains("unbound"), "Invalid HAPI route did not leave the target stale with a useful status"):
+	if not _check(host_target.procedural_stale and host_target.procedural_status.contains("missing terrain layer"), "Invalid HAPI route did not leave the host's previous target stale with a useful status"):
 		return false
 
 	print("HAPI_TERRAIN_FIELD_LAYOUT ", coarse_height.resolution, " origin=", coarse_height.sample_origin, " x=", coarse_height.sample_step_x, " y=", coarse_height.sample_step_y)

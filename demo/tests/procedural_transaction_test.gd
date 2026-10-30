@@ -75,6 +75,35 @@ func _run() -> void:
 	check(not detached.ok and is_equal_approx(a.sample_channel(&"height", Vector2.ZERO).value, 5.0), "Reparenting a snapshot source rejects without replacing its target")
 	selected.free()
 	check(not StrataProcedural.token_is_current(snapshot.token), "Deleting a captured source invalidates its read token safely")
+	await _freshness(scene, terrain, source)
 	current_scene = null; scene.free()
 	print("PROCEDURAL_TRANSACTION_TEST: %s (%d failures)" % ["PASS" if failures == 0 else "FAIL", failures])
 	quit(0 if failures == 0 else 1)
+
+
+## A commit records its producer, signature and read set on the layer; the terrain's poll
+## marks the layer stale once one of those inputs changes.
+func _freshness(scene: Node3D, terrain: StrataTerrain3D, source: StrataLayer) -> void:
+	var producer := Node3D.new(); producer.name = "Producer"; scene.add_child(producer)
+	var stage := target(terrain, "Stage")
+	var read := StrataProcedural.create_snapshot(source, "raw", {"channels": ["height"]})
+	var mask := field(0.5); mask.name = "habitat"
+	var open := StrataProcedural.begin_transaction(producer, "Producer", [{"layer": stage}], [read], {"signature": {"opaque": [1, 2]}})
+	var committed := StrataProcedural.commit_fields(open, [{"layer_id": stage.layer_id, "fields": [field(4.0), mask]}])
+	check(committed.ok and stage.procedural_fields.has("height") and stage.procedural_fields.has("habitat"), "A target declared without channels accepts every channel and requires none")
+	check(stage.producer_id == "Producer" and stage.producer_path == stage.get_path_to(producer) and stage.producer_signature == {"opaque": [1, 2]}, "A commit records the producer's path and opaque signature on the layer")
+	check(stage.source_tokens.size() == 1 and stage.sources_current(), "A commit records the read set it was built from")
+	var blank := StrataProcedural.begin_transaction(producer, "Producer", [{"layer": stage, "required_channels": [""]}], [])
+	check(not blank.ok, "Blank required channel names are rejected")
+	var rival := Node3D.new(); rival.name = "Rival"; scene.add_child(rival)
+	check(not StrataProcedural.begin_transaction(rival, "Rival", [{"layer": stage}], []).ok, "Another producer cannot take a layer whose recorded producer is still in the scene")
+	terrain.check_procedural_sources()
+	check(not stage.procedural_stale, "An unchanged read set keeps the result current")
+	var intent := stage.producer_intent_revision
+	source.data.set_sample(&"height", Vector2i.ZERO, 5.0)
+	check(not stage.sources_current(), "Editing an input layer invalidates the recorded read set")
+	await create_timer(StrataTerrain3D.SOURCE_POLL_INTERVAL * 2.0).timeout
+	check(stage.procedural_stale and stage.producer_intent_revision == intent + 1 and "input layer changed" in stage.procedural_status, "The terrain's poll marks the result stale, with new producer intent, without being asked")
+	producer.free()
+	var adopted := StrataProcedural.begin_transaction(rival, "Rival", [{"layer": stage}], [])
+	check(adopted.ok and StrataProcedural.commit_fields(adopted, [{"layer_id": stage.layer_id, "fields": [field(6.0)]}]).ok and stage.producer_id == "Rival" and stage.source_tokens.is_empty(), "A deleted producer does not lock its layer; the new producer's empty read set replaces the old one")

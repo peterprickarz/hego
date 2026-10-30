@@ -8,6 +8,8 @@ extends HEGoInputHandler
 ## through that layer) or raw (its own values plus separate binary ownership), with the
 ## channels and spacing set in the input's settings: terrain_mode, terrain_channels,
 ## terrain_spacing, terrain_channel_spacings, terrain_max_samples and terrain_compact_empty.
+## A host with a terrain input cooks only on request, and strictly: an input that cannot be
+## sent fails the cook.
 
 ## Marks stored input settings as belonging to a terrain input, so its options and explicit
 ## cook rule stay in force while the source layer is missing.
@@ -18,15 +20,14 @@ func handles(node: Node) -> bool:
 	return node is StrataLayer and node.get_parent() is StrataTerrain3D
 
 
+## Takes a snapshot of [param node] and uploads it. The snapshot is recorded in the cook
+## dictionary ([constant HEGoStrataOutput.COOK_KEY]), so the cook's terrain publication
+## can tell whether this input changed while Houdini cooked.
 func sync(host: Node, existing_node: Variant, node: Node, settings: Dictionary) -> Dictionary:
-	# A host with terrain targets snapshots its terrain inputs before the cook starts, so
-	# the transaction can tell whether they changed while it ran. Reuse that snapshot;
-	# otherwise take one now.
-	var cook: Dictionary = settings.get("_cook", {})
-	var snapshots: Dictionary = cook.get(HEGoStrataTargets.COOK_KEY, {}).get("snapshots", {})
-	var source: Dictionary = snapshots.get(node.get_instance_id(), {})
-	if source.is_empty():
-		source = snapshot(node, settings)
+	var source := snapshot(node, settings)
+	var cook: Variant = settings.get("_cook")
+	if cook is Dictionary and source.get("ok", false):
+		HEGoStrataOutput.record_input(cook, source)
 	return await upload(host, existing_node, node, source)
 
 
@@ -36,6 +37,11 @@ func claims_settings(settings: Dictionary) -> bool:
 
 ## Terrain stages are expensive and publish into layers, so they cook only on request.
 func requires_explicit_cook(_settings: Dictionary) -> bool:
+	return true
+
+
+## A terrain result is published all-or-nothing, so no input may be silently skipped.
+func requires_strict_cook(_settings: Dictionary) -> bool:
 	return true
 
 

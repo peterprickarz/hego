@@ -1,4 +1,4 @@
-[gd_scene load_steps=65 format=4 uid="uid://dgirr7lofrano"]
+[gd_scene load_steps=64 format=4 uid="uid://dgirr7lofrano"]
 
 [ext_resource type="Script" uid="uid://bi8r4ieqeir4b" path="res://island/authoring_level.gd" id="1_xvlrx"]
 [ext_resource type="Script" uid="uid://be5gtust1fosq" path="res://addons/strata/strata_terrain_3d.gd" id="2_esx07"]
@@ -45,7 +45,6 @@
 [ext_resource type="Script" uid="uid://blnvgo8r28r5p" path="res://addons/hego/HEGoNode3D.gd" id="102_nlj40"]
 [ext_resource type="Script" uid="uid://k5yujyonxs8a" path="res://island/island_camera.gd" id="103_jafaw"]
 [ext_resource type="Shader" uid="uid://cd11o64i1h22m" path="res://island/shaders/ocean.gdshader" id="104_ffoo6"]
-[ext_resource type="Script" uid="uid://cpqswggi1wx32" path="res://addons/hego_strata/hego_strata_targets.gd" id="200_terrain_targets"]
 [ext_resource type="Resource" path="res://island/terrain/material_distribution/material_coastal_sand.res" id="300_mat_coastal_sand"]
 [ext_resource type="Resource" path="res://island/terrain/material_distribution/material_island_grass.res" id="300_mat_island_grass"]
 [ext_resource type="Resource" path="res://island/terrain/material_distribution/material_scree_gravel.res" id="300_mat_scree_gravel"]
@@ -152,7 +151,8 @@ data = ExtResource("41_co56g")
 script = ExtResource("40_088s2")
 procedural = true
 layer_id = "bracken-isle-coarse-erosion-v1"
-producer_id = "bracken-isle-coarse-cook-v1"
+producer_id = "HDA/CoarseCook"
+producer_path = NodePath("../../HDA/CoarseCook")
 procedural_fields = {
 "debris": ExtResource("42_aui3i"),
 "erosion_delta": ExtResource("43_24wlv"),
@@ -200,7 +200,8 @@ composition_modes = {
 script = ExtResource("40_088s2")
 procedural = true
 layer_id = "bracken-isle-detail-erosion-v1"
-producer_id = "bracken-isle-detail-cook-v1"
+producer_id = "HDA/DetailCook"
+producer_path = NodePath("../../HDA/DetailCook")
 procedural_fields = {
 "debris": ExtResource("53_e56s8"),
 "erosion_delta": ExtResource("54_82oju"),
@@ -245,7 +246,8 @@ data = ExtResource("63_1baja")
 script = ExtResource("40_088s2")
 procedural = true
 layer_id = "bracken-isle-terrain-tint-v1"
-producer_id = "bracken-isle-terrain-tint-v1"
+producer_id = "HDA/TintCook"
+producer_path = NodePath("../../HDA/TintCook")
 procedural_fields = {
 "terrain_ao": ExtResource("64_l7iht"),
 "terrain_tint_b": ExtResource("65_waqvu"),
@@ -266,7 +268,8 @@ producer_intent_revision = 1
 script = ExtResource("40_088s2")
 procedural = true
 layer_id = "bracken-isle-material-distribution-v1"
-producer_id = "bracken-isle-material-cook-v1"
+producer_id = "HDA/MaterialCook"
+producer_path = NodePath("../../HDA/MaterialCook")
 procedural_fields = {
 "material_coastal_sand": ExtResource("300_mat_coastal_sand"),
 "material_dark_cliff": ExtResource("300_mat_dark_cliff"),
@@ -296,16 +299,6 @@ input_stash = [{
 }
 }]
 
-[node name="StrataTargets" type="Node" parent="HDA/CoarseCook"]
-script = ExtResource("200_terrain_targets")
-targets = Array[Dictionary]([{
-"channels": PackedStringArray("height", "erosion_delta", "sediment", "debris", "flow", "grass", "rock", "sand", "scree", "material_coastal_sand", "material_island_grass", "material_scree_gravel", "material_dark_cliff"),
-"path": "../../Terrain/CoarseErosion",
-"required_channels": PackedStringArray("height")
-}])
-producer_id = "bracken-isle-coarse-cook-v1"
-status = "Cached terrain state; explicit recook required after loading"
-
 [node name="DetailCook" type="Node3D" parent="HDA"]
 script = ExtResource("102_nlj40")
 asset_name = "Sop/HEGo_IslandErosion"
@@ -325,16 +318,6 @@ input_stash = [{
 }
 }]
 
-[node name="StrataTargets" type="Node" parent="HDA/DetailCook"]
-script = ExtResource("200_terrain_targets")
-targets = Array[Dictionary]([{
-"channels": PackedStringArray("height", "erosion_delta", "sediment", "debris", "flow", "grass", "rock", "sand", "scree", "material_coastal_sand", "material_island_grass", "material_scree_gravel", "material_dark_cliff"),
-"path": "../../Terrain/DetailErosion",
-"required_channels": PackedStringArray("height")
-}])
-producer_id = "bracken-isle-detail-cook-v1"
-status = "Cached terrain state; explicit recook required after loading"
-
 [node name="TintCook" type="Node3D" parent="HDA"]
 script = ExtResource("102_nlj40")
 asset_name = "Sop/HEGo_TerrainTint"
@@ -348,16 +331,6 @@ input_stash = [{
 }
 }]
 
-[node name="StrataTargets" type="Node" parent="HDA/TintCook"]
-script = ExtResource("200_terrain_targets")
-targets = Array[Dictionary]([{
-"channels": PackedStringArray("terrain_tint_r", "terrain_tint_g", "terrain_tint_b", "terrain_ao"),
-"path": "../../Terrain/TerrainTint",
-"required_channels": PackedStringArray("terrain_tint_r", "terrain_tint_g", "terrain_tint_b", "terrain_ao")
-}])
-producer_id = "bracken-isle-terrain-tint-v1"
-status = "Cached terrain state; explicit recook required after loading"
-
 [node name="MaterialCook" type="Node3D" parent="HDA"]
 script = ExtResource("102_nlj40")
 asset_name = "Sop/HEGo_MaterialDistribution"
@@ -370,16 +343,6 @@ input_stash = [{
 "terrain_spacing": 4.0
 }
 }]
-
-[node name="StrataTargets" type="Node" parent="HDA/MaterialCook"]
-script = ExtResource("200_terrain_targets")
-targets = Array[Dictionary]([{
-"channels": PackedStringArray("material_coastal_sand", "material_island_grass", "material_scree_gravel", "material_dark_cliff"),
-"path": "../../Terrain/MaterialDistribution",
-"required_channels": PackedStringArray("material_coastal_sand", "material_island_grass", "material_scree_gravel", "material_dark_cliff")
-}])
-producer_id = "bracken-isle-material-cook-v1"
-status = "No material cook yet"
 
 [node name="Camera" type="Camera3D" parent="."]
 transform = Transform3D(0.839253, 0.224739, -0.495123, 0, 0.910586, 0.41332, 0.543741, -0.34688, 0.764212, -3000, 2000, 3300)

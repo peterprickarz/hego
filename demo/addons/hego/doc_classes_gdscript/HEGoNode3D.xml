@@ -24,7 +24,7 @@
 		<method name="cook_extensions">
 			<return type="HEGoCookExtension[]" />
 			<description>
-				The children that take part in this node's cooks, in child order: every direct child that extends [HEGoCookExtension].  This is how another addon adds to what a cook does without HEGo knowing about it. The HEGo Strata bridge, for example, adds a child that publishes the cook's heightfields into terrain layers.
+				The children that take part in this node's cooks, in child order: every direct child that extends [HEGoCookExtension].  This is how another addon adds to what a cook does without HEGo knowing about it, for example by checking or publishing the cook's result before the [code]Outputs[/code] subtree is replaced.
 			</description>
 		</method>
 		<method name="hego_use_bottom_panel">
@@ -42,13 +42,13 @@
 		<method name="hego_notify_cook_inputs_changed">
 			<return type="void" />
 			<description>
-				Tells this node's cook extensions that its inputs or parameters changed. The panel calls it on every edit, and [method hego_set_input_stash] calls it too.
+				Tells this node's cook extensions that its inputs or parameters changed, and emits [signal cook_inputs_changed]. The panel calls it on every edit, and [method hego_set_input_stash] calls it too.
 			</description>
 		</method>
 		<method name="hego_requires_explicit_cook">
 			<return type="bool" />
 			<description>
-				Whether recooking should wait for an explicit request rather than following every edit, because one of this node's cook extensions asks for that. The panel's auto recook is skipped while this is true.
+				Whether recooking should wait for an explicit request rather than following every edit, because one of this node's cook extensions, or the input handler of one of its input rows (see [method HEGoInputHandler.requires_explicit_cook]), asks for that. The panel's auto recook is skipped while this is true.
 			</description>
 		</method>
 		<method name="hego_get_asset_node">
@@ -108,6 +108,13 @@
 			The tedious parts of driving an HDA. Everything it does is an ordinary call on [HEGoAssetNode]; see [HEGoAssetAgent].
 		</member>
 	</members>
+	<signals>
+		<signal name="cook_inputs_changed">
+			<description>
+				Emitted by [method hego_notify_cook_inputs_changed]: this node's inputs or parameters changed since its last cook, so anything built from that cook may be out of date. Lets another addon react at once without HEGo knowing about it; the HEGo Strata bridge, for example, marks the terrain layers this node published as stale.
+			</description>
+		</signal>
+	</signals>
 	<constants>
 		<constant name="LOG_CATEGORY" value="&quot;cook&quot;">
 			Category this file logs under, shown in the session panel filter.

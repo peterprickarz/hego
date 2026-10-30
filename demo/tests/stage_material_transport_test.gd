@@ -128,12 +128,12 @@ func check_bindings() -> void:
 		var label: String = ["CoarseCook", "DetailCook", "MaterialCook"][index]
 		var target: String = ["CoarseErosion", "DetailErosion", "MaterialDistribution"][index]
 		var host := HEGoNode3D.new(); host.name = label; group.add_child(host)
-		var binding := HEGoStrataTargets.ensure(host)
 		host.asset_name = HEGoIslandStageMaterials.EROSION_OPERATOR if index < 2 else HEGoIslandStageMaterials.MATERIAL_OPERATOR
-		binding.producer_id = ["bracken-isle-coarse-cook-v1", "bracken-isle-detail-cook-v1", HEGoIslandMaterials.PRODUCER_ID][index]
 		host.parm_stash = PackedByteArray([index, 19, 42])
-		var names := PackedStringArray(HEGoIslandStageMaterials.LEGACY_OUTPUTS) if index < 2 else HEGoIslandMaterials.channels()
-		binding.targets = [{"path": "../../Terrain/" + target, "channels": names, "required_channels": PackedStringArray(["height"]) if index < 2 else names}]
+		# As an earlier commit by this host records it; the editor plugin watches the host.
+		var layer := terrain.get_node(target) as StrataLayer
+		layer.producer_path = layer.get_path_to(host); layer.producer_id = HEGoStrataOutput.producer_id(host)
+		HEGoStrataOutput.watch(host)
 		var settings := {"terrain_mode": "cumulative", "terrain_channels": "height"}
 		if index == 2: settings.terrain_spacing = 4.0
 		host.input_stash = [{"inputs": ["../../Terrain/" + ["RoughBase", "ManualFine", "BuildingFlatten"][index]], "settings": settings}]
@@ -149,15 +149,15 @@ func check_bindings() -> void:
 	var hand_hash := HEGoIslandTransition.manual_hash(hand)
 	var preserved := HEGoIslandMaterials.host_state_hash(coarse)
 	detail.input_stash[0].settings.terrain_channels = "height,user_mask"
-	check(not HEGoIslandStageMaterials.migrate(scene).ok and HEGoIslandMaterials.host_state_hash(coarse) == preserved, "custom downstream bindings reject migration before any upstream mutation")
+	check(not HEGoIslandStageMaterials.migrate(scene).ok and HEGoIslandMaterials.host_state_hash(coarse) == preserved, "custom downstream input rows reject migration before any upstream mutation")
 	detail.input_stash[0].settings.terrain_channels = "height"
 	var raw: Dictionary = detail.input_stash[1].duplicate(true)
 	var migrated := HEGoIslandStageMaterials.migrate(scene)
-	check(migrated.ok and migrated.changed and HEGoStrataTargets.of(coarse).targets[0].channels.size() == 9 + HEGoIslandMaterialRegistry.count() and HEGoStrataTargets.of(detail).targets[0].required_channels.size() == 9 + HEGoIslandMaterialRegistry.count(), "explicit migration requires complete height/simulation/material output")
+	check(migrated.ok and migrated.changed and coarse.get_child_count() == 0 and HEGoIslandMaterials.host_state_hash(coarse) != preserved, "explicit migration changes only the hosts' input rows")
 	check(coarse.input_stash[0].settings.terrain_channel_spacings.flow == 8.0 and detail.input_stash[0].settings.terrain_channel_spacings.flow == 4.0 and not detail.input_stash[0].settings.has("terrain_spacing"), "migration sets bounded mask grids and preserves native height input spacing")
-	check(detail.input_stash[1] == raw and detail.parm_stash == PackedByteArray([1, 19, 42]) and HEGoStrataTargets.of(detail).producer_id == "bracken-isle-detail-cook-v1", "raw building input, saved parameters and producer identity survive migration")
+	check(detail.input_stash[1] == raw and detail.parm_stash == PackedByteArray([1, 19, 42]) and terrain.get_node("DetailErosion").producer_id == HEGoStrataOutput.producer_id(detail), "raw building input, saved parameters and producer identity survive migration")
 	check(material.input_stash[0].settings.terrain_channels.size() == 5 + HEGoIslandMaterialRegistry.count() and material.input_stash[0].settings.terrain_spacing == 4.0 and material.input_stash[0].settings.terrain_max_samples == StrataProcedural.MAX_SAMPLES, "final material input carries actual masks and prior weights on4m grid")
-	check(cached.procedural_fields.height == cached_height and cached_height.data.get_sample(&"height", Vector2i.ZERO) == 19.0 and terrain.get_node("DetailErosion").procedural_revision == 0 and HEGoStrataTargets.of(coarse).stale and HEGoIslandTransition.manual_hash(hand) == hand_hash, "migration leaves cached fields/revisions and owned hand zero alone and requests explicit cooks")
+	check(cached.procedural_fields.height == cached_height and cached_height.data.get_sample(&"height", Vector2i.ZERO) == 19.0 and terrain.get_node("DetailErosion").procedural_revision == 0 and cached.procedural_stale and cached.producer_intent_revision == 1 and HEGoIslandTransition.manual_hash(hand) == hand_hash, "migration leaves cached fields/revisions and owned hand zero alone and requests explicit cooks")
 	var row: Variant = load("res://addons/hego/ui/input_ui.tscn").instantiate()
 	scene.add_child(row)
 	row.setup("Detail stage", PackedStringArray(["../../Terrain/ManualFine"]), detail.input_stash[0].settings, detail)

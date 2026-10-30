@@ -1,5 +1,7 @@
 extends "res://tests/runtime_test_base.gd"
-## Runtime freshness follows explicit HEGo intent, without starting HAPI.
+## Runtime freshness follows explicit HEGo intent and changed input layers, without
+## starting HAPI. The bridge's editor plugin watches HEGo nodes in the editor; here the test
+## watches them itself, as a game that edits HEGo inputs at runtime would.
 
 func _initialize() -> void:
 	run.call_deferred()
@@ -11,7 +13,9 @@ func run() -> void:
 	var generated := StrataLayer.new(); generated.name = "Generated"; generated.procedural = true
 	terrain.add_child(generated); generated.owner = scene
 	var host := HEGoNode3D.new(); host.name = "Producer"; scene.add_child(host); host.owner = scene
-	HEGoStrataTargets.ensure(host).targets = [{"path": "../Terrain/Generated"}]
+	# What a commit by this host records on the layer.
+	generated.producer_path = generated.get_path_to(host); generated.producer_id = HEGoStrataOutput.producer_id(host)
+	HEGoStrataOutput.watch(host)
 	var baked := StrataBake.bake(terrain, {"allow_stale_procedural": true})
 	check(baked.ok and not terrain.is_runtime_bake_stale(), "explicitly accepted saved procedural cache is fresh")
 	var before := generated.producer_intent_revision
@@ -31,8 +35,22 @@ func run() -> void:
 	var loaded_terrain: StrataTerrain3D = loaded.get_node("Terrain")
 	var loaded_generated: StrataLayer = loaded_terrain.get_node("Generated")
 	check(not loaded_terrain.is_runtime_bake_stale() and loaded_generated.producer_intent_revision == before + 1, "reload/status initialization preserves the accepted cache and persisted intent")
+	check(loaded_generated.producer_path == NodePath("../../Producer") and loaded_generated.producer_id == "Producer", "the recorded producer survives the reload")
+	HEGoStrataOutput.watch(loaded.get_node("Producer"))
 	loaded.get_node("Producer").hego_notify_cook_inputs_changed()
 	check(loaded_terrain.runtime_bake_stale and loaded_generated.producer_intent_revision == before + 2, "post-load HEGo parameter/input intent eagerly invalidates the runtime bake")
+	# A changed input layer: Strata's own poll marks the result stale and the bake with it.
+	var source := StrataLayer.new(); source.name = "Source"; terrain.add_child(source); terrain.move_child(source, 0)
+	source.data.set_sample(&"height", Vector2i.ZERO, 1.0)
+	var snapshot := StrataProcedural.create_snapshot(source, "raw", {"channels": ["height"]})
+	var image := Image.create(2, 2, false, Image.FORMAT_RF); image.fill(Color(2, 0, 0))
+	var ticket := StrataProcedural.begin_transaction(host, generated.producer_id, [{"layer": generated}], [snapshot])
+	check(StrataProcedural.commit_fields(ticket, [{"layer_id": generated.layer_id, "fields": [{"name": "height", "image": image, "sample_origin": Vector3.ZERO, "sample_step_x": Vector3.RIGHT, "sample_step_y": Vector3.BACK}]}]).ok and not generated.procedural_stale, "a result built from an input layer publishes")
+	check(StrataBake.bake(terrain).ok and not terrain.is_runtime_bake_stale(), "the current result bakes")
+	var built := generated.producer_intent_revision
+	source.data.set_sample(&"height", Vector2i.ZERO, 6.0)
+	await create_timer(StrataTerrain3D.SOURCE_POLL_INTERVAL * 2.0).timeout
+	check(generated.procedural_stale and generated.producer_intent_revision == built + 1 and terrain.is_runtime_bake_stale(), "a changed input layer makes the result and its runtime bake stale within a few frames")
 	check(not HEGoAPI.get_singleton().is_session_active(), "no HAPI session was started")
 	loaded.free(); scene.free()
 	finish("RUNTIME_INTENT_TEST")

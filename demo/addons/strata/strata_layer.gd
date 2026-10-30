@@ -19,7 +19,22 @@ enum Composition { REPLACE, ADD }
 		procedural = value
 		_data_changed()
 @export var layer_id := ""
+## Identity of the producer that last published this layer. A transaction from another
+## producer is refused while that producer is still in the tree; see [member producer_path].
 @export var producer_id := ""
+## Path from this layer to the node whose cook last published it, recorded by every commit
+## (see [method StrataProcedural.commit_fields]). Relative to this layer, so it still
+## resolves when the scene is instanced elsewhere. Empty until a producer has published.
+@export var producer_path: NodePath
+## What the producer looked like when it last published, written by whatever drives it and
+## recorded by the commit. Strata treats it as opaque: the producer compares it with its
+## current state to tell whether this result is out of date.
+@export var producer_signature: Dictionary = {}
+## Revision tokens of the input snapshots the current result was built from, recorded by
+## the commit. [StrataTerrain3D] polls them and marks this layer stale once one of those
+## inputs changes. Runtime only: the tokens hold weak references to live layers, so they are
+## not saved, and a loaded layer has none (it starts stale until its producer cooks again).
+var source_tokens: Array[Dictionary] = []
 @export var procedural_fields: Dictionary = {}
 @export var procedural_revision := 0
 @export var procedural_stale := true
@@ -86,7 +101,7 @@ func get_channel_data(channel: StringName) -> StrataLayerData:
 	return field.data if field != null else data
 
 func _validate_property(property: Dictionary) -> void:
-	if property.name in ["procedural_status", "procedural_revision", "procedural_stale", "layer_id", "producer_intent_revision"]:
+	if property.name in ["procedural_status", "procedural_revision", "procedural_stale", "layer_id", "producer_intent_revision", "producer_signature"]:
 		property.usage |= PROPERTY_USAGE_READ_ONLY
 	if property.name == "procedural_fields" or (procedural and property.name == "data"):
 		property.usage |= PROPERTY_USAGE_READ_ONLY
@@ -97,6 +112,21 @@ func _validate_property(property: Dictionary) -> void:
 func mark_producer_intent() -> void:
 	producer_intent_revision += 1
 	_data_changed()
+
+## Whether every input recorded in [member source_tokens] is unchanged since this layer's
+## result was built from it. True when none are recorded.
+func sources_current() -> bool:
+	for token in source_tokens:
+		if not StrataProcedural.token_is_current(token): return false
+	return true
+
+## Marks the cached result out of date because of [param reason], keeping it in place until
+## the producer cooks again. Also records new producer intent, so a runtime bake of the
+## result goes stale too.
+func mark_stale(reason: String) -> void:
+	procedural_stale = true
+	procedural_status = reason
+	mark_producer_intent()
 
 func get_composition(channel: StringName) -> int:
 	return int(composition_modes.get(String(channel), Composition.REPLACE))
