@@ -30,6 +30,28 @@ git submodule update --init --recursive
 
 > **Note**: The `release` branch is automatically updated with each commit to `main` and contains only the addon files, making it perfect for submodule use.
 
+### Strata terrain and the HEGo Strata bridge
+
+HEGo ships with two more addons that are developed in this repository but installed
+separately, each with a one-way dependency:
+
+| Addon | Folder | Depends on | What it does |
+| --- | --- | --- | --- |
+| **HEGo** | `addons/hego` | – | Houdini Engine integration (this addon) |
+| **Strata** | `addons/strata` | – | Layered terrain: hand and procedural layers, quadtree mesher, material renderer, bake, collision and navigation. Works without Houdini. |
+| **HEGo Strata** | `addons/hego_strata` | HEGo + Strata | Routes HDA heightfield volumes carrying `hegostrata_*` attributes into Strata layers |
+
+The `next` channel publishes them as `release-next` (HEGo), `strata-release-next`,
+`hego-strata-release-next` and `release-next-bundle` (all three); see
+[docs/next-packaging.md](docs/next-packaging.md). Cooking a terrain is covered in
+[docs/terrain-houdini-integration.md](docs/terrain-houdini-integration.md), the terrain
+itself in [docs/terrain-runtime.md](docs/terrain-runtime.md).
+
+> **Note**: The demo island's cooked terrain data and textures are stored with
+> [Git LFS](https://git-lfs.com). Run `git lfs install` once before cloning (or
+> `git lfs pull` afterwards), otherwise `demo/scenes/terrain_island.tscn` finds pointer
+> files instead of its layers.
+
 ## Features
 
 - **Scriptable API**: Built with GDScript integration in mind for maximum flexibility

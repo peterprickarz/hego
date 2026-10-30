@@ -42,6 +42,17 @@ package_tree() {
             git read-tree --prefix=hego_strata/ "$sha:demo/addons/hego_strata"
             ;;
     esac
+    # The generated header carries the source revision; the addon's own README, when
+    # it has one, follows it so the package documents itself.
+    local addon_readme=""
+    case "$kind" in
+        hego) addon_readme="$(git show "$sha:demo/addons/hego/README.md" 2>/dev/null || true)" ;;
+        strata) addon_readme="$(git show "$sha:demo/addons/strata/README.md" 2>/dev/null || true)" ;;
+        bridge) addon_readme="$(git show "$sha:demo/addons/hego_strata/README.md" 2>/dev/null || true)" ;;
+    esac
+    if [[ -n "$addon_readme" ]]; then
+        readme="$readme"$'\n\n'"$addon_readme"
+    fi
     add_file README.md "$readme"
     add_file LICENSE "$(git show "$sha:LICENSE")"
     add_file SOURCE_COMMIT "$sha"$'\n'
