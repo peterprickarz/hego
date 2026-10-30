@@ -196,7 +196,7 @@ source .venv/bin/activate
 python -m pip install 'scons>=4.5,<5'
 scripts/build.sh              # native debug + release; discovers Houdini via HFS
 scripts/build.sh all          # redistributable Linux x86_64 (container) + Windows (MinGW)
-ARCH=arm64 scripts/build.sh linux-compat                      # Linux ARM64 (qemu on x86_64 hosts)
+ARCH=arm64 scripts/build.sh linux-compat                      # Linux ARM64 (supported, not shipped; slow under qemu)
 OSXCROSS_ROOT=~/osxcross ARCH=universal scripts/build.sh macos  # universal macOS from Linux
 scripts/build-terrain.sh ...  # the same platforms for the Strata extension, no Houdini needed
 ```
