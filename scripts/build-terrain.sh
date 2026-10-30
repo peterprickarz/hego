@@ -80,10 +80,12 @@ esac
 # builds default to a universal binary so one dylib serves both Mac CPUs.
 linux_arch="${ARCH:-$(uname -m)}"
 case "$linux_arch" in aarch64) linux_arch=arm64 ;; amd64) linux_arch=x86_64 ;; esac
-case "$linux_arch" in
-    arm64|x86_64) ;;
-    *) echo "error: Linux ARCH must be arm64 or x86_64, got $linux_arch" >&2; exit 2 ;;
-esac
+for platform in "${PLATFORMS[@]}"; do
+    case "$platform:$linux_arch" in
+        linux:arm64|linux:x86_64|linux-compat:arm64|linux-compat:x86_64|windows:*|macos:*) ;;
+        *) echo "error: Linux ARCH must be arm64 or x86_64, got $linux_arch" >&2; exit 2 ;;
+    esac
+done
 macos_arch="${ARCH:-}"
 MACOS_COMPILER=""
 MACOS_SCONS_ARGS=()
