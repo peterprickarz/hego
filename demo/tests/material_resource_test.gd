@@ -111,29 +111,36 @@ func run() -> void:
 	check(exported_material.roughness_scale == 0.8 and exported_material.roughness_bias == 0.2, "Roughness controls survive scene export")
 	check(exported_material.triplanar_sharpness == 12.0, "Triplanar sharpness survives scene export")
 	exported.free()
+	# The island's real material profiles, whichever the registry lists.
 	var profiles: Array[StrataMaterial] = []
-	for name in ["coastal_sand", "island_grass", "mossy_cliff", "dark_cliff", "scree_gravel", "alpine_snow"]:
-		var source := load("res://island/materials/resources/" + name + ".tres") as StrataMaterial
-		check(source != null and source.color_texture != null and source.normal_texture != null and source.ormh_texture != null, "Actual source retains its three textures: " + name)
-		profiles.append(source)
+	for entry in HEGoIslandMaterialRegistry.registry().get("entries", []):
+		var source := load(String(entry.resource)) as StrataMaterial
+		check(source != null and source.color_texture != null and source.normal_texture != null and source.ormh_texture != null, "Actual source retains its three textures: " + String(entry.name))
+		if source != null: profiles.append(source)
+	check(profiles.size() == HEGoIslandMaterialRegistry.count() and not profiles.is_empty(), "every registry material loads")
+	if profiles.is_empty(): finish(); return
 	# Artist edits can intentionally reverse the original demonstration profiles.
-	# The reusable make_variant API below is a deliberate synthetic alias fixture;
-	# it is not the actual32-distinct-source showcase material pool.
+	# The reusable make_variant API below is a deliberate synthetic alias fixture
+	# (32 slots aliased over the registry's few sources); it is not the showcase pool.
 	for profile in profiles:
 		check(is_finite(profile.height_blend_contrast) and profile.height_blend_contrast >= 0.0 and profile.height_blend_contrast <= 16.0, "Actual artist contrast remains valid without forcing a cliff/grass hierarchy")
 		check(is_finite(profile.triplanar_sharpness) and profile.triplanar_sharpness >= 1.0 and profile.triplanar_sharpness <= 64.0, "Actual artist projection sharpness remains valid")
 	var variants: Array[StrataMaterial] = []
 	for index in range(32):
-		var source := profiles[index % 6]
+		var source := profiles[index % profiles.size()]
 		var item := source.make_variant()
 		check(item.height_blend_contrast == source.height_blend_contrast and item.height_blend_bias == source.height_blend_bias and item.ormh_texture == source.ormh_texture, "Synthetic32-alias fixture inherits each source's height controls")
 		check(item.uv_scale == source.uv_scale and item.roughness_scale == source.roughness_scale and item.roughness_bias == source.roughness_bias, "Aliases use one physical material scale and the same dry-surface controls")
 		variants.append(item)
-	var original := profiles[2].height_blend_contrast
-	profiles[2].height_blend_contrast = 11.0
+	var edited := profiles.size() - 1
+	var original := profiles[edited].height_blend_contrast
+	profiles[edited].height_blend_contrast = 11.0
 	for index in range(32):
-		if index % 6 == 2: check(variants[index].height_blend_contrast == 11.0, "Source Inspector contrast edits reach every matching UV definition")
-	profiles[2].height_blend_contrast = original
+		if index % profiles.size() == edited: check(variants[index].height_blend_contrast == 11.0, "Source Inspector contrast edits reach every matching UV definition")
+	profiles[edited].height_blend_contrast = original
+	finish()
+
+func finish() -> void:
 	print("MATERIAL_RESOURCE_TEST checks=%d failures=%d" % [checks, failures])
 	quit(0 if failures == 0 else 1)
 
