@@ -412,16 +412,19 @@ func _handle_multiparm_parm(parm_dict: Dictionary, parent: Control, asset: HEGoA
 			
 			
 func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary, asset: HEGoAssetNode):
+	_notify_inputs_changed()
 	await _await_task(asset.set_parm(parm_dict["name"], value))
 	await update_ui()
 	
 
 func _on_insert_multiparm_instance(id: int, index: int, asset: HEGoAssetNode):
+	_notify_inputs_changed()
 	await _await_task(asset.insert_multiparm_instance(id, index))
 	await update_ui()
 	
 
 func _on_remove_multiparm_instance(id: int, index: int, asset: HEGoAssetNode):
+	_notify_inputs_changed()
 	await _await_task(asset.remove_multiparm_instance(id, index))
 	await update_ui()
 
@@ -447,8 +450,9 @@ func _on_selected_node_exiting() -> void:
 
 
 func _on_value_changed(name, value, asset: HEGoAssetNode):
+	_notify_inputs_changed()
 	await _await_task(asset.set_parm(name, value))
-	if auto_recook_toggle.button_pressed:
+	if auto_recook_toggle.button_pressed and not _requires_explicit_recook():
 		await recook()
 	
 
@@ -466,14 +470,34 @@ func _on_input_changed():
 		if i < stashed.size() and stashed[i] is Dictionary:
 			settings = stashed[i].get("settings", {}).duplicate()
 		settings["include_children"] = input_nodes[i].include_children.button_pressed
+		# Settings an extension input handler edits in this row, see HEGoInputHandler.
+		settings.merge(input_nodes[i].get_extension_settings(), true)
 		inputs.append({
 			"inputs": input_nodes[i].get_inputs(),
 			"settings": settings,
 		})
 	if hego_tool_node.has_method("hego_set_input_stash"):
 		hego_tool_node.hego_set_input_stash(inputs)
-	if auto_recook_toggle.button_pressed:
+	if auto_recook_toggle.button_pressed and not _requires_explicit_recook():
 		await recook()
+
+
+## Whether the selected node or one of its inputs asks to be recooked only on request,
+## which turns auto recook off for it.
+func _requires_explicit_recook() -> bool:
+	if hego_tool_node and hego_tool_node.has_method("hego_requires_explicit_cook") and hego_tool_node.hego_requires_explicit_cook():
+		return true
+	for row in input_nodes:
+		if row.requires_explicit_cook():
+			return true
+	return false
+
+
+## Lets the selected node know its inputs or parameters changed, for anything that tracks
+## whether its last result is still current.
+func _notify_inputs_changed() -> void:
+	if hego_tool_node and hego_tool_node.has_method("hego_notify_cook_inputs_changed"):
+		hego_tool_node.hego_notify_cook_inputs_changed()
 	
 
 func _on_recook_button_pressed():
@@ -511,6 +535,9 @@ func recook():
 		await hego_tool_node.cook()
 	_cooking = false
 	_set_buttons_disabled(false)
+	# A failed preset restore can leave a valid HAPI node ID. Do not replace
+	# the saved stash with that incomplete instance or provoke a second error.
+	if hego_tool_node.has_method("hego_did_last_cook_succeed") and not hego_tool_node.hego_did_last_cook_succeed(): return
 
 	# Read the parameters back so they survive a scene reload. Guarded because a node whose
 	# cook did not instantiate anything - a missing HDA, or no session - still has no asset
@@ -519,7 +546,7 @@ func recook():
 		if not hego_asset_node:
 			var entries := _panel_assets()
 			hego_asset_node = entries[0]["asset"] if not entries.is_empty() else null
-		if hego_asset_node:
+		if _is_instantiated(hego_asset_node):
 			var preset = await _await_task(hego_asset_node.get_preset())
 			if preset != null:
 				hego_tool_node.hego_set_parm_stash(preset)
@@ -640,6 +667,7 @@ func _on_load_preset_button_pressed():
 		return
 	
 	# Load and apply the preset
+	_notify_inputs_changed()
 	await _await_task(hego_asset_node.set_preset(presets_res.presets[preset_name]))
 	print("[HEGo]: Loaded preset: ", preset_name)
 	await update_ui()
@@ -732,7 +760,7 @@ func _on_asset_picked(asset_name: String):
 	# The node decides what changing its HDA means, including forgetting the old one.
 	hego_tool_node.hego_set_asset_name(asset_name)
 
-	if auto_recook_toggle.button_pressed:
+	if auto_recook_toggle.button_pressed and not _requires_explicit_recook():
 		await recook()
 
 

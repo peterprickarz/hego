@@ -25,6 +25,9 @@ var asset: HEGoAssetNode
 ## This is the same dictionary the handler's [code]should_handle()[/code] was asked about,
 ## so [method handle] can read what it was selected for rather than working it out again.
 var summary: Dictionary
+## The dictionary the host's [HEGoCookExtension]s share for this one cook, or empty when
+## the cook was not run through them.
+var cook_state: Dictionary = {}
 
 
 ## Builds a context for [param host_node]'s cook of [param asset_node].

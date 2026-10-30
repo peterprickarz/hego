@@ -34,6 +34,29 @@ static func await_task(host: Node, task: HEGoTask) -> Variant:
 	return task.get_result()
 
 
+## Waits for [param task] like [method await_task], but reports the outcome rather than
+## logging it: [code]{ok: true, value}[/code], or [code]{ok: false, message}[/code] when the
+## task failed, was null, or [param host] left the scene tree while it waited.
+##
+## Use this where failure has to be told apart from a task that legitimately completed with
+## null, which is what HEGo returns for work it could skip.
+static func checked_task(host: Variant, task: HEGoTask) -> Dictionary:
+	if task == null:
+		return {"ok": false, "message": "No task was returned; the session is probably not running"}
+	if not is_instance_valid(host) or not host.is_inside_tree():
+		return {"ok": false, "message": "The node waiting for this task is no longer in the scene"}
+	var tree: SceneTree = host.get_tree()
+	while task.get_status() < HEGoTask.COMPLETED:
+		if not is_instance_valid(host) or not host.is_inside_tree():
+			return {"ok": false, "message": "The node waiting for this task was removed while waiting"}
+		await tree.process_frame
+		if not is_instance_valid(host) or not host.is_inside_tree():
+			return {"ok": false, "message": "The node waiting for this task was removed while waiting"}
+	if task.get_status() != HEGoTask.COMPLETED:
+		return {"ok": false, "message": task.get_error_message()}
+	return {"ok": true, "value": task.get_result()}
+
+
 ## Whether the cook produced the kind of geometry a handler needs.
 ##
 ## [param summary] is [method HEGoAssetNode.get_output_summary]'s result and

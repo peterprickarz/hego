@@ -34,6 +34,10 @@ one to see how an output type is built. Writing a node of your own around them i
      - Applying ``hego_custom_properties`` to a spawned object
    * - :ref:`HEGoInputNodes<class_HEGoInputNodes>`
      - Turning a Godot node into the right HEGo input node
+   * - :ref:`HEGoInputHandler<class_HEGoInputHandler>`
+     - Base class another addon extends to add a kind of input node
+   * - :ref:`HEGoCookExtension<class_HEGoCookExtension>`
+     - Base class for a child node that takes part in its HEGo node's cooks
    * - :ref:`HEGoOutputContext<class_HEGoOutputContext>`
      - What one handler is given: the host node, the HDA, the cook summary, and the node
        building it needs
@@ -136,6 +140,51 @@ Four things matter here:
   without an owner silently disappears.
 - **Log through** :ref:`HEGoLog<class_HEGoLog>` so your messages show up in the
   session panel next to HEGo's. See :doc:`logging`.
+
+Extending inputs and cooks from another addon
+---------------------------------------------
+
+An output handler changes what one node's cook produces. Two base classes let another
+*addon* add to HEGo without HEGo knowing it exists, so the dependency only ever points
+from that addon to HEGo:
+
+- :ref:`HEGoInputHandler<class_HEGoInputHandler>` adds a kind of Godot node that can feed
+  an HDA input. Extend it with a ``class_name``: HEGo finds every global class that
+  extends it, in the editor and in exported games, and asks each through ``handles(node)``
+  before trying its own input kinds. ``sync()`` sends the node and returns
+  ``{ok, node}`` or ``{ok: false, message}``. A handler can also supply a settings editor
+  for the bottom panel's input row and ask for explicit recooks.
+- :ref:`HEGoCookExtension<class_HEGoCookExtension>` is a node you add as a direct child of
+  an :ref:`HEGoNode3D<class_HEGoNode3D>`. Its hooks run at each step of the cook:
+  ``cook_prepare()`` before anything reaches Houdini, ``cook_before()`` before the HDA
+  cooks, ``cook_commit()`` before ``Outputs`` is replaced, and ``cook_failed()`` when the
+  cook stops early. Any hook returning ``ok: false`` stops the cook with every previous
+  output left in place. An extension can make the cook *strict*, so an input that cannot be
+  sent fails it rather than being skipped.
+
+.. code-block:: gdscript
+
+    @tool
+    class_name MyStampInput
+    extends HEGoInputHandler
+
+    func handles(node: Node) -> bool:
+        return node is MyStamp
+
+    func sync(host: Node, existing_node: Variant, node: Node, settings: Dictionary) -> Dictionary:
+        var input: HEGoInputNode = existing_node if existing_node is HEGoInputNode else HEGoInputNode.new()
+        var created := await HEGoNodeUtil.checked_task(host, input.instantiate())
+        if not created.ok:
+            return created
+        var sent := await HEGoNodeUtil.checked_task(host, input.set_geo_from_mesh(node.to_mesh(), []))
+        if not sent.ok:
+            return sent
+        return {"ok": true, "node": input}
+
+The HEGo Strata bridge (``addons/hego_strata``) is the worked example of
+both: ``HEGoStrataInput`` sends terrain layers, and ``HEGoStrataTargets`` publishes a
+cook's heightfields into terrain layers in one transaction. See
+``docs/terrain-houdini-integration.md`` in the repository.
 
 Shared helpers
 --------------

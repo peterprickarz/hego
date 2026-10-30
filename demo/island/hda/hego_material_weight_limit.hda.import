@@ -1,0 +1,15 @@
+[remap]
+
+importer="hego.hda"
+type="HDAResource"
+uid="uid://cmgwjnwyxcjaa"
+path="res://.godot/imported/hego_material_weight_limit.hda-709f278d07d61fbe621178581f94b729.tres"
+
+[deps]
+
+source_file="res://island/hda/hego_material_weight_limit.hda"
+dest_files=["res://.godot/imported/hego_material_weight_limit.hda-709f278d07d61fbe621178581f94b729.tres"]
+
+[params]
+
+my_option=false

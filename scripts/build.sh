@@ -10,6 +10,7 @@
 #   scripts/build.sh linux-compat             # redistributable Linux, in a container
 #   scripts/build.sh all                      # Linux + Windows release binaries
 #   scripts/build.sh windows template_release # one specific target
+#   JOBS=2 scripts/build.sh all               # cap compiler concurrency
 #
 # "linux" builds with the host toolchain: fast, but the result only loads on a glibc at
 # least as new as this machine's. "linux-compat" builds in a glibc 2.28 container so the
@@ -37,6 +38,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="$ROOT_DIR/demo/addons/hego/bin"
 HOST_OS="$(uname -s)"
 JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
+if [[ ! "$JOBS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: JOBS must be a positive integer" >&2
+    exit 1
+fi
 SCONS="${SCONS:-scons}"
 PYTHON="${PYTHON:-python3}"
 ALL_TARGETS=(template_debug template_release)
@@ -281,6 +286,28 @@ for platform in "${PLATFORMS[@]}"; do
                     ;;
             esac
         fi
+        output_platform="$platform"
+        [[ "$output_platform" == "linux-compat" ]] && output_platform=linux
+        if [[ "$output_platform" == "windows" ]]; then
+            artifact="bin/hego.windows.${target}.x86_64.dll"
+            compiler="$(x86_64-w64-mingw32-g++ --version | head -n 1)"
+        elif [[ "$output_platform" == "linux" ]]; then
+            artifact="bin/libhego.linux.${target}.x86_64.so"
+            if [[ "$platform" == "linux-compat" ]]; then
+                compiler="$IMAGE"
+            else
+                compiler="$(c++ --version | head -n 1)"
+            fi
+        else
+            echo "error: receipt naming is not configured for platform $output_platform" >&2
+            exit 1
+        fi
+        hfs_version="$(cat "$HFS/houdini_version.txt" 2>/dev/null || basename "$HFS")"
+        hapi_headers="$(find "$HFS/toolkit/include/HAPI" -maxdepth 1 -type f -name '*.h' -print0 \
+            | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+        context="platform=$output_platform,target=$target,arch=x86_64,compiler=$compiler,hfs=$hfs_version,hapi_headers_sha256=$hapi_headers"
+        python3 "$ROOT_DIR/scripts/native_build_manifest.py" record --addon hego \
+            --artifact "$artifact" --context "$context"
     done
 done
 

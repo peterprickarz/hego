@@ -1,0 +1,103 @@
+extends "res://tests/runtime_test_base.gd"
+## Runs in a project holding only the runtime scripts: no terrain extension,
+## authoring scripts, HEGo or Houdini. Loads the exported scene and data.
+
+const S := StrataRuntimeData.Status
+
+func _initialize() -> void:
+	call_deferred("run")
+
+static func payload_hashes(data: StrataRuntimeData) -> Dictionary:
+	var result := {}
+	var payloads := {"heights": data.heights.to_byte_array(), "holes": data.holes, "nav_exclusions": data.nav_exclusions, "lattice": PackedFloat64Array([data.bounds.position.x, data.bounds.position.y, data.bounds.size.x, data.bounds.size.y, data.height_min, data.height_max]).to_byte_array()}
+	for name in data.channels:
+		payloads["channel:" + name] = data.channels[name].values.to_byte_array() + data.channels[name].coverage.to_byte_array()
+	for key in payloads:
+		var context := HashingContext.new()
+		context.start(HashingContext.HASH_SHA256)
+		context.update(payloads[key])
+		result[key] = context.finish().hex_encode()
+	return result
+
+func run() -> void:
+	check(not ClassDB.class_exists("StrataLayerData") and not ClassDB.class_exists("HEGoAPI"), "no native terrain or HEGo classes are loaded")
+	var globals := ProjectSettings.get_global_class_list().map(func(entry: Dictionary) -> String: return entry["class"])
+	check(not globals.has("StrataTerrain3D") and not globals.has("StrataLayer") and not globals.has("StrataBake"), "no authoring scripts in this project: %s" % [globals])
+	var expected: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://export/expected.json"))
+	var packed: PackedScene = load("res://export/runtime_terrain.scn")
+	check(packed != null, "runtime scene loads")
+	var terrain: Node3D = packed.instantiate()
+	get_root().add_child(terrain)
+	var data: StrataRuntimeData = terrain.get_meta(&"strata_runtime_data")
+	check(data != null and data.resource_path == "res://export/runtime_data.res", "compiled data is the external resource: %s" % (data.resource_path if data else "null"))
+	check(data.validate().ok and data.bake_revision == int(expected.revision), "data validates with the exported revision")
+	check(terrain.transform.is_equal_approx(str_to_var(expected.transform)), "terrain transform preserved")
+	check(payload_hashes(data) == expected.hashes, "exported payload bytes are bit-identical: %s" % payload_hashes(data))
+	var collision: StrataCollision = terrain.get_node("Collision")
+	var navigation: StrataNavigation = terrain.get_node("Navigation")
+	check(collision.data == data and navigation.data == data, "children share the one compiled resource")
+	check(collision.chunk_cells == 16 and collision.collision_layer == 4 and navigation.tile_cells == 16, "exported settings persisted")
+
+	var holes := 0
+	for row in expected.rows:
+		var point := Vector2(row.x, row.z)
+		var sampled := data.sample_height(point)
+		check(sampled.status == int(row.status), "status at %s" % point)
+		# JSON keeps ~15 significant digits; payload identity is the hash check.
+		if sampled.status == S.OK:
+			near(sampled.value, row.height, 0.000000001, "height at %s" % point)
+		holes += 1 if sampled.status == S.HOLE else 0
+		var mask := data.sample_channel(&"mask", point)
+		check(mask.status == int(row.mask_status) and (mask.status != S.OK or absf(mask.value - row.mask) < 0.000000001), "mask at %s" % point)
+	check(holes > 0, "roundtrip covers hole queries")
+
+	check(collision.prepare_region(data.bounds).ok, "collision builds without the extension")
+	await physics_frame
+	await physics_frame
+	var space := terrain.get_world_3d().direct_space_state
+	var worst := 0.0
+	for row in expected.rows:
+		if int(row.status) == S.OUTSIDE:
+			continue
+		var from := terrain.global_transform * Vector3(row.x, 50.0, row.z)
+		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * 200.0, 4))
+		if int(row.status) == S.HOLE:
+			check(hit.is_empty(), "hole at %s,%s stays open" % [row.x, row.z])
+		elif hit.is_empty():
+			check(false, "missing collision at %s,%s" % [row.x, row.z])
+		else:
+			var surface := terrain.global_transform * Vector3(row.x, row.height, row.z)
+			worst = maxf(worst, (hit.position as Vector3).distance_to(surface))
+	check(worst < 0.0005, "roundtrip collision matches baked heights (max %s)" % worst)
+
+	var map := terrain.get_world_3d().navigation_map
+	var baseline := NavigationServer3D.map_get_regions(map).size()
+	var baked := navigation.bake_region(data.bounds)
+	check(baked.ok and baked.regions > 1, "navigation bakes without the extension: %s" % baked)
+	for frame in range(4):
+		await physics_frame
+		await process_frame
+	var nav_from := terrain.global_transform * Vector3(expected.nav_from[0], data.sample_height(Vector2(expected.nav_from[0], expected.nav_from[1])).value, expected.nav_from[1])
+	var nav_to := terrain.global_transform * Vector3(expected.nav_to[0], data.sample_height(Vector2(expected.nav_to[0], expected.nav_to[1])).value, expected.nav_to[1])
+	var path := NavigationServer3D.map_get_path(map, nav_from, nav_to, true)
+	check(path.size() >= 2 and path[-1].distance_to(nav_to) < 0.75, "navigation path across tiles reaches its goal (%d points)" % path.size())
+
+	# ResourceSaver roundtrip of the loaded data, binary and text.
+	for path_name in ["res://export/resaved.res", "res://export/resaved.tres"]:
+		check(ResourceSaver.save(data, path_name) == OK, "resave %s" % path_name)
+		var loaded: StrataRuntimeData = ResourceLoader.load(path_name, "", ResourceLoader.CACHE_MODE_IGNORE)
+		check(loaded != null and payload_hashes(loaded) == expected.hashes, "%s is bit-identical" % path_name)
+		check(loaded != null and loaded.heights == data.heights and loaded.holes == data.holes and loaded.nav_exclusions == data.nav_exclusions and loaded.channels == data.channels and loaded.channel_names == data.channel_names and loaded.bounds == data.bounds, "%s preserves every payload" % path_name)
+		check(loaded.material_ids != null and loaded.material_ids.get_data() == data.material_ids.get_data() and loaded.material_weights.get_data() == data.material_weights.get_data(), "%s preserves material controls" % path_name)
+	var text: StrataRuntimeData = ResourceLoader.load("res://export/runtime_data_text.tres", "", ResourceLoader.CACHE_MODE_IGNORE)
+	check(text != null and payload_hashes(text) == expected.hashes and text.validate().ok, "text resource written by the authoring project is bit-identical here")
+	var corrupt: StrataRuntimeData = StrataRuntimeData.new()
+	corrupt.set("height_data", PackedByteArray([1, 2, 3]))
+	check(not corrupt.validate().ok, "a malformed stored payload fails validation")
+
+	terrain.queue_free()
+	for frame in range(4):
+		await physics_frame
+		await process_frame
+	check(NavigationServer3D.map_get_regions(map).size() == baseline, "freeing the runtime terrain removes its regions")
+	finish("RUNTIME_ROUNDTRIP_TEST")

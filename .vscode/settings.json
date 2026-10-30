@@ -85,5 +85,6 @@
     "variant": "cpp"
   },
   "clang-format.assumeFilename": "clang-format",
-  "editor.fontLigatures": true
+  "editor.fontLigatures": true,
+  "cmake.sourceDirectory": "/home/peter/projects/hego/godot-cpp"
 }

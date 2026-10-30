@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="StrataMaterial" load_steps=5 format=3 uid="uid://bsmg1gbwgfu1l"]
+
+[ext_resource type="Script" uid="uid://wburwgbfdl88" path="res://addons/strata/strata_material.gd" id="1_material"]
+[ext_resource type="Texture2D" uid="uid://b7jlpoeif6pp2" path="res://island/materials/textures/coastal_sand_color.jpg" id="2_color"]
+[ext_resource type="Texture2D" uid="uid://c6g3rpo380gvc" path="res://island/materials/textures/coastal_sand_normal_gl.jpg" id="3_normal"]
+[ext_resource type="Texture2D" uid="uid://8tkjo41kq3q4" path="res://island/materials/textures/coastal_sand_ormh.png" id="4_ormh"]
+
+[resource]
+script = ExtResource("1_material")
+color_texture = ExtResource("2_color")
+normal_texture = ExtResource("3_normal")
+ormh_texture = ExtResource("4_ormh")
+uv_scale = 0.1
+displacement_strength = 2.79
+height_blend_contrast = 13.7
+height_blend_bias = 0.1
+roughness_scale = 1.0
+roughness_bias = 0.18

@@ -1,0 +1,15 @@
+[remap]
+
+importer="hego.hda"
+type="HDAResource"
+uid="uid://52jleld5fa0i"
+path="res://.godot/imported/hego_material_distribution.hda-180a80ba106465ef859ec5d5d66f894c.tres"
+
+[deps]
+
+source_file="res://island/hda/hego_material_distribution.hda"
+dest_files=["res://.godot/imported/hego_material_distribution.hda-180a80ba106465ef859ec5d5d66f894c.tres"]
+
+[params]
+
+my_option=false

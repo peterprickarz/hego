@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+demo/island/terrain/**/*.res filter=lfs diff=lfs merge=lfs -text
+demo/island/materials/textures/*.jpg filter=lfs diff=lfs merge=lfs -text
+demo/island/materials/textures/*.png filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "retrieved_on": "2026-10-29",
+  "provider": "ambientCG",
+  "api": {
+    "version": "v3",
+    "endpoint": "https://ambientcg.com/api/v3/assets",
+    "docs": "https://docs.ambientcg.com/api/v3/assets/"
+  },
+  "license": {
+    "name": "Creative Commons CC0 1.0 Universal",
+    "url": "https://docs.ambientcg.com/license/",
+    "summary": "Copy, modify, distribute, and use commercially without permission; attribution is optional."
+  },
+  "resolution_format": "1K-JPG",
+  "assets": [
+    {
+      "name": "coastal_sand",
+      "id": "Ground093C",
+      "role": "sand",
+      "use": "Light eroded coastal dune and beach ground",
+      "download_url": "https://ambientcg.com/get?file=Ground093C_1K-JPG.zip",
+      "material_id": 0,
+      "tiling": {
+        "basis": "preserved_artist_resource",
+        "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+      }
+    },
+    {
+      "name": "island_grass",
+      "id": "Grass004",
+      "role": "grass",
+      "use": "Lush short grass on lower and sheltered slopes",
+      "download_url": "https://ambientcg.com/get?file=Grass004_1K-JPG.zip",
+      "material_id": 1,
+      "tiling": {
+        "basis": "preserved_artist_resource",
+        "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+      }
+    },
+    {
+      "name": "scree_gravel",
+      "id": "Gravel043",
+      "role": "gravel",
+      "use": "Fine grey granular gravel for scree and rough shore",
+      "download_url": "https://ambientcg.com/get?file=Gravel043_1K-JPG.zip",
+      "material_id": 2,
+      "tiling": {
+        "basis": "preserved_artist_resource",
+        "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+      }
+    },
+    {
+      "name": "dark_cliff",
+      "id": "Rock016",
+      "role": "cliff",
+      "use": "Dark grey rock faces and coastal stone",
+      "download_url": "https://ambientcg.com/get?file=Rock016_1K-JPG.zip",
+      "material_id": 3,
+      "tiling": {
+        "basis": "preserved_artist_resource",
+        "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+      }
+    }
+  ],
+  "scope": "Persistent island showcase catalog of 4 real CC0 PBR source sets (sand, grass, gravel, cliff), not a temporary/artificial fixture. Stable IDs 0..3; no aliases or UV-variant slots. Existing .tres tuning is preserved by default."
+}

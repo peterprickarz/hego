@@ -1,0 +1,601 @@
+{
+	"engine": {
+		"build": "official",
+		"hash": "49a5bc7b616bd04689a2c89e89bda41f50241464",
+		"hex": 263169,
+		"major": 4,
+		"minor": 4,
+		"patch": 1,
+		"status": "stable",
+		"string": "4.4.1-stable (official)",
+		"timestamp": 0
+	},
+	"graphics_adapter": {
+		"api_version": "1.4.354",
+		"name": "AMD Radeon RX 9070 XT (RADV GFX1201)",
+		"vendor": "AMD"
+	},
+	"material_inventory": {
+		"material_definitions": 32,
+		"unique_color_textures": 6,
+		"unique_material_texture_triples": 6,
+		"unique_normal_textures": 6,
+		"unique_ormh_textures": 6,
+		"unique_texture_resources_total": 18
+	},
+	"phases": {
+		"displacement_off/fast_traversal": {
+			"gpu_timing_available": true,
+			"main_loop_frame_ms": {
+				"count": 300,
+				"max_ms": 5.65,
+				"p50_ms": 3.969,
+				"p95_ms": 4.921,
+				"p99_ms": 5.454
+			},
+			"measured_frames": 300,
+			"memory": {
+				"process_rss_kib": 602332,
+				"rendering_server_buffer_bytes": 33279528,
+				"rendering_server_texture_bytes": 634254596
+			},
+			"renderer_process_cpu_ms": {
+				"count": 300,
+				"max_ms": 4.232,
+				"p50_ms": 2.878,
+				"p95_ms": 3.696,
+				"p99_ms": 4.033
+			},
+			"renderer_process_cpu_timing_available": true,
+			"renderer_stats": {
+				"binding_backend": "direct Texture2D[32]",
+				"control_resolution": "(1025, 1025)",
+				"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+				"height_refresh_cpu_ms": 36.068,
+				"height_resolution": "(4097, 4097)",
+				"last_lod_cpu_ms": 3.419,
+				"lod_updated_this_frame": true,
+				"lod_updates": 505,
+				"material_count": 32,
+				"max_discarded_weight": 0.0000000372529029846191,
+				"mesh_cache_entries": 67,
+				"patches": 355,
+				"process_cpu_ms": 3.599,
+				"sampler_limit_per_stage": 8388606,
+				"texture_limit_per_stage": 8388606,
+				"triangles": 723712
+			},
+			"viewport_cpu_ms": {
+				"count": 300,
+				"max_ms": 0.904999971389771,
+				"p50_ms": 0.620999991893768,
+				"p95_ms": 0.764999985694885,
+				"p99_ms": 0.869000017642975
+			},
+			"viewport_cpu_timing_available": true,
+			"viewport_gpu_ms": {
+				"count": 300,
+				"max_ms": 1.89900004863739,
+				"p50_ms": 1.66199994087219,
+				"p95_ms": 1.84700000286102,
+				"p99_ms": 1.88699996471405
+			},
+			"warmup_frames": 60
+		},
+		"displacement_off/overview": {
+			"gpu_timing_available": true,
+			"main_loop_frame_ms": {
+				"count": 300,
+				"max_ms": 1.29,
+				"p50_ms": 0.897,
+				"p95_ms": 1.025,
+				"p99_ms": 1.265
+			},
+			"measured_frames": 300,
+			"memory": {
+				"process_rss_kib": 602332,
+				"rendering_server_buffer_bytes": 33279528,
+				"rendering_server_texture_bytes": 634254596
+			},
+			"renderer_process_cpu_ms": {
+				"count": 300,
+				"max_ms": 0.009,
+				"p50_ms": 0.003,
+				"p95_ms": 0.005,
+				"p99_ms": 0.006
+			},
+			"renderer_process_cpu_timing_available": true,
+			"renderer_stats": {
+				"binding_backend": "direct Texture2D[32]",
+				"control_resolution": "(1025, 1025)",
+				"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+				"height_refresh_cpu_ms": 36.068,
+				"height_resolution": "(4097, 4097)",
+				"last_lod_cpu_ms": 1.71,
+				"lod_updated_this_frame": false,
+				"lod_updates": 265,
+				"material_count": 32,
+				"max_discarded_weight": 0.0000000372529029846191,
+				"mesh_cache_entries": 67,
+				"patches": 16,
+				"process_cpu_ms": 0.004,
+				"sampler_limit_per_stage": 8388606,
+				"texture_limit_per_stage": 8388606,
+				"triangles": 32576
+			},
+			"viewport_cpu_ms": {
+				"count": 300,
+				"max_ms": 0.216999992728233,
+				"p50_ms": 0.109999999403954,
+				"p95_ms": 0.136999994516373,
+				"p99_ms": 0.162000000476837
+			},
+			"viewport_cpu_timing_available": true,
+			"viewport_gpu_ms": {
+				"count": 300,
+				"max_ms": 0.882000029087067,
+				"p50_ms": 0.848999977111816,
+				"p95_ms": 0.866999983787537,
+				"p99_ms": 0.879999995231628
+			},
+			"warmup_frames": 60
+		},
+		"displacement_off/teleports": {
+			"gpu_timing_available": true,
+			"main_loop_frame_ms": {
+				"count": 300,
+				"max_ms": 9.15,
+				"p50_ms": 1.356,
+				"p95_ms": 6.564,
+				"p99_ms": 8.346
+			},
+			"measured_frames": 300,
+			"memory": {
+				"process_rss_kib": 602332,
+				"rendering_server_buffer_bytes": 33279528,
+				"rendering_server_texture_bytes": 634254596
+			},
+			"renderer_process_cpu_ms": {
+				"count": 300,
+				"max_ms": 7.834,
+				"p50_ms": 0.004,
+				"p95_ms": 5.428,
+				"p99_ms": 6.982
+			},
+			"renderer_process_cpu_timing_available": true,
+			"renderer_stats": {
+				"binding_backend": "direct Texture2D[32]",
+				"control_resolution": "(1025, 1025)",
+				"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+				"height_refresh_cpu_ms": 36.068,
+				"height_resolution": "(4097, 4097)",
+				"last_lod_cpu_ms": 5.905,
+				"lod_updated_this_frame": false,
+				"lod_updates": 525,
+				"material_count": 32,
+				"max_discarded_weight": 0.0000000372529029846191,
+				"mesh_cache_entries": 67,
+				"patches": 304,
+				"process_cpu_ms": 0.003,
+				"sampler_limit_per_stage": 8388606,
+				"texture_limit_per_stage": 8388606,
+				"triangles": 619968
+			},
+			"viewport_cpu_ms": {
+				"count": 300,
+				"max_ms": 1.10699999332428,
+				"p50_ms": 0.172999992966652,
+				"p95_ms": 0.611999988555908,
+				"p99_ms": 0.890999972820282
+			},
+			"viewport_cpu_timing_available": true,
+			"viewport_gpu_ms": {
+				"count": 300,
+				"max_ms": 1.61099994182587,
+				"p50_ms": 1.29900002479553,
+				"p95_ms": 1.51900005340576,
+				"p99_ms": 1.54200005531311
+			},
+			"warmup_frames": 60
+		},
+		"displacement_off/walk": {
+			"gpu_timing_available": true,
+			"main_loop_frame_ms": {
+				"count": 300,
+				"max_ms": 4.915,
+				"p50_ms": 1.5195,
+				"p95_ms": 4.281,
+				"p99_ms": 4.809
+			},
+			"measured_frames": 300,
+			"memory": {
+				"process_rss_kib": 602332,
+				"rendering_server_buffer_bytes": 33279528,
+				"rendering_server_texture_bytes": 634254596
+			},
+			"renderer_process_cpu_ms": {
+				"count": 300,
+				"max_ms": 3.663,
+				"p50_ms": 0.004,
+				"p95_ms": 2.918,
+				"p99_ms": 3.582
+			},
+			"renderer_process_cpu_timing_available": true,
+			"renderer_stats": {
+				"binding_backend": "direct Texture2D[32]",
+				"control_resolution": "(1025, 1025)",
+				"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+				"height_refresh_cpu_ms": 36.068,
+				"height_resolution": "(4097, 4097)",
+				"last_lod_cpu_ms": 3.195,
+				"lod_updated_this_frame": false,
+				"lod_updates": 283,
+				"material_count": 32,
+				"max_discarded_weight": 0.0000000372529029846191,
+				"mesh_cache_entries": 67,
+				"patches": 373,
+				"process_cpu_ms": 0.003,
+				"sampler_limit_per_stage": 8388606,
+				"texture_limit_per_stage": 8388606,
+				"triangles": 760352
+			},
+			"viewport_cpu_ms": {
+				"count": 300,
+				"max_ms": 0.916999995708466,
+				"p50_ms": 0.188999995589256,
+				"p95_ms": 0.691999971866608,
+				"p99_ms": 0.787999987602234
+			},
+			"viewport_cpu_timing_available": true,
+			"viewport_gpu_ms": {
+				"count": 300,
+				"max_ms": 1.57599997520447,
+				"p50_ms": 1.4384999871254,
+				"p95_ms": 1.53900003433228,
+				"p99_ms": 1.57099997997284
+			},
+			"warmup_frames": 60
+		},
+		"displacement_on/fast_traversal": {
+			"gpu_timing_available": true,
+			"main_loop_frame_ms": {
+				"count": 300,
+				"max_ms": 5.74,
+				"p50_ms": 3.9625,
+				"p95_ms": 4.758,
+				"p99_ms": 5.238
+			},
+			"measured_frames": 300,
+			"memory": {
+				"process_rss_kib": 602324,
+				"rendering_server_buffer_bytes": 33236940,
+				"rendering_server_texture_bytes": 634254596
+			},
+			"renderer_process_cpu_ms": {
+				"count": 300,
+				"max_ms": 4.211,
+				"p50_ms": 2.878,
+				"p95_ms": 3.536,
+				"p99_ms": 3.977
+			},
+			"renderer_process_cpu_timing_available": true,
+			"renderer_stats": {
+				"binding_backend": "direct Texture2D[32]",
+				"control_resolution": "(1025, 1025)",
+				"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+				"height_refresh_cpu_ms": 36.068,
+				"height_resolution": "(4097, 4097)",
+				"last_lod_cpu_ms": 3.036,
+				"lod_updated_this_frame": true,
+				"lod_updates": 244,
+				"material_count": 32,
+				"max_discarded_weight": 0.0000000372529029846191,
+				"mesh_cache_entries": 66,
+				"patches": 355,
+				"process_cpu_ms": 3.199,
+				"sampler_limit_per_stage": 8388606,
+				"texture_limit_per_stage": 8388606,
+				"triangles": 723712
+			},
+			"viewport_cpu_ms": {
+				"count": 300,
+				"max_ms": 1.15499997138977,
+				"p50_ms": 0.617999970912933,
+				"p95_ms": 0.777999997138977,
+				"p99_ms": 0.845000028610229
+			},
+			"viewport_cpu_timing_available": true,
+			"viewport_gpu_ms": {
+				"count": 300,
+				"max_ms": 1.94700002670288,
+				"p50_ms": 1.66449999809265,
+				"p95_ms": 1.89499998092651,
+				"p99_ms": 1.93900001049042
+			},
+			"warmup_frames": 60
+		},
+		"displacement_on/overview": {
+			"gpu_timing_available": true,
+			"main_loop_frame_ms": {
+				"count": 300,
+				"max_ms": 1.493,
+				"p50_ms": 0.901,
+				"p95_ms": 1.067,
+				"p99_ms": 1.297
+			},
+			"measured_frames": 300,
+			"memory": {
+				"process_rss_kib": 602116,
+				"rendering_server_buffer_bytes": 33151668,
+				"rendering_server_texture_bytes": 634254596
+			},
+			"renderer_process_cpu_ms": {
+				"count": 300,
+				"max_ms": 0.009,
+				"p50_ms": 0.004,
+				"p95_ms": 0.005,
+				"p99_ms": 0.006
+			},
+			"renderer_process_cpu_timing_available": true,
+			"renderer_stats": {
+				"binding_backend": "direct Texture2D[32]",
+				"control_resolution": "(1025, 1025)",
+				"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+				"height_refresh_cpu_ms": 36.068,
+				"height_resolution": "(4097, 4097)",
+				"last_lod_cpu_ms": 0.933,
+				"lod_updated_this_frame": false,
+				"lod_updates": 4,
+				"material_count": 32,
+				"max_discarded_weight": 0.0000000372529029846191,
+				"mesh_cache_entries": 64,
+				"patches": 16,
+				"process_cpu_ms": 0.003,
+				"sampler_limit_per_stage": 8388606,
+				"texture_limit_per_stage": 8388606,
+				"triangles": 32576
+			},
+			"viewport_cpu_ms": {
+				"count": 300,
+				"max_ms": 0.266999989748001,
+				"p50_ms": 0.123000003397465,
+				"p95_ms": 0.162000000476837,
+				"p99_ms": 0.194000005722046
+			},
+			"viewport_cpu_timing_available": true,
+			"viewport_gpu_ms": {
+				"count": 300,
+				"max_ms": 0.90200001001358,
+				"p50_ms": 0.850500017404556,
+				"p95_ms": 0.884999990463257,
+				"p99_ms": 0.894999980926514
+			},
+			"warmup_frames": 60
+		},
+		"displacement_on/teleports": {
+			"gpu_timing_available": true,
+			"main_loop_frame_ms": {
+				"count": 300,
+				"max_ms": 9.651,
+				"p50_ms": 1.476,
+				"p95_ms": 6.241,
+				"p99_ms": 9.271
+			},
+			"measured_frames": 300,
+			"memory": {
+				"process_rss_kib": 602332,
+				"rendering_server_buffer_bytes": 33279528,
+				"rendering_server_texture_bytes": 634254596
+			},
+			"renderer_process_cpu_ms": {
+				"count": 300,
+				"max_ms": 8.307,
+				"p50_ms": 0.004,
+				"p95_ms": 5.249,
+				"p99_ms": 7.85
+			},
+			"renderer_process_cpu_timing_available": true,
+			"renderer_stats": {
+				"binding_backend": "direct Texture2D[32]",
+				"control_resolution": "(1025, 1025)",
+				"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+				"height_refresh_cpu_ms": 36.068,
+				"height_resolution": "(4097, 4097)",
+				"last_lod_cpu_ms": 6.965,
+				"lod_updated_this_frame": false,
+				"lod_updates": 264,
+				"material_count": 32,
+				"max_discarded_weight": 0.0000000372529029846191,
+				"mesh_cache_entries": 67,
+				"patches": 304,
+				"process_cpu_ms": 0.004,
+				"sampler_limit_per_stage": 8388606,
+				"texture_limit_per_stage": 8388606,
+				"triangles": 619968
+			},
+			"viewport_cpu_ms": {
+				"count": 300,
+				"max_ms": 0.933000028133392,
+				"p50_ms": 0.180000007152557,
+				"p95_ms": 0.614000022411346,
+				"p99_ms": 0.810000002384186
+			},
+			"viewport_cpu_timing_available": true,
+			"viewport_gpu_ms": {
+				"count": 300,
+				"max_ms": 1.65100002288818,
+				"p50_ms": 1.403500020504,
+				"p95_ms": 1.58800005912781,
+				"p99_ms": 1.64600002765656
+			},
+			"warmup_frames": 60
+		},
+		"displacement_on/walk": {
+			"gpu_timing_available": true,
+			"main_loop_frame_ms": {
+				"count": 300,
+				"max_ms": 6.072,
+				"p50_ms": 1.7275,
+				"p95_ms": 4.951,
+				"p99_ms": 5.828
+			},
+			"measured_frames": 300,
+			"memory": {
+				"process_rss_kib": 602220,
+				"rendering_server_buffer_bytes": 33151668,
+				"rendering_server_texture_bytes": 634254596
+			},
+			"renderer_process_cpu_ms": {
+				"count": 300,
+				"max_ms": 4.639,
+				"p50_ms": 0.004,
+				"p95_ms": 3.439,
+				"p99_ms": 4.552
+			},
+			"renderer_process_cpu_timing_available": true,
+			"renderer_stats": {
+				"binding_backend": "direct Texture2D[32]",
+				"control_resolution": "(1025, 1025)",
+				"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+				"height_refresh_cpu_ms": 36.068,
+				"height_resolution": "(4097, 4097)",
+				"last_lod_cpu_ms": 4.313,
+				"lod_updated_this_frame": false,
+				"lod_updates": 22,
+				"material_count": 32,
+				"max_discarded_weight": 0.0000000372529029846191,
+				"mesh_cache_entries": 64,
+				"patches": 373,
+				"process_cpu_ms": 0.003,
+				"sampler_limit_per_stage": 8388606,
+				"texture_limit_per_stage": 8388606,
+				"triangles": 760352
+			},
+			"viewport_cpu_ms": {
+				"count": 300,
+				"max_ms": 1.01199996471405,
+				"p50_ms": 0.208000004291534,
+				"p95_ms": 0.71399998664856,
+				"p99_ms": 0.875999987125397
+			},
+			"viewport_cpu_timing_available": true,
+			"viewport_gpu_ms": {
+				"count": 300,
+				"max_ms": 1.79499995708466,
+				"p50_ms": 1.63399994373322,
+				"p95_ms": 1.74100005626678,
+				"p99_ms": 1.78799998760223
+			},
+			"warmup_frames": 60
+		}
+	},
+	"renderer_stats": {
+		"binding_backend": "direct Texture2D[32]",
+		"control_resolution": "(1025, 1025)",
+		"discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+		"height_refresh_cpu_ms": 36.068,
+		"height_resolution": "(4097, 4097)",
+		"last_lod_cpu_ms": 5.905,
+		"lod_updated_this_frame": false,
+		"lod_updates": 525,
+		"material_count": 32,
+		"max_discarded_weight": 0.0000000372529029846191,
+		"mesh_cache_entries": 67,
+		"patches": 304,
+		"process_cpu_ms": 0.003,
+		"sampler_limit_per_stage": 8388606,
+		"texture_limit_per_stage": 8388606,
+		"triangles": 619968
+	},
+	"rendering_driver": "vulkan",
+	"rendering_method": "forward_plus",
+	"scope_note": "Viewport CPU/GPU timings cover the complete rendered scene, including sky, lighting, shadows, materials, UI, and terrain. They are not terrain-only GPU measurements.",
+	"settings": {
+		"camera_motion": {
+			"fast_route_end_xz": [
+				1800.0,
+				1650.0
+			],
+			"fast_route_start_xz": [
+				-1800.0,
+				-1650.0
+			],
+			"fast_traversal_frame_step_m": 2.0,
+			"fast_traversal_speed_m_s": 120.0,
+			"minimum_camera_clearance_over_sea_or_terrain_m": 3.0,
+			"simulation_hz": 60.0,
+			"teleport_anchor_xz": [
+				[
+					-1800.0,
+					-1800.0
+				],
+				[
+					1800.0,
+					-1800.0
+				],
+				[
+					1800.0,
+					1800.0
+				],
+				[
+					-1800.0,
+					1800.0
+				],
+				[
+					0.0,
+					0.0
+				],
+				[
+					900.0,
+					-400.0
+				]
+			],
+			"walk_frame_step_m": 0.1,
+			"walk_path": "60 m radius arc around the building platform at (-1008.0, 592.0)",
+			"walk_speed_m_s": 6.0
+		},
+		"camera_paths": "deterministic frame-indexed overview, walk, fast traversal, and teleport paths",
+		"cells_per_patch": 32,
+		"control_blend_slots_max": 4,
+		"displacement_modes": [
+			"displacement_on",
+			"displacement_off"
+		],
+		"displacement_radius_m": 32.0,
+		"displacement_strength_m": 0.2,
+		"frames_per_phase": 300,
+		"material_slots": 32,
+		"material_source_sets": 6,
+		"max_patches": 512,
+		"min_patch_size_m": 8.0,
+		"phase_order": [
+			"overview",
+			"walk",
+			"fast_traversal",
+			"teleports"
+		],
+		"scene": "res://island/island_showcase.tscn",
+		"split_ratio": 1.8,
+		"terrain_bounds_local": [
+			-2048.0,
+			-2048.0,
+			4096.0,
+			4096.0
+		],
+		"texture_material_definitions": 32,
+		"unique_color_textures": 6,
+		"unique_normal_textures": 6,
+		"unique_ormh_textures": 6,
+		"unique_texture_resources_total": 18,
+		"vsync": "disabled",
+		"warmup_frames_per_phase": 60
+	},
+	"startup_and_scene_load_included": false,
+	"viewport": {
+		"render_target_height": 1080.0,
+		"render_target_width": 1920.0,
+		"window_height": 1080,
+		"window_width": 1920
+	},
+	"wall_seconds": 5.854652
+}

@@ -1,0 +1,583 @@
+{
+  "adapter": "AMD Radeon RX 9070 XT (RADV GFX1201)",
+  "base_settings": {
+    "cells_per_patch": 64,
+    "displacement_enabled": true,
+    "displacement_radius_m": 32.0,
+    "displacement_strength_m": 0.2,
+    "distance_uv_enabled": false,
+    "extra_patch_budget": 1024,
+    "far_uv_factor": 0.125,
+    "max_patches": 1024,
+    "min_patch_size_m": 8.0,
+    "split_ratio": 3.0,
+    "uv_far_distance_m": 128.0,
+    "uv_near_distance_m": 16.0
+  },
+  "camera_position": "(-984.0, 38.12524, 666.0)",
+  "camera_target": "(-960.0, 38.43451, 630.0)",
+  "driver": "vulkan",
+  "engine": {
+    "build": "official",
+    "hash": "49a5bc7b616bd04689a2c89e89bda41f50241464",
+    "hex": 263169,
+    "major": 4,
+    "minor": 4,
+    "patch": 1,
+    "status": "stable",
+    "string": "4.4.1-stable (official)",
+    "timestamp": 0
+  },
+  "ground_sample_m": 30.1252460479736,
+  "material_profiles_32_slots": [
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.1,
+      "height_blend_contrast": 1.2,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 0,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.18,
+      "height_blend_contrast": 2.0,
+      "roughness_bias": 0.52,
+      "roughness_scale": 0.75,
+      "slot": 1,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.11,
+      "height_blend_contrast": 12.0,
+      "roughness_bias": 0.22,
+      "roughness_scale": 1.0,
+      "slot": 2,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.0,
+      "height_blend_contrast": 14.0,
+      "roughness_bias": 0.06,
+      "roughness_scale": 1.0,
+      "slot": 3,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.14,
+      "height_blend_contrast": 8.0,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 4,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": -0.2,
+      "height_blend_contrast": 2.5,
+      "roughness_bias": 0.24,
+      "roughness_scale": 1.0,
+      "slot": 5,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.1,
+      "height_blend_contrast": 1.2,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 6,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.18,
+      "height_blend_contrast": 2.0,
+      "roughness_bias": 0.52,
+      "roughness_scale": 0.75,
+      "slot": 7,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.11,
+      "height_blend_contrast": 12.0,
+      "roughness_bias": 0.22,
+      "roughness_scale": 1.0,
+      "slot": 8,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.0,
+      "height_blend_contrast": 14.0,
+      "roughness_bias": 0.06,
+      "roughness_scale": 1.0,
+      "slot": 9,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.14,
+      "height_blend_contrast": 8.0,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 10,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": -0.2,
+      "height_blend_contrast": 2.5,
+      "roughness_bias": 0.24,
+      "roughness_scale": 1.0,
+      "slot": 11,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.1,
+      "height_blend_contrast": 1.2,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 12,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.18,
+      "height_blend_contrast": 2.0,
+      "roughness_bias": 0.52,
+      "roughness_scale": 0.75,
+      "slot": 13,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.11,
+      "height_blend_contrast": 12.0,
+      "roughness_bias": 0.22,
+      "roughness_scale": 1.0,
+      "slot": 14,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.0,
+      "height_blend_contrast": 14.0,
+      "roughness_bias": 0.06,
+      "roughness_scale": 1.0,
+      "slot": 15,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.14,
+      "height_blend_contrast": 8.0,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 16,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": -0.2,
+      "height_blend_contrast": 2.5,
+      "roughness_bias": 0.24,
+      "roughness_scale": 1.0,
+      "slot": 17,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.1,
+      "height_blend_contrast": 1.2,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 18,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.18,
+      "height_blend_contrast": 2.0,
+      "roughness_bias": 0.52,
+      "roughness_scale": 0.75,
+      "slot": 19,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.11,
+      "height_blend_contrast": 12.0,
+      "roughness_bias": 0.22,
+      "roughness_scale": 1.0,
+      "slot": 20,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.0,
+      "height_blend_contrast": 14.0,
+      "roughness_bias": 0.06,
+      "roughness_scale": 1.0,
+      "slot": 21,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.14,
+      "height_blend_contrast": 8.0,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 22,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": -0.2,
+      "height_blend_contrast": 2.5,
+      "roughness_bias": 0.24,
+      "roughness_scale": 1.0,
+      "slot": 23,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.1,
+      "height_blend_contrast": 1.2,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 24,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.18,
+      "height_blend_contrast": 2.0,
+      "roughness_bias": 0.52,
+      "roughness_scale": 0.75,
+      "slot": 25,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.11,
+      "height_blend_contrast": 12.0,
+      "roughness_bias": 0.22,
+      "roughness_scale": 1.0,
+      "slot": 26,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.0,
+      "height_blend_contrast": 14.0,
+      "roughness_bias": 0.06,
+      "roughness_scale": 1.0,
+      "slot": 27,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.14,
+      "height_blend_contrast": 8.0,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 28,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": -0.2,
+      "height_blend_contrast": 2.5,
+      "roughness_bias": 0.24,
+      "roughness_scale": 1.0,
+      "slot": 29,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.1,
+      "height_blend_contrast": 1.2,
+      "roughness_bias": 0.18,
+      "roughness_scale": 1.0,
+      "slot": 30,
+      "uv_scale_repeats_per_m": 0.1
+    },
+    {
+      "displacement_strength": 1.0,
+      "height_blend_bias": 0.18,
+      "height_blend_contrast": 2.0,
+      "roughness_bias": 0.52,
+      "roughness_scale": 0.75,
+      "slot": 31,
+      "uv_scale_repeats_per_m": 0.1
+    }
+  ],
+  "measured_frames": 300,
+  "variants": {
+    "refinement_03125": {
+      "effective_spacing_m": 0.03125,
+      "refinement_limited": false,
+      "renderer_process_cpu": {
+        "max_ms": 0.065,
+        "p50_ms": 0.018,
+        "p95_ms": 0.024,
+        "samples": 300
+      },
+      "renderer_stats": {
+        "base_patch_count": 793,
+        "binding_backend": "direct Texture2D[32]",
+        "control_resolution": "(1025, 1025)",
+        "discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+        "height_refresh_cpu_ms": 61.378,
+        "height_resolution": "(4097, 4097)",
+        "last_lod_cpu_ms": 22.388,
+        "last_lod_select_cpu_ms": 3.176,
+        "last_mesh_prepare_cpu_ms": 4.143,
+        "last_patch_allocated": 744,
+        "last_patch_apply_cpu_ms": 15.059,
+        "last_patch_mesh_changes": 1753,
+        "last_patch_retained": 0,
+        "last_patch_reused": 1009,
+        "lod_updated_this_frame": false,
+        "lod_updates": 7,
+        "material_count": 32,
+        "max_discarded_weight": 3.72529029846191e-08,
+        "mesh_cache_entries": 77,
+        "patches": 1753,
+        "pooled_instances": 0,
+        "process_cpu_ms": 0.028,
+        "refinement_active": true,
+        "refinement_depth_limited": false,
+        "refinement_effective_vertex_spacing": 0.03125,
+        "refinement_guard_band": 0.5,
+        "refinement_limited": false,
+        "refinement_patch_count": 960,
+        "refinement_radius": 32.0,
+        "refinement_requested_vertex_spacing": 0.03125,
+        "refinement_selection_radius": 32.5,
+        "refinement_status": "Active",
+        "refinement_supported": true,
+        "sampler_limit_per_stage": 8388606,
+        "texture_limit_per_stage": 8388606,
+        "triangles": 14343744
+      },
+      "requested_spacing_m": 0.03125,
+      "viewport_cpu": {
+        "max_ms": 1.22200000286102,
+        "p50_ms": 0.834999978542328,
+        "p95_ms": 1.0,
+        "samples": 300
+      },
+      "viewport_gpu": {
+        "max_ms": 9.41499996185303,
+        "p50_ms": 8.92700004577637,
+        "p95_ms": 9.1850004196167,
+        "samples": 300
+      }
+    },
+    "refinement_03125_budget2048": {
+      "effective_spacing_m": 0.03125,
+      "refinement_limited": false,
+      "renderer_process_cpu": {
+        "max_ms": 0.032,
+        "p50_ms": 0.017,
+        "p95_ms": 0.022,
+        "samples": 300
+      },
+      "renderer_stats": {
+        "base_patch_count": 793,
+        "binding_backend": "direct Texture2D[32]",
+        "control_resolution": "(1025, 1025)",
+        "discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+        "height_refresh_cpu_ms": 61.378,
+        "height_resolution": "(4097, 4097)",
+        "last_lod_cpu_ms": 7.455,
+        "last_lod_select_cpu_ms": 3.502,
+        "last_mesh_prepare_cpu_ms": 0.331,
+        "last_patch_allocated": 0,
+        "last_patch_apply_cpu_ms": 3.615,
+        "last_patch_mesh_changes": 0,
+        "last_patch_retained": 1753,
+        "last_patch_reused": 0,
+        "lod_updated_this_frame": false,
+        "lod_updates": 8,
+        "material_count": 32,
+        "max_discarded_weight": 3.72529029846191e-08,
+        "mesh_cache_entries": 77,
+        "patches": 1753,
+        "pooled_instances": 0,
+        "process_cpu_ms": 0.017,
+        "refinement_active": true,
+        "refinement_depth_limited": false,
+        "refinement_effective_vertex_spacing": 0.03125,
+        "refinement_guard_band": 0.5,
+        "refinement_limited": false,
+        "refinement_patch_count": 960,
+        "refinement_radius": 32.0,
+        "refinement_requested_vertex_spacing": 0.03125,
+        "refinement_selection_radius": 32.5,
+        "refinement_status": "Active",
+        "refinement_supported": true,
+        "sampler_limit_per_stage": 8388606,
+        "texture_limit_per_stage": 8388606,
+        "triangles": 14343744
+      },
+      "requested_spacing_m": 0.03125,
+      "viewport_cpu": {
+        "max_ms": 1.36000001430511,
+        "p50_ms": 0.820999979972839,
+        "p95_ms": 0.933000028133392,
+        "samples": 300
+      },
+      "viewport_gpu": {
+        "max_ms": 8.95199966430664,
+        "p50_ms": 8.90200042724609,
+        "p95_ms": 8.92300033569336,
+        "samples": 300
+      }
+    },
+    "refinement_0625": {
+      "effective_spacing_m": 0.0625,
+      "refinement_limited": false,
+      "renderer_process_cpu": {
+        "max_ms": 0.041,
+        "p50_ms": 0.017,
+        "p95_ms": 0.021,
+        "samples": 300
+      },
+      "renderer_stats": {
+        "base_patch_count": 793,
+        "binding_backend": "direct Texture2D[32]",
+        "control_resolution": "(1025, 1025)",
+        "discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+        "height_refresh_cpu_ms": 61.378,
+        "height_resolution": "(4097, 4097)",
+        "last_lod_cpu_ms": 11.511,
+        "last_lod_select_cpu_ms": 2.092,
+        "last_mesh_prepare_cpu_ms": 0.244,
+        "last_patch_allocated": 0,
+        "last_patch_apply_cpu_ms": 9.168,
+        "last_patch_mesh_changes": 1009,
+        "last_patch_retained": 0,
+        "last_patch_reused": 1009,
+        "lod_updated_this_frame": false,
+        "lod_updates": 6,
+        "material_count": 32,
+        "max_discarded_weight": 3.72529029846191e-08,
+        "mesh_cache_entries": 68,
+        "patches": 1009,
+        "pooled_instances": 0,
+        "process_cpu_ms": 0.016,
+        "refinement_active": true,
+        "refinement_depth_limited": false,
+        "refinement_effective_vertex_spacing": 0.0625,
+        "refinement_guard_band": 1.0,
+        "refinement_limited": false,
+        "refinement_patch_count": 216,
+        "refinement_radius": 32.0,
+        "refinement_requested_vertex_spacing": 0.0625,
+        "refinement_selection_radius": 33.0,
+        "refinement_status": "Active",
+        "refinement_supported": true,
+        "sampler_limit_per_stage": 8388606,
+        "texture_limit_per_stage": 8388606,
+        "triangles": 8253504
+      },
+      "requested_spacing_m": 0.0625,
+      "viewport_cpu": {
+        "max_ms": 1.03900003433228,
+        "p50_ms": 0.575999975204468,
+        "p95_ms": 0.662000000476837,
+        "samples": 300
+      },
+      "viewport_gpu": {
+        "max_ms": 9.2189998626709,
+        "p50_ms": 5.06400012969971,
+        "p95_ms": 9.01000022888184,
+        "samples": 300
+      }
+    },
+    "refinement_off": {
+      "effective_spacing_m": 0.0,
+      "refinement_limited": false,
+      "renderer_process_cpu": {
+        "max_ms": 0.042,
+        "p50_ms": 0.011,
+        "p95_ms": 0.014,
+        "samples": 300
+      },
+      "renderer_stats": {
+        "base_patch_count": 793,
+        "binding_backend": "direct Texture2D[32]",
+        "control_resolution": "(1025, 1025)",
+        "discarded_diagnostic": "sampled control-cell midpoints; not a worst-case bound",
+        "height_refresh_cpu_ms": 61.378,
+        "height_resolution": "(4097, 4097)",
+        "last_lod_cpu_ms": 6.455,
+        "last_lod_select_cpu_ms": 1.02,
+        "last_mesh_prepare_cpu_ms": 0.142,
+        "last_patch_allocated": 0,
+        "last_patch_apply_cpu_ms": 5.289,
+        "last_patch_mesh_changes": 793,
+        "last_patch_retained": 0,
+        "last_patch_reused": 793,
+        "lod_updated_this_frame": false,
+        "lod_updates": 5,
+        "material_count": 32,
+        "max_discarded_weight": 3.72529029846191e-08,
+        "mesh_cache_entries": 68,
+        "patches": 793,
+        "pooled_instances": 216,
+        "process_cpu_ms": 0.01,
+        "refinement_active": false,
+        "refinement_depth_limited": false,
+        "refinement_effective_vertex_spacing": 0.0,
+        "refinement_guard_band": 0.0,
+        "refinement_limited": false,
+        "refinement_patch_count": 0,
+        "refinement_radius": 32.0,
+        "refinement_requested_vertex_spacing": 0.0625,
+        "refinement_selection_radius": 0.0,
+        "refinement_status": "Disabled",
+        "refinement_supported": true,
+        "sampler_limit_per_stage": 8388606,
+        "texture_limit_per_stage": 8388606,
+        "triangles": 6486464
+      },
+      "requested_spacing_m": 0.0625,
+      "viewport_cpu": {
+        "max_ms": 0.734000027179718,
+        "p50_ms": 0.444000005722046,
+        "p95_ms": 0.558000028133392,
+        "samples": 300
+      },
+      "viewport_gpu": {
+        "max_ms": 6.83699989318848,
+        "p50_ms": 3.84999990463257,
+        "p95_ms": 6.76300001144409,
+        "samples": 300
+      }
+    }
+  },
+  "viewport": "(1920.0, 1080.0)",
+  "vsync": "disabled",
+  "warmup_frames": 60,
+  "window": "(1920, 1080)",
+  "recorded_date": "2026-10-29",
+  "measurement_scope": "Static fixed-camera whole viewport; renderer process CPU is idle, not a traversal or LOD update measurement.",
+  "native_library_sha256": "55ef793d2735b2c1da646bbf983b25ce3c4007375ca589d599dcfa282c300402",
+  "native_source_fingerprint": "7b7de862e0832211ac4f24c6b2ee3ddf028997972a53dee42168dd608fddbecd",
+  "fixture_note": "Compiled island generation_20261029T123032_12295773; isolated material snapshot staged before later authoring edits. Material and distance UV profiles are recorded below.",
+  "source_hashes": {
+    "demo/addons/hego_terrain/hego_terrain_renderer.gd": "6bdef433a4308902d0157744ed051cbfba1fd2d96c0404128a16de683d9557af",
+    "demo/addons/hego_terrain/hego_terrain_render_settings.gd": "cd0f14aa96e1f7ac2053cd0b297a6221769e99a767f5c4d0e3a028f601d4be85",
+    "terrain_demo/tests/island_refinement_runtime_test.gd": "d3921232409bf35d8f4fb43e333cd21261037695dec131c1bd71be9885032de9"
+  }
+}

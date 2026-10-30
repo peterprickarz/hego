@@ -1,0 +1,15 @@
+[remap]
+
+importer="hego.hda"
+type="HDAResource"
+uid="uid://b2rt2at78fldg"
+path="res://.godot/imported/hego_island_erosion.hda-cf1dd8b4b6129c79e0b4b8bd4b71f0d1.tres"
+
+[deps]
+
+source_file="res://island/hda/hego_island_erosion.hda"
+dest_files=["res://.godot/imported/hego_island_erosion.hda-cf1dd8b4b6129c79e0b4b8bd4b71f0d1.tres"]
+
+[params]
+
+my_option=false

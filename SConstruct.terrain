@@ -1,0 +1,94 @@
+#!/usr/bin/env python
+"""Standalone Godot build for the Strata prototype (no Houdini SDK)."""
+import os
+import shutil
+import subprocess
+import filecmp
+
+# Keep this extension's signature database separate both from HEGo and from the
+# other platform/toolchain profiles. Host Linux and the glibc-compat build must
+# never reuse each other's godot-cpp object files.
+_platform = ARGUMENTS.get("platform", "linux")
+_terrain_profile = ARGUMENTS.pop("terrain_build_profile", "host")
+if _platform not in ("linux", "windows"):
+    raise RuntimeError(f"Strata supports Linux and Windows builds only, got {_platform!r}.")
+if _terrain_profile not in ("host", "linux-compat", "windows"):
+    raise RuntimeError(f"Unknown Terrain build profile {_terrain_profile!r}.")
+if _terrain_profile == "linux-compat" and _platform != "linux":
+    raise RuntimeError("The linux-compat profile must build platform=linux.")
+if _terrain_profile == "windows" and _platform != "windows":
+    raise RuntimeError("The windows profile must build platform=windows.")
+
+_sconsign_profile = "-linux-compat" if _terrain_profile == "linux-compat" else ""
+SConsignFile(f".sconsign-terrain-{_platform}{_sconsign_profile}.dblite")
+
+# Keep the existing host object tree for incremental development. Container and
+# cross-platform builds get independent godot-cpp object trees so switching
+# compiler/libc profiles cannot overwrite objects used by the host build.
+if _terrain_profile == "host":
+    env = SConscript("godot-cpp/SConstruct")
+else:
+    _cpp_profile_root = os.path.abspath(f"terrain/build/dependencies/godot-cpp/{_terrain_profile}")
+    os.makedirs(os.path.dirname(_cpp_profile_root), exist_ok=True)
+    # godot-cpp assumes its SConstruct runs in a source-root directory and uses
+    # relative tool/include/source paths. Keep an isolated lightweight source
+    # mirror per foreign profile instead of sharing objects or changing upstream.
+    os.makedirs(_cpp_profile_root, exist_ok=True)
+    _tracked_file = os.environ.get("HEGO_TERRAIN_CPP_FILELIST")
+    if _tracked_file and os.path.isfile(_tracked_file):
+        with open(_tracked_file, encoding="utf-8") as _file:
+            _tracked = [line.rstrip("\n") for line in _file if line.rstrip("\n")]
+    else:
+        _tracked = subprocess.check_output(
+            ["git", "-C", "godot-cpp", "ls-files", "-z"], text=False
+        ).decode("utf-8").split("\0")
+        _tracked = [path for path in _tracked if path]
+    _manifest = os.path.join(_cpp_profile_root, ".terrain-source-files")
+    _previous = set()
+    if os.path.isfile(_manifest):
+        with open(_manifest, encoding="utf-8") as _file:
+            _previous = set(line.rstrip("\n") for line in _file)
+    else:
+        # Migrate mirrors created by older copytree-based scaffold revisions.
+        # Their generated outputs were mixed with untracked/stale sources.
+        shutil.rmtree(_cpp_profile_root)
+        os.makedirs(_cpp_profile_root, exist_ok=True)
+    _current = set(_tracked)
+    for _stale in _previous - _current:
+        _stale_path = os.path.join(_cpp_profile_root, _stale)
+        if os.path.isfile(_stale_path) or os.path.islink(_stale_path):
+            os.unlink(_stale_path)
+    for _relative in _tracked:
+        _source = os.path.join("godot-cpp", _relative)
+        _destination = os.path.join(_cpp_profile_root, _relative)
+        os.makedirs(os.path.dirname(_destination), exist_ok=True)
+        if not os.path.isfile(_destination) or not filecmp.cmp(_source, _destination, shallow=False):
+            shutil.copy2(_source, _destination)
+    with open(_manifest, "w", encoding="utf-8") as _file:
+        _file.write("\n".join(_tracked) + "\n")
+    env = SConscript(os.path.join(_cpp_profile_root, "SConstruct"))
+
+if env["platform"] == "linux":
+    # Keep statically linked libstdc++ symbols private to this extension. Exporting
+    # them can interpose on the runtime already loaded by Godot or other extensions.
+    env.Append(LINKFLAGS=["-Wl,--exclude-libs,ALL"])
+else:
+    # SCons' MinGW SharedLibrary builder defaults to a `lib` prefix. Godot's
+    # Windows extension descriptor uses the platform-native basename.
+    env.Replace(SHLIBPREFIX="")
+
+src_dir = "terrain/src"
+build_dir = f"terrain/build/{env['platform']}.{env['target']}.{env['arch']}"
+if _terrain_profile == "linux-compat":
+    build_dir += ".linux-compat"
+VariantDir(build_dir, src_dir, duplicate=0)
+env.Append(CPPPATH=[src_dir])
+
+sources = Glob(f"{build_dir}/*.cpp")
+library_prefix = "lib" if env["platform"] == "linux" else ""
+
+library = env.SharedLibrary(
+    f"demo/addons/strata/bin/{library_prefix}strata.{env['platform']}.{env['target']}.{env['arch']}{env['SHLIBSUFFIX']}",
+    source=sources,
+)
+Default(library)

@@ -75,7 +75,11 @@ func _init(p_owner_node: Node) -> void:
 ## failure after [code]cook()[/code], which returns 0 when it succeeds and fails its task
 ## when Houdini rejects it.
 func task(task: HEGoTask) -> Variant:
-	return await HEGoNodeUtil.await_task(owner_node, task)
+	var completed := await HEGoNodeUtil.checked_task(owner_node, task)
+	if not completed.ok:
+		HEGoLog.get_singleton().error(LOG_CATEGORY, completed.message)
+		return null
+	return completed.value
 
 
 ## The asset node for [param operator_name], created on first use and reused afterwards.
@@ -112,8 +116,21 @@ func asset(operator_name: String, label := "") -> HEGoAssetNode:
 ## Returns false on a license failure, which Houdini reports by completing successfully with
 ## an id of -1 rather than by failing. An unknown operator name is not caught here, because
 ## Houdini hands back a valid id for one; the cook is what rejects it.
-func instantiate(asset: HEGoAssetNode, stashed_parameters := PackedByteArray()) -> bool:
+##
+## With [param strict], a failed transform or parameter restore also returns false, rather
+## than carrying on with an asset that is not in the state the stash describes.
+func instantiate(asset: HEGoAssetNode, stashed_parameters := PackedByteArray(), strict := false) -> bool:
 	var existed := asset.get_id() != UNINSTANTIATED_NODE_ID
+	if strict:
+		var created := await HEGoNodeUtil.checked_task(owner_node, asset.instantiate())
+		if not created.ok or asset.get_id() == UNINSTANTIATED_NODE_ID: return false
+		if owner_node is Node3D:
+			var placed := await HEGoNodeUtil.checked_task(owner_node, asset.set_transform(owner_node.global_transform))
+			if not placed.ok: return false
+		if not existed and stashed_parameters.size() > 0:
+			var restored := await HEGoNodeUtil.checked_task(owner_node, asset.set_preset(stashed_parameters))
+			if not restored.ok: return false
+		return true
 
 	await task(asset.instantiate())
 	if owner_node is Node3D:
@@ -141,12 +158,30 @@ func save_parameters(asset: HEGoAssetNode) -> PackedByteArray:
 ## Godot nodes, and the input nodes are kept between cooks so unchanged geometry is not
 ## re-sent. [param skip_indices] leaves inputs alone that something else fills, which is how
 ## an input fed by another HDA survives.
-func sync_inputs(asset: HEGoAssetNode, skip_indices := []) -> void:
+##
+## [param cook] is the dictionary a host's [HEGoCookExtension]s share, and its
+## [code]errors[/code] collects what went wrong. An input an [HEGoInputHandler] could not
+## send always counts as an error. When [code]strict[/code] is true, so does any input that
+## is missing, incompatible or fails to upload, rather than being skipped with a warning.
+## Returns false when the input names could not be read or any error was recorded.
+func sync_inputs(asset: HEGoAssetNode, skip_indices := [], cook: Dictionary = {}) -> bool:
 	var names = await task(asset.get_input_names())
 	if not names is PackedStringArray:
-		return
+		return false
+	var strict := bool(cook.get("strict", false))
+	if not cook.get("errors") is Array:
+		cook["errors"] = []
+	var errors: Array = cook["errors"]
 
 	var rows := _input_rows()
+	if strict:
+		for index in range(names.size(), rows.size()):
+			if rows[index] is Dictionary:
+				for path in rows[index].get("inputs", []):
+					if not String(path).is_empty():
+						errors.append("A configured input exceeds this HDA's %d inputs" % names.size())
+						HEGoLog.get_singleton().error(LOG_CATEGORY, errors[-1])
+						return false
 	var label := _label_of(asset)
 	if not _input_nodes.has(label):
 		_input_nodes[label] = {}
@@ -159,14 +194,27 @@ func sync_inputs(asset: HEGoAssetNode, skip_indices := []) -> void:
 		var paths := []
 		var settings := {}
 		if index < rows.size() and rows[index] is Dictionary:
-			paths = rows[index].get("inputs", [])
+			paths = Array(rows[index].get("inputs", []))
 			settings = rows[index].get("settings", {})
+		settings = settings.duplicate()
+		settings["_cook"] = cook
+		settings["_errors"] = errors
+		settings["_strict"] = strict
+		if strict:
+			for path in paths:
+				if String(path).is_empty(): continue
+				var source := HEGoInputNodes._resolve_input_node(owner_node, path)
+				if source == null or (not HEGoInputNodes.is_compatible_source(source) and not settings.get("include_children", false)):
+					errors.append("Input %s is missing or is not a kind HEGo can send" % str(path))
+					HEGoLog.get_singleton().error(LOG_CATEGORY, errors[-1])
+					return false
 		paths = HEGoInputNodes.resolve_paths(owner_node, paths, settings)
 
 		if chains.has(index):
-			await _update_chain(asset, chains, index, paths, settings)
+			if not await _update_chain(asset, chains, index, paths, settings): return false
 		elif not paths.is_empty():
-			await _create_chain(asset, chains, index, paths, settings)
+			if not await _create_chain(asset, chains, index, paths, settings): return false
+	return errors.is_empty()
 
 
 ## Points HDA input [param index] at [param sources], which may be a [Node], a [NodePath], a
@@ -232,9 +280,13 @@ func panel_assets() -> Array:
 ## Needed by anything in the output library: [method HEGoMeshOutput.fetch_meshes],
 ## [method HEGoMultiMeshOutput.setup_multimesh], and a handler's own
 ## [code]handle(context)[/code].
-func output_context(asset: HEGoAssetNode) -> HEGoOutputContext:
+##
+## [param cook] becomes the context's [member HEGoOutputContext.cook_state].
+func output_context(asset: HEGoAssetNode, cook: Dictionary = {}) -> HEGoOutputContext:
 	var summary = await task(asset.get_output_summary())
-	return HEGoOutputContext.create(owner_node, asset, summary if summary is Dictionary else {})
+	var context := HEGoOutputContext.create(owner_node, asset, summary if summary is Dictionary else {})
+	context.cook_state = cook
+	return context
 
 
 # ─────────────────────────────────────────────
@@ -271,30 +323,44 @@ func _scene_relative_path(node: Node) -> NodePath:
 	return owner_node.get_path_to(node)
 
 
-func _create_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: Array, settings: Dictionary) -> void:
+func _create_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: Array, settings: Dictionary) -> bool:
 	var merge_node := HEGoMergeNode.new()
-	await task(merge_node.instantiate())
+	if not await _chain_task(merge_node.instantiate(), settings): return false
 
 	var input_array := []
 	for path in paths:
 		input_array.append(await HEGoInputNodes.sync(owner_node, null, path, settings))
+	if settings.get("_strict", false) and (input_array.has(null) or not settings.get("_errors", []).is_empty()): return false
 
-	await task(merge_node.connect_inputs(input_array))
-	await task(asset.connect_input(merge_node, index))
+	if not await _chain_task(merge_node.connect_inputs(input_array), settings): return false
+	if not await _chain_task(asset.connect_input(merge_node, index), settings): return false
 	chains[index] = {"merge": merge_node, "inputs": input_array}
+	return true
 
 
-func _update_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: Array, settings: Dictionary) -> void:
+func _update_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: Array, settings: Dictionary) -> bool:
 	var chain: Dictionary = chains[index]
 	var merge_node: HEGoMergeNode = chain["merge"]
-	await task(merge_node.instantiate())
+	if not await _chain_task(merge_node.instantiate(), settings): return false
 
 	# Resizing first drops the input nodes whose source is gone and pads with nulls, and
 	# sync() creates a node wherever it finds one.
-	var input_array: Array = chain["inputs"]
+	var input_array: Array = chain["inputs"].duplicate()
 	input_array.resize(paths.size())
 	for i in range(paths.size()):
 		input_array[i] = await HEGoInputNodes.sync(owner_node, input_array[i], paths[i], settings)
+	if settings.get("_strict", false) and (input_array.has(null) or not settings.get("_errors", []).is_empty()): return false
 
-	await task(merge_node.connect_inputs(input_array))
-	await task(asset.connect_input(merge_node, index))
+	if not await _chain_task(merge_node.connect_inputs(input_array), settings): return false
+	if not await _chain_task(asset.connect_input(merge_node, index), settings): return false
+	chain["inputs"] = input_array
+	return true
+
+func _chain_task(native_task: HEGoTask, settings: Dictionary) -> bool:
+	if settings.get("_strict", false):
+		var result := await HEGoNodeUtil.checked_task(owner_node, native_task)
+		if not result.ok:
+			settings["_errors"].append(result.message)
+		return result.ok
+	await task(native_task)
+	return true

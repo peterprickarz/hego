@@ -48,23 +48,44 @@ git submodule update --init --recursive
 ## Developer Setup
 > If you're interested in contributing read on, otherwise check out the Releases section for the latest version
 
+### Terrain island in the main demo
+
+Open `demo/project.godot` and select `res://scenes/terrain_island.tscn` to edit or
+play the saved island normally. The scene uses the installed addons in
+`demo/addons`; no launcher, addon staging or automatic Houdini cook is required.
+The terrain's layers and cooked channels live as one file each under
+`demo/island/terrain/` and are committed; a cook overwrites its files in place,
+and the bake and material control maps are rebuilt on open. Island assets, scripts
+and HDAs are in `demo/island/`, tests in `demo/tests/`. See the
+[island workflow](docs/island-showcase.md) for explicit cooking.
+Artificial prototype scenes remain under `demo/scenes/terrain_prototype/`;
+automated standalone/integration tests use disposable projects.
+
 ### Testing HEGo in another project
 
 `next` is the development source branch. The **Publish next addon** workflow
-publishes its committed `demo/addons/hego` contents to `release-next`, with
-README, license, and a `SOURCE_COMMIT` file identifying the source revision.
-Each publication is a child of the previous publication: old submodule pins stay
-reachable. The initial publication creates an independent root commit. Publication
-uses ordinary pushes, never force-pushes, and does not modify the source checkout.
-It packages checked-in binaries; it does **not** build them. Include matching
-binaries when publishing native-code changes.
+stages four matched refs: `release-next` (HEGo), `strata-release-next`
+(Strata, the standalone terrain), `hego-strata-release-next` (the bridge that cooks HDAs
+into terrain layers), and `release-next-bundle` (all three in a consumer layout).
+HEGo and Strata each stand alone; only the bridge's package manifest declares
+dependencies, on the other two at the same source revision.
+Every package records `SOURCE_COMMIT`; native build receipts must match the
+selected source revision before staging. Each publication is a child of its
+previous publication, uses an atomic non-force push, and does not
+modify the source checkout. See [the package layout and build guide](docs/next-packaging.md).
 
-After the first publication, a new consumer can install it with:
+The HEGo-only submodule package can be installed with:
 
 ```bash
 cd /path/to/godot-project
 git submodule add -b release-next https://github.com/peterprickarz/hego.git addons/hego
 ```
+
+That is all HEGo needs. To cook HDAs into Strata layers, also install
+`strata-release-next` at `addons/strata` and `hego-strata-release-next`
+at `addons/hego_strata`, or use `release-next-bundle` and place its three
+directories in the project's `addons/` directory. Strata can also be installed
+alone, without HEGo or Houdini.
 
 For an existing, genuine submodule, change its tracking branch from the consumer's
 repository root, then deliberately update and commit the tested pin:

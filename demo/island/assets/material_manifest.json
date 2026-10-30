@@ -1,0 +1,294 @@
+{
+  "schema_version": 1,
+  "scope": "HEGo island showcase catalog; 4 real distinct ambientCG source sets, stable IDs, no UV aliases. Not a temporary or artificial test fixture.",
+  "generated_on": "2026-10-30",
+  "license": {
+    "name": "Creative Commons CC0 1.0 Universal",
+    "url": "https://docs.ambientcg.com/license/",
+    "summary": "Copy, modify, distribute, and use commercially without permission; attribution is optional."
+  },
+  "api_request": "https://ambientcg.com/api/v3/assets?id=Ground093C%2CGrass004%2CGravel043%2CRock016&include=downloads%2Cmaps%2Ctitle%2Curl%2Ctags%2Cdimensions",
+  "resolution_format": "1K-JPG",
+  "packing": "ORMH RGBA PNG channels are Ambient Occlusion, Roughness, constant Metallic=0, and source Displacement; the shader centers height at 0.5.",
+  "normal_convention": "NormalGL source map (OpenGL green-up); preserved as supplied.",
+  "godot_texture_import": "Godot 4.4 VRAM Compressed mode with mipmaps; high-quality BC7 for Color and ORMH; RGTC normal-map compression for NormalGL; no Y inversion.",
+  "assets": [
+    {
+      "name": "coastal_sand",
+      "id": "Ground093C",
+      "role": "sand",
+      "use": "Light eroded coastal dune and beach ground",
+      "download_url": "https://ambientcg.com/get?file=Ground093C_1K-JPG.zip",
+      "material_id": 0,
+      "tiling": {
+        "basis": "preserved_artist_resource",
+        "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+      },
+      "title": "Ground 093 C",
+      "provider_tags": [
+        "093",
+        "93",
+        "accumulation",
+        "beach",
+        "beige",
+        "coastal",
+        "desert",
+        "dune",
+        "earthy",
+        "eroded",
+        "granular",
+        "gritty",
+        "ground",
+        "layered",
+        "natural",
+        "organic",
+        "outdoor",
+        "rough",
+        "rustic",
+        "sand",
+        "windy"
+      ],
+      "provider_dimensions": {
+        "width": 0,
+        "height": 0,
+        "depth": 0
+      },
+      "asset_url": "https://ambientcg.com/a/Ground093C",
+      "source_download_url": "https://ambientcg.com/get?file=Ground093C_1K-JPG.zip",
+      "source_archive_bytes": 5088593,
+      "source_archive_sha256": "5f1a1ec87a6d51e7a0391928a6ee9bb862b7e41524c36e0964eaa15c83630dd2",
+      "source_maps": {
+        "color": "Ground093C_1K-JPG_Color.jpg",
+        "normal_gl": "Ground093C_1K-JPG_NormalGL.jpg",
+        "roughness": "Ground093C_1K-JPG_Roughness.jpg",
+        "ambient_occlusion": "Ground093C_1K-JPG_AmbientOcclusion.jpg",
+        "displacement": "Ground093C_1K-JPG_Displacement.jpg"
+      },
+      "map_dimensions": [
+        1024,
+        1024
+      ],
+      "maps": {
+        "color": "demo/island/materials/textures/coastal_sand_color.jpg",
+        "normal_gl": "demo/island/materials/textures/coastal_sand_normal_gl.jpg",
+        "ormh": "demo/island/materials/textures/coastal_sand_ormh.png"
+      },
+      "material_resource": "res://island/materials/resources/coastal_sand.tres",
+      "outputs": {
+        "coastal_sand_color.jpg": {
+          "bytes": 563256,
+          "sha256": "947ebef9b25cc90c315d4d3008fe640d61fc95b713ea31053144fedd11dea51c"
+        },
+        "coastal_sand_normal_gl.jpg": {
+          "bytes": 1058031,
+          "sha256": "fcc02973d605291844ce9c8f94769fcff9617bb7cba11c8c68cbda0d7b0546f9"
+        },
+        "coastal_sand_ormh.png": {
+          "bytes": 1403849,
+          "sha256": "e06aebd8c40553c5409a9d7fa72e5b4492f33d2170d1f8b2b3031fe8657b1aec"
+        }
+      }
+    },
+    {
+      "name": "island_grass",
+      "id": "Grass004",
+      "role": "grass",
+      "use": "Lush short grass on lower and sheltered slopes",
+      "download_url": "https://ambientcg.com/get?file=Grass004_1K-JPG.zip",
+      "material_id": 1,
+      "tiling": {
+        "basis": "preserved_artist_resource",
+        "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+      },
+      "title": "Grass 004",
+      "provider_tags": [
+        "004",
+        "4",
+        "dense",
+        "garden",
+        "grass",
+        "grass004",
+        "green",
+        "ground",
+        "lawn",
+        "lush",
+        "natural",
+        "park",
+        "short",
+        "soft",
+        "suburban"
+      ],
+      "provider_dimensions": {
+        "width": 140,
+        "height": 140,
+        "depth": 0
+      },
+      "asset_url": "https://ambientcg.com/a/Grass004",
+      "source_download_url": "https://ambientcg.com/get?file=Grass004_1K-JPG.zip",
+      "source_archive_bytes": 11003149,
+      "source_archive_sha256": "4b63495f459db8481f4d5144e4e9069345c81cf898cc71f2216f5dd3bb344469",
+      "source_maps": {
+        "color": "Grass004_1K-JPG_Color.jpg",
+        "normal_gl": "Grass004_1K-JPG_NormalGL.jpg",
+        "roughness": "Grass004_1K-JPG_Roughness.jpg",
+        "ambient_occlusion": "Grass004_1K-JPG_AmbientOcclusion.jpg",
+        "displacement": "Grass004_1K-JPG_Displacement.jpg"
+      },
+      "map_dimensions": [
+        1024,
+        1024
+      ],
+      "maps": {
+        "color": "demo/island/materials/textures/island_grass_color.jpg",
+        "normal_gl": "demo/island/materials/textures/island_grass_normal_gl.jpg",
+        "ormh": "demo/island/materials/textures/island_grass_ormh.png"
+      },
+      "material_resource": "res://island/materials/resources/island_grass.tres",
+      "outputs": {
+        "island_grass_color.jpg": {
+          "bytes": 1985561,
+          "sha256": "9e1c60da44b34a9738b1256ba827541f097dc583521b1d281e61b5f4b4217bc5"
+        },
+        "island_grass_normal_gl.jpg": {
+          "bytes": 2339612,
+          "sha256": "8014a81d896a5c589b60612a769bc39eb1213e48d96f6146f485ea36e9e9610f"
+        },
+        "island_grass_ormh.png": {
+          "bytes": 2963489,
+          "sha256": "873f83070f729415494bf1f5f636da3ba6e8963fc138ea94e815ecdc745abe2a"
+        }
+      }
+    },
+    {
+      "name": "scree_gravel",
+      "id": "Gravel043",
+      "role": "gravel",
+      "use": "Fine grey granular gravel for scree and rough shore",
+      "download_url": "https://ambientcg.com/get?file=Gravel043_1K-JPG.zip",
+      "material_id": 2,
+      "tiling": {
+        "basis": "preserved_artist_resource",
+        "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+      },
+      "title": "Gravel 043",
+      "provider_tags": [
+        "043",
+        "43",
+        "fine",
+        "grained",
+        "granular",
+        "gravel",
+        "gravel043",
+        "gray",
+        "ground",
+        "industrial",
+        "natural",
+        "pathway",
+        "rough",
+        "stone"
+      ],
+      "provider_dimensions": {
+        "width": 160,
+        "height": 160,
+        "depth": 0
+      },
+      "asset_url": "https://ambientcg.com/a/Gravel043",
+      "source_download_url": "https://ambientcg.com/get?file=Gravel043_1K-JPG.zip",
+      "source_archive_bytes": 10405844,
+      "source_archive_sha256": "bca54835c7c71bea4b4b9f27fbef127d666fa1cf7de16f2b04f0ceb4294e784c",
+      "source_maps": {
+        "color": "Gravel043_1K-JPG_Color.jpg",
+        "normal_gl": "Gravel043_1K-JPG_NormalGL.jpg",
+        "roughness": "Gravel043_1K-JPG_Roughness.jpg",
+        "ambient_occlusion": "Gravel043_1K-JPG_AmbientOcclusion.jpg",
+        "displacement": "Gravel043_1K-JPG_Displacement.jpg"
+      },
+      "map_dimensions": [
+        1024,
+        1024
+      ],
+      "maps": {
+        "color": "demo/island/materials/textures/scree_gravel_color.jpg",
+        "normal_gl": "demo/island/materials/textures/scree_gravel_normal_gl.jpg",
+        "ormh": "demo/island/materials/textures/scree_gravel_ormh.png"
+      },
+      "material_resource": "res://island/materials/resources/scree_gravel.tres",
+      "outputs": {
+        "scree_gravel_color.jpg": {
+          "bytes": 1667560,
+          "sha256": "8213c9929bcaa64cc1953c85bc2c87bc6e62a7f23c4b0109db52b07fb22a9203"
+        },
+        "scree_gravel_normal_gl.jpg": {
+          "bytes": 2272547,
+          "sha256": "927f44914118aad71b05ae1d8631ce197c2049f4e67b12e470400e016453ba95"
+        },
+        "scree_gravel_ormh.png": {
+          "bytes": 2622312,
+          "sha256": "fe56a4303afcd8f536449713d7bd9bafb946a38eb36107e1f6069d799291fa83"
+        }
+      }
+    },
+    {
+      "name": "dark_cliff",
+      "id": "Rock016",
+      "role": "cliff",
+      "use": "Dark grey rock faces and coastal stone",
+      "download_url": "https://ambientcg.com/get?file=Rock016_1K-JPG.zip",
+      "material_id": 3,
+      "tiling": {
+        "basis": "preserved_artist_resource",
+        "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+      },
+      "title": "Rock 016",
+      "provider_tags": [
+        "16",
+        "cliff",
+        "dark",
+        "grey",
+        "moss",
+        "rock",
+        "stone"
+      ],
+      "provider_dimensions": {
+        "width": 0,
+        "height": 0,
+        "depth": 0
+      },
+      "asset_url": "https://ambientcg.com/a/Rock016",
+      "source_download_url": "https://ambientcg.com/get?file=Rock016_1K-JPG.zip",
+      "source_archive_bytes": 7608372,
+      "source_archive_sha256": "04facc93f3a7e8765e0d7177240be53d322d72c1a848a642e07a5fde9d8235e2",
+      "source_maps": {
+        "color": "Rock016_1K-JPG_Color.jpg",
+        "normal_gl": "Rock016_1K-JPG_NormalGL.jpg",
+        "roughness": "Rock016_1K-JPG_Roughness.jpg",
+        "ambient_occlusion": "Rock016_1K-JPG_AmbientOcclusion.jpg",
+        "displacement": "Rock016_1K-JPG_Displacement.jpg"
+      },
+      "map_dimensions": [
+        1024,
+        1024
+      ],
+      "maps": {
+        "color": "demo/island/materials/textures/dark_cliff_color.jpg",
+        "normal_gl": "demo/island/materials/textures/dark_cliff_normal_gl.jpg",
+        "ormh": "demo/island/materials/textures/dark_cliff_ormh.png"
+      },
+      "material_resource": "res://island/materials/resources/dark_cliff.tres",
+      "outputs": {
+        "dark_cliff_color.jpg": {
+          "bytes": 973251,
+          "sha256": "46d5e3919f854705274012f31755f5c905c45ec4d3f18ec999b125beccced77f"
+        },
+        "dark_cliff_normal_gl.jpg": {
+          "bytes": 2013384,
+          "sha256": "32093de71042db13ad6b870171ce9bcc60cb34e813143b6d0b14aabd053277c6"
+        },
+        "dark_cliff_ormh.png": {
+          "bytes": 1476627,
+          "sha256": "1eebd1d1d2b7959f2e3462b04c1a158c27babb4995b4210fea0dbac41c1a9c4c"
+        }
+      }
+    }
+  ]
+}

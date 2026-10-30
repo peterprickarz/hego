@@ -1,0 +1,67 @@
+extends SceneTree
+## Actual cached scene, real renderer/physics/nav and UI callbacks; never saves or cooks.
+var failures := 0
+func _initialize() -> void: call_deferred("run")
+func check(condition: bool, message: String) -> void:
+	if not condition: failures += 1; push_error(message)
+func run() -> void:
+	create_timer(120.0).timeout.connect(func(): push_error("Island graphical test watchdog expired"); quit(1))
+	if DisplayServer.get_name() == "headless": push_error("Use graphical Forward+ for island_showcase_test"); quit(2); return
+	print("ISLAND_GPU ", RenderingServer.get_video_adapter_name(), " / ", RenderingServer.get_video_adapter_api_version())
+	if change_scene_to_file("res://island/island_showcase.tscn") != OK: quit(2); return
+	while current_scene == null: await process_frame
+	var level := current_scene
+	var started := Time.get_ticks_msec()
+	while not level.ready_for_capture:
+		if Time.get_ticks_msec() - started > 60000: push_error("Island startup timeout"); quit(2); return
+		await process_frame
+	level._capture = ""
+	var terrain: StrataTerrain3D = level.terrain
+	var renderer: StrataRenderer = level.renderer
+	check(not HEGoAPI.get_singleton().is_session_active(), "Graphical cached startup is Houdini-free")
+	check(terrain.runtime_data != null and not terrain.is_runtime_bake_stale(), "Fresh compiled runtime ready")
+	check(renderer.get_stats().height_resolution == Vector2i(4097, 4097), "Actual 1 m GPU field")
+	check(renderer._hole_image != null, "Final canonical holes bound")
+	await level._select_layer(0)
+	check(renderer._hole_image == null, "Earlier stage omits later authored holes")
+	await level._select_layer(4)
+	check(renderer._hole_image != null, "Final stage restores authored holes")
+	var height_bytes := renderer._height_image.get_data()
+	check(renderer.set_ownership_overlay(terrain.get_layers()[4]), "Native ownership overlay enabled")
+	check(renderer._height_image.get_data() == height_bytes, "Ownership overlay preserves geometry")
+	var layer := terrain.get_layers()[4]
+	var snapshot := layer.data.snapshot()
+	level._stroke_layer = layer; level._stroke_records = []; level._last_point = Vector2(INF, INF)
+	level._radius.value = 4.0; level._strength.value = 0.5; level._operation.select(0)
+	level._dab(level.PAD + Vector2(0.0, 16.0)); level._finish_stroke()
+	check(layer.data.snapshot() != snapshot, "Actual dab changes the selected native layer")
+	await level._undo_stroke()
+	check(layer.data.snapshot() == snapshot, "UI undo restores values and ownership")
+	await level._redo_stroke()
+	check(layer.data.snapshot() != snapshot, "UI redo reapplies the owned stroke")
+	await level._undo_stroke()
+	check(layer.data.snapshot() == snapshot, "Test restores original hand layer")
+	await level.set_player_enabled(true)
+	check(level.player.is_player_enabled(), "Collision-driven player enables")
+	for index in range(120): await physics_frame
+	check(level.player.is_on_floor(), "Actual character settles on compiled collision")
+	level.set_player_enabled(false)
+	check(level.camera.get_parent() == level and level.camera.input_enabled, "Fly camera restored after player")
+	var map: RID = level.navigation.get_navigation_map()
+	for index in range(4): await physics_frame
+	var a: Vector2 = level.PAD + Vector2(-12.0, 16.0); var b: Vector2 = level.PAD + Vector2(12.0, 16.0)
+	var start := terrain.to_global(Vector3(a.x, terrain.sample_height(a), a.y)); var end := terrain.to_global(Vector3(b.x, terrain.sample_height(b), b.y))
+	var path := NavigationServer3D.map_get_path(map, start, end, true)
+	check(path.size() >= 2, "Actual selected-area Recast path is connected")
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--capture="):
+			level._capture = ""
+			var h := renderer.sample_render_height(level.PAD)
+			level.camera.teleport_to(Vector3(level.PAD.x - 82.0, h + 75.0, level.PAD.y + 110.0), Vector3(level.PAD.x + 4.0, h + 1.0, level.PAD.y))
+			level._ownership.button_pressed = true
+			renderer.set_ownership_overlay(layer)
+			for index in range(10): await process_frame
+			await RenderingServer.frame_post_draw
+			check(root.get_texture().get_image().save_png(argument.trim_prefix("--capture=")) == OK, "Save actual GPU capture")
+	print("ISLAND_SHOWCASE_TEST failures=", failures, " nav_points=", path.size())
+	quit(0 if failures == 0 else 1)

@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-29",
+  "scope": "Actual32-material saved island authoring scene; static-view indicative whole-viewport measurements, not an isolated baseline or synthetic residency stress test.",
+  "hardware": {
+    "cpu": "AMD Ryzen 7 5800X3D 8-Core Processor",
+    "reported_system_ram_bytes": 67332407296,
+    "gpu": "AMD Radeon RX 9070 XT (RADV GFX1201)",
+    "graphics_api": "Vulkan1.4.354 / RADV",
+    "engine_version": "Godot4.4.1 stable official"
+  },
+  "viewport": {
+    "width": 1920,
+    "height": 1080,
+    "rendering_method": "forward_plus",
+    "camera_fov_degrees_saved": 54.0,
+    "vsync": "disabled only in the QA process"
+  },
+  "scene": {
+    "captured_candidate": "res://authoring/island_authoring_materials_1793301728_21043306.tscn",
+    "captured_generation": "res://island/cache/generation_20261029T192206_18989242",
+    "final_equivalent_generation": "res://island/cache/generation_20261029T192936_19251738",
+    "repeat_controls_height_macro_bytes_identical": true,
+    "authoritative_source_scene_sha256": "30eb5785c2c91729d4a50835cd3d38cce9e7cbfc54c606aea926d72b579273d7",
+    "registry_sha256": "2c86e10467e06dba411ceab28129a7c069e983a51ce821cb8e2e3b5d1d517535",
+    "hda_sha256": "640efee2a5cfbbeb8569a6fad48817db69a6bfd3530438312941b1c6ed6884d1",
+    "settings_storage_sha256": "8eb20143b96cffac16ebb2ec603fba33f96065bab479e1989fe5b1a756c0d440",
+    "settings_and_material_state_hashes_unchanged": true,
+    "height_resolution": [
+      4097,
+      4097
+    ],
+    "control_resolution": [
+      1025,
+      1025
+    ],
+    "saved_cutoff": "whole stack (null)"
+  },
+  "residency": {
+    "actual_ambientcg_source_sets": 32,
+    "independent_material_resources": 32,
+    "unique_color_textures": 32,
+    "unique_normal_textures": 32,
+    "unique_ormh_textures": 32,
+    "unique_texture_bindings": 96,
+    "valid_texture_rids": 96,
+    "mipmaps_all_sources": true,
+    "formats": {
+      "color": "BC7 / BPTC_RGBA",
+      "normal_gl": "BC5 / RGTC_RG",
+      "ormh": "BC7 / BPTC_RGBA"
+    },
+    "compressed_source_texture_payload_bytes": 520096320,
+    "rendering_server_texture_bytes": 764734468,
+    "rendering_server_buffer_bytes": 42840772,
+    "rendering_server_video_total_bytes": 945468564,
+    "godot_static_allocator_bytes": 553166869,
+    "memory_scope": "This Godot process reports rendering allocations and its static allocator; these are not total board VRAM or OS process RSS."
+  },
+  "method": {
+    "warmup_frames_per_view": 60,
+    "measured_frames_per_view": 180,
+    "camera_selection": "Nearby examples from the actual saved Houdini material controls; field values never edited.",
+    "overlays": "Temporary runtime diagnostic overlays disabled for clean captures; saved appearance/LOD/material resources unchanged.",
+    "other_gpu_applications_active": true,
+    "context": "Other Godot editors and desktop applications remained open. Timings are indicative; no GPU quiescence, isolated baseline, or paired speedup is claimed.",
+    "timing_cost": "Whole viewport includes ocean/environment and all terrain rendering; renderer process CPU is reported separately.",
+    "raw_report": "Kept outside the repository with the full migration receipt."
+  },
+  "views": {
+    "cliff": {
+      "viewport_gpu_ms": {
+        "max": 7.22599983215332,
+        "p50": 4.89300012588501,
+        "p95": 6.63700008392334
+      },
+      "viewport_cpu_ms": {
+        "max": 0.746999979019165,
+        "p50": 0.552999973297119,
+        "p95": 0.674000024795532
+      },
+      "renderer_process_cpu_ms": {
+        "max": 0.034,
+        "p50": 0.017,
+        "p95": 0.022
+      },
+      "main_loop_frame_ms": {
+        "max": 7.609,
+        "p50": 5.039,
+        "p95": 6.789
+      },
+      "patches": 1324,
+      "base_patches": 958,
+      "refinement_extra_patches": 366,
+      "effective_near_vertex_spacing_m": 0.0625,
+      "triangles": 10833344,
+      "camera_local_m": [
+        -910.576049804688,
+        218.2197265625,
+        330.962432861328
+      ],
+      "target_local_m": [
+        -912.0,
+        215.419723510742,
+        304.0
+      ],
+      "capture": "terrain_demo/island/screenshots/materials32-cliff.png",
+      "capture_sha256": "131d0c867e2aa79c13f566b40921a24689ee4edf8d4eddd1dcb36fadf493635f"
+    },
+    "coast": {
+      "viewport_gpu_ms": {
+        "max": 9.30500030517578,
+        "p50": 8.59700012207031,
+        "p95": 8.84000015258789
+      },
+      "viewport_cpu_ms": {
+        "max": 0.820999979972839,
+        "p50": 0.574000000953674,
+        "p95": 0.646000027656555
+      },
+      "renderer_process_cpu_ms": {
+        "max": 0.049,
+        "p50": 0.018,
+        "p95": 0.022
+      },
+      "main_loop_frame_ms": {
+        "max": 9.797,
+        "p50": 8.814,
+        "p95": 9.296
+      },
+      "patches": 1345,
+      "base_patches": 988,
+      "refinement_extra_patches": 357,
+      "effective_near_vertex_spacing_m": 0.0625,
+      "triangles": 11004800,
+      "camera_local_m": [
+        528.614562988281,
+        3.5,
+        711.992126464844
+      ],
+      "target_local_m": [
+        528.0,
+        6.14542293548584,
+        688.0
+      ],
+      "capture": "terrain_demo/island/screenshots/materials32-coast.png",
+      "capture_sha256": "aebeaff08454d326d5a5ae33008a827c79cc165305f40a8dca6654583b14a61f"
+    },
+    "forest-ground": {
+      "viewport_gpu_ms": {
+        "max": 8.46599960327148,
+        "p50": 6.89799976348877,
+        "p95": 7.68400001525879
+      },
+      "viewport_cpu_ms": {
+        "max": 0.694000005722046,
+        "p50": 0.523000001907349,
+        "p95": 0.601000010967255
+      },
+      "renderer_process_cpu_ms": {
+        "max": 0.037,
+        "p50": 0.017,
+        "p95": 0.023
+      },
+      "main_loop_frame_ms": {
+        "max": 8.597,
+        "p50": 7.104,
+        "p95": 7.876
+      },
+      "patches": 1348,
+      "base_patches": 994,
+      "refinement_extra_patches": 354,
+      "effective_near_vertex_spacing_m": 0.0625,
+      "triangles": 11030272,
+      "camera_local_m": [
+        -1020.0,
+        186.213851928711,
+        2.0
+      ],
+      "target_local_m": [
+        -1008.0,
+        189.786987304688,
+        -16.0
+      ],
+      "capture": "terrain_demo/island/screenshots/materials32-forest-ground.png",
+      "capture_sha256": "80c891772a536c6ef33f353dbf398de426611ea40afb0254037540b18238f1b1"
+    },
+    "summit": {
+      "viewport_gpu_ms": {
+        "max": 6.30200004577637,
+        "p50": 3.63800001144409,
+        "p95": 5.84600019454956
+      },
+      "viewport_cpu_ms": {
+        "max": 0.781000018119812,
+        "p50": 0.586000025272369,
+        "p95": 0.656000018119812
+      },
+      "renderer_process_cpu_ms": {
+        "max": 0.062,
+        "p50": 0.017,
+        "p95": 0.021
+      },
+      "main_loop_frame_ms": {
+        "max": 6.725,
+        "p50": 3.826,
+        "p95": 5.983
+      },
+      "patches": 1336,
+      "base_patches": 994,
+      "refinement_extra_patches": 342,
+      "effective_near_vertex_spacing_m": 0.0625,
+      "triangles": 10931264,
+      "camera_local_m": [
+        -618.0,
+        453.131805419922,
+        126.0
+      ],
+      "target_local_m": [
+        -528.0,
+        419.331817626953,
+        16.0
+      ],
+      "capture": "terrain_demo/island/screenshots/materials32-summit.png",
+      "capture_sha256": "706cdd3b7dab5f4a248d530abfdf2e0d0f0b2a8aedee02227d5f6276511c980b"
+    }
+  }
+}

@@ -97,7 +97,7 @@ HAPI_NodeId create_merge_sop(HEGoSessionManager *session_mgr, HAPI_NodeId node_i
  * @param source_node_id Node supplying the geometry.
  * @param output_index Which of the source node's outputs to take. An HDA can have several.
  */
-void connect_node_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id, int input_index, HAPI_NodeId source_node_id, int output_index);
+bool connect_node_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id, int input_index, HAPI_NodeId source_node_id, int output_index);
 
 /**
  * Disconnect every currently connected input on the target node.
@@ -105,7 +105,7 @@ void connect_node_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_node
  * @param session_mgr Active session manager used to access the Houdini session.
  * @param target_node_id Node whose input slots should be disconnected.
  */
-void disconnect_node_inputs(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id);
+bool disconnect_node_inputs(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id);
 
 /**
  * Rebuild all inputs on a merge node from the provided source node ids.
@@ -117,7 +117,7 @@ void disconnect_node_inputs(HEGoSessionManager *session_mgr, HAPI_NodeId target_
  * @param merge_node_id Merge node that will receive the source connections.
  * @param sources Source node ids to connect to the merge inputs in order.
  */
-void connect_to_merge(HEGoSessionManager *session_mgr, HAPI_NodeId merge_node_id, godot::PackedInt32Array sources);
+bool connect_to_merge(HEGoSessionManager *session_mgr, HAPI_NodeId merge_node_id, godot::PackedInt32Array sources);
 
 /**
  * Populate a Houdini curve input from pre-tessellated positions.

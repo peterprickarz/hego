@@ -84,6 +84,8 @@ GROUPS = [
             "HEGoOutputContext",
             "HEGoNodeUtil",
             "HEGoInputNodes",
+            "HEGoInputHandler",
+            "HEGoCookExtension",
             "HEGoCookTimings",
             "HEGoGraphInput3D",
             "HEGoGraphAttributes",

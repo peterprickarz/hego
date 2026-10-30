@@ -1,0 +1,414 @@
+class_name StrataNavigation
+extends Node3D
+## Bounded, tiled navigation for selected gameplay areas. Each tile bakes real
+## Recast navigation through NavigationServer3D from terrain source triangles
+## (the canonical (a, b, c), (b, d, c) split). Hole and navigation-exclusion
+## cells contribute no faces. Tiles bake padded source geometry and clip to their
+## own rectangle (border_size + filter_baking_aabb), so agent-radius erosion is
+## consistent across tile edges and adjacent regions connect on the shared map.
+##
+## Map requirement: Godot 4.4 merges region edges by flooring vertices to
+## cell_size * merge_rasterizer_cell_scale. Recast emits terrain vertices closer
+## than one 0.25 m cell (measured 0.04 m on the 1 m island), which the default
+## scale 1.0 collapses into "already-merged edge" errors. Set
+## navigation/3d/merge_rasterizer_cell_scale = 0.01 in the project (the engine
+## clamps smaller values to 0.01), or call NavigationServer3D.map_set_merge_rasterizer_cell_scale()
+## on the map you own. This node never changes the map. Opt-in diagnostics
+## predict conflicts and warn with this remedy when any exist.
+
+signal bake_finished(result: Dictionary)
+
+@export var data: StrataRuntimeData:
+	set(value):
+		data = value
+		clear()
+## Cell intervals per tile side. tile_cells * spacing must be a multiple of the
+## navigation cell size so voxel grids line up across tiles. Tile keys depend on
+## it, so changing it clears the resident tiles and cancels pending bakes.
+@export_range(8, 512, 1) var tile_cells := 64:
+	set(value):
+		if value < 1 or value > 512:
+			push_warning("Terrain navigation tile_cells must be in 1..512; previous settings retained.")
+			return
+		if value != tile_cells:
+			tile_cells = value
+			clear()
+## Agent and bake settings. A change does not touch published tiles; the next
+## bake_region() rebakes every tile it keeps that was baked with other settings,
+## so one map never mixes settings (see is_config_current()).
+@export_range(0.05, 8.0, 0.01) var agent_radius := 0.5:
+	set(value):
+		if not is_finite(value) or value <= 0: return
+		if value != agent_radius: agent_radius = value; _settings_changed()
+@export_range(0.1, 8.0, 0.01) var agent_height := 1.8:
+	set(value):
+		if not is_finite(value) or value <= 0: return
+		if value != agent_height: agent_height = value; _settings_changed()
+@export_range(0.0, 8.0, 0.01) var agent_max_climb := 0.25:
+	set(value):
+		if not is_finite(value) or value < 0: return
+		if value != agent_max_climb: agent_max_climb = value; _settings_changed()
+@export_range(0.0, 89.0, 0.1) var agent_max_slope := 45.0:
+	set(value):
+		if not is_finite(value) or value < 0 or value >= 90: return
+		if value != agent_max_slope: agent_max_slope = value; _settings_changed()
+## Contour simplification in voxels. Godot recommends at most 1.0 for tiles
+## baked with border_size, so tile borders stay aligned; larger is rejected.
+@export_range(0.0, 1.0, 0.01) var edge_max_error := 1.0:
+	set(value):
+		if not is_finite(value) or value < 0 or value > 1: return
+		if value != edge_max_error: edge_max_error = value; _settings_changed()
+## Zero uses the navigation map's cell size/height (required to match for merging).
+@export var cell_size := 0.0:
+	set(value):
+		if not is_finite(value) or value < 0: return
+		if value != cell_size: cell_size = value; _settings_changed()
+@export var cell_height := 0.0:
+	set(value):
+		if not is_finite(value) or value < 0: return
+		if value != cell_height: cell_height = value; _settings_changed()
+@export_flags_3d_navigation var navigation_layers := 1:
+	set(value):
+		navigation_layers = value
+		for region in _tiles.values():
+			if is_instance_valid(region): region.navigation_layers = value
+@export_range(1, 1024, 1) var max_tiles := 64:
+	set(value):
+		if value < 1 or value > 1024: return
+		if value != max_tiles: max_tiles = value; _settings_changed()
+@export var use_async := true
+## Predict Godot's map edge merge after each publication (see the class note).
+@export var check_merge_conflicts := false
+
+var _tiles: Dictionary = {}
+## Bake settings of the published tiles (see _bake_config()).
+var _tiles_config: Dictionary = {}
+var _generation := 0
+var _pending: Dictionary = {}
+var _stats := {"bakes": 0, "tiles_baked": 0, "last_bake_ms": 0.0, "last_source_faces": 0, "discarded_results": 0}
+
+func _exit_tree() -> void:
+	# Results of in-flight async bakes are discarded by generation.
+	_generation += 1
+	_pending.clear()
+
+func is_transform_valid() -> bool:
+	var basis := global_transform.basis
+	return global_transform.is_finite() and basis.y.is_equal_approx(Vector3.UP) and is_equal_approx(basis.x.length(), 1.0) and is_equal_approx(basis.z.length(), 1.0) and is_equal_approx(basis.determinant(), 1.0)
+
+func get_navigation_map() -> RID:
+	return get_world_3d().navigation_map if is_inside_tree() else RID()
+
+func get_tile_grid() -> Vector2i:
+	if data == null or data.resolution.x < 2 or tile_cells < 1:
+		return Vector2i.ZERO
+	var cells := data.get_cell_resolution()
+	return Vector2i(ceili(float(cells.x) / tile_cells), ceili(float(cells.y) / tile_cells))
+
+func get_tile_cells(key: Vector2i) -> Rect2i:
+	var grid := get_tile_grid()
+	if key.x < 0 or key.y < 0 or key.x >= grid.x or key.y >= grid.y: return Rect2i()
+	var cells := data.get_cell_resolution()
+	var start := key * tile_cells
+	return Rect2i(start, Vector2i(mini(tile_cells, cells.x - start.x), mini(tile_cells, cells.y - start.y)))
+
+func tiles_in_local_rect(rect: Rect2) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	var grid := get_tile_grid()
+	if grid == Vector2i.ZERO or not rect.position.is_finite() or not rect.size.is_finite() or not rect.end.is_finite() or rect.size.x < 0 or rect.size.y < 0 or not data.bounds.intersects(rect, true):
+		return result
+	var clipped := rect.intersection(data.bounds)
+	var low := data.local_to_lattice(clipped.position) / tile_cells
+	var high := data.local_to_lattice(clipped.end) / tile_cells
+	# Half-open at the far edge: a rectangle ending on a boundary does not pull
+	# in the next one; a degenerate rectangle still selects its own.
+	var first := Vector2i(clampi(floori(low.x), 0, grid.x - 1), clampi(floori(low.y), 0, grid.y - 1))
+	var last := Vector2i(clampi(maxi(ceili(high.x) - 1, first.x), 0, grid.x - 1), clampi(maxi(ceili(high.y) - 1, first.y), 0, grid.y - 1))
+	for z in range(first.y, last.y + 1):
+		for x in range(first.x, last.x + 1):
+			result.append(Vector2i(x, z))
+	return result
+
+## Bake the tiles overlapping `local_rect` and make them the resident set (or
+## add to it with `keep_existing`). With use_async the result arrives through
+## bake_finished; regions are published together only after every tile baked.
+func bake_region(local_rect: Rect2, keep_existing := false) -> Dictionary:
+	var plan := _plan(local_rect, keep_existing)
+	if not plan.ok:
+		return plan
+	_generation += 1
+	var generation := _generation
+	_pending = {"generation": generation, "keys": plan.keys, "baked": {}, "remaining": plan.jobs.size(), "started": Time.get_ticks_usec(), "faces": plan.faces, "agent": plan.agent, "config": plan.config, "replace_all": plan.replace_all}
+	_stats.bakes += 1
+	if plan.jobs.is_empty():
+		return _finish(generation)
+	for job in plan.jobs:
+		if use_async:
+			NavigationServer3D.bake_from_source_geometry_data_async(job.mesh, job.source, _completion(weakref(self), generation, job.key, job.mesh))
+		else:
+			NavigationServer3D.bake_from_source_geometry_data(job.mesh, job.source)
+			_pending.baked[job.key] = job.mesh
+			_pending.remaining -= 1
+	if not use_async:
+		return _finish(generation)
+	return {"ok": true, "pending": true, "generation": generation, "tiles": plan.jobs.size()}
+
+## Static so the callback never keeps a freed navigation node alive or calls it.
+static func _completion(owner: WeakRef, generation: int, key: Vector2i, mesh: NavigationMesh) -> Callable:
+	return func() -> void:
+		var node: Object = owner.get_ref()
+		if node != null:
+			node.call_deferred("_on_tile_baked", generation, key, mesh)
+
+func _on_tile_baked(generation: int, key: Vector2i, mesh: NavigationMesh) -> void:
+	if _pending.is_empty() or generation != _generation or _pending.generation != generation:
+		_stats.discarded_results += 1
+		return
+	_pending.baked[key] = mesh
+	_pending.remaining -= 1
+	if _pending.remaining == 0:
+		_finish(generation)
+
+func _finish(generation: int) -> Dictionary:
+	var state := _pending
+	_pending = {}
+	if not is_inside_tree() or state.config != _bake_config():
+		var failed := {"ok": false, "message": "Navigation node or bake configuration changed before publication", "generation": generation}
+		bake_finished.emit(failed)
+		return failed
+	var keep: Dictionary = state.keys
+	for key in _tiles.keys():
+		# replace_all: every kept tile was rebaked for new settings; one that
+		# produced no faces must not survive with the old settings.
+		if not keep.has(key) or state.baked.has(key) or state.replace_all:
+			_tiles[key].free()
+			_tiles.erase(key)
+	var polygons := 0
+	for key in state.baked:
+		var mesh: NavigationMesh = state.baked[key]
+		polygons += mesh.get_polygon_count()
+		if mesh.get_polygon_count() == 0:
+			continue
+		var region := NavigationRegion3D.new()
+		region.name = "Tile_%d_%d" % [key.x, key.y]
+		region.navigation_layers = navigation_layers
+		region.navigation_mesh = mesh
+		add_child(region)
+		_tiles[key] = region
+	_tiles_config = state.config
+	_stats.tiles_baked += state.baked.size()
+	_stats.last_bake_ms = (Time.get_ticks_usec() - state.started) / 1000.0
+	_stats.last_source_faces = state.faces
+	var result := {"ok": true, "pending": false, "generation": generation, "tiles": state.baked.size(), "regions": _tiles.size(), "polygons": polygons, "agent": state.agent, "merge_rasterizer_cell_scale": NavigationServer3D.map_get_merge_rasterizer_cell_scale(get_navigation_map())}
+	if check_merge_conflicts:
+		result.merge_conflicts = predict_merge_conflicts()
+		_stats.merge_conflicts = result.merge_conflicts
+		if result.merge_conflicts.total > 0:
+			push_warning("Terrain navigation: %d region edges collide in Godot's map edge merge at merge_rasterizer_cell_scale %s (%s); expect 'already-merged edge' errors. Set navigation/3d/merge_rasterizer_cell_scale = 0.01 or call NavigationServer3D.map_set_merge_rasterizer_cell_scale() on this map." % [result.merge_conflicts.total, result.merge_rasterizer_cell_scale, result.merge_conflicts])
+	bake_finished.emit(result)
+	return result
+
+## Mirrors Godot 4.4's map edge merge: polygon vertices are floored to
+## cell_size * merge_rasterizer_cell_scale (and cell_height * scale); an edge key
+## shared by more than two published polygon edges cannot merge and makes the
+## engine report an "already-merged edge" synchronization error.
+func predict_merge_conflicts() -> Dictionary:
+	var map := get_navigation_map()
+	var result := {"total": 0, "intra_tile": 0, "cross_tile": 0, "edges": 0, "ms": 0.0}
+	if not map.is_valid():
+		return result
+	var started := Time.get_ticks_usec()
+	var scale := NavigationServer3D.map_get_merge_rasterizer_cell_scale(map)
+	var size := NavigationServer3D.map_get_cell_size(map) * scale
+	var height := NavigationServer3D.map_get_cell_height(map) * scale
+	var uses: Dictionary = {}
+	for region in _tiles.values():
+		var mesh: NavigationMesh = region.navigation_mesh
+		var transform: Transform3D = region.global_transform
+		var vertices := mesh.get_vertices()
+		var quantized: Array[Vector3i] = []
+		quantized.resize(vertices.size())
+		for index in range(vertices.size()):
+			var world := transform * vertices[index]
+			quantized[index] = Vector3i(floori(world.x / size), floori(world.y / height), floori(world.z / size))
+		for polygon_index in range(mesh.get_polygon_count()):
+			var polygon := mesh.get_polygon(polygon_index)
+			for edge in range(polygon.size()):
+				var p := quantized[polygon[edge]]
+				var q := quantized[polygon[(edge + 1) % polygon.size()]]
+				var key := [p, q] if p < q else [q, p]
+				if not uses.has(key):
+					uses[key] = []
+				uses[key].append(region)
+				result.edges += 1
+	for key in uses:
+		var owners: Array = uses[key]
+		if owners.size() > 2:
+			result.total += 1
+			result["cross_tile" if owners.count(owners[0]) != owners.size() else "intra_tile"] += 1
+	result.ms = (Time.get_ticks_usec() - started) / 1000.0
+	return result
+
+## False when agent/bake settings changed since the published tiles were baked.
+func is_config_current() -> bool:
+	return _tiles.is_empty() or _tiles_config == _bake_config()
+
+func _settings_changed() -> void:
+	_generation += 1
+	if _pending.is_empty(): return
+	var cancelled := int(_pending.generation)
+	_pending = {}
+	bake_finished.emit({"ok": false, "pending": false, "generation": cancelled, "message": "Navigation settings changed before publication; previous regions retained"})
+
+func is_baking() -> bool:
+	return not _pending.is_empty()
+
+func clear() -> void:
+	_generation += 1
+	var cancelled := int(_pending.get("generation", -1))
+	_pending = {}
+	for region in _tiles.values():
+		if is_instance_valid(region):
+			region.free()
+	_tiles.clear()
+	_tiles_config = {}
+	if cancelled >= 0:
+		bake_finished.emit({"ok": false, "pending": false, "generation": cancelled, "message": "Navigation bake cleared before publication"})
+
+func get_regions() -> Array[NavigationRegion3D]:
+	var result: Array[NavigationRegion3D] = []
+	for region in _tiles.values():
+		result.append(region)
+	return result
+
+func get_stats() -> Dictionary:
+	var stats := _stats.duplicate()
+	stats.regions = _tiles.size()
+	return stats
+
+func _resolved_cell_size() -> Vector2:
+	var map := get_navigation_map()
+	var size := cell_size if cell_size > 0.0 else NavigationServer3D.map_get_cell_size(map)
+	var height := cell_height if cell_height > 0.0 else NavigationServer3D.map_get_cell_height(map)
+	return Vector2(size, height)
+
+## Everything that changes a tile's baked mesh, except the data itself.
+func _bake_config() -> Dictionary:
+	var cells := _resolved_cell_size()
+	return {"tile_cells": tile_cells, "agent_radius": agent_radius, "agent_height": agent_height, "agent_max_climb": agent_max_climb, "agent_max_slope": agent_max_slope, "edge_max_error": edge_max_error, "cell_size": cells.x, "cell_height": cells.y}
+
+func _plan(local_rect: Rect2, keep_existing: bool) -> Dictionary:
+	if data == null or not data.validate().ok or not data.is_resident():
+		return _error("Navigation needs valid resident runtime terrain data")
+	if tile_cells < 1 or max_tiles < 1:
+		return _error("tile_cells (%d) and max_tiles (%d) must be at least 1" % [tile_cells, max_tiles])
+	for setting in [agent_radius, agent_height, agent_max_climb, agent_max_slope, edge_max_error, cell_size, cell_height]:
+		if not is_finite(setting) or setting < 0.0:
+			return _error("Navigation agent and cell settings must be finite and nonnegative")
+	if agent_radius <= 0.0 or agent_height <= 0.0 or agent_max_slope >= 90.0:
+		return _error("agent_radius and agent_height must be positive and agent_max_slope below 90")
+	if edge_max_error > 1.0:
+		return _error("edge_max_error %s exceeds 1.0, the documented maximum for border_size tiles" % edge_max_error)
+	if not is_inside_tree():
+		return _error("Navigation must be inside the scene tree to use its world map")
+	if not is_transform_valid():
+		return _error("Terrain navigation supports translation and yaw with unit scale only")
+	var cells := _resolved_cell_size()
+	var spacing := data.get_spacing()
+	if cells.x <= 0.0 or cells.y <= 0.0 or cells.x > spacing * 0.5:
+		return _error("Navigation cell size %s must be positive and at most half the terrain spacing %s so masked cells cannot be filled" % [cells.x, spacing])
+	var tile_span := tile_cells * spacing / cells.x
+	if absf(tile_span - roundf(tile_span)) > 0.0001:
+		return _error("tile_cells * spacing (%s) must be a multiple of the navigation cell size %s" % [tile_cells * spacing, cells.x])
+	var keys: Dictionary = {}
+	for key in tiles_in_local_rect(local_rect):
+		keys[key] = true
+	if keys.is_empty():
+		return _error("Requested navigation area does not overlap the terrain")
+	var config := _bake_config()
+	var total := keys.duplicate()
+	if keep_existing:
+		for key in _tiles:
+			total[key] = true
+	if total.size() > max_tiles:
+		return _error("Area needs %d navigation tiles, above max_tiles %d" % [total.size(), max_tiles])
+	# Kept tiles baked with other settings are rebaked with this request.
+	var replace_all := keep_existing and not _tiles.is_empty() and _tiles_config != config
+	if replace_all:
+		keys = total
+	# Agent sizes in whole voxels, rounded as Recast does (height and radius up,
+	# climb down), so the effective values are explicit instead of warnings.
+	var radius := ceilf(agent_radius / cells.x - 0.0001) * cells.x
+	var height := ceilf(agent_height / cells.y - 0.0001) * cells.y
+	var climb := floorf(agent_max_climb / cells.y + 0.0001) * cells.y
+	# Recast recommends erosion radius + 3 voxels of border.
+	var border := radius + 3.0 * cells.x
+	var pad := ceili(border / spacing) + 1
+	var jobs: Array = []
+	var faces_total := 0
+	for key in keys:
+		var tile := get_tile_cells(key)
+		var source_cells := tile.grow(pad).intersection(Rect2i(Vector2i.ZERO, data.get_cell_resolution()))
+		var faces := build_source_faces(source_cells)
+		if faces.is_empty():
+			continue
+		faces_total += faces.size() / 3
+		var source := NavigationMeshSourceGeometryData3D.new()
+		source.add_faces(faces, Transform3D.IDENTITY)
+		var mesh := NavigationMesh.new()
+		mesh.cell_size = cells.x
+		mesh.cell_height = cells.y
+		mesh.agent_radius = radius
+		mesh.agent_height = height
+		mesh.agent_max_climb = climb
+		mesh.agent_max_slope = agent_max_slope
+		mesh.edge_max_error = edge_max_error
+		# Godot 4.4 trims border_size inward from the baking bounds, so the
+		# bounds are the tile grown by the border: the padded geometry is
+		# rasterized and the result is clipped exactly at the tile edge.
+		mesh.border_size = border
+		var start := data.lattice_to_local(Vector2(tile.position)) - Vector2.ONE * border
+		var size := Vector2(tile.size) * spacing + Vector2.ONE * border * 2.0
+		mesh.filter_baking_aabb = AABB(Vector3(start.x, data.height_min - height - 1.0, start.y), Vector3(size.x, data.height_max - data.height_min + height * 2.0 + 2.0, size.y))
+		jobs.append({"key": key, "mesh": mesh, "source": source})
+	var keep_keys := keys.duplicate()
+	if keep_existing:
+		for key in _tiles:
+			keep_keys[key] = true
+	return {"ok": true, "jobs": jobs, "keys": keep_keys, "faces": faces_total, "config": config, "replace_all": replace_all, "agent": {"radius": radius, "height": height, "max_climb": climb, "max_slope": agent_max_slope, "edge_max_error": edge_max_error, "cell_size": cells.x, "cell_height": cells.y, "border": border}}
+
+## Terrain-local triangles for solid, non-excluded cells in `cells`. Holes and
+## exclusions are the two canonical final cell masks, checked per cell.
+func build_source_faces(cells: Rect2i) -> PackedVector3Array:
+	var faces := PackedVector3Array()
+	var width := data.resolution.x
+	var cell_width := width - 1
+	var heights := data.heights
+	var holes := data.holes
+	var exclusions := data.nav_exclusions
+	var origin := data.bounds.position
+	var spacing := data.get_spacing()
+	faces.resize(cells.size.x * cells.size.y * 6)
+	var write := 0
+	for z in range(cells.position.y, cells.end.y):
+		var z0 := origin.y + z * spacing
+		var z1 := origin.y + (z + 1) * spacing
+		for x in range(cells.position.x, cells.end.x):
+			var cell := z * cell_width + x
+			if not holes.is_empty() and holes[cell] == StrataRuntimeData.MASK_SET or not exclusions.is_empty() and exclusions[cell] == StrataRuntimeData.MASK_SET:
+				continue
+			var x0 := origin.x + x * spacing
+			var x1 := origin.x + (x + 1) * spacing
+			var row := z * width + x
+			var a := Vector3(x0, heights[row], z0)
+			var b := Vector3(x1, heights[row + 1], z0)
+			var c := Vector3(x0, heights[row + width], z1)
+			var d := Vector3(x1, heights[row + width + 1], z1)
+			faces[write] = a; faces[write + 1] = b; faces[write + 2] = c
+			faces[write + 3] = b; faces[write + 4] = d; faces[write + 5] = c
+			write += 6
+	faces.resize(write)
+	return faces
+
+func _error(message: String) -> Dictionary:
+	return {"ok": false, "message": message}

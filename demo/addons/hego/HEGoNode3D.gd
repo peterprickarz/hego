@@ -25,6 +25,9 @@ class_name HEGoNode3D
 ## References to the Godot nodes wired into the HDA's inputs, one entry per input.
 @export var input_stash: Array
 
+# Whether the last cook ran to the end, for the bottom panel; see hego_did_last_cook_succeed().
+var _last_cook_succeeded := false
+
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "cook"
 
@@ -39,26 +42,53 @@ var agent := HEGoAssetAgent.new(self)
 
 ## Instantiates the HDA if needed, pushes inputs and parameters, cooks it and rebuilds the
 ## [code]Outputs[/code] subtree from the result.
+##
+## Children that extend [HEGoCookExtension] take part at each step; see
+## [method cook_extensions]. Without any, this is the whole of a cook.
 func cook() -> void:
+	_last_cook_succeeded = false
 	if asset_name.is_empty():
 		return
+
+	# The extensions share one dictionary for the whole cook. One of them can make the
+	# cook strict, so that an input that cannot be sent fails it instead of being skipped.
+	var extensions := cook_extensions()
+	var cook_state := {"strict": false, "errors": []}
+	for extension in extensions:
+		var prepared: Dictionary = await extension.cook_prepare(self, cook_state)
+		if not prepared.get("ok", false):
+			_cook_failed(extensions, cook_state, String(prepared.get("message", "A cook extension refused to start")), extension)
+			return
+	var strict: bool = cook_state.strict
 
 	var timings := HEGoCookTimings.new()
 	var asset := agent.asset(asset_name)
 
 	timings.begin_phase()
-	if not await agent.instantiate(asset, parm_stash):
+	if not await agent.instantiate(asset, parm_stash, strict):
+		_cook_failed(extensions, cook_state, "HDA instantiation failed")
 		HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 		return
 	timings.end_phase("instantiation")
 
 	timings.begin_phase()
-	await agent.sync_inputs(asset)
+	if not await agent.sync_inputs(asset, [], cook_state):
+		var errors: Array = cook_state.errors
+		var reason := "Input synchronization failed"
+		if not errors.is_empty():
+			reason += ": " + "; ".join(PackedStringArray(errors))
+		_cook_failed(extensions, cook_state, reason)
+		return
 	timings.end_phase("input_setup")
 
 	timings.begin_phase()
 	parm_stash = await agent.save_parameters(asset)
 	timings.end_phase("parm_stash")
+	for extension in extensions:
+		var primed: Dictionary = await extension.cook_before(self, asset, cook_state)
+		if not primed.get("ok", false):
+			_cook_failed(extensions, cook_state, String(primed.get("message", "A cook extension stopped the cook")), extension)
+			return
 
 	timings.begin_phase()
 	var cook_result = await agent.task(asset.cook())
@@ -66,24 +96,35 @@ func cook() -> void:
 	# A cook Houdini rejects fails its task, so null covers both a cook that could not run
 	# and one that ran and came back with fatal errors.
 	if cook_result == null:
+		_cook_failed(extensions, cook_state, "Houdini cook failed")
 		HEGoLog.get_singleton().error(LOG_CATEGORY, "Cook failed, leaving the previous output in place")
 		HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 		return
+
+	# One look at what the cook produced, so a handler with nothing to do is skipped rather
+	# than asking Houdini for attributes that are not there. An unreadable summary means they
+	# all run, which costs time rather than output.
+	timings.begin_phase()
+	var context := await agent.output_context(asset, cook_state)
+	timings.end_phase("output_summary")
+
+	# Extensions publish first, so one that rejects the result leaves every previous output
+	# in place, including the Outputs subtree below.
+	for extension in extensions:
+		var committed: Dictionary = await extension.cook_commit(context)
+		if not committed.get("ok", false):
+			_cook_failed(extensions, cook_state, String(committed.get("message", "A cook extension rejected the result")), extension)
+			return
 
 	# Cleared only now the cook has succeeded, so a failure leaves the last result visible.
 	var outputs_node := get_node_or_null(HEGoNodeUtil.OUTPUTS_ROOT_NAME)
 	if outputs_node:
 		outputs_node.free()
 
-	# One look at what the cook produced, so a handler with nothing to do is skipped rather
-	# than asking Houdini for attributes that are not there. An unreadable summary means they
-	# all run, which costs time rather than output.
-	timings.begin_phase()
-	var context := await agent.output_context(asset)
-	timings.end_phase("output_summary")
-
 	var skipped := PackedStringArray()
 	for handler in output_handlers():
+		if _skipped_by_extension(extensions, handler, cook_state):
+			continue
 		var phase: String = handler.output_phase()
 		timings.begin_phase()
 		if handler.should_handle(context.summary):
@@ -95,6 +136,7 @@ func cook() -> void:
 	if not skipped.is_empty():
 		HEGoLog.get_singleton().debug(LOG_CATEGORY, "Nothing to do for: " + ", ".join(skipped))
 	HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
+	_last_cook_succeeded = true
 
 
 ## The output handlers a cook runs, in the order it runs them.
@@ -119,6 +161,35 @@ func output_handlers() -> Array:
 	return handlers
 
 
+## The children that take part in this node's cooks, in child order: every direct child
+## that extends [HEGoCookExtension].
+##
+## This is how another addon adds to what a cook does without HEGo knowing about it. The
+## HEGo Strata bridge, for example, adds a child that publishes the cook's heightfields into
+## terrain layers.
+func cook_extensions() -> Array[HEGoCookExtension]:
+	var result: Array[HEGoCookExtension] = []
+	for child in get_children():
+		if child is HEGoCookExtension and not child.is_queued_for_deletion():
+			result.append(child)
+	return result
+
+
+## Tells every extension except [param reporter], which recorded its own reason, that the
+## cook stopped.
+func _cook_failed(extensions: Array[HEGoCookExtension], cook_state: Dictionary, message: String, reporter: HEGoCookExtension = null) -> void:
+	for extension in extensions:
+		if extension != reporter and is_instance_valid(extension):
+			extension.cook_failed(self, cook_state, message)
+
+
+func _skipped_by_extension(extensions: Array[HEGoCookExtension], handler: Variant, cook_state: Dictionary) -> bool:
+	for extension in extensions:
+		if extension.skips_output_handler(handler, cook_state):
+			return true
+	return false
+
+
 # ─────────────────────────────────────────────
 # Bottom panel interface
 #
@@ -129,6 +200,29 @@ func output_handlers() -> Array:
 ## Tells the plugin this node can be edited from the HEGo bottom panel.
 func hego_use_bottom_panel() -> bool:
 	return true
+
+
+## Whether the last cook ran to the end. The panel only reads parameters back after one
+## that did, so a failed cook cannot overwrite the stash with a half-restored asset.
+func hego_did_last_cook_succeed() -> bool:
+	return _last_cook_succeeded
+
+
+## Tells this node's cook extensions that its inputs or parameters changed. The panel calls
+## it on every edit, and [method hego_set_input_stash] calls it too.
+func hego_notify_cook_inputs_changed() -> void:
+	for extension in cook_extensions():
+		extension.inputs_changed()
+
+
+## Whether recooking should wait for an explicit request rather than following every edit,
+## because one of this node's cook extensions asks for that. The panel's auto recook is
+## skipped while this is true.
+func hego_requires_explicit_cook() -> bool:
+	for extension in cook_extensions():
+		if extension.requires_explicit_cook():
+			return true
+	return false
 
 
 ## The asset node the bottom panel reads parameters from, or null before the first cook.
@@ -168,6 +262,7 @@ func hego_set_input_stash(input_array: Array) -> void:
 			"settings": input["settings"],
 		})
 	input_stash = result
+	hego_notify_cook_inputs_changed()
 
 
 ## Lets the panel's asset picker change which HDA this node cooks.

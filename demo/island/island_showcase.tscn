@@ -1,0 +1,136 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://island/island_showcase.gd" id="1"]
+[ext_resource type="Script" path="res://addons/strata/strata_terrain_3d.gd" id="2"]
+[ext_resource type="Script" path="res://addons/strata/strata_layer.gd" id="3"]
+[ext_resource type="Script" path="res://addons/hego/HEGoNode3D.gd" id="4"]
+[ext_resource type="Script" path="res://island/island_camera.gd" id="5"]
+[ext_resource type="Shader" path="res://island/shaders/ocean.gdshader" id="6"]
+[ext_resource type="Script" path="res://addons/hego_strata/hego_strata_targets.gd" id="targets"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
+sky_top_color = Color(0.18, 0.35, 0.49, 1)
+sky_horizon_color = Color(0.7, 0.78, 0.78, 1)
+ground_bottom_color = Color(0.14, 0.23, 0.24, 1)
+ground_horizon_color = Color(0.7, 0.75, 0.73, 1)
+sun_angle_max = 4.0
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMaterial")
+
+[sub_resource type="Environment" id="Environment"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_energy = 0.28
+tonemap_mode = 2
+fog_enabled = true
+fog_light_color = Color(0.55, 0.68, 0.72, 1)
+fog_density = 0.000012
+fog_sky_affect = 0.5
+
+[sub_resource type="PlaneMesh" id="OceanMesh"]
+size = Vector2(80000, 80000)
+subdivide_width = 128
+subdivide_depth = 128
+
+[sub_resource type="ShaderMaterial" id="OceanMaterial"]
+shader = ExtResource("6")
+
+[node name="BrackenIsle" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("2")
+storage_directory = "res://island/terrain"
+base_bounds = Rect2(-2048, -2048, 4096, 4096)
+preview_spacing = 32.0
+
+[node name="RoughBase" type="Node" parent="Terrain"]
+script = ExtResource("3")
+layer_id = "bracken-isle-rough-base-v1"
+
+[node name="CoarseErosion" type="Node" parent="Terrain"]
+script = ExtResource("3")
+procedural = true
+layer_id = "bracken-isle-coarse-erosion-v1"
+
+[node name="ManualFine" type="Node" parent="Terrain"]
+script = ExtResource("3")
+layer_id = "bracken-isle-manual-fine-v1"
+composition_modes = {"height": 1}
+
+[node name="DetailErosion" type="Node" parent="Terrain"]
+script = ExtResource("3")
+procedural = true
+layer_id = "bracken-isle-detail-erosion-v1"
+
+[node name="BuildingFlatten" type="Node" parent="Terrain"]
+script = ExtResource("3")
+layer_id = "bracken-isle-building-flatten-v1"
+
+[node name="TerrainTint" type="Node" parent="Terrain"]
+script = ExtResource("3")
+procedural = true
+layer_id = "bracken-isle-terrain-tint-v1"
+
+[node name="MaterialDistribution" type="Node" parent="Terrain"]
+script = ExtResource("3")
+procedural = true
+layer_id = "bracken-isle-material-distribution-v1"
+
+[node name="HDA" type="Node3D" parent="."]
+
+[node name="CoarseCook" type="Node3D" parent="HDA"]
+script = ExtResource("4")
+asset_name = "Sop/hego_island_erosion::1.0"
+
+[node name="StrataTargets" type="Node" parent="HDA/CoarseCook"]
+script = ExtResource("targets")
+producer_id = "bracken-isle-coarse-cook-v1"
+
+[node name="DetailCook" type="Node3D" parent="HDA"]
+script = ExtResource("4")
+asset_name = "Sop/hego_island_erosion::1.0"
+
+[node name="StrataTargets" type="Node" parent="HDA/DetailCook"]
+script = ExtResource("targets")
+producer_id = "bracken-isle-detail-cook-v1"
+
+[node name="TintCook" type="Node3D" parent="HDA"]
+script = ExtResource("4")
+asset_name = "Sop/hego_terrain_tint::1.0"
+
+[node name="StrataTargets" type="Node" parent="HDA/TintCook"]
+script = ExtResource("targets")
+producer_id = "bracken-isle-terrain-tint-v1"
+
+[node name="MaterialCook" type="Node3D" parent="HDA"]
+script = ExtResource("4")
+
+[node name="StrataTargets" type="Node" parent="HDA/MaterialCook"]
+script = ExtResource("targets")
+producer_id = "bracken-isle-material-cook-v1"
+
+[node name="Camera" type="Camera3D" parent="."]
+position = Vector3(-2200, 1020, 2250)
+far = 22000.0
+near = 0.2
+fov = 54.0
+current = true
+script = ExtResource("5")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-32, -38, 0)
+light_color = Color(1, 0.94, 0.83, 1)
+light_energy = 1.15
+shadow_enabled = true
+directional_shadow_max_distance = 2600.0
+
+[node name="Ocean" type="MeshInstance3D" parent="."]
+mesh = SubResource("OceanMesh")
+material_override = SubResource("OceanMaterial")
+cast_shadow = 0

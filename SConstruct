@@ -212,7 +212,7 @@ if env["platform"] == "macos":
     )
 else:
     library = env.SharedLibrary(
-        f"demo/addons/hego/bin/hego{env['suffix']}{env['SHLIBSUFFIX']}",
+        ARGUMENTS.get("terrain_integration_output") or f"demo/addons/hego/bin/hego{env['suffix']}{env['SHLIBSUFFIX']}",
         source=cpp_sources,
     )
 

@@ -12,6 +12,8 @@ namespace Parm
 {
 godot::PackedByteArray get_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id);
 void set_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::PackedByteArray preset);
+bool read_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::PackedByteArray &result, godot::String &error);
+bool write_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const godot::PackedByteArray &preset, godot::String &error);
 } // namespace Parm
 } // namespace Util
 } // namespace HEGo
