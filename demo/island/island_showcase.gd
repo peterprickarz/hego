@@ -338,6 +338,9 @@ func _prepare_island() -> void:
 ## The saved island is left untouched; the process exits without writing storage.
 func _five_stage_check() -> void:
 	_set_message("Five-stage fixture check (nothing is saved)")
+	# Commits write their channel files whenever the terrain has a storage directory, so
+	# the fixture detaches storage first; the layers are already loaded in memory.
+	terrain.storage_directory = ""
 	if not _load_rough_base(): _finish_headless(false); return
 	if not await _cook(0): _finish_headless(false); return
 	_make_hand_edits()
