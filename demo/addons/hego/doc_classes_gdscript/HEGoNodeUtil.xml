@@ -14,7 +14,7 @@
 			<param index="0" name="host" type="Node" />
 			<param index="1" name="task" type="HEGoTask" />
 			<description>
-				Waits for [param task] to finish and returns its result, or [code]null[/code] if it failed. [param host] is only needed for its scene tree, to yield a frame.
+				Waits for [param task] to finish and returns its result, or [code]null[/code] if it failed or the host leaves the tree. This does not cancel the native task.
 			</description>
 		</method>
 		<method name="output_has" qualifiers="static">

@@ -261,7 +261,7 @@ Fetches the cook's surfaces and builds the mesh output.
 
 ``ArrayMesh`` **build_array_mesh**\ (\ surfaces\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_build_array_mesh>`
 
-Builds one ``ArrayMesh`` from a { material path: surface data } dictionary, adding a surface per material and wiring up LODs and materials.
+Builds one ``ArrayMesh`` from a { material path: surface data } dictionary, adding a surface per material and wiring up LODs and materials. Returns null if empty or any surface is invalid; partial meshes are never published.
 
 .. rst-class:: classref-item-separator
 

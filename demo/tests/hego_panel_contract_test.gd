@@ -63,6 +63,11 @@ func _initialize() -> void:
 	var panel = preload("res://addons/hego/hego_control.tscn").instantiate()
 	root.add_child(panel)
 	await process_frame
+	var modes: OptionButton = panel.connection_type
+	for expected in [["Shared Memory", HEGoAPI.SESSION_IN_PROCESS], ["Named Pipe", HEGoAPI.SESSION_NAMED_PIPE], ["TCP Port", HEGoAPI.SESSION_TCP_SOCKET]]:
+		var index := modes.get_item_index(expected[1])
+		modes.select(index)
+		check(modes.get_item_text(index) == expected[0] and modes.get_selected_id() == expected[1], "session mode %s has its API ID" % expected[0])
 	var tab := panel.get_node("TabContainer/HDA")
 	check(tab != null, "the HDA tab is reachable in the panel scene")
 

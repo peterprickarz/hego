@@ -349,7 +349,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray 
 				// Reads the primitive and vertex lists here, on the worker thread, so
 				// the queries the caller makes afterwards are pure in-memory work.
 				surfaces->setup(cache, nid, point_attribs);
-				surfaces->load_attributes(preload_attribs);
+				surfaces->load_attributes_now(preload_attribs);
 
 				return surfaces;
 			});

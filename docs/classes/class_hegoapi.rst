@@ -98,7 +98,7 @@ Houdini is started by HEGo and closes with it. Served by a shared memory server,
 
 :ref:`SessionType<enum_HEGoAPI_SessionType>` **SESSION_NAMED_PIPE** = ``2``
 
-HEGo starts a Thrift server on a named pipe. ``connection_data`` is the pipe name.
+Connects to an existing named-pipe server (including Houdini Session Sync), or starts one if none is available. ``connection_data`` is the pipe name. Disconnecting from an existing server preserves its scene; HEGo only cleans up servers it started.
 
 .. _class_HEGoAPI_constant_SESSION_TCP_SOCKET:
 
@@ -299,7 +299,7 @@ Returns ``true`` on successful session startup and initialization.
 
 ``bool`` **stop_session**\ (\ ) :ref:`🔗<class_HEGoAPI_method_stop_session>`
 
-Stops the task scheduler and then closes the active Houdini Engine session, releasing all session resources.
+Stops the task scheduler and closes the active Houdini Engine connection. Servers started by HEGo are cleaned up. Existing servers retain their initialized session and scene.
 
 
 

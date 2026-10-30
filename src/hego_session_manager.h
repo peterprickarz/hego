@@ -24,9 +24,9 @@
 class HEGoSessionManager
 {
 public:
-	// How HEGo connects to Houdini Engine. The New* types start the server
-	// themselves; the Existing* types are reserved for connecting to a server
-	// somebody else started and are not implemented yet.
+	// How HEGo connects to Houdini Engine. NewNamedPipe first tries to attach,
+	// then starts a server if needed. Other New* types start the server.
+	// The Existing* enum values are reserved and not exposed to GDScript.
 	//
 	// InProcess starts a shared memory server, which behaves like an in-process
 	// session (Houdini starts with HEGo and closes with it) without being HAPI's
@@ -49,7 +49,8 @@ public:
 
 	HEGoSessionManager();
 
-	// Creates a new session. connection_data is the pipe or shared memory name, or
+	// Connects to a session, starting a server if needed for named pipes.
+	// connection_data is the pipe or shared memory name, or
 	// the port number for TCP sessions.
 	bool start_session(SessionType session_type = NewNamedPipe, const std::string &connection_data = DEFAULT_NAMED_PIPE);
 
@@ -57,7 +58,7 @@ public:
 	// type, reusing the pipe name or port of the session that was stopped.
 	bool restart_session(SessionType session_type, bool use_cooking_thread);
 
-	// Cleanup and shutdown an existing session
+	// Disconnects from borrowed servers; cleans up servers started by HEGo.
 	bool stop_session();
 
 	// Initializes the HAPI session, should be called after successfully creating a session
@@ -88,6 +89,8 @@ private:
 	HAPI_Session my_session;
 	HAPI_CookOptions my_cook_options;
 	SessionType my_session_type = InProcess;
+	// Only a server we started may be cleaned up or shut down on disconnect.
+	bool my_owns_server = false;
 	std::string my_named_pipe = DEFAULT_NAMED_PIPE;
 	int my_tcp_port = DEFAULT_TCP_PORT;
 	std::string my_shared_memory_name;

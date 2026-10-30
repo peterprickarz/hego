@@ -29,11 +29,12 @@ HEGoAPI::HEGoAPI() : session_mgr()
 {
 	singleton = this;
 
-	// Set up Houdini installation path project setting with default
+	// Resolve $HFS before seeding the setting, so an installation selected in the
+	// launching shell is not shadowed by this platform's default.
 	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
 	if (!project_settings->has_setting(HOUDINI_PATH_SETTING))
 	{
-		project_settings->set_setting(HOUDINI_PATH_SETTING, HEGoPlatform::get_default_houdini_path());
+		project_settings->set_setting(HOUDINI_PATH_SETTING, HEGoPlatform::get_houdini_path());
 	}
 
 	HEGoPlatform::set_env_vars();
