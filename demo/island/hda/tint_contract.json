@@ -1,7 +1,7 @@
 {
   "contract_version": 1,
-  "operator": "Sop/hego_terrain_tint::1.0",
-  "hda_file": "demo/island/hda/hego_terrain_tint.hda",
+  "operator": "Sop/HEGo_TerrainTint",
+  "hda_file": "otls/HEGo_TerrainTint.hda",
   "source_script": "scripts/houdini/build_tint_hda.py",
   "houdini_version": "22.0.429",
   "units": "metres; terrain-local XZ; height Y relative to the StrataTerrain3D origin",

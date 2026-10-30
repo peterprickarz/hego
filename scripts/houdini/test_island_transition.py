@@ -1,5 +1,5 @@
 #!/usr/bin/env hython
-"""Focused regression for the hego_island_erosion manual-height transition.
+"""Focused regression for the HEGo_IslandErosion manual-height transition.
 
 Cooks only the saved .hda in a fresh hython session on small synthetic fixtures
 (257x257 @ 2 m around the Bracken Isle pad, no 4 km erosion):

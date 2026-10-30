@@ -20,7 +20,7 @@ cooks only the material distribution against the saved layers and writes `island
 
 ## Reusable Houdini material weight limiter
 
-`Sop/hego_material_weight_limit::1.0` (`demo/island/hda/hego_material_weight_limit.hda`) limits any set of material weight volumes to four positive contributions per voxel. For each voxel, with `t` the fifth-largest weight, it keeps `q_i = max(w_i - t, 0)` and normalizes, so a changing fourth contribution fades out continuously; ties with five or more equal maxima fall back to the first four in channel order and are counted in `hego_material_limit_tie_fallback_voxels`. Only the selected volumes change. The shared source is `scripts/houdini/material_weight_limit.py`, embedded by both HDAs so cooks need no project imports.
+`Sop/util_MaterialWeightLimit` (`otls/util_MaterialWeightLimit.hda`) limits any set of material weight volumes to four positive contributions per voxel. For each voxel, with `t` the fifth-largest weight, it keeps `q_i = max(w_i - t, 0)` and normalizes, so a changing fourth contribution fades out continuously; ties with five or more equal maxima fall back to the first four in channel order and are counted in `hego_material_limit_tie_fallback_voxels`. Only the selected volumes change. The shared source is `scripts/houdini/material_weight_limit.py`, embedded by both HDAs so cooks need no project imports.
 
 ## Generators and tests
 
@@ -28,11 +28,11 @@ cooks only the material distribution against the saved layers and writes `island
 hython scripts/houdini/build_material_weight_limit_hda.py
 hython scripts/houdini/build_material_distribution_hda.py
 hython scripts/houdini/build_island_hda.py --skip-base
-HOUDINI_PACKAGE_DIR=$PWD/demo/island/packages hython scripts/houdini/test_hda_package_graphs.py
+HOUDINI_PATH="$PWD:&" hython scripts/houdini/test_hda_package_graphs.py
 hython scripts/houdini/test_material_distribution.py --out-dir /tmp/hego-materials/test
 hython scripts/houdini/test_island_stage_materials.py --out-dir /tmp/hego-materials/stages
-hython scripts/houdini/test_material_inheritance.py --erosion-hda demo/island/hda/hego_island_erosion.hda --material-hda demo/island/hda/hego_material_distribution.hda
-hython scripts/houdini/test_material_weight_limit.py --hda demo/island/hda/hego_material_weight_limit.hda
+hython scripts/houdini/test_material_inheritance.py --erosion-hda otls/HEGo_IslandErosion.hda --material-hda otls/HEGo_MaterialDistribution.hda
+hython scripts/houdini/test_material_weight_limit.py --hda otls/util_MaterialWeightLimit.hda
 ```
 
 `build_material_distribution_hda.py` refuses a registry whose entries are not `id == material_id == index` with `channel == material_<name>`, or that disagrees with `material_contract.json`'s registry sha256 and channel list, or that names a material the habitat rules never produce. `test_material_distribution.py` checks the contract, the interface, a synthetic island's placement (sea floor without grass, rock on slopes over 50°, bare summit, sandy low coast, grassy lowland), determinism, optional erosion masks, prior-stage inheritance, orientation and spacing invariance, parameter response and error handling; `--actual PATH.rf32` additionally cooks an exported saved-scene height.

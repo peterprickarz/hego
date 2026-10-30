@@ -1,5 +1,5 @@
 #!/usr/bin/env hython
-"""Build Sop/hego_terrain_tint::1.0, the terrain-wide tint/AO generator.
+"""Build Sop/HEGo_TerrainTint, the terrain-wide tint/AO generator.
 
 A lightweight, tint-only HDA: it reads the cumulative FINAL terrain height
 (input 0, any dense orthogonal horizontal lattice) and writes the four HEGo
@@ -7,7 +7,7 @@ macro channels terrain_tint_r/g/b (linear multipliers, neutral 1, 0..2) and
 terrain_ao (neutral 1, 0..1) on exactly the input lattice. No erosion, no
 directional light. Run with Houdini 22.0's hython:
 
-  hython scripts/houdini/build_tint_hda.py             # author demo/island/hda/hego_terrain_tint.hda
+  hython scripts/houdini/build_tint_hda.py             # author otls/HEGo_TerrainTint.hda
 
 The regression is scripts/houdini/test_terrain_tint.py (loads only the saved .hda).
 """
@@ -23,8 +23,8 @@ REPO = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 sys.dont_write_bytecode = True
 
 HDA_VERSION = "1.0"
-OPERATOR = "hego_terrain_tint::" + HDA_VERSION
-HDA_PATH = os.path.join(REPO, "demo", "island", "hda", "hego_terrain_tint.hda")
+OPERATOR = "HEGo_TerrainTint"
+HDA_PATH = os.path.join(REPO, "otls", "HEGo_TerrainTint.hda")
 CONTRACT_PATH = os.path.join(REPO, "demo", "island", "hda", "tint_contract.json")
 CHANNELS = ["terrain_tint_r", "terrain_tint_g", "terrain_tint_b", "terrain_ao"]
 
@@ -51,7 +51,7 @@ FLOAT_PARMS = [
 INT_PARMS = [("seed", "Seed", 11, 0, 100000, "World-space variation noise seed.")]
 
 TINT_PY = r'''
-# hego_terrain_tint: four copies of the input height volume (same lattice and
+# HEGo_TerrainTint: four copies of the input height volume (same lattice and
 # transform) become terrain_tint_r/g/b and terrain_ao. Pure numpy, O(samples).
 import time
 import numpy as np
@@ -60,38 +60,38 @@ node = hou.pwd()
 geo = node.geometry()
 started = time.time()
 if not node.evalParm("target_layer_path"):
-    raise hou.NodeError("hego_terrain_tint: target_layer_path is empty")
+    raise hou.NodeError("HEGo_TerrainTint: target_layer_path is empty")
 volumes = [prim for prim in geo.prims() if prim.type() == hou.primType.Volume]
 if len(volumes) != 4 or len(geo.prims()) != 4:
-    raise hou.NodeError("hego_terrain_tint: input 0 needs exactly one 'height' volume")
+    raise hou.NodeError("HEGo_TerrainTint: input 0 needs exactly one 'height' volume")
 source = volumes[0]
 res = source.resolution()
 if res[2] != 1 or res[0] < 2 or res[1] < 2:
-    raise hou.NodeError("hego_terrain_tint: height must be a 2D grid of at least 2x2 samples")
+    raise hou.NodeError("HEGo_TerrainTint: height must be a 2D grid of at least 2x2 samples")
 if res[0] > 4097 or res[1] > 4097:
-    raise hou.NodeError("hego_terrain_tint: height exceeds 4097 samples per axis; send a coarser cumulative input (terrain_spacing)")
+    raise hou.NodeError("HEGo_TerrainTint: height exceeds 4097 samples per axis; send a coarser cumulative input (terrain_spacing)")
 # HAPI can set any value; re-check every parameter (finite, in range).
 values = {}
 for name, _, _, low, high, _ in FLOAT_PARMS:
     value = float(node.evalParm(name))
     if not np.isfinite(value) or not low <= value <= high:
-        raise hou.NodeError("hego_terrain_tint: %s must be finite and in [%g, %g]" % (name, low, high))
+        raise hou.NodeError("HEGo_TerrainTint: %s must be finite and in [%g, %g]" % (name, low, high))
     values[name] = value
 seed = int(node.evalParm("seed"))
 if not 0 <= seed <= 100000:
-    raise hou.NodeError("hego_terrain_tint: seed must be in 0..100000")
+    raise hou.NodeError("HEGo_TerrainTint: seed must be in 0..100000")
 p = lambda name: values[name]
 origin = np.array(source.indexToPos((0, 0, 0)), dtype=np.float64)
 step_a = np.array(source.indexToPos((1, 0, 0)), dtype=np.float64) - origin
 step_b = np.array(source.indexToPos((0, 1, 0)), dtype=np.float64) - origin
 la, lb = float(np.linalg.norm(step_a)), float(np.linalg.norm(step_b))
 if not (np.isfinite(origin).all() and np.isfinite(la) and np.isfinite(lb)) or la <= 1e-6 or lb <= 1e-6:
-    raise hou.NodeError("hego_terrain_tint: height lattice needs finite nonzero sample steps")
+    raise hou.NodeError("HEGo_TerrainTint: height lattice needs finite nonzero sample steps")
 if abs(step_a[1]) > 1e-4 * la or abs(step_b[1]) > 1e-4 * lb or abs(float(np.dot(step_a, step_b))) > 1e-4 * la * lb:
-    raise hou.NodeError("hego_terrain_tint: height steps must be horizontal and orthogonal")
+    raise hou.NodeError("HEGo_TerrainTint: height steps must be horizontal and orthogonal")
 height = np.frombuffer(source.allVoxelsAsString(), dtype="<f4").reshape(res[1], res[0]).astype(np.float64)  # [b][a]
 if not np.isfinite(height).all():
-    raise hou.NodeError("hego_terrain_tint: height contains nonfinite samples")
+    raise hou.NodeError("HEGo_TerrainTint: height contains nonfinite samples")
 
 
 def box(values, radius, axis):
@@ -223,7 +223,7 @@ def build_hda(hou, hda_path, staging_dir):
     hda_path = os.path.join(staging_dir, os.path.basename(final_path))
     hou.hipFile.clear(suppress_save_prompt=True)
     geo = hou.node("/obj").createNode("geo", "tint_build")
-    sub = geo.createNode("subnet", "hego_terrain_tint")
+    sub = geo.createNode("subnet", "HEGo_TerrainTint")
     sub.parm("label1").set("Cumulative final terrain height")
     group = sub.parmTemplateGroup()
     for template in _parm_templates(hou).parmTemplates():
@@ -283,7 +283,7 @@ def build_hda(hou, hda_path, staging_dir):
         os.remove(hda_path)
     asset = sub.createDigitalAsset(
         name=OPERATOR, hda_file_name=hda_path, description="Strata Tint",
-        min_num_inputs=1, max_num_inputs=1, version=HDA_VERSION,
+        min_num_inputs=1, max_num_inputs=1, version="",
         ignore_external_references=True, change_node_type=True, create_backup=False)
     definition = asset.type().definition()
     document_definition(hou, definition, _parm_templates(hou), "Strata Tint",

@@ -1,5 +1,5 @@
 #!/usr/bin/env hython
-"""Regression for Sop/hego_terrain_tint::1.0 (loads only the saved .hda).
+"""Regression for Sop/HEGo_TerrainTint (loads only the saved .hda).
 
   hython scripts/houdini/test_terrain_tint.py [--hda PATH] [--out-dir DIR] [--actual RF32]
 

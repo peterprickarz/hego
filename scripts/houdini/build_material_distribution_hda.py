@@ -1,5 +1,5 @@
 #!/usr/bin/env hython
-"""Build Sop/hego_material_distribution::1.0, the registry-material weight generator.
+"""Build Sop/HEGo_MaterialDistribution, the registry-material weight generator.
 
 A mask-only HDA, the final MaterialCook pass: it reads the cumulative FINAL
 terrain height (input 0, volume 'height', a dense orthogonal horizontal lattice
@@ -13,7 +13,7 @@ published byte-exact (Prior Stage Materials = inherit); the habitat model
 (material_habitat.py) fills the rest. It never outputs or modifies height or any
 other layer. Run with Houdini 22.0's hython:
 
-  hython scripts/houdini/build_material_distribution_hda.py   # author demo/island/hda/hego_material_distribution.hda
+  hython scripts/houdini/build_material_distribution_hda.py   # author otls/HEGo_MaterialDistribution.hda
 
 The registry (demo/island/materials/material_registry.json) is the only
 channel list; this script validates it and embeds it, the contract and its own
@@ -34,8 +34,8 @@ REPO = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 sys.dont_write_bytecode = True
 
 HDA_VERSION = "1.0"
-OPERATOR = "hego_material_distribution::" + HDA_VERSION
-HDA_PATH = os.path.join(REPO, "demo", "island", "hda", "hego_material_distribution.hda")
+OPERATOR = "HEGo_MaterialDistribution"
+HDA_PATH = os.path.join(REPO, "otls", "HEGo_MaterialDistribution.hda")
 CONTRACT_PATH = os.path.join(REPO, "demo", "island", "hda", "material_contract.json")
 REGISTRY_PATH = os.path.join(REPO, "demo", "island", "materials", "material_registry.json")
 OPTIONAL_MASKS = ("flow", "sediment", "debris", "erosion_delta")
@@ -139,7 +139,7 @@ def core_source():
 
 
 SOP_PY = r'''
-# hego_material_distribution: one copy of the input height volume per registry material (same lattice
+# HEGo_MaterialDistribution: one copy of the input height volume per registry material (same lattice
 # and transform) become the registry material weights. Mask-only; pure numpy.
 import time
 
@@ -149,7 +149,7 @@ started = time.time()
 
 
 def fail(message):
-    raise hou.NodeError("hego_material_distribution: " + message)
+    raise hou.NodeError("HEGo_MaterialDistribution: " + message)
 
 
 if not node.evalParm("target_layer_path").strip():
@@ -402,7 +402,7 @@ def build_hda(hou, hda_path, staging_dir):
     hda_path = os.path.join(staging_dir, os.path.basename(final_path))
     hou.hipFile.clear(suppress_save_prompt=True)
     geo = hou.node("/obj").createNode("geo", "material_build")
-    sub = geo.createNode("subnet", "hego_material_distribution")
+    sub = geo.createNode("subnet", "HEGo_MaterialDistribution")
     sub.parm("label1").set(INPUT_LABEL)
     group = sub.parmTemplateGroup()
     for template in _parm_templates(hou).parmTemplates():
@@ -470,7 +470,7 @@ def build_hda(hou, hda_path, staging_dir):
         os.remove(hda_path)
     asset = sub.createDigitalAsset(
         name=OPERATOR, hda_file_name=hda_path, description="HEGo Material Distribution",
-        min_num_inputs=1, max_num_inputs=1, version=HDA_VERSION,
+        min_num_inputs=1, max_num_inputs=1, version="",
         ignore_external_references=True, change_node_type=True, create_backup=False)
     definition = asset.type().definition()
     from graph_layout import document_definition

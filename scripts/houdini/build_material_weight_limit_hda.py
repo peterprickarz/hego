@@ -1,5 +1,5 @@
 #!/usr/bin/env hython
-"""Build standalone Sop/hego_material_weight_limit::1.0 (no runtime imports).
+"""Build standalone Sop/util_MaterialWeightLimit (no runtime imports).
 
   hython scripts/houdini/build_material_weight_limit_hda.py
 """
@@ -11,8 +11,8 @@ import sys
 sys.dont_write_bytecode = True
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(SCRIPT_DIR))
-OPERATOR = "hego_material_weight_limit::1.0"
-HDA_PATH = os.path.join(REPO, "demo/island/hda/hego_material_weight_limit.hda")
+OPERATOR = "util_MaterialWeightLimit"
+HDA_PATH = os.path.join(REPO, "otls/util_MaterialWeightLimit.hda")
 HELPER_PATH = os.path.join(SCRIPT_DIR, "material_weight_limit.py")
 
 
@@ -27,7 +27,7 @@ def build_hda(hou, path, staging):
     staged = os.path.join(staging, os.path.basename(path))
     hou.hipFile.clear(suppress_save_prompt=True)
     parent = hou.node("/obj").createNode("geo", "weight_limit_build")
-    subnet = parent.createNode("subnet", "hego_material_weight_limit")
+    subnet = parent.createNode("subnet", "util_MaterialWeightLimit")
     group = hou.ParmTemplateGroup()
     group.append(hou.StringParmTemplate("channels", "Material Channels (Stable ID Order)", 1, default_value=("material_*",),
         help="Whitespace-separated material weight names/patterns. Explicit names keep caller order; wildcard matches keep incoming primitive order. This is the stable tie order. Only selected values change; all geometry, attributes and other fields pass through."))
@@ -53,7 +53,7 @@ def build_hda(hou, path, staging):
         os.remove(staged)
     asset = subnet.createDigitalAsset(name=OPERATOR, hda_file_name=staged,
         description="HEGo Material Weight Limit", min_num_inputs=1, max_num_inputs=1,
-        version="1.0", ignore_external_references=True, create_backup=False)
+        version="", ignore_external_references=True, create_backup=False)
     definition = asset.type().definition()
     definition.setParmTemplateGroup(group)
     definition.setIcon("SOP_heightfield_maskbyfeature")

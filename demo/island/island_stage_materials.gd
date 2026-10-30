@@ -2,8 +2,8 @@
 class_name HEGoIslandStageMaterials
 extends RefCounted
 ## Explicit binding migration only. No HAPI, field edits, scene saves or cache IO.
-const EROSION_OPERATOR := "Sop/hego_island_erosion::1.0"
-const MATERIAL_OPERATOR := "Sop/hego_material_distribution::1.0"
+const EROSION_OPERATOR := "Sop/HEGo_IslandErosion"
+const MATERIAL_OPERATOR := "Sop/HEGo_MaterialDistribution"
 const LEGACY_OUTPUTS := ["height", "erosion_delta", "sediment", "debris", "flow", "grass", "rock", "sand", "scree"]
 const SIMULATION := ["erosion_delta", "sediment", "debris", "flow"]
 

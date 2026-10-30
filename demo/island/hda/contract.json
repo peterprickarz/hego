@@ -1,7 +1,7 @@
 {
   "contract_version": 2,
-  "operator": "Sop/hego_island_erosion::1.0",
-  "hda_file": "demo/island/hda/hego_island_erosion.hda",
+  "operator": "Sop/HEGo_IslandErosion",
+  "hda_file": "otls/HEGo_IslandErosion.hda",
   "source_script": "scripts/houdini/build_island_hda.py",
   "houdini_version": "22.0.429",
   "erosion_node": "Sop/heightfield_erode::3.0 (OPlibTerrain.hda, built-in), frozen simulation",

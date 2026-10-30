@@ -119,7 +119,7 @@ class TerrainLaunchers(unittest.TestCase):
         for name in ("contract.json", "material_contract.json", "tint_contract.json"):
             with self.subTest(contract=name):
                 current = (ROOT / "demo/island/hda" / name).read_text()
-                saved = current.replace('"demo/', '"terrain_demo/')
+                saved = current.replace('"otls/', '"demo/island/hda/')
                 self.assertNotEqual(saved, current)
                 self.assertTrue(METADATA.contract_metadata_matches(saved, current))
                 changed = current.replace('"contract_version": ', '"contract_version": 100', 1)

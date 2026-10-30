@@ -90,7 +90,7 @@ func run() -> void:
 		values = await read(wrangle)
 		check(values.get("class") == [2] and values.get("snippet") == ["f@test = 17;"], "Integer menu and string UI semantics remain compatible")
 	if not island_hda.is_empty():
-		var island := HEGoAssetNode.new(); island.op_name = "Sop/hego_island_erosion::1.0"
+		var island := HEGoAssetNode.new(); island.op_name = "Sop/HEGo_IslandErosion"
 		if await wait_task(island.instantiate()):
 			var request: Dictionary = JSON.parse_string('{"detail_stage":1.0,"freeze_frame":16.0,"feature_size":3}')
 			await wait_task(island.set_parms_batch(request))

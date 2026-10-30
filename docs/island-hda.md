@@ -1,12 +1,12 @@
 # HEGo island erosion HDA
 
-`Sop/hego_island_erosion::1.0` (contract version 2) turns cumulative terrain into eroded height, simulation/biome masks and 32 stable material-weight fields: 41 output volumes in total. It wraps Houdini 22.0's native `Sop/heightfield_erode::3.0` and an optional native HeightField Slump pass over this simulation's loose thermal debris. The later manual-height transition is a separate authoring operation; its correction is excluded from the simulation evidence used to update materials.
+`Sop/HEGo_IslandErosion` (contract version 2) turns cumulative terrain into eroded height, simulation/biome masks and 32 stable material-weight fields: 41 output volumes in total. It wraps Houdini 22.0's native `Sop/heightfield_erode::3.0` and an optional native HeightField Slump pass over this simulation's loose thermal debris. The later manual-height transition is a separate authoring operation; its correction is excluded from the simulation evidence used to update materials.
 
 The new saved definitions have been validated on actual island inputs at draft scope: the whole island at 16 m and a 512 m building crop at 2 m height/4 m masks. No new full 4 km island cook at 2 m, saved-level adoption or production appearance/performance result is claimed here. Existing edited scenes, hand resources, material tuning and cache generations remain authoritative until an explicit migration/cook is accepted.
 
 | Item | Path |
 | --- | --- |
-| HDA | `demo/island/hda/hego_island_erosion.hda` |
+| HDA | `otls/HEGo_IslandErosion.hda` |
 | Machine-readable contract | `demo/island/hda/contract.json` (also embedded in the HDA as section `hego_contract.json`) |
 | Creation source | `scripts/houdini/build_island_hda.py` (also embedded as section `hego_build_island_hda.py`) |
 | Manual-transition regression | `scripts/houdini/test_island_transition.py` |

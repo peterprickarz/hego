@@ -28,7 +28,7 @@
   "sample_centres": "first and last samples lie on the extent corners (-2048 and +2048)",
   "units": "metres, Y relative to the StrataTerrain3D origin, sea level 0",
   "channel": "height",
-  "role": "rough manual base (uneroded); edit freely, erosion is applied by Sop/hego_island_erosion::1.0",
+  "role": "rough manual base (uneroded); edit freely, erosion is applied by Sop/HEGo_IslandErosion",
   "generator": "scripts/houdini/island_base.py",
   "generator_version": 1,
   "seed": 20261028,

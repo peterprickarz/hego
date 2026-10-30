@@ -46,7 +46,7 @@ func run() -> void:
 	var started := api.start_session(HEGoAPI.SESSION_NAMED_PIPE, pipe)
 	check(started, "private session starts (a license failure here requires coordination, not touching the editor session)")
 	if not started: await finish(); return
-	check(installed_operators().has("Sop/hego_island_erosion::1.0"), "Houdini startup discovers the coarse operator before any asset creation")
+	check(installed_operators().has("Sop/HEGo_IslandErosion"), "Houdini startup discovers the coarse operator before any asset creation")
 	world = Node3D.new(); root.add_child(world)
 	var terrain := StrataTerrain3D.new(); terrain.name = "Terrain"; terrain.base_bounds = Rect2(-2048, -2048, 4096, 4096); world.add_child(terrain)
 	# The saved island's own rough base and coarse-cook preset, read from its storage files
@@ -66,7 +66,7 @@ func run() -> void:
 	target.procedural_fields = {"height": StrataFieldData.from_field({"name": "height", "image": prior, "sample_origin": Vector3(-2048, 0, -2048), "sample_step_x": Vector3(8, 0, 0), "sample_step_y": Vector3(0, 0, 8)})}
 	terrain.add_child(target)
 	var group := Node3D.new(); group.name = "HDA"; world.add_child(group)
-	var host := HEGoNode3D.new(); host.name = "CoarseCook"; host.asset_name = "Sop/hego_island_erosion::1.0"
+	var host := HEGoNode3D.new(); host.name = "CoarseCook"; host.asset_name = "Sop/HEGo_IslandErosion"
 	host.parm_stash = coarse_preset
 	host.input_stash = [{"inputs": ["../../Terrain/RoughBase"], "settings": {"terrain_mode": "cumulative", "terrain_channels": "height"}}]
 	group.add_child(host)
@@ -92,7 +92,7 @@ func run() -> void:
 	var history_before := api.get_completed_task_history().size()
 	await panel.recook()
 	check(failed.writes == 0 and failed.stash == PackedByteArray([7, 8, 9]) and api.get_completed_task_history().size() == history_before, "a failed cook with a valid ID performs no preset task and never overwrites stash")
-	host.asset_name = "Sop/hego_island_erosion::1.0"; host.agent.assets.clear(); panel.hego_asset_node = null
+	host.asset_name = "Sop/HEGo_IslandErosion"; host.agent.assets.clear(); panel.hego_asset_node = null
 	ui.set_selected_node(host); await process_frame
 	print("ACTUAL_COARSE_PANEL_COOK_BEGIN")
 	await panel._on_recook_button_pressed()
@@ -100,9 +100,9 @@ func run() -> void:
 	check(target.procedural_fields.has("height") and target.procedural_fields.height.resolution == Vector2i(513, 513), "actual coarse result has its native 8m lattice")
 	check(HEGoIslandMaterials.layer_content_hash(rough) == source_before, "cooking leaves the cloned authoritative input unchanged")
 	var first = installed_operators()
-	check(first.has("Sop/hego_island_erosion::1.0") and first.has("Sop/hego_terrain_tint::1.0") and first.has("Sop/hego_material_distribution::1.0"), "all three HDAs are present from the Houdini startup package")
+	check(first.has("Sop/HEGo_IslandErosion") and first.has("Sop/HEGo_TerrainTint") and first.has("Sop/HEGo_MaterialDistribution"), "all three HDAs are present from the Houdini startup package")
 	api.stop_session()
 	check(api.start_session(HEGoAPI.SESSION_NAMED_PIPE, pipe + "_second"), "restart private session")
 	var renewed = installed_operators()
-	check(renewed.has("Sop/hego_island_erosion::1.0") and renewed.has("Sop/hego_terrain_tint::1.0") and renewed.has("Sop/hego_material_distribution::1.0"), "Houdini processes the package again for the new session")
+	check(renewed.has("Sop/HEGo_IslandErosion") and renewed.has("Sop/HEGo_TerrainTint") and renewed.has("Sop/HEGo_MaterialDistribution"), "Houdini processes the package again for the new session")
 	await finish()

@@ -1,5 +1,5 @@
 #!/usr/bin/env hython
-"""Build Sop/hego_island_erosion::1.0 and the rough island base cache.
+"""Build Sop/HEGo_IslandErosion and the rough island base cache.
 
 Run with Houdini 22.0's hython. Default: author the HDA and export the
 uneroded 513x513 base height; no erosion is cooked. Cook modes load ONLY the
@@ -33,8 +33,8 @@ import island_base  # noqa: E402
 import build_material_distribution_hda as material_builder  # noqa: E402  registry, habitat parameters, limiter
 
 HDA_VERSION = "1.0"
-OPERATOR = "hego_island_erosion::" + HDA_VERSION
-HDA_PATH = os.path.join(REPO, "demo", "island", "hda", "hego_island_erosion.hda")
+OPERATOR = "HEGo_IslandErosion"
+HDA_PATH = os.path.join(REPO, "otls", "HEGo_IslandErosion.hda")
 CACHE_DIR = os.path.join(REPO, "demo", "island", "cache")
 CHANNELS = ["height", "erosion_delta", "sediment", "debris", "flow", "grass", "rock", "sand", "scree"]
 MASK_CHANNELS = CHANNELS[1:]
@@ -72,16 +72,16 @@ def material_stage_code():
 GRID_INFO_VEX = r"""
 // Derive the output and mask lattices from the input height sample centres.
 int hp = nametoprim(0, "height");
-if (hp < 0) error("hego_island_erosion: input 0 has no 'height' volume");
-if (chs("../target_layer_path") == "") error("hego_island_erosion: target_layer_path is empty");
+if (hp < 0) error("HEGo_IslandErosion: input 0 has no 'height' volume");
+if (chs("../target_layer_path") == "") error("HEGo_IslandErosion: target_layer_path is empty");
 vector res = volumeres(0, hp);
-if (res.x < 2 || res.y < 2 || res.z != 1) error("hego_island_erosion: height must be a 2D grid of at least 2x2 samples");
+if (res.x < 2 || res.y < 2 || res.z != 1) error("HEGo_IslandErosion: height must be a 2D grid of at least 2x2 samples");
 vector o = volumeindextopos(0, hp, {0, 0, 0});
 vector ea = volumeindextopos(0, hp, {1, 0, 0}) - o;
 vector eb = volumeindextopos(0, hp, {0, 1, 0}) - o;
 float la = length(ea), lb = length(eb);
 if (abs(ea.y) > 1e-4 * la || abs(eb.y) > 1e-4 * lb || abs(dot(ea, eb)) > 1e-4 * la * lb)
-    error("hego_island_erosion: height steps must be horizontal and orthogonal");
+    error("HEGo_IslandErosion: height steps must be horizontal and orthogonal");
 vector corners[] = array(o, o + ea * (res.x - 1), o + eb * (res.y - 1), o + ea * (res.x - 1) + eb * (res.y - 1));
 float minx = 1e30, maxx = -1e30, minz = 1e30, maxz = -1e30;
 foreach (vector c; corners) {
@@ -89,11 +89,11 @@ foreach (vector c; corners) {
     minz = min(minz, c.z); maxz = max(maxz, c.z);
 }
 float s = chf("../output_spacing");
-if (s <= 0) error("hego_island_erosion: output_spacing must be positive");
+if (s <= 0) error("HEGo_IslandErosion: output_spacing must be positive");
 int nx = int(floor((maxx - minx) / s + 1e-3)) + 1;
 int nz = int(floor((maxz - minz) / s + 1e-3)) + 1;
-if (nx < 4 || nz < 4) error("hego_island_erosion: output grid needs at least 4x4 samples");
-if (nx > 4097 || nz > 4097) error("hego_island_erosion: output grid exceeds the 4097-sample bound per axis");
+if (nx < 4 || nz < 4) error("HEGo_IslandErosion: output grid needs at least 4x4 samples");
+if (nx > 4097 || nz > 4097) error("HEGo_IslandErosion: output grid exceeds the 4097-sample bound per axis");
 int k = max(1, int(rint(max(chf("../mask_spacing"), s) / s)));
 int mnx = (nx - 1) / k + 1;
 int mnz = (nz - 1) / k + 1;
@@ -259,13 +259,13 @@ def publish():
 def lattice(prim):
     res = prim.resolution()
     if res[2] != 1:
-        raise hou.NodeError("hego_island_erosion: manual target volumes must be 2D heightfields")
+        raise hou.NodeError("HEGo_IslandErosion: manual target volumes must be 2D heightfields")
     origin = np.array(prim.indexToPos((0, 0, 0)), dtype=np.float64)
     step_a = np.array(prim.indexToPos((1, 0, 0)), dtype=np.float64) - origin
     step_b = np.array(prim.indexToPos((0, 1, 0)), dtype=np.float64) - origin
     la, lb = np.linalg.norm(step_a), np.linalg.norm(step_b)
     if la <= 0 or lb <= 0 or abs(step_a[1]) > 1e-4 * la or abs(step_b[1]) > 1e-4 * lb or abs(step_a @ step_b) > 1e-4 * la * lb:
-        raise hou.NodeError("hego_island_erosion: manual target steps must be horizontal and orthogonal")
+        raise hou.NodeError("HEGo_IslandErosion: manual target steps must be horizontal and orthogonal")
     return (res[0], res[1]), origin, step_a, step_b
 
 
@@ -301,27 +301,27 @@ def run():
     owner = named.get(channel + "__ownership")
     if owner is None:
         stats["status"] = "ignored_no_ownership"
-        node.addWarning("hego_island_erosion: raw '%s' has no '%s__ownership'; manual transition ignored" % (channel, channel))
+        node.addWarning("HEGo_IslandErosion: raw '%s' has no '%s__ownership'; manual transition ignored" % (channel, channel))
         return
     mode = prim_string(raw, target, "hegostrata_snapshot_mode")
     if mode not in ("", "raw"):
-        raise hou.NodeError("hego_island_erosion: manual target '%s' must be a raw snapshot, got '%s'" % (channel, mode))
+        raise hou.NodeError("HEGo_IslandErosion: manual target '%s' must be a raw snapshot, got '%s'" % (channel, mode))
     composition = prim_string(raw, target, "hegostrata_composition")
     if composition not in ("", "replace"):
-        raise hou.NodeError("hego_island_erosion: manual target '%s' must be an absolute (replace) layer, got '%s'" % (channel, composition))
+        raise hou.NodeError("HEGo_IslandErosion: manual target '%s' must be an absolute (replace) layer, got '%s'" % (channel, composition))
     role = prim_string(raw, owner, "hegostrata_role")
     if role not in ("", "ownership"):
-        raise hou.NodeError("hego_island_erosion: '%s__ownership' must have role 'ownership', got '%s'" % (channel, role))
+        raise hou.NodeError("HEGo_IslandErosion: '%s__ownership' must have role 'ownership', got '%s'" % (channel, role))
     if owner.resolution() != target.resolution():
-        raise hou.NodeError("hego_island_erosion: manual target and its ownership differ in resolution")
+        raise hou.NodeError("HEGo_IslandErosion: manual target and its ownership differ in resolution")
     t_res, t_origin, t_a, t_b = lattice(target)
     _, o_origin, o_a, o_b = lattice(owner)
     if np.abs(o_origin - t_origin).max() > 1e-3 or np.abs(o_a - t_a).max() > 1e-6 or np.abs(o_b - t_b).max() > 1e-6:
-        raise hou.NodeError("hego_island_erosion: manual target and its ownership use different lattices")
+        raise hou.NodeError("HEGo_IslandErosion: manual target and its ownership use different lattices")
     raw_value = voxels(target)
     raw_owned = voxels(owner) >= 0.5
     if not np.all(np.isfinite(raw_value[raw_owned])):
-        raise hou.NodeError("hego_island_erosion: manual target has non-finite owned samples")
+        raise hou.NodeError("HEGo_IslandErosion: manual target has non-finite owned samples")
     stats["status"] = "no_owned_samples"
     if not raw_owned.any():
         return
@@ -524,7 +524,7 @@ def run():
     changed = anchor | band
     result = np.where(fixed, value, np.where(band, eroded + correction, eroded))
     if not np.all(np.isfinite(result[changed])):
-        raise hou.NodeError("hego_island_erosion: manual transition produced non-finite heights")
+        raise hou.NodeError("HEGo_IslandErosion: manual transition produced non-finite heights")
     out = np.frombuffer(height.allVoxelsAsString(), dtype="<f4").reshape(nb, na).copy()
     crop = out[b0:b1 + 1, a0:a1 + 1]
     crop[changed] = result[changed].astype("<f4")
@@ -560,7 +560,7 @@ started = time.time()
 
 
 def fail(message):
-    raise hou.NodeError("hego_island_erosion: " + message)
+    raise hou.NodeError("HEGo_IslandErosion: " + message)
 
 
 def by_name(g):
@@ -718,16 +718,16 @@ for key, value in stats.items():
 CHECK_GRID_VEX = r"""
 // Guard: erosion must preserve the resampled lattice exactly.
 int a = nametoprim(0, "height"), b = nametoprim(1, "height");
-if (volumeres(0, a) != volumeres(1, b)) error("hego_island_erosion: erosion changed the grid resolution");
+if (volumeres(0, a) != volumeres(1, b)) error("HEGo_IslandErosion: erosion changed the grid resolution");
 if (distance(volumeindextopos(0, a, {0, 0, 0}), volumeindextopos(1, b, {0, 0, 0})) > 1e-3)
-    error("hego_island_erosion: erosion changed the sample origin");
+    error("HEGo_IslandErosion: erosion changed the sample origin");
 int c = nametoprim(1, "height");
 vector o = volumeindextopos(1, c, {0, 0, 0});
 if (abs(o.x - detail(2, "hego_island_origin_x")) > 1e-3 || abs(o.z - detail(2, "hego_island_origin_z")) > 1e-3)
-    error("hego_island_erosion: output lattice does not start at the input's first sample centre");
+    error("HEGo_IslandErosion: output lattice does not start at the input's first sample centre");
 string produced[] = {"sediment", "debris", "flow"};
 foreach (string name; produced)
-    if (nametoprim(0, name) < 0) error("hego_island_erosion: heightfield_erode did not produce '%s'", name);
+    if (nametoprim(0, name) < 0) error("HEGo_IslandErosion: heightfield_erode did not produce '%s'", name);
 """
 
 MASKS_VEX = r"""
@@ -785,7 +785,7 @@ for (int da = -(k - 1); da <= k - 1; da++) {
         wsum += wt;
     }
 }
-if (wsum <= 0.0) error("hego_island_erosion: mask sample outside the height lattice");
+if (wsum <= 0.0) error("HEGo_IslandErosion: mask sample outside the height lattice");
 @erosion_delta = acc[0] / wsum;
 @sediment = acc[1] / wsum;
 @debris = acc[2] / wsum;
@@ -828,7 +828,7 @@ DIAG_VEX = "// Diagnostics only; never routed to terrain layers.\n" + "".join(
 s@hego_island_operator = "Sop/OPERATOR";
 s@hego_island_stage = chi("../detail_stage") ? "detail" : "coarse";
 i@hego_island_seed = chi("../seed");
-f@hego_island_erosion_strength = chf("../erosion_strength");
+f@HEGo_IslandErosion_strength = chf("../erosion_strength");
 s@hego_island_erode_node = "Sop/heightfield_erode::3.0";
 """.replace("OPERATOR", OPERATOR)
 
@@ -1036,7 +1036,7 @@ def build_hda(hou, hda_path, staging_dir):
     hda_path = os.path.join(staging_dir, os.path.basename(final_path))
     hou.hipFile.clear(suppress_save_prompt=True)
     geo = hou.node("/obj").createNode("geo", "island_build")
-    sub = geo.createNode("subnet", "hego_island_erosion")
+    sub = geo.createNode("subnet", "HEGo_IslandErosion")
     sub.parm("label1").set("Cumulative terrain (height + masks)")
     sub.parm("label2").set("Raw manual constraints (optional)")
     group = sub.parmTemplateGroup()
@@ -1171,7 +1171,7 @@ def build_hda(hou, hda_path, staging_dir):
         os.remove(hda_path)
     asset = sub.createDigitalAsset(
         name=OPERATOR, hda_file_name=hda_path, description="HEGo Island Erosion",
-        min_num_inputs=1, max_num_inputs=2, version=HDA_VERSION,
+        min_num_inputs=1, max_num_inputs=2, version="",
         ignore_external_references=True, change_node_type=True, create_backup=False)
     definition = asset.type().definition()
     from graph_layout import document_definition

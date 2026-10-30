@@ -32,13 +32,18 @@ Existing `.tres` tuning is preserved unless `--reset-resources` is given. The re
 
 ## Cooking
 
-Install the island's Houdini package once per checkout, then every cook is an explicit action:
+The island HDAs live in the repository's `otls/` folder with the other HEGo assets
+(`HEGo_IslandErosion`, `HEGo_TerrainTint`, `HEGo_MaterialDistribution`, and the
+`util_MaterialWeightLimit` helper they embed). Houdini has to find that folder at startup,
+which a user-level package does once per checkout, e.g. `~/houdini22.0/packages/hego.json`:
 
-```sh
-python3 scripts/install_island_houdini_package.py --user-pref-dir "$HOME/houdini22.0"
+```json
+{"env": [{"HEGO": "/path/to/hego"}, {"HOUDINI_PATH": {"value": "$HEGO", "method": "prepend"}}]}
 ```
 
-In the editor, select an `HDA/*Cook` node and press **Cook** in the HEGo panel: `CoarseCook` and `DetailCook` run `hego_island_erosion.hda`, `TintCook` runs `hego_terrain_tint.hda`, `MaterialCook` runs `hego_material_distribution.hda`. Each writes its layer's channel files and marks the scene unsaved; save the scene to keep the updated references. The material binding on the scene root repacks the control maps whenever the material distribution commits.
+After that every cook is an explicit action:
+
+In the editor, select an `HDA/*Cook` node and press **Cook** in the HEGo panel: `CoarseCook` and `DetailCook` run `HEGo_IslandErosion.hda`, `TintCook` runs `HEGo_TerrainTint.hda`, `MaterialCook` runs `HEGo_MaterialDistribution.hda`. Each writes its layer's channel files and marks the scene unsaved; save the scene to keep the updated references. The material binding on the scene root repacks the control maps whenever the material distribution commits.
 
 Headless, from the repository root:
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env hython
-"""Stage-material and slump regression for Sop/hego_island_erosion::1.0 (contract v2).
+"""Stage-material and slump regression for Sop/HEGo_IslandErosion (contract v2).
 
 Cooks the saved HDA in a fresh hython session on ACTUAL island inputs exported
 from a HEGo session (bgeo files: the coarse cumulative height, the detail
@@ -12,11 +12,11 @@ authoring scene or a cache.
 
   hython scripts/houdini/test_island_stage_materials.py \
       --coarse-input coarse.bgeo.sc --detail-input detail.bgeo.sc \
-      --constraints constraints.bgeo.sc --baseline-hda old/hego_island_erosion.hda \
+      --constraints constraints.bgeo.sc --baseline-hda old/HEGo_IslandErosion.hda \
       --out-dir /tmp/hego-stage-materials
 
 --baseline-hda is a contract v1 definition (e.g. `git show <rev>:demo/
-island/hda/hego_island_erosion.hda`); it is cooked in a separate hython process
+island/hda/HEGo_IslandErosion.hda`); it is cooked in a separate hython process
 to prove that Slump off reproduces the v1 channels byte for byte.
 """
 
@@ -34,7 +34,7 @@ sys.dont_write_bytecode = True
 
 import build_island_hda as island  # noqa: E402
 
-OPERATOR = "hego_island_erosion::1.0"
+OPERATOR = "HEGo_IslandErosion"
 # The four island materials: loose rock is the talus family, water-moved material is gravel
 # or sand, and incised ground reads as gravel or bare rock.
 FAMILIES = {
@@ -63,7 +63,7 @@ if parms.pop("_crop", None):
     crop = geo.createNode("heightfield_crop"); crop.setInput(0, src)
     crop.parm("orient").set("zx"); crop.parmTuple("size").set((CROP, CROP)); crop.parmTuple("t").set((CX, 0, CZ))
     src = crop
-node = geo.createNode("hego_island_erosion::1.0"); node.setInput(0, src)
+node = geo.createNode("HEGo_IslandErosion"); node.setInput(0, src)
 if constraints:
     c = geo.createNode("file"); c.parm("file").set(constraints); node.setInput(1, c)
 for k, v in parms.items(): node.parm(k).set(v)

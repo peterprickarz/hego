@@ -109,5 +109,5 @@ try:
             geo.addAttrib(hou.attribType.Global, name, value)
         geo.setGlobalAttribValue(name, value)
 except ValueError as error:
-    raise hou.NodeError("hego_material_weight_limit: " + str(error))
+    raise hou.NodeError("util_MaterialWeightLimit: " + str(error))
 '''

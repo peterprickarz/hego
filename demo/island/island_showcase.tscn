@@ -83,7 +83,7 @@ layer_id = "bracken-isle-material-distribution-v1"
 
 [node name="CoarseCook" type="Node3D" parent="HDA"]
 script = ExtResource("4")
-asset_name = "Sop/hego_island_erosion::1.0"
+asset_name = "Sop/HEGo_IslandErosion"
 
 [node name="StrataTargets" type="Node" parent="HDA/CoarseCook"]
 script = ExtResource("targets")
@@ -91,7 +91,7 @@ producer_id = "bracken-isle-coarse-cook-v1"
 
 [node name="DetailCook" type="Node3D" parent="HDA"]
 script = ExtResource("4")
-asset_name = "Sop/hego_island_erosion::1.0"
+asset_name = "Sop/HEGo_IslandErosion"
 
 [node name="StrataTargets" type="Node" parent="HDA/DetailCook"]
 script = ExtResource("targets")
@@ -99,7 +99,7 @@ producer_id = "bracken-isle-detail-cook-v1"
 
 [node name="TintCook" type="Node3D" parent="HDA"]
 script = ExtResource("4")
-asset_name = "Sop/hego_terrain_tint::1.0"
+asset_name = "Sop/HEGo_TerrainTint"
 
 [node name="StrataTargets" type="Node" parent="HDA/TintCook"]
 script = ExtResource("targets")

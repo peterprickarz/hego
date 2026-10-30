@@ -1,7 +1,7 @@
 {
   "contract_version": 3,
-  "operator": "Sop/hego_material_distribution::1.0",
-  "hda_file": "demo/island/hda/hego_material_distribution.hda",
+  "operator": "Sop/HEGo_MaterialDistribution",
+  "hda_file": "otls/HEGo_MaterialDistribution.hda",
   "source_script": "scripts/houdini/build_material_distribution_hda.py",
   "test_script": "scripts/houdini/test_material_distribution.py",
   "actual_fixture": "test --actual takes the saved-scene final cumulative height as RF32 (1025^2, row-major [row][column]) with a sibling .json (width, height, sample_origin, sample_step_x, sample_step_y, height_sha256) exported by the scene owner; the test only reads it",
@@ -30,13 +30,13 @@
       },
       "volumes": {
         "height": "REQUIRED. Exactly one 2D scalar Volume primitive named 'height' (not VDB): the complete stack cumulative through the last height layer, absolute terrain-local metres, finite. Any dense orthogonal horizontal lattice from 3x3 up to 1025 samples per axis (the island packer accepts at most 1025); for the 4 km island send terrain_spacing 4.0 = 1025x1025, origin (-2048, 0, -2048).",
-        "flow": "optional; 0..1 (heightfield_erode log-scaled flow as published by Sop/hego_island_erosion). Missing = 0.",
+        "flow": "optional; 0..1 (heightfield_erode log-scaled flow as published by Sop/HEGo_IslandErosion). Missing = 0.",
         "sediment": "optional; >= 0 metres. Missing = 0.",
         "debris": "optional; >= 0 metres. Missing = 0.",
         "erosion_delta": "optional; signed metres (<0 eroded, >0 deposited). Missing = 0.",
         "lattice_rule": "Every optional mask present must be a single Volume with exactly the height resolution and the same sample positions at the origin, the first step along each axis and the far end of each axis (|difference| <= 1e-4 m). Nothing is resampled; a mismatch is a node error.",
         "other volumes": "ignored, including <name>__ownership companions, unknown material_* names and the legacy grass/rock/sand/scree biome masks; never passed through",
-        "material_<name>": "optional, all registry channels or none: the stage materials authored by Sop/hego_island_erosion::1.0 (contract v2), cumulative. Each a single Volume on the exact height lattice (same rule as the masks), finite, >= -1e-6 (clamped to 0). A sample whose 32 values sum to more than 1e-6 is covered. Duplicates, a partial set, another lattice or negative/nonfinite values are node errors; unknown material_* names are ignored.",
+        "material_<name>": "optional, all registry channels or none: the stage materials authored by Sop/HEGo_IslandErosion (contract v2), cumulative. Each a single Volume on the exact height lattice (same rule as the masks), finite, >= -1e-6 (clamped to 0). A sample whose 32 values sum to more than 1e-6 is covered. Duplicates, a partial set, another lattice or negative/nonfinite values are node errors; unknown material_* names are ignored.",
         "masks_unavailable": "A mask that is missing OR declared but zero everywhere is reported in hego_material_unavailable_masks (all-zero ones also in hego_material_all_zero_masks). The habitat model then has no evidence for it, exactly as if absent; nothing is synthesised in its place."
       },
       "hego_settings_with_stage_materials": {
@@ -69,7 +69,7 @@
       "maximum": 4,
       "ties": "If five or more equal maxima make every residual zero, retain original top four with ascending stable registry ID tie breaking, then normalize. hego_material_limit_tie_fallback_voxels reports these degenerate samples. This fallback does not guarantee continuity at such ties.",
       "coverage": "Generic utility preserves all-zero samples. The island generator remains fully assigned, including sea floor.",
-      "source": "scripts/houdini/material_weight_limit.py is embedded in this HDA and the standalone Sop/hego_material_weight_limit::1.0; neither imports project files at cook time.",
+      "source": "scripts/houdini/material_weight_limit.py is embedded in this HDA and the standalone Sop/util_MaterialWeightLimit; neither imports project files at cook time.",
       "scope": "This limits each published sample. Bilinear interpolation of neighboring controls can still contain more than four IDs and requires separate renderer selection."
     }
   },
@@ -236,7 +236,7 @@
     "required_channels": "the same 32 channels"
   },
   "final_pass": {
-    "role": "The erosion stages author materials from their own simulation (Sop/hego_island_erosion contract v2, outputs.materials). MaterialCook is the final publication pass: it must not erase stage results or apply the same erosion evidence again.",
+    "role": "The erosion stages author materials from their own simulation (Sop/HEGo_IslandErosion contract v2, outputs.materials). MaterialCook is the final publication pass: it must not erase stage results or apply the same erosion evidence again.",
     "modes": {
       "standalone": "no stage materials (absent or all zero): habitat model everywhere, identical to contract v2",
       "inherit": "stage materials present and Prior Stage Materials = inherit",

@@ -1,9 +1,12 @@
-"""Compare saved HDA metadata across the demo directory migration.
+"""Compare saved HDA metadata across the repository's directory migrations.
 
 The HDA graphs and embedded contracts and builder provenance remain byte-for-byte untouched.
-Only the retired terrain_demo filesystem spelling in provenance is accepted as
-an equivalent to the new demo location; contract, algorithm or graph changes still fail.
+Only retired filesystem spellings in provenance are accepted as equivalent to the current
+locations: the terrain_demo checkout layout that became demo/, and the demo/island/hda
+folder the HDA files lived in before moving to otls/. Contract, algorithm or graph changes
+still fail.
 """
+import re
 
 
 def _current_paths(source: str) -> str:
@@ -11,6 +14,8 @@ def _current_paths(source: str) -> str:
                                   ('"terrain_demo",', '"demo",'),
                                   ("'terrain_demo',", "'demo',")):
         source = source.replace(previous, replacement)
+    source = re.sub(r"demo/island/hda/([A-Za-z0-9_]+\.hda)", r"otls/\1", source)
+    source = source.replace('"demo", "island", "hda", "', '"otls", "')
     return source
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env hython
-"""Regression for Sop/hego_material_distribution::1.0 (loads only the saved .hda).
+"""Regression for Sop/HEGo_MaterialDistribution (loads only the saved .hda).
 
   hython scripts/houdini/test_material_distribution.py [--hda PATH] [--out-dir DIR] [--actual DIR]
 

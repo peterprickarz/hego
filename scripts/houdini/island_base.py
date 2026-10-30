@@ -2,7 +2,7 @@
 
 The base is an editable, uneroded manual layer. It is analytic (numpy only) so
 it can be regenerated without a Houdini licence; erosion is applied later by
-the Sop/hego_island_erosion HDA. Coordinates are metres in the terrain parent
+the Sop/HEGo_IslandErosion HDA. Coordinates are metres in the terrain parent
 frame: X east, Z south, Y up, sea level at Y=0, extent 4096 m centred at 0.
 """
 
@@ -235,7 +235,7 @@ def generate(seed=20261028, resolution=RESOLUTION, extent=EXTENT):
         "sample_centres": "first and last samples lie on the extent corners (-2048 and +2048)",
         "units": "metres, Y relative to the StrataTerrain3D origin, sea level 0",
         "channel": "height",
-        "role": "rough manual base (uneroded); edit freely, erosion is applied by Sop/hego_island_erosion::1.0",
+        "role": "rough manual base (uneroded); edit freely, erosion is applied by Sop/HEGo_IslandErosion",
         "generator": "scripts/houdini/island_base.py",
         "generator_version": BASE_VERSION,
         "seed": seed,
