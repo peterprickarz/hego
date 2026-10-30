@@ -48,13 +48,14 @@ In the editor, select an `HDA/*Cook` node and press **Cook** in the HEGo panel: 
 Headless, from the repository root:
 
 ```sh
-python3 scripts/run_terrain_island.py --prepare         # rough base -> coarse -> hand edits -> detail -> tint -> materials, then save
-python3 scripts/run_terrain_island.py --cook-materials  # only the material distribution, against the saved layers
-python3 scripts/run_terrain_island.py --verify          # reopen the saved island headlessly without Houdini
-python3 scripts/run_terrain_island.py --editor          # open the scene in the editor
+python3 scripts/run_terrain_island.py --prepare           # rough base -> coarse -> detail -> tint -> materials, then save
+python3 scripts/run_terrain_island.py --cook-materials    # only the material distribution, against the saved layers
+python3 scripts/run_terrain_island.py --five-stage-check  # artificial fixture check, see below; saves nothing
+python3 scripts/run_terrain_island.py --verify            # reopen the saved island headlessly without Houdini
+python3 scripts/run_terrain_island.py --editor            # open the scene in the editor
 ```
 
-`--prepare` also recooks the coarse stage with changed parameters and checks that both hand layers survive byte for byte and that the detail stage goes stale. It takes several minutes with Houdini 22.0. `--godot PATH` overrides the Godot executable; the launcher never rebuilds native code.
+`--prepare` recooks every stage from the saved hand layers with each HDA's saved parameters and overwrites the stage files in place; the hand layers themselves are never changed. `--five-stage-check` is an **artificial fixture**: it paints scripted strokes into the hand layers in memory, recooks the coarse stage with other parameters and checks that both hand layers survive byte for byte while the detail stage goes stale. It writes nothing to storage and exists only to exercise the preservation contract end to end. It takes several minutes with Houdini 22.0. `--godot PATH` overrides the Godot executable; the launcher never rebuilds native code.
 
 The HDAs are generated from `scripts/houdini/build_*.py` and embed their contracts (`demo/island/hda/*.json`). After changing a builder or the registry, regenerate with `hython` and rerun the Houdini tests listed in [island-material-distribution.md](island-material-distribution.md).
 

@@ -74,7 +74,7 @@ class TerrainLaunchers(unittest.TestCase):
             run.assert_not_called()
 
     def test_headless_cook_modes_pass_their_flags_to_the_showcase(self):
-        for mode, flag in (("--prepare", "--prepare-island"), ("--cook-materials", "--cook-materials"), ("--verify", "--verify")):
+        for mode, flag in (("--prepare", "--prepare-island"), ("--cook-materials", "--cook-materials"), ("--five-stage-check", "--five-stage-check"), ("--verify", "--verify")):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 library = root / "demo/addons/strata/bin/libstrata.linux.template_debug.x86_64.so"

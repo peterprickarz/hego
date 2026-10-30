@@ -88,6 +88,9 @@ func _ready() -> void:
 	if OS.get_cmdline_user_args().has("--prepare-island"):
 		await _prepare_island()
 		return
+	if OS.get_cmdline_user_args().has("--five-stage-check"):
+		await _five_stage_check()
+		return
 	if OS.get_cmdline_user_args().has("--cook-materials"):
 		await _cook_materials_headless()
 		return
@@ -107,7 +110,7 @@ func _ready() -> void:
 		get_tree().quit(0 if valid else 1)
 		return
 	if DisplayServer.get_name() == "headless":
-		push_error("Use a real Forward+ display for the island; --prepare-island, --cook-materials and --verify are the headless modes.")
+		push_error("Use a real Forward+ display for the island; --prepare-island, --cook-materials, --five-stage-check and --verify are the headless modes.")
 		get_tree().quit(2)
 		return
 	_materials = HEGoIslandMaterials.pool()
@@ -308,8 +311,33 @@ func _cook_materials() -> bool:
 ## Builds the whole island from the rough base: both erosion stages, the hand edits that sit
 ## between them, the tint and the materials, then saves every layer to storage. Also checks
 ## that recooking the coarse stage leaves the hand layers untouched.
+## Recooks every stage of the saved island in order and overwrites its storage files: the
+## rough base from the cache, then coarse and detail erosion with their saved parameters,
+## the tint and the material distribution, and finally the runtime bake. The hand layers
+## are used as saved and never changed here.
 func _prepare_island() -> void:
-	_set_message("Preparing the five-stage island")
+	_set_message("Recooking the island's stages from the saved layers")
+	if not _load_rough_base(): _finish_headless(false); return
+	for index in [0, 1]:
+		if not await _cook(index): _finish_headless(false); return
+	if tint_host != null and not await _cook_tint(): _finish_headless(false); return
+	if not await _cook_materials(): _finish_headless(false); return
+	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, 1.0)
+	if not _full_compiled.get("ok", false): _finish_headless(false); return
+	if not await _install_runtime(): _finish_headless(false); return
+	var saved := StrataStorage.save_all(terrain)
+	if not saved.ok: push_error(saved.message)
+	else: print("ISLAND_PREPARED ", saved.message)
+	_finish_headless(saved.ok)
+
+
+## ARTIFICIAL FIXTURE, never saved: scripted brush strokes stand in for hand edits so the
+## five-stage preservation contract can be checked end to end in a headless run. Cooks
+## coarse, applies the strokes, cooks detail, recooks coarse with other parameters and
+## checks that both hand layers survive byte for byte while the detail stage goes stale.
+## The saved island is left untouched; the process exits without writing storage.
+func _five_stage_check() -> void:
+	_set_message("Five-stage fixture check (nothing is saved)")
 	if not _load_rough_base(): _finish_headless(false); return
 	if not await _cook(0): _finish_headless(false); return
 	_make_hand_edits()
@@ -320,17 +348,10 @@ func _prepare_island() -> void:
 	var downstream_stale := _layers()[3].procedural_stale
 	if not await _cook(1): _finish_headless(false); return
 	var preserved := fine_hash == _hand_hash(_layers()[2]) and building_hash == _hand_hash(_layers()[4])
-	if not preserved or not downstream_stale or _layers()[3].procedural_stale:
-		push_error("Five-stage preservation check failed: hands preserved=%s, detail went stale=%s" % [preserved, downstream_stale]); _finish_headless(false); return
-	if tint_host != null and not await _cook_tint(): _finish_headless(false); return
-	if not await _cook_materials(): _finish_headless(false); return
-	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, 1.0)
-	if not _full_compiled.get("ok", false): _finish_headless(false); return
-	if not await _install_runtime(): _finish_headless(false); return
-	var saved := StrataStorage.save_all(terrain)
-	if not saved.ok: push_error(saved.message)
-	else: print("ISLAND_PREPARED ", saved.message)
-	_finish_headless(saved.ok)
+	var ok := preserved and downstream_stale and not _layers()[3].procedural_stale
+	if not ok: push_error("Five-stage preservation check failed: hands preserved=%s, detail went stale=%s" % [preserved, downstream_stale])
+	print("ISLAND_FIVE_STAGE_%s" % ("PASS" if ok else "FAIL"))
+	_finish_headless(ok)
 
 
 ## Cooks only the materials against the saved layers and writes the control maps.
@@ -362,6 +383,7 @@ func _load_rough_base() -> bool:
 	return layer.data.replace_dense(&"height", Vector2i.ZERO, image)
 
 
+## Fixture strokes for [method _five_stage_check]; not an authoring tool and never saved.
 func _make_hand_edits() -> void:
 	var fine := _layers()[2]; fine.data.sample_spacing = 2.0; fine.set_composition(&"height", StrataLayer.Composition.ADD)
 	StrataBrush.apply_brush(fine, PAD + Vector2(170.0, -70.0), 85.0, 18.0, "raise")

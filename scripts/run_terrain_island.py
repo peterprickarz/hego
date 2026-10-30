@@ -5,9 +5,12 @@ The island's data lives at fixed paths under demo/island/terrain (see StrataStor
 file per hand layer, one per cooked channel, plus the bake and material control maps. A
 cook overwrites its files in place. The headless modes below cook into those files:
 
-  --prepare         rough base -> coarse -> hand edits -> detail -> tint -> materials, then save
-  --cook-materials  only the material distribution, against the saved layers
-  --verify          reopen the saved island headlessly without starting Houdini
+  --prepare           rough base -> coarse -> detail -> tint -> materials from the saved hand
+                      layers, then save (overwrites the stage files in place)
+  --cook-materials    only the material distribution, against the saved layers
+  --five-stage-check  ARTIFICIAL FIXTURE: scripted strokes stand in for hand edits to check the
+                      five-stage preservation contract; cooks in memory, saves nothing
+  --verify            reopen the saved island headlessly without starting Houdini
 """
 from pathlib import Path
 import argparse
@@ -26,8 +29,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--godot", default=os.environ.get("GODOT_BIN", GODOT))
     modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--prepare", action="store_true", help="cook every stage from the rough base and save all layers to storage")
+    modes.add_argument("--prepare", action="store_true", help="recook every stage from the rough base and the saved hand layers, then save")
     modes.add_argument("--cook-materials", action="store_true", help="cook only the material distribution against the saved layers")
+    modes.add_argument("--five-stage-check", action="store_true", help="artificial fixture: scripted hand edits + recooks checking the preservation contract; saves nothing")
     modes.add_argument("--verify", action="store_true", help="reopen the saved island headlessly without starting Houdini")
     modes.add_argument("--editor", action="store_true", help="open scenes/terrain_island.tscn in the main demo editor")
     modes.add_argument("--stage-only", action="store_true", help="validate the installed main-demo addons without launching")
@@ -44,7 +48,7 @@ def main():
     terrain_library = ROOT / "demo/addons/strata/bin/libstrata.linux.template_debug.x86_64.so"
     if not terrain_library.is_file(): parser.error("Build the Strata library first: scripts/build-terrain.sh")
     if args.quit_after_frames is not None and args.quit_after_frames < 1: parser.error("--quit-after-frames must be positive")
-    headless = args.prepare or args.cook_materials or args.verify
+    headless = args.prepare or args.cook_materials or args.five_stage_check or args.verify
     diagnostic_view = args.capture_view != "overview" or args.show_ownership
     diagnostic_run = bool(args.capture or diagnostic_view or args.quit_after_frames is not None)
     if diagnostic_run and (args.editor or args.stage_only or headless):
@@ -70,6 +74,7 @@ def main():
     extra = []
     if args.prepare: extra.append("--prepare-island")
     if args.cook_materials: extra.append("--cook-materials")
+    if args.five_stage_check: extra.append("--five-stage-check")
     if args.verify: extra.append("--verify")
     if args.capture:
         args.capture.parent.mkdir(parents=True, exist_ok=True)
