@@ -38,7 +38,7 @@ Properties
    +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
    | ``Array``                                   | :ref:`input_stash<class_HEGoNode3D_property_input_stash>`       |                             |
    +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
-   | :ref:`HEGoAssetAgent<class_HEGoAssetAgent>` | :ref:`agent<class_HEGoNode3D_property_agent>`                   | ``new(...)``                |
+   | :ref:`HEGoAssetAgent<class_HEGoAssetAgent>` | :ref:`agent<class_HEGoNode3D_property_agent>`                   | ``<unknown>``               |
    +---------------------------------------------+-----------------------------------------------------------------+-----------------------------+
 
 .. rst-class:: classref-reftable-group
@@ -174,7 +174,7 @@ References to the Godot nodes wired into the HDA's inputs, one entry per input.
 
 .. rst-class:: classref-property
 
-:ref:`HEGoAssetAgent<class_HEGoAssetAgent>` **agent** = ``new(...)`` :ref:`🔗<class_HEGoNode3D_property_agent>`
+:ref:`HEGoAssetAgent<class_HEGoAssetAgent>` **agent** = ``<unknown>`` :ref:`🔗<class_HEGoNode3D_property_agent>`
 
 The tedious parts of driving an HDA. Everything it does is an ordinary call on :ref:`HEGoAssetNode<class_HEGoAssetNode>`; see :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`.
 

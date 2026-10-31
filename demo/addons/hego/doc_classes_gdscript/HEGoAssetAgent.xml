@@ -25,7 +25,7 @@ func cook() -&gt; void:
     mesh = meshes.values()[0] if not meshes.is_empty() else null
     parm_stash = await agent.save_parameters(fence)
 [/codeblock]
- Everything the HDA does is still an ordinary call on [HEGoAssetNode], in the order the script writes it. The agent never stands between the two.
+Everything the HDA does is still an ordinary call on [HEGoAssetNode], in the order the script writes it. The agent never stands between the two.
 	</description>
 	<tutorials>
 	</tutorials>

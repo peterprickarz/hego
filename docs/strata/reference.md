@@ -74,10 +74,13 @@ properties (the *Regions* group) set them:
 `StrataBake` takes both from the terrain unless its options say otherwise, so a bake of the
 default settings uses the regions you see in the editor.
 
-Memory: with materials, a 256-cell region at 1 m is about 0.9 MB of video memory (height
-0.27 MB, material IDs 0.27 MB, material weights 0.27 MB, holes 0.07 MB, tint 0.04 MB) plus
-a CPU copy for sampling. A 4 km terrain at 1 m is 256 regions, about
-235 MB. Halving `region_spacing` quadruples that; doubling it divides it by four.
+Memory: with materials, a 256-cell region at 1 m is about 0.9 MB of video memory at full
+resolution (height 0.27 MB, material IDs 0.27 MB, material weights 0.27 MB, holes 0.07 MB,
+tint 0.04 MB) plus a CPU copy for sampling. Only the regions near the camera are held at
+full resolution: farther regions use a reduced level and the rest of the terrain draws from
+one coarse map set, so resident video memory depends on the streaming budgets, not on the
+terrain size (about 48 MB for the 4 km island, about 51 MB for an 8 km terrain at 1 m).
+Halving `region_spacing` quadruples the size of each region's data on disk.
 
 ## Bridge attributes
 
@@ -235,7 +238,7 @@ All are binary `.res` resources, written through a temporary `<name>~.res` file.
 | Brush dab | 65,536 samples of the layer's grid; radius up to 4096 m |
 | Materials | 32 per terrain, at most four blended at any point |
 | Terrain bounds | square, with a side of 8 m × a power of two (8 m to 32 km at the default render quality; the factor is the quality's minimum patch size); non-square or other sizes are not drawn |
-| Regions | 4096 cells per side at most, and no more regions than the graphics device has texture array layers; every region is resident, so video memory is the practical limit |
+| Regions | 4096 cells per side at most and at most 1,048,576 regions; resident regions are bounded by the streaming slots (25 near and 256 far by default), which must not exceed the graphics device's texture array layers |
 | Precomputed control maps | `editor_control_ids` and `editor_control_weights` are at most 1025 texels per side; region composition has no such limit |
 | Baked tint and AO map | at most 4097 texels per side: the default 4 m spacing covers terrains up to 16 km, a larger terrain needs a coarser `macro` spacing |
 | Bake | 512 MiB in total for all regions and their detail levels |

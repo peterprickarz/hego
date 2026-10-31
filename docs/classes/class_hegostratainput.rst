@@ -19,7 +19,7 @@ Sends Strata layers to HDA inputs as heightfield volumes.
 Description
 -----------
 
-HEGo finds this handler because it extends :ref:`HEGoInputHandler<class_HEGoInputHandler>`; neither HEGo nor the terrain addon names the other. A layer is sent either cumulatively (the composed terrain through that layer) or raw (its own values plus separate binary ownership), with the channels and spacing set in the input's settings: terrain_mode, terrain_channels, terrain_spacing, terrain_channel_spacings, terrain_max_samples and terrain_compact_empty. A host with a terrain input cooks only on request, and strictly: an input that cannot be sent fails the cook.
+HEGo finds this handler because it extends :ref:`HEGoInputHandler<class_HEGoInputHandler>`; neither HEGo nor the terrain addon names the other. A layer is sent either cumulatively (the composed terrain through that layer) or raw (its own values plus separate binary ownership), with the channels and spacing set in the input's settings: terrain_mode, terrain_channels, terrain_spacing, terrain_channel_spacings, terrain_max_samples, terrain_compact_empty and terrain_bounds (a Rect2 in terrain-local metres: the lattice covers it instead of the terrain's bounds, as a tiled cook sends one tile at a time). A host with a terrain input cooks only on request, and strictly: an input that cannot be sent fails the cook.
 
 .. rst-class:: classref-reftable-group
 

@@ -227,16 +227,7 @@ are built for the island's four materials, and make good templates for your own:
 | --- | --- | --- |
 | `HEGo_IslandErosion` | cumulative `height`; optionally the raw `height` and `constraint` of a later hand layer, which it protects and blends toward | `height`, `erosion_delta`, `sediment`, `debris`, `flow`, `grass`, `rock`, `sand`, `scree`, `footpath`, plus one `material_<name>` weight per material |
 | `HEGo_TerrainTint` | cumulative `height` | `terrain_tint_r`, `terrain_tint_g`, `terrain_tint_b`, `terrain_ao` |
-| `HEGo_MaterialDistribution` | cumulative `height` | one `material_<name>` weight per material, summing to 1 | The material HDA works on the terrain's own lattice, up to 4097 samples per axis, and writes every output on exactly the lattice it receives; a 4097-sample cook takes about 75 s and about 12 GB of memory. Transitional: the island still composes and sends the material height at 4 m (1025 samples) until the Godot-side region work lands.
-
-`footpath` is a trail network: least-cost paths over the final height join a handful of
-seeded waypoints into one connected network, and water and steep ground are never part of it.
-It is 1 on the trail centreline and falls to 0 at the edges, so a navigation profile can use
-it as `{"channel": "footpath", "min": 0.5}` (see
-[navigation profiles](getting_started.md#navigation-profiles)). The *Footpaths* parameters
-control it:
-
-| Parameter | Default | Meaning |
+| `HEGo_MaterialDistribution` | cumulative `height` | one `material_<name>` weight per material, summing to 1 | The material HDA works on the terrain's own lattice, up to 4097 samples per axis, and writes every output on exactly the lattice it receives; a 4097-sample cook takes about 75 s and about 12 GB of memory. The island sends it at the terrain's 1 m spacing (4097 samples); a lattice above 4097 samples per axis is cooked in overlapping tiles and published as one result (see the development notes on the material distribution). | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `footpaths` | on | compute the channel; off still outputs it, all 0 |
 | `footpath_count` | 8 | waypoints joined into the network |

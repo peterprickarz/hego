@@ -42,7 +42,7 @@ Using one is optional. Every method below is a short sequence of ordinary :ref:`
         mesh = meshes.values()[0] if not meshes.is_empty() else null
         parm_stash = await agent.save_parameters(fence)
 
- Everything the HDA does is still an ordinary call on :ref:`HEGoAssetNode<class_HEGoAssetNode>`, in the order the script writes it. The agent never stands between the two.
+Everything the HDA does is still an ordinary call on :ref:`HEGoAssetNode<class_HEGoAssetNode>`, in the order the script writes it. The agent never stands between the two.
 
 .. rst-class:: classref-reftable-group
 

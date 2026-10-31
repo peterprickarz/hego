@@ -1,8 +1,10 @@
 # Terrain renderer: regions
 
-Track R of [the regions plan](strata_regions_plan.md). Phase A: every region is resident at level 0;
-Phase B (Track R2, [Residency tiers](#residency-tiers-phase-b)) adds the far and coarse tiers and the
-slot API on top, and is off unless a residency is passed.
+Track R of [the regions plan](strata_regions_plan.md). Without a residency (the default of
+`set_regions`, used by tests and small terrains) every region is resident at level 0; with one
+([Residency tiers](#residency-tiers-phase-b)) the renderer holds near regions at level 0, far
+regions at a mip level and draws the rest from the coarse maps, which is how the island and
+large terrains run.
 `StrataRenderer` keeps one `Texture2DArray` per map with a layer per region, a region table
 texture, and the CPU `StrataRegionData` of each region. The shader addresses height, material
 controls, cell holes and the macro tint through them. Whole-terrain images are still accepted
@@ -260,7 +262,7 @@ stays until the next layout change.
 
 Plan layout per region at 256 cells, apron 2: height RF 261 x 261 x 4 = 272,484 bytes; material
 ids RGBA8 272,484; weights RGBA8 272,484; holes L8 258 x 258 = 66,564; macro RGBAH at scale 4
-(67 x 67 x 8) = 35,912; about 235 MB for the 16 x 16 island.
+(67 x 67 x 8) = 35,912; about 235 MB for the 16 x 16 island with every region resident, about 48 MB with the default residency (25 near, the rest far or coarse).
 
 Measured through the adapters on the saved island (`renderer.get_stats().region_bytes`): 464,740
 bytes per region, 113.5 MB for 256 regions. The 1025-texel control maps become scale 4 with apron 1

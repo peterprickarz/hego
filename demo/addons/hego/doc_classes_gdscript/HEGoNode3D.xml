@@ -104,7 +104,7 @@
 		<member name="input_stash" type="Array" setter="" getter="">
 			References to the Godot nodes wired into the HDA's inputs, one entry per input.
 		</member>
-		<member name="agent" type="HEGoAssetAgent" setter="" getter="" default="new(...)">
+		<member name="agent" type="HEGoAssetAgent" setter="" getter="" default="&lt;unknown&gt;">
 			The tedious parts of driving an HDA. Everything it does is an ordinary call on [HEGoAssetNode]; see [HEGoAssetAgent].
 		</member>
 	</members>
