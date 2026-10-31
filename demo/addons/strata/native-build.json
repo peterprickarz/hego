@@ -1,29 +1,29 @@
 {
   "format_version": 1,
-  "source_fingerprint": "087845611dd6e9cecb31ce45eb988e4f403d0c19ac51f30c3d2a41a24953046c",
+  "source_fingerprint": "9a26477e9dc14690ac19b0e02c9335b8d938b7ff170256f46cd0179343185a11",
   "artifacts": {
     "bin/libstrata.linux.template_debug.x86_64.so": {
-      "sha256": "6df57aec45b63f23e613f9580f2ec14a3a0ed15d6281cf794151bc2279a47a8d",
+      "sha256": "de485d38c39bde148b6a7b1ce02bca0eca25bd608729d725702fbf7aa866f56c",
       "build_context": "platform=linux,target=template_debug,arch=x86_64,profile=linux-compat,compiler=g++ (GCC) 13.3.1 20240611 (Red Hat 13.3.1-2);image=357022fee6beedf4d260b5ee6d085df044f4a615c7b18469293570ee490b7e45,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/libstrata.linux.template_release.x86_64.so": {
-      "sha256": "a5f76d2d086ef2ca8a592187d76c3a7136f7a0a9658bc4ca896e649d73aa7ef3",
+      "sha256": "ce72395872e3c2fb08775769a8d377f5bfa32c69d4985806eb3ef523226a376b",
       "build_context": "platform=linux,target=template_release,arch=x86_64,profile=linux-compat,compiler=g++ (GCC) 13.3.1 20240611 (Red Hat 13.3.1-2);image=357022fee6beedf4d260b5ee6d085df044f4a615c7b18469293570ee490b7e45,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/libstrata.macos.template_debug.dylib": {
-      "sha256": "977e3d6ea5d40b758e4b0a2de8f32ee5341157307fa582c9b2f0c9184a8edb55",
+      "sha256": "92293d98536c8c88744d1c50ec6fc6707cfc48357885ccc05fd9f3164995cd36",
       "build_context": "platform=macos,target=template_debug,arch=universal,profile=macos,compiler=clang version 22.1.8 (Fedora 22.1.8-4.fc44),godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/libstrata.macos.template_release.dylib": {
-      "sha256": "22d8b6050d050624bf6f6561cd42ae6b172ba70898092f47e3c8d4214c2efca9",
+      "sha256": "8af709efcc9d13d384af95936b72db2fae5a3f1ad7a1c6425149e9d860140aa9",
       "build_context": "platform=macos,target=template_release,arch=universal,profile=macos,compiler=clang version 22.1.8 (Fedora 22.1.8-4.fc44),godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/strata.windows.template_debug.x86_64.dll": {
-      "sha256": "7d593ec98f5662917253540bcb7a2d18029e4f546d3ee77061b75ccac1cdc0f7",
+      "sha256": "a180afd877d81b7bd9a83407ce59101bfa1524b9ad037a8db54c3203ae20a0d3",
       "build_context": "platform=windows,target=template_debug,arch=x86_64,profile=windows,compiler=x86_64-w64-mingw32-g++ (GCC) 16.2.1 20260819 (Fedora MinGW 16.2.1-1.fc44),godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/strata.windows.template_release.x86_64.dll": {
-      "sha256": "36a433dff935d7a589ca53a75f78f0e1c763bd4609908a30040342c35b61434b",
+      "sha256": "2fba3d2b8aecf4435f7242ca9ccaf1fb53373de25644bb43d2beb1216bcb78b0",
       "build_context": "platform=windows,target=template_release,arch=x86_64,profile=windows,compiler=x86_64-w64-mingw32-g++ (GCC) 16.2.1 20260819 (Fedora MinGW 16.2.1-1.fc44),godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     }
   }
