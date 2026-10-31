@@ -48,7 +48,7 @@ func _enter_tree() -> void:
 	_channel.text = "height"
 	_channel.placeholder_text = "Channel"
 	_channel.custom_minimum_size.x = 160.0
-	_channel.tooltip_text = "Named scalar channel. Type a new name or pick an existing one from the list. Show channel displays values. hole/nav_exclusion: Raise=1, Lower=0, Erase=reveal."
+	_channel.tooltip_text = "Named scalar channel. Type a new name or pick an existing one from the list. Show channel displays values. hole/nav_exclusion: Raise=1, Lower=0, Erase=reveal. Material channels paint coverage: Raise/Lower move that material's share of the mix, Erase reveals the materials below."
 	_toolbar.add_child(_channel)
 	_channel.text_changed.connect(_apply_channel)
 	_channel_menu = MenuButton.new()
@@ -224,7 +224,7 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 			return AFTER_GUI_INPUT_STOP
 		_stroke_layer = _layer
 		_stroke_records = []
-		_flatten = (_layer.get_parent() as StrataTerrain3D).sample_channel(StringName(_channel.text), hit.local_position, _layer)
+		_flatten = StrataBrush.flatten_target(_layer, StringName(_channel.text), hit.local_position)
 		_last_point = Vector2(INF, INF)
 		_dab(hit.local_position)
 		return AFTER_GUI_INPUT_STOP
@@ -288,7 +288,10 @@ func _dab(point: Vector2) -> void:
 	var operation := _operation.get_item_text(_operation.selected).to_lower()
 	var grid := StrataBrush.candidate_grid(_stroke_layer, point, _radius.value)
 	if grid.is_empty(): return
-	var record := StrataBrush.begin_record(_stroke_layer.data, channel, grid)
+	# A material dab writes every material channel, so undo must capture all of them.
+	var records: Array = []
+	for written in StrataBrush.written_channels(_stroke_layer, channel):
+		records.append(StrataBrush.begin_record(_stroke_layer.data, written, grid))
 	var touched: int
 	if channel in [&"hole", &"nav_exclusion"] and operation != "erase":
 		if operation not in ["raise", "lower"]:
@@ -300,7 +303,9 @@ func _dab(point: Vector2) -> void:
 		touched = _paint_binary(point, 1.0 if operation == "raise" else 0.0, channel)
 	else:
 		touched = StrataBrush.apply_brush(_stroke_layer, point, _radius.value, _strength.value, operation, channel, _flatten)
-	if touched > 0 and StrataBrush.finish_record(_stroke_layer.data, record): _stroke_records.append(record)
+	if touched > 0:
+		for record in records:
+			if StrataBrush.finish_record(_stroke_layer.data, record): _stroke_records.append(record)
 	_status.text = "%d touched samples" % touched if touched > 0 else "No samples changed; check layer, strength or channel"
 	if touched > 0 and is_instance_valid(bridge): bridge.refresh_region(point, _radius.value, _stroke_layer.data.sample_spacing, StringName(_channel.text), can_patch)
 

@@ -83,6 +83,8 @@ static func apply_brush(layer: StrataLayer, position: Vector2, radius: float, st
 	if _exceeds_sample_limit(grid):
 		push_warning(sample_limit_message(layer, position, radius))
 		return 0
+	if is_material_channel(layer, channel):
+		return _erase_material_channels(layer, position, radius, grid) if operation == "erase" else _apply_material_brush(layer, position, radius, strength, operation, channel, flatten_height, grid)
 	var first: Vector2i = grid.first
 	var last: Vector2i = grid.last
 	var target_flat := terrain.sample_channel(channel, position, layer) if is_nan(flatten_height) else flatten_height
@@ -134,6 +136,155 @@ static func apply_brush(layer: StrataLayer, position: Vector2, radius: float, st
 		return 0
 	var written: bool = data.erase_dense(channel, first, mask) if operation == "erase" else data.patch_dense(channel, first, values, mask)
 	return count if written else 0
+
+
+# ─────────────────────────────────────────────
+# Material weight channels
+#
+# The renderer keeps the four strongest materials at each point and normalizes their
+# weights, so a weight only means something relative to the others. Adding metres to one
+# channel therefore never converges: a weight pushed to 100 by many dabs makes a later 0.6
+# dab of another material invisible. Material channels (the terrain's
+# editor_material_channels) paint coverage instead: the dab moves the painted material's
+# share of the mix toward its target at a rate of strength × falloff and rescales the other
+# materials so the shares still sum to one. Every material channel is written at the touched
+# samples, so the layer owns the complete mix there and nothing below can shift it.
+# ─────────────────────────────────────────────
+
+## True when [param channel] is one of the terrain's material weight channels.
+static func is_material_channel(layer: StrataLayer, channel: StringName) -> bool:
+	if not is_instance_valid(layer): return false
+	var terrain := layer.get_parent() as StrataTerrain3D
+	return terrain != null and terrain.editor_material_channels.has(String(channel))
+
+## The channels one dab on [param channel] writes or erases: every material channel for a
+## material channel, otherwise the channel itself. Undo records must cover all of them.
+static func written_channels(layer: StrataLayer, channel: StringName) -> Array[StringName]:
+	var result: Array[StringName] = []
+	if is_material_channel(layer, channel):
+		for name in (layer.get_parent() as StrataTerrain3D).editor_material_channels: result.append(StringName(name))
+	else: result.append(channel)
+	return result
+
+## The value Flatten pulls toward when a stroke starts at [param position]: the material's
+## share of the mix (0 to 1) for a material channel, the composed value otherwise.
+static func flatten_target(layer: StrataLayer, channel: StringName, position: Vector2) -> float:
+	if not is_instance_valid(layer) or not position.is_finite(): return NAN
+	var terrain := layer.get_parent() as StrataTerrain3D
+	if terrain == null: return NAN
+	if is_material_channel(layer, channel): return _material_share(terrain, layer, channel, position)
+	return terrain.sample_channel(channel, position, layer)
+
+## [param channel]'s share of the material weights composed through [param layer] at
+## [param position]; 0 where no material has any weight.
+static func _material_share(terrain: StrataTerrain3D, layer: StrataLayer, channel: StringName, position: Vector2) -> float:
+	var total := 0.0
+	var own := 0.0
+	for name in terrain.editor_material_channels:
+		var value := maxf(0.0, terrain.sample_channel(StringName(name), position, layer))
+		total += value
+		if StringName(name) == channel: own = value
+	return own / total if total > 0.0 else 0.0
+
+static func _apply_material_brush(layer: StrataLayer, position: Vector2, radius: float, strength: float, operation: String, channel: StringName, flatten_share: float, grid: Dictionary) -> int:
+	if operation not in ["raise", "lower", "flatten", "smooth"]: return 0
+	var terrain := layer.get_parent() as StrataTerrain3D
+	var data := layer.data
+	var spacing: float = data.sample_spacing
+	var origin: Vector2 = data.grid_origin
+	var channels: PackedStringArray = terrain.editor_material_channels
+	var own := channels.find(String(channel))
+	var first: Vector2i = grid.first
+	var last: Vector2i = grid.last
+	var values: Array[Image] = []
+	for index in range(channels.size()): values.append(Image.create(grid.width, grid.height, false, Image.FORMAT_RF))
+	var mask := Image.create(grid.width, grid.height, false, Image.FORMAT_RF)
+	var count := 0
+	for z in range(first.y, last.y + 1):
+		for x in range(first.x, last.x + 1):
+			var point := origin + Vector2(x, z) * spacing
+			if not terrain.contains_position(point): continue
+			var distance := point.distance_to(position)
+			if distance >= radius: continue
+			var influence := 1.0 - smoothstep(0.0, 1.0, distance / radius)
+			if influence <= 0.0: continue
+			var rate := clampf(strength * influence, 0.0, 1.0)
+			# The complete mix as composed through this layer before the dab; a negative
+			# weight somewhere below counts as none.
+			var current := PackedFloat32Array()
+			var total := 0.0
+			for name in channels:
+				var value := maxf(0.0, terrain.sample_channel(StringName(name), point, layer))
+				current.append(value)
+				total += value
+			var share := current[own] / total if total > 0.0 else 0.0
+			var target := share
+			match operation:
+				"raise": target = 1.0
+				"lower": target = 0.0
+				"flatten": target = clampf(flatten_share, 0.0, 1.0) if not is_nan(flatten_share) else share
+				"smooth":
+					var sum := 0.0
+					var neighbours := 0
+					for offset in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
+						var neighbour: Vector2 = point + offset * spacing
+						if terrain.contains_position(neighbour):
+							sum += _material_share(terrain, layer, channel, neighbour)
+							neighbours += 1
+					if neighbours > 0: target = sum / neighbours
+			var desired := lerpf(share, target, rate)
+			# The other materials keep their proportions. Once a material was saturated the
+			# layer holds exact zeros for the rest, so their proportions come from the stack
+			# below the layer: lowering then reveals that mix again.
+			var proportions := current
+			var others := total - current[own]
+			if others <= 0.0:
+				proportions = PackedFloat32Array()
+				others = 0.0
+				for index in range(channels.size()):
+					var below := maxf(0.0, terrain.sample_below(StringName(channels[index]), point, layer)) if index != own else 0.0
+					proportions.append(below)
+					others += below
+			for index in range(channels.size()):
+				var value: float
+				if index == own: value = desired
+				elif others > 0.0: value = proportions[index] * (1.0 - desired) / others
+				else: value = 0.0
+				if layer.get_composition(StringName(channels[index])) == StrataLayer.Composition.ADD:
+					value -= terrain.sample_below(StringName(channels[index]), point, layer)
+				values[index].set_pixel(x - first.x, z - first.y, Color(value, 0.0, 0.0, 1.0))
+			mask.set_pixel(x - first.x, z - first.y, Color(1.0, 0.0, 0.0, 1.0))
+			count += 1
+	if count == 0:
+		return 0
+	for index in range(channels.size()):
+		if not data.patch_dense(StringName(channels[index]), first, values[index], mask): return 0
+	return count
+
+## Releases the layer's samples of every material channel inside the dab, so the mix below
+## shows through. Returns the number of distinct samples released.
+static func _erase_material_channels(layer: StrataLayer, position: Vector2, radius: float, grid: Dictionary) -> int:
+	var terrain := layer.get_parent() as StrataTerrain3D
+	var data := layer.data
+	var first: Vector2i = grid.first
+	var last: Vector2i = grid.last
+	var masks := {}
+	var released := {}
+	for name in terrain.editor_material_channels:
+		var mask := Image.create(grid.width, grid.height, false, Image.FORMAT_RF)
+		var any := false
+		for z in range(first.y, last.y + 1):
+			for x in range(first.x, last.x + 1):
+				var index := Vector2i(x, z)
+				var point: Vector2 = data.grid_origin + Vector2(index) * data.sample_spacing
+				if not terrain.contains_position(point) or point.distance_to(position) >= radius or not data.has_sample(StringName(name), index): continue
+				mask.set_pixel(x - first.x, z - first.y, Color(1.0, 0.0, 0.0, 1.0))
+				any = true
+				released[index] = true
+		if any: masks[name] = mask
+	for name in masks:
+		if not data.erase_dense(StringName(name), first, masks[name]): return 0
+	return released.size()
 
 
 # ─────────────────────────────────────────────

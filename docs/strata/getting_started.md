@@ -62,9 +62,9 @@ The toolbar:
 
 | Control | What it does |
 | --- | --- |
-| Operation | **Raise** and **Lower** add or subtract `strength` metres at the centre, falling off smoothly to the edge. **Flatten** pulls toward the value under the point where the stroke started. **Smooth** pulls toward the average of neighbouring samples. **Erase** releases the samples, so this layer stops overriding and the layers below show through. |
+| Operation | **Raise** and **Lower** add or subtract `strength` metres at the centre, falling off smoothly to the edge. **Flatten** pulls toward the value under the point where the stroke started. **Smooth** pulls toward the average of neighbouring samples. **Erase** releases the samples, so this layer stops overriding and the layers below show through. On a material weight channel the same operations paint coverage instead; see [Materials](#materials). |
 | Radius | In metres, up to 4096. One dab touches at most 65,536 samples of the layer's grid; if a radius is too large for the layer's spacing, the toolbar says so and suggests a radius, or a new, coarser layer. |
-| Strength | How much each dab changes. |
+| Strength | How much each dab changes: metres for `height` and other scalar channels, the share moved (0 to 1) for material channels. |
 | Channel | The channel to paint, `height` by default. The **▾** menu next to the field lists the channels this terrain already has: `height`, the material weight channels (with their material names), the `hole` and `nav_exclusion` masks, and anything the layers hold or cook. Type a name to paint a channel that does not exist yet. |
 | Show overrides | Tints in orange every sample the selected layer owns in that channel, including samples whose value happens to equal the ground below. |
 | Show channel | Shows the channel's values in greyscale. The geometry is always the height. |
@@ -126,7 +126,19 @@ you paint or cook like any other.
    `material_sand`, `material_grass`, `material_rock`.
 4. **Paint the weights.** Select a manual layer, pick the material from the brush's
    **Channel ▾** menu (it lists every material channel with its material name) and
-   **Raise** it where that material should appear. Weights must stay zero or positive.
+   **Raise** it where that material should appear.
+
+On a material channel the brush paints coverage rather than metres, because only the
+materials' relative weights matter. Each dab moves the painted material's share of the mix
+toward 100 % (**Raise**) or 0 % (**Lower**) by `strength × falloff`, so a strength of 0.6
+gives a 60 % share at the centre of the first dab and repeated dabs converge on 100 % without
+ever overshooting. The other materials shrink or grow in proportion so the shares still sum
+to one, **Flatten** pulls toward the share under the point where the stroke started,
+**Smooth** toward the neighbours' share, and **Erase** releases every material channel of the
+layer inside the dab so the materials below show through. A material dab writes all material
+channels at the samples it touches, so the layer owns the complete mix there and a later
+procedural recook below cannot shift it. Weights never become negative this way; a negative
+weight anywhere in the stack would leave the whole terrain unassigned.
 
 The editor composes the material channels through the stack on a 4 m grid, keeps the four
 strongest materials at each point and normalizes their weights; the renderer then blends
