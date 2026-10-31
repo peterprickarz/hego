@@ -21,8 +21,8 @@ From the bottom of the stack to the top:
 
 `MaterialDistribution` is last only in the shipped island. It reads the stack directly below
 it, so you can add a manual layer above it and paint the four `material_*` channels by hand
-(for example to touch up a path or a beach). The terrain's material controls then compose
-your hand weights over the Houdini result, and a recook of `MaterialCook` never reads that
+(for example to touch up a path or a beach). The terrain's material maps are composed from
+the whole stack, region by region at 1 m, so your hand weights win over the Houdini result, and a recook of `MaterialCook` never reads that
 layer back.
 
 The `HEGoNode3D` nodes that cook them sit under `HDA`: `CoarseCook`, `DetailCook`,
@@ -71,7 +71,9 @@ example `~/houdini22.0/packages/hego.json`:
 Then select a host under `HDA` and press **Recook** in the HEGo panel. Each publishes into
 the layer its `target_layer_path` parameter names and overwrites that layer's files. To
 rebuild the whole island, cook `CoarseCook`, `DetailCook`, `TintCook` and `MaterialCook` in
-that order. Save the scene afterwards.
+that order. Save the scene afterwards. `MaterialCook` reads the island at 1 m (4097 by 4097
+samples); the cook takes about a minute and a half and needs around 12 GB of memory. Your
+hand-painted layers are never recooked or overwritten.
 
 ## Things to try
 

@@ -14,12 +14,10 @@ func _configure_stage_materials() -> void:
 
 func _ready() -> void:
 	var terrain := get_node("Terrain") as StrataTerrain3D
-	if terrain.get_node_or_null(HEGoIslandMaterials.LAYER) != null:
-		var binding := Node.new()
-		binding.set_script(load("res://island/island_material_binding.gd"))
-		binding.name = "MaterialControlsBinding"
-		add_child(binding, false, Node.INTERNAL_MODE_BACK)
-		binding.setup(terrain)
+	# Materials need no binding: the editor preview composes the material maps from the stack
+	# (editor_material_channels), manual layers above the procedural pass included.
+	if terrain.editor_material_channels.is_empty() and terrain.get_node_or_null(HEGoIslandMaterials.LAYER) != null:
+		terrain.editor_material_channels = HEGoIslandMaterials.channels()
 	if Engine.is_editor_hint(): return
 	var camera := get_node("Camera") as Camera3D
 	var view := StrataEditorPreview.new()

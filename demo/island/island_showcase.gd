@@ -4,7 +4,7 @@ extends Node3D
 ## scene and its storage directory and never cooks; every Houdini cook is a button.
 ##
 ## The terrain's data lives at fixed paths under its storage directory (see StrataStorage):
-## one file per hand layer, one per cooked channel, plus the bake and material control maps.
+## one file per hand layer, one per cooked channel, plus the region bake (manifest and region files).
 ## A cook overwrites its layer's files; nothing here creates dated folders or manifests.
 
 signal showcase_ready
@@ -30,6 +30,10 @@ var ready_for_capture := false
 var selected := 4
 var _compiled: Dictionary = {}
 var _full_compiled: Dictionary = {}
+## The manifest the renderer was configured from, and the regions it holds as private copies
+## (stage views and brush dabs edit copies, never the baked regions).
+var _bound_data: StrataRuntimeData
+var _private_regions: Dictionary = {}
 var _contract: Dictionary = {}
 var _tint_contract: Dictionary = {}
 var _material_contract: Dictionary = {}
@@ -72,14 +76,8 @@ func _ready() -> void:
 		var attached := HEGoIslandMaterials.attach(self, _material_contract)
 		if not attached.ok: push_error(attached.message); return
 		material_host = attached.host
+		if terrain.editor_material_channels.is_empty(): terrain.editor_material_channels = HEGoIslandMaterials.channels()
 	_configure_hosts()
-	# Packs the control maps whenever the material distribution commits a cook.
-	if terrain.get_node_or_null(HEGoIslandMaterials.LAYER) != null and get_node_or_null("MaterialControlsBinding") == null:
-		var binding := Node.new()
-		binding.set_script(load("res://island/island_material_binding.gd"))
-		binding.name = "MaterialControlsBinding"
-		add_child(binding, false, Node.INTERNAL_MODE_BACK)
-		binding.setup(terrain)
 	if Engine.is_editor_hint():
 		terrain.preview_spacing = 32.0
 		return
@@ -88,6 +86,9 @@ func _ready() -> void:
 		if argument == "--show-ownership": _capture_ownership = true
 		if argument.begins_with("--capture="): _capture = argument.trim_prefix("--capture=")
 		if argument.begins_with("--quit-after-frames="): _quit_frames = int(argument.trim_prefix("--quit-after-frames="))
+	# Tests set this meta so a bake they trigger is published in memory only (a stack that
+	# differs from the saved bake would otherwise rewrite runtime_data.res and regions/).
+	if Engine.has_meta("island_no_save") or OS.get_cmdline_user_args().has("--no-save"): terrain.storage_directory = ""
 	if OS.get_cmdline_user_args().has("--prepare-island"):
 		await _prepare_island()
 		return
@@ -102,7 +103,7 @@ func _ready() -> void:
 		push_error("The saved island has no rough base; run scripts/run_terrain_island.py --prepare first")
 		get_tree().quit(2)
 		return
-	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, 1.0)
+	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, terrain.region_spacing)
 	if not _full_compiled.get("ok", false):
 		push_error("Island height compilation failed: " + str(_full_compiled)); get_tree().quit(2); return
 	_compiled = _full_compiled
@@ -119,17 +120,16 @@ func _ready() -> void:
 	_materials = HEGoIslandMaterials.pool()
 	renderer = StrataRenderer.new(); renderer.name = "IslandRenderer"; terrain.add_child(renderer)
 	renderer.max_patches = 512; renderer.min_patch_size = 8.0; renderer.split_ratio = 1.8
-	if not renderer.configure_compiled_field(terrain, _materials, _compiled):
-		get_tree().quit(2); return
-	if not _ensure_controls(): get_tree().quit(2); return
-	if not renderer.set_control_maps(terrain.editor_control_ids, terrain.editor_control_weights): get_tree().quit(2); return
+	# The runtime renderer is built from the baked manifest (configure_runtime): heights, holes,
+	# macro tint and the material ids/weights all come from regions composed from the stack.
+	if not _bake_runtime(): get_tree().quit(2); return
 	renderer.set_camera(camera); camera.renderer = renderer
 	camera.teleport_to(Vector3(-3000.0, 2000.0, 3300.0), Vector3(-700.0, 80.0, -250.0))
 	_remember_hands()
 	_make_landmarks()
 	_build_ui()
 	_create_cursor()
-	if not await _install_runtime(): get_tree().quit(2); return
+	if not await _install_physics(): get_tree().quit(2); return
 	if _capture_view == "platform":
 		var h := renderer.sample_render_height(PAD)
 		camera.teleport_to(Vector3(PAD.x - 82.0, h + 75.0, PAD.y + 110.0), Vector3(PAD.x + 4.0, h + 1.0, PAD.y))
@@ -165,6 +165,13 @@ func _configure_hosts() -> void:
 		var below := _layers()[tint.get_index() - 1] if tint.get_index() > 0 else null
 		tint_host.asset_name = _tint_contract.operator
 		tint_host.input_stash = [{"inputs": ["../../Terrain/" + String(below.name)] if below != null else [], "settings": {"terrain_mode": "cumulative", "terrain_channels": "height", "terrain_spacing": StrataMacro.DEFAULT_SPACING}}]
+	# The material pass reads the final stack below it at the terrain's region spacing (1 m,
+	# 4097 samples per side), so its fields are the lattice the regions are composed from.
+	if material_host != null and not _material_contract.is_empty():
+		var material_layer := terrain.get_node_or_null(HEGoIslandMaterials.LAYER) as StrataLayer
+		var material_below := HEGoIslandMaterials.layer_below(terrain, material_layer) if material_layer != null else null
+		if material_below != null:
+			material_host.input_stash = [{"inputs": ["../../Terrain/" + String(material_below.name)], "settings": HEGoIslandStageMaterials.input_settings(4.0, {}, true, terrain.region_spacing)}]
 	if _contract.is_empty(): return
 	for index in range(2):
 		var host: HEGoNode3D = hosts[index]
@@ -288,20 +295,25 @@ func _cook_tint(changes: Dictionary = {}) -> bool:
 	return ok
 
 
-## Cooks only the material distribution; the result is packed into the terrain's control
-## maps by the material binding.
+## Cooks only the material distribution at the terrain's region spacing. Nothing is packed:
+## the editor preview and the bake compose the material maps from the committed fields (with
+## any manual layers above them). A result that is not on the terrain lattice is marked stale.
 func _cook_materials() -> bool:
 	if _material_contract.is_empty() or material_host == null: _set_message("This level has no material producer"); return false
 	if not _ensure_houdini(): _set_message("Houdini session could not start; saved materials retained"); return false
 	var target := terrain.get_node_or_null(HEGoIslandMaterials.LAYER) as StrataLayer
 	if target == null: _set_message("The scene has no MaterialDistribution layer"); return false
+	_configure_hosts()
 	var started := Time.get_ticks_usec()
-	_set_message("Cooking material distribution in Houdini…")
+	_set_message("Cooking material distribution in Houdini at %s m…" % String.num(terrain.region_spacing))
 	var result := await HEGoIslandMaterials.cook_explicit(self, material_host, target, _material_contract)
-	# The binding packs the controls on the frame after the commit.
-	await get_tree().process_frame
-	await get_tree().process_frame
-	var ok: bool = result.get("ok", false) and not target.procedural_stale and terrain.editor_control_ids != null
+	var ok: bool = result.get("ok", false) and not target.procedural_stale
+	if ok:
+		var checked := HEGoIslandMaterials.validate(target)
+		if not checked.ok:
+			target.mark_stale(String(checked.message))
+			result = {"message": checked.message}
+			ok = false
 	_set_message("Materials committed in %.1f s" % ((Time.get_ticks_usec() - started) / 1000000.0) if ok else String(result.get("message", "Material cook failed")))
 	return ok
 
@@ -319,14 +331,22 @@ func _cook_materials() -> bool:
 ## are used as saved and never changed here.
 func _prepare_island() -> void:
 	_set_message("Recooking the island's stages from the saved layers")
+	# Every hand-painted layer (ManualFine, BuildingFlatten, the top StrataLayer and any other
+	# non-procedural layer) is saved as loaded; refuse to save if a cook changed one.
+	var hands_before := _all_hand_hashes()
 	if not _load_rough_base(): _finish_headless(false); return
 	for index in [0, 1]:
 		if not await _cook(index): _finish_headless(false); return
 	if tint_host != null and not await _cook_tint(): _finish_headless(false); return
 	if not await _cook_materials(): _finish_headless(false); return
-	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, 1.0)
+	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, terrain.region_spacing)
 	if not _full_compiled.get("ok", false): _finish_headless(false); return
+	var hands_after := _all_hand_hashes()
+	for name in hands_before:
+		if name != String(_layers()[0].name) and hands_after.get(name) != hands_before[name]:
+			push_error("Hand layer %s changed during the recook; nothing was saved" % name); _finish_headless(false); return
 	if not await _install_runtime(): _finish_headless(false); return
+	# Saves the stage channels, the hand layers as loaded, runtime_data.res and regions/.
 	var saved := StrataStorage.save_all(terrain)
 	if not saved.ok: push_error(saved.message)
 	else: print("ISLAND_PREPARED ", saved.message)
@@ -359,10 +379,10 @@ func _five_stage_check() -> void:
 	_finish_headless(ok)
 
 
-## Cooks only the materials against the saved layers and writes the control maps.
+## Cooks only the materials against the saved layers, then rebakes and saves the regions.
 func _cook_materials_headless() -> void:
 	if not await _cook_materials(): _finish_headless(false); return
-	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, 1.0)
+	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, terrain.region_spacing)
 	if not _full_compiled.get("ok", false): _finish_headless(false); return
 	if not await _install_runtime(): _finish_headless(false); return
 	var saved := StrataStorage.save_all(terrain)
@@ -408,6 +428,13 @@ func _make_hand_edits() -> void:
 	building.data.replace_dense(&"nav_exclusion", Vector2i(roundi((PAD.x - 14.0) / 0.25), roundi((PAD.y - 10.0) / 0.25)), exclusion)
 
 
+func _all_hand_hashes() -> Dictionary:
+	var hashes := {}
+	for layer in _layers():
+		if not layer.procedural: hashes[String(layer.name)] = _hand_hash(layer)
+	return hashes
+
+
 func _hand_hash(layer: StrataLayer) -> String:
 	var context := HashingContext.new(); context.start(HashingContext.HASH_SHA256)
 	context.update(var_to_bytes(layer.data.snapshot()))
@@ -422,34 +449,39 @@ func _remember_hands() -> void:
 # Runtime
 # ─────────────────────────────────────────────
 
-## Control maps come from storage when the scene opened; otherwise they are packed from the
-## MaterialDistribution layer's saved fields.
-func _ensure_controls() -> bool:
-	if terrain.editor_control_ids != null and terrain.editor_control_weights != null: return true
-	var layer := terrain.get_node_or_null(HEGoIslandMaterials.LAYER) as StrataLayer
-	if layer == null or layer.procedural_fields.is_empty():
-		push_error("No material controls and no cooked MaterialDistribution; run scripts/run_terrain_island.py --cook-materials")
-		return false
-	var packed := HEGoIslandMaterials.controls(terrain, layer)
-	if not packed.get("ok", false): push_error(String(packed.message)); return false
-	terrain.editor_control_ids = packed.ids; terrain.editor_control_weights = packed.weights
+## Bakes the complete stack into region data (heights, holes, macro tint, material ids and
+## weights composed from the stack at [member StrataTerrain3D.region_spacing]) and, when a
+## renderer exists, builds it from that manifest with configure_runtime. A bake loaded from
+## storage that is still current is reused rather than rebuilt.
+func _bake_runtime() -> bool:
+	var spacing := terrain.region_spacing
+	if terrain.runtime_data == null or terrain.is_runtime_bake_stale():
+		if not _full_compiled.has("token"):
+			_full_compiled = StrataProcedural.compile_heightfield(terrain, null, spacing)
+		var masks := StrataProcedural.compile_cell_masks(terrain, null, spacing)
+		if not masks.get("ok", false): push_error("Island mask compilation failed: " + str(masks)); return false
+		var baked := StrataBake.bake(terrain, {"compiled": _full_compiled, "spacing": spacing, "allow_stale_procedural": true, "cell_masks": masks})
+		if not baked.get("ok", false): push_error("Island runtime bake failed: " + str(baked)); return false
+	if renderer != null and not _bind_renderer(): return false
 	return true
 
 
-## Bakes the complete stack into runtime data, collision and navigation. A bake loaded from
-## storage that is still current is reused rather than rebuilt.
-func _install_runtime() -> bool:
-	if not _full_compiled.has("token"):
-		_full_compiled = StrataProcedural.compile_heightfield(terrain, null, 1.0)
-	var masks := StrataProcedural.compile_cell_masks(terrain, null, 1.0)
-	if not masks.get("ok", false): push_error("Island mask compilation failed: " + str(masks)); return false
-	if terrain.runtime_data == null or terrain.is_runtime_bake_stale():
-		var baked := StrataBake.bake(terrain, {"compiled": _full_compiled, "spacing": 1.0, "allow_stale_procedural": true, "cell_masks": masks, "material_ids": terrain.editor_control_ids, "material_weights": terrain.editor_control_weights})
-		if not baked.get("ok", false): push_error("Island runtime bake failed: " + str(baked)); return false
-	if renderer != null: renderer.set_hole_image(masks.hole_image)
-	if renderer != null and renderer.has_method("set_macro_map"):
-		var macro: Dictionary = terrain.runtime_data.get_macro_binding()
-		if macro.ok: renderer.call("set_macro_map", macro.image, macro.bounds)
+## Builds the renderer from the terrain's manifest, or restores it from a stage view.
+func _bind_renderer() -> bool:
+	if _bound_data == terrain.runtime_data and renderer.region_spec().size() > 0:
+		for xy in _private_regions: renderer.update_region(xy, terrain.runtime_data.get_region(xy))
+		_private_regions = {}
+		return true
+	if not renderer.configure_runtime(terrain, terrain.runtime_data, _materials):
+		push_error("The renderer rejected the baked island regions")
+		return false
+	_bound_data = terrain.runtime_data
+	_private_regions = {}
+	return true
+
+
+## Collision, navigation and the player, from the published manifest.
+func _install_physics() -> bool:
 	if collision == null:
 		collision = StrataCollision.new(); collision.name = "IslandCollision"; terrain.add_child(collision)
 	var replacement := collision.replace_data(terrain.runtime_data)
@@ -469,6 +501,68 @@ func _install_runtime() -> bool:
 	if player == null and DisplayServer.get_name() != "headless":
 		player = HEGoIslandPlayer.new(); player.name = "Player"; player.terrain = terrain; player.collision = collision; player.player_camera = camera; player.spawn_local_xz = PAD; add_child(player)
 	await get_tree().process_frame
+	return true
+
+
+## Bakes, drives the renderer (if any) and installs collision and navigation.
+func _install_runtime() -> bool:
+	if not _bake_runtime(): return false
+	return await _install_physics()
+
+
+## A private copy of a renderer region, installed in place of the baked one, so a stage view
+## or a brush dab never edits the manifest's regions.
+func _private_region(xy: Vector2i) -> StrataRegionData:
+	if _private_regions.has(xy): return renderer.get_region(xy)
+	var copy: StrataRegionData = terrain.runtime_data.get_region(xy).duplicate()
+	copy.maps = terrain.runtime_data.get_region(xy).maps.duplicate(true)
+	if not renderer.update_region(xy, copy): return null
+	_private_regions[xy] = true
+	return copy
+
+
+## Shows the cumulative terrain through [param through]: heights and holes composed through
+## that layer replace the baked ones in private region copies (materials and tint stay those
+## of the final stack, as before). A null layer restores the baked regions.
+func _show_stage(through: StrataLayer) -> bool:
+	if through == null: return _bind_renderer()
+	var spec := renderer.region_spec()
+	var grid := StrataRegions.grid_size(spec)
+	var started := Time.get_ticks_msec()
+	for y in range(grid.y):
+		for x in range(grid.x):
+			var xy := Vector2i(x, y)
+			if _private_region(xy) == null: return false
+			for map in [StrataRegions.MAP_HEIGHT, StrataRegions.MAP_HOLES]:
+				if not spec.maps.has(map): continue
+				var window := StrataRegions.map_window(spec, xy, spec.maps[map])
+				var composed := StrataRegionCompose.compose_map(terrain, through, map, window, spec)
+				if not composed.get("ok", false) or not renderer.update_region_window(xy, map, composed.image, Vector2i.ZERO):
+					push_error("Stage view failed for region %s %s: %s" % [xy, map, composed.get("message", "renderer rejected the window")]); return false
+		if Time.get_ticks_msec() - started > 8: await get_tree().process_frame; started = Time.get_ticks_msec()
+	return true
+
+
+## Writes a freshly compiled height patch (lattice at the region spacing) into the regions
+## it touches, through private copies.
+func _patch_regions(patch: Dictionary) -> bool:
+	var spec := renderer.region_spec()
+	var image: Image = patch.get("image")
+	if image == null or not patch.get("ok", false): return false
+	var bounds: Rect2 = patch.bounds
+	var spacing: float = spec.spacing
+	var first := Vector2i(((bounds.position - spec.bounds.position) / spacing).round())
+	var description: Dictionary = spec.maps[StrataRegions.MAP_HEIGHT]
+	for xy in StrataRegions.regions_touching(spec, bounds, description):
+		if _private_region(xy) == null: return false
+		# Region texel (u, v) is terrain sample (xy * cells + (u, v) - apron).
+		var offset: Vector2i = xy * int(spec.cells) - Vector2i.ONE * int(description.apron)
+		var size := StrataRegions.map_size(int(spec.cells), description)
+		var low := Vector2i(maxi(first.x - offset.x, 0), maxi(first.y - offset.y, 0))
+		var high := Vector2i(mini(first.x + image.get_width() - offset.x, size.x), mini(first.y + image.get_height() - offset.y, size.y))
+		if high.x <= low.x or high.y <= low.y: continue
+		var window := image.get_region(Rect2i(low + offset - first, high - low))
+		if not renderer.update_region_window(xy, StrataRegions.MAP_HEIGHT, window, low): return false
 	return true
 
 
@@ -552,14 +646,12 @@ func _select_layer(index: int) -> void:
 	if _busy: return
 	set_player_enabled(false)
 	selected = index
-	_set_busy(true); _set_message("Compiling the selected cumulative stage…")
+	_set_busy(true); _set_message("Composing the selected cumulative stage…")
 	await get_tree().process_frame
-	_compiled = StrataProcedural.compile_heightfield(terrain, _layers()[selected], 1.0)
-	if _compiled.get("ok", false): renderer.set_compiled_field(_compiled)
-	var masks := StrataProcedural.compile_cell_masks(terrain, _layers()[selected], 1.0)
-	if masks.get("ok", false): renderer.set_hole_image(masks.hole_image)
+	# Stage 5 is the complete stack (what is baked); earlier stages are views through the layer.
+	var ok := await _show_stage(null if selected >= 4 else _layers()[selected])
 	if _ownership.button_pressed: renderer.set_ownership_overlay(_layers()[selected])
-	_set_message("Viewing cumulative terrain through stage %d" % (selected + 1)); _set_busy(false)
+	_set_message("Viewing cumulative terrain through stage %d" % (selected + 1) if ok else "The stage view could not be composed"); _set_busy(false)
 
 
 func _recook(index: int) -> void:
@@ -589,11 +681,9 @@ func _recook_materials() -> void:
 func _refresh_full() -> void:
 	_set_message("Compiling 4097² runtime heightfield…")
 	await get_tree().process_frame
-	_full_compiled = StrataProcedural.compile_heightfield(terrain)
+	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, terrain.region_spacing)
 	_compiled = _full_compiled; selected = 4
 	if _layer_choice != null: _layer_choice.select(4)
-	if renderer != null: renderer.set_compiled_field(_compiled)
-	if renderer != null and terrain.editor_control_ids != null: renderer.set_control_maps(terrain.editor_control_ids, terrain.editor_control_weights)
 	await _install_runtime()
 	if _ownership != null and _ownership.button_pressed: renderer.set_ownership_overlay(_layers()[selected])
 	_set_message("Compiled terrain updated; hand ownership remains independent")
@@ -677,8 +767,8 @@ func _dab(point: Vector2) -> void:
 	var margin := _radius.value + maxf(3.0, _stroke_layer.data.sample_spacing * 2.0)
 	var minimum := (point - Vector2.ONE * margin).floor().max(terrain.base_bounds.position)
 	var maximum := (point + Vector2.ONE * margin).ceil().min(terrain.base_bounds.end)
-	var patch := StrataProcedural.compile_heightfield(terrain, _stroke_layer, 1.0, {"bounds": Rect2(minimum, maximum - minimum)})
-	renderer.update_compiled_region(patch)
+	var patch := StrataProcedural.compile_heightfield(terrain, _stroke_layer, terrain.region_spacing, {"bounds": Rect2(minimum, maximum - minimum)})
+	_patch_regions(patch)
 	if _ownership.button_pressed: renderer.set_ownership_overlay(_stroke_layer)
 
 

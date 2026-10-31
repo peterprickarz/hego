@@ -2,12 +2,18 @@
 """Open the saved island in the main demo; Houdini runs only for explicit cook actions.
 
 The island's data lives at fixed paths under demo/island/terrain (see StrataStorage): one
-file per hand layer, one per cooked channel, plus the bake and material control maps. A
-cook overwrites its files in place. The headless modes below cook into those files:
+file per hand layer, one per cooked channel, plus the region bake (runtime_data.res and
+regions/). Material ids and weights are composed from the stack at the terrain's region
+spacing (1 m); there are no control-map files. A cook overwrites its files in place. The
+headless modes below cook into those files:
 
-  --prepare           rough base -> coarse -> detail -> tint -> materials from the saved hand
-                      layers, then save (overwrites the stage files in place)
-  --cook-materials    only the material distribution, against the saved layers
+  --prepare           rough base -> coarse -> detail -> tint -> materials (1 m, 4097^2) from the
+                      saved hand layers, bake the regions, then save (overwrites the stage and
+                      bake files in place; every hand layer, including the top StrataLayer, is
+                      saved as loaded and the run refuses to save if a cook changed one).
+                      Roughly coarse 15 s, detail 172 s, materials 75 s (about 12 GB in
+                      hython), bake 15 s.
+  --cook-materials    only the material distribution, against the saved layers, then bake
   --five-stage-check  ARTIFICIAL FIXTURE: scripted strokes stand in for hand edits to check the
                       five-stage preservation contract; cooks in memory, saves nothing
   --verify            reopen the saved island headlessly without starting Houdini
@@ -29,8 +35,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--godot", default=os.environ.get("GODOT_BIN", GODOT))
     modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--prepare", action="store_true", help="recook every stage from the rough base and the saved hand layers, then save")
-    modes.add_argument("--cook-materials", action="store_true", help="cook only the material distribution against the saved layers")
+    modes.add_argument("--prepare", action="store_true", help="recook every stage from the rough base and the saved hand layers, bake the regions, then save")
+    modes.add_argument("--cook-materials", action="store_true", help="cook only the material distribution (1 m) against the saved layers, then bake and save")
     modes.add_argument("--five-stage-check", action="store_true", help="artificial fixture: scripted hand edits + recooks checking the preservation contract; saves nothing")
     modes.add_argument("--verify", action="store_true", help="reopen the saved island headlessly without starting Houdini")
     modes.add_argument("--editor", action="store_true", help="open scenes/terrain_island.tscn in the main demo editor")

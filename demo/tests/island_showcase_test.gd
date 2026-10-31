@@ -8,6 +8,8 @@ func run() -> void:
 	create_timer(120.0).timeout.connect(func(): push_error("Island graphical test watchdog expired"); quit(1))
 	if DisplayServer.get_name() == "headless": push_error("Use graphical Forward+ for island_showcase_test"); quit(2); return
 	print("ISLAND_GPU ", RenderingServer.get_video_adapter_name(), " / ", RenderingServer.get_video_adapter_api_version())
+	# Bakes triggered by this test are published in memory only; nothing is written under island/terrain.
+	Engine.set_meta("island_no_save", true)
 	if change_scene_to_file("res://island/island_showcase.tscn") != OK: quit(2); return
 	while current_scene == null: await process_frame
 	var level := current_scene
@@ -21,14 +23,28 @@ func run() -> void:
 	check(not HEGoAPI.get_singleton().is_session_active(), "Graphical cached startup is Houdini-free")
 	check(terrain.runtime_data != null and not terrain.is_runtime_bake_stale(), "Fresh compiled runtime ready")
 	check(renderer.get_stats().height_resolution == Vector2i(4097, 4097), "Actual 1 m GPU field")
-	check(renderer._hole_image != null, "Final canonical holes bound")
+	# The renderer is built by configure_runtime from the baked manifest: its regions are the
+	# manifest's own region objects, and the material maps are the stack's composition.
+	var data := terrain.runtime_data
+	var spec := renderer.region_spec()
+	var probe := Vector2i(4, 10)
+	check(level._bound_data == data and renderer.get_region(probe) == data.get_region(probe), "Runtime renderer holds the manifest's regions (configure_runtime)")
+	check(spec.spacing == terrain.region_spacing and spec.maps.has("material_ids") and spec.maps.has("material_weights") and spec.maps.has("holes") and spec.maps.has("height"), "Renderer spec has the stack's maps at the terrain's region spacing")
+	check(renderer.get_stats().control_resolution == renderer.get_stats().height_resolution, "Material maps are on the height lattice, not a 4 m control lattice")
+	check(level.get_node_or_null("MaterialControlsBinding") == null and terrain.editor_control_ids == null and terrain.editor_control_weights == null, "No control-map binding or packed control maps")
+	var ids_window := StrataRegions.map_window(spec, probe, spec.maps.material_ids)
+	var composed := StrataRegionCompose.compose_map(terrain, null, "material_ids", ids_window, spec)
+	check(composed.get("ok", false) and composed.image.get_data() == data.get_region(probe).get_image("material_ids", 0).get_data(), "Baked material ids equal the stack composition of the same region")
+	check(renderer._height_image == null and renderer._control_ids == null, "No whole-image adapters are in use")
+	var holes_before := renderer.get_region(probe).get_image("holes", 0).get_data()
+	var height_bytes := renderer.get_region(probe).get_image("height", 0).get_data()
 	await level._select_layer(0)
-	check(renderer._hole_image == null, "Earlier stage omits later authored holes")
+	check(renderer.get_region(probe) != data.get_region(probe) and data.get_region(probe).get_image("holes", 0).get_data() == holes_before, "A stage view edits private copies, never the baked regions")
+	check(renderer.get_region(probe).get_image("holes", 0).get_data().find(255) == -1, "Earlier stage omits later authored holes")
 	await level._select_layer(4)
-	check(renderer._hole_image != null, "Final stage restores authored holes")
-	var height_bytes := renderer._height_image.get_data()
+	check(renderer.get_region(probe) == data.get_region(probe) and renderer.get_region(probe).get_image("holes", 0).get_data() == holes_before, "Final stage restores the baked holes")
 	check(renderer.set_ownership_overlay(terrain.get_layers()[4]), "Native ownership overlay enabled")
-	check(renderer._height_image.get_data() == height_bytes, "Ownership overlay preserves geometry")
+	check(renderer.get_region(probe).get_image("height", 0).get_data() == height_bytes, "Ownership overlay preserves geometry")
 	var layer := terrain.get_layers()[4]
 	var snapshot := layer.data.snapshot()
 	level._stroke_layer = layer; level._stroke_records = []; level._last_point = Vector2(INF, INF)

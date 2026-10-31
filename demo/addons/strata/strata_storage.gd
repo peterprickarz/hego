@@ -10,8 +10,6 @@ extends RefCounted
 ## <directory>/<layer>/<channel>.res   one cooked channel of a procedural layer (StrataFieldData)
 ## <directory>/runtime_data.res        the published bake's manifest (StrataRuntimeData)
 ## <directory>/regions/region_<i>_<j>.res  one StrataRegionData per region of the bake
-## <directory>/material_ids.res        the terrain's editor control maps (Image), when it has any
-## <directory>/material_weights.res
 ## [/codeblock]
 ## Layer names become snake_case file names. A procedural commit saves its fields here on its
 ## own (see [method StrataProcedural.commit_fields]); manual layers are saved with
@@ -81,11 +79,6 @@ static func save_all(terrain: StrataTerrain3D) -> Dictionary:
 		if not bake.ok:
 			return bake
 		layers.saved.append_array(bake.saved)
-	if terrain.editor_control_ids != null and terrain.editor_control_weights != null:
-		var controls := save_control_maps(terrain)
-		if not controls.ok:
-			return controls
-		layers.saved.append_array(controls.saved)
 	layers.message = "Saved %d terrain files to %s" % [layers.saved.size(), directory(terrain)]
 	return layers
 
@@ -192,7 +185,9 @@ static func save_runtime_data(terrain: StrataTerrain3D, embed_regions: bool = fa
 	return {"ok": true, "message": "Saved %d files" % saved.size(), "saved": saved}
 
 
-## The terrain's editor control maps (material IDs and weights) to their two files.
+## Deprecated: material IDs and weights are composed per region from the stack and saved with
+## the bake (see [method save_runtime_data]); [method save_all] no longer writes these two
+## files. Kept for old scenes and tests.
 static func save_control_maps(terrain: StrataTerrain3D) -> Dictionary:
 	if not has_storage(terrain):
 		return _error("This terrain has no storage directory")
@@ -207,8 +202,9 @@ static func save_control_maps(terrain: StrataTerrain3D) -> Dictionary:
 	])
 
 
-## The control maps saved for this terrain as [code]{ids, weights}[/code], or empty when
-## either file is missing.
+## Deprecated, see [method save_control_maps]. The control maps saved for this terrain as
+## [code]{ids, weights}[/code], or empty when either file is missing. The terrain no longer
+## loads them.
 static func load_control_maps(terrain: StrataTerrain3D) -> Dictionary:
 	if not has_storage(terrain) or not FileAccess.file_exists(control_ids_path(terrain)) or not FileAccess.file_exists(control_weights_path(terrain)):
 		return {}

@@ -3,7 +3,8 @@ extends SceneTree
 ##
 ## Checks that every layer of scenes/terrain_island.tscn references its own file under the
 ## terrain's storage directory, that those files hold what the layers hold, and that the
-## bake and control maps are the gitignored files StrataStorage names.
+## bake (manifest and region files) is what StrataStorage names. The retired control maps
+## (material_ids.res, material_weights.res) are neither read, written nor referenced.
 var checks := 0
 var failures := 0
 
@@ -49,8 +50,15 @@ func run() -> void:
 			check(references.get(String(layer.name) + "/data", "") == expected and FileAccess.file_exists(expected), "hand layer %s is the file %s" % [layer.name, expected])
 			var saved := ResourceLoader.load(expected, "", ResourceLoader.CACHE_MODE_IGNORE) as StrataLayerData
 			check(saved != null and saved.snapshot() == layer.data.snapshot(), "saved hand layer equals the loaded one: " + String(layer.name))
-	check(StrataStorage.runtime_data_path(terrain) == directory + "/runtime_data.res" and StrataStorage.control_ids_path(terrain) == directory + "/material_ids.res", "bake and control maps have their fixed file names")
-	for name in ["runtime_data.res", "material_ids.res", "material_weights.res"]:
+	check(StrataStorage.runtime_data_path(terrain) == directory + "/runtime_data.res" and StrataStorage.regions_directory(terrain) == directory + "/regions", "the bake has its fixed manifest and region directory")
+	check(terrain.editor_control_ids == null and terrain.editor_control_weights == null, "the retired control maps are not loaded from storage")
+	if terrain.runtime_data != null:
+		var data := terrain.runtime_data
+		var grid := data.grid
+		check(data.format_version == 2 and data.spacing == terrain.region_spacing and data.bounds == terrain.base_bounds, "the saved manifest is a v2 bake at the terrain's region spacing")
+		check(data.maps.has("material_ids") and data.maps.has("material_weights") and data.maps.has("height"), "the manifest carries the material maps composed from the stack")
+		check(DirAccess.get_files_at(StrataStorage.regions_directory(terrain)).size() >= grid.x * grid.y, "every region of the bake has its file")
+	for name in ["runtime_data.res", "material_ids.res", "material_weights.res", "regions/"]:
 		var scene_text := FileAccess.get_file_as_string("res://scenes/terrain_island.tscn")
 		check(not scene_text.contains(name), "the scene does not reference the rebuildable file " + name)
 	check(terrain.editor_materials.size() == HEGoIslandMaterialRegistry.count() and terrain.editor_material_channels.size() == HEGoIslandMaterialRegistry.count(), "the terrain binds exactly the registry's materials")

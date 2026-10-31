@@ -5,6 +5,8 @@ const CONTRACT := "res://island/hda/material_contract.json"
 const LAYER := "MaterialDistribution"
 const HOST := "HDA/MaterialCook"
 const LAYER_ID := "bracken-isle-material-distribution-v1"
+## The MaterialCook input lattice of scenes cooked before the regions work (1025 samples).
+const LEGACY_SPACING := 4.0
 
 ## Includes every stored property, including appearance controls omitted by
 ## the geometry-only parameters() snapshot. No Resource identity/RID hashing.
@@ -55,10 +57,14 @@ static func layer_content_hash(layer: StrataLayer) -> String:
 		context.update((dense.ownership as Image).get_data())
 	return context.finish().hex_encode()
 
-## A complete result must use one common physical lattice. No channel is
-## invented/resampled; binary ownership must cover every exported sample.
-static func pack(layer: StrataLayer) -> Dictionary:
-	var started := Time.get_ticks_usec()
+## Checks that [param layer] holds a complete MaterialDistribution result: every registry
+## field, one common physical lattice, binary ownership on every sample. Inside a terrain the
+## lattice must also be the final stack's: the terrain's [member StrataTerrain3D.region_spacing]
+## (1 m for the island, 4097 x 4097 samples) covering the bounds. Nothing is packed or
+## resampled: the editor preview and the bake compose the materials from these fields, with
+## any manual layers above them, as regions. Returns [code]{ok, message, entries, first,
+## images}[/code]; [param read_images] false skips reading the samples (lattice checks only).
+static func validate(layer: StrataLayer, read_images: bool = true) -> Dictionary:
 	if not is_instance_valid(layer) or not layer.procedural: return {"ok": false, "message": "MaterialDistribution must be a procedural target"}
 	var checked := registry()
 	if not checked.ok: return checked
@@ -70,17 +76,33 @@ static func pack(layer: StrataLayer) -> Dictionary:
 		if field == null or field.data == null or field.channel != StringName(entry.channel) or layer.get_composition(field.channel) != StrataLayer.Composition.REPLACE: return {"ok": false, "message": "Missing or invalid material field: " + entry.channel}
 		if first == null: first = field
 		elif field.resolution != first.resolution or field.sample_origin != first.sample_origin or field.sample_step_x != first.sample_step_x or field.sample_step_y != first.sample_step_y: return {"ok": false, "message": "Material fields must share exactly one physical lattice"}
+		if not read_images: continue
 		var read := field.data.read_dense(field.channel, Vector2i.ZERO, field.resolution)
 		if not read.get("ok", false) or read.get("owned_count", 0) != field.resolution.x * field.resolution.y: return {"ok": false, "message": "Material field has missing owned samples: " + entry.channel}
 		images.append(read.image)
 	var terrain := layer.get_parent() as StrataTerrain3D
 	if terrain != null:
 		var span := terrain.base_bounds
+		var spacing := terrain.region_spacing
 		var end := first.sample_origin + first.sample_step_x * (first.resolution.x - 1) + first.sample_step_y * (first.resolution.y - 1)
-		if first.resolution != Vector2i(1025, 1025) or not Vector2(first.sample_origin.x, first.sample_origin.z).is_equal_approx(span.position) or not Vector2(end.x, end.z).is_equal_approx(span.end) or not first.sample_step_x.is_equal_approx(Vector3(4, 0, 0)) or not first.sample_step_y.is_equal_approx(Vector3(0, 0, 4)): return {"ok": false, "message": "Island material controls must cover the complete endpoint-aligned 4m terrain lattice"}
+		var origin := Vector2(first.sample_origin.x, first.sample_origin.z)
+		var epsilon := spacing * 0.001
+		if not first.sample_step_x.is_equal_approx(Vector3(spacing, 0, 0)) or not first.sample_step_y.is_equal_approx(Vector3(0, 0, spacing)):
+			return {"ok": false, "message": "Island material fields must be on the terrain's %s m lattice (this result steps %s m); recook MaterialCook after Configure Stage Material Inputs" % [String.num(spacing), String.num(first.sample_step_x.x)]}
+		if origin.x > span.position.x + epsilon or origin.y > span.position.y + epsilon or end.x < span.end.x - epsilon or end.z < span.end.y - epsilon: return {"ok": false, "message": "Island material fields must cover the complete terrain bounds"}
+	return {"ok": true, "message": "%d material fields on one %s lattice" % [checked.entries.size(), first.resolution], "entries": checked.entries, "first": first, "images": images}
+
+## Diagnostic and fixture packer: [method validate] plus the native strongest-four pack of the
+## fields into an RGBA8 ID image and an RGBAF weight image. The island no longer uses it (its
+## regions are composed from the stack).
+static func pack(layer: StrataLayer) -> Dictionary:
+	var started := Time.get_ticks_usec()
+	var checked := validate(layer)
+	if not checked.ok: return checked
+	var first: StrataFieldData = checked.first
 	var native := StrataLayerData.new()
 	if not native.has_method("pack_material_weights"): return {"ok": false, "message": "This terrain native library cannot pack material fields; rebuild it before cooking"}
-	var packed: Dictionary = native.call("pack_material_weights", images)
+	var packed: Dictionary = native.call("pack_material_weights", checked.images)
 	if not packed.get("ok", false): return packed
 	packed["source"] = "Houdini MaterialDistribution: %d distinct ambientCG sources" % checked.entries.size()
 	packed["registry_sha256"] = FileAccess.get_sha256(REGISTRY)
@@ -124,19 +146,6 @@ static func above_state(terrain: StrataTerrain3D, target: StrataLayer) -> Array:
 		state.append([layer.get_instance_id(), entries])
 	return state
 
-## Control maps for the terrain. Without material-owning layers above the procedural pass
-## this is the strict [method pack] of [param target]; with them, the procedural pass is
-## still validated by [method pack], and the maps come from the stack composed through the
-## final layer so hand-painted weights win where they own a texel.
-static func controls(terrain: StrataTerrain3D, target: StrataLayer) -> Dictionary:
-	var packed := pack(target)
-	if not packed.get("ok", false) or material_layers_above(terrain, target).is_empty(): return packed
-	var composed := StrataMaterialControls.compose(terrain, channels(), null)
-	if not composed.get("ok", false): return composed
-	if composed.get("empty", false): return {"ok": false, "message": "Composed material controls are empty"}
-	composed["source"] = packed.get("source", "") + " with manual material layers"
-	return composed
-
 ## Adds only a missing mask stage/producer. Existing layer identity, input rows,
 ## user material edits, parameters and every preexisting node are retained. The host's
 ## target is its HDA's target_layer_path parameter, which [method cook_explicit] sets.
@@ -164,11 +173,13 @@ static func attach(scene: Node3D, contract: Dictionary, upgrade_legacy_input: bo
 	# (hand-painted material touch-ups) are composed after the cook and never fed back in.
 	var below := layer_below(terrain, target)
 	if below == null: return {"ok": false, "message": "MaterialDistribution needs an earlier cumulative height source"}
-	if host.input_stash.is_empty(): host.input_stash = [{"inputs": ["../../Terrain/" + String(below.name)], "settings": {"terrain_mode": "cumulative", "terrain_channels": HEGoIslandStageMaterials.input_channels(), "terrain_spacing": 4.0, "terrain_max_samples": StrataProcedural.MAX_SAMPLES}}]
-	if host.input_stash.size() != 1 or host.input_stash[0].get("inputs", []) != ["../../Terrain/" + String(below.name)] or host.input_stash[0].get("settings", {}).get("terrain_mode") != "cumulative" or HEGoIslandStageMaterials.channel_names(host.input_stash[0].get("settings", {}).get("terrain_channels", [])) not in [PackedStringArray(["height"]), HEGoIslandStageMaterials.input_channels()] or host.input_stash[0].get("settings", {}).get("terrain_spacing", 0.0) != 4.0: return {"ok": false, "message": "MaterialCook requires the final cumulative height/material/simulation input at 4 m (or the saved legacy height-only binding); use the explicit stage input migration to upgrade"}
-	if upgrade_legacy_input and HEGoIslandStageMaterials.channel_names(host.input_stash[0].settings.terrain_channels) == PackedStringArray(["height"]):
+	if host.input_stash.is_empty(): host.input_stash = [{"inputs": ["../../Terrain/" + String(below.name)], "settings": {"terrain_mode": "cumulative", "terrain_channels": HEGoIslandStageMaterials.input_channels(), "terrain_spacing": terrain.region_spacing, "terrain_max_samples": StrataProcedural.MAX_SAMPLES}}]
+	var input_spacing: float = host.input_stash[0].get("settings", {}).get("terrain_spacing", 0.0) if host.input_stash.size() == 1 else 0.0
+	if host.input_stash.size() != 1 or host.input_stash[0].get("inputs", []) != ["../../Terrain/" + String(below.name)] or host.input_stash[0].get("settings", {}).get("terrain_mode") != "cumulative" or HEGoIslandStageMaterials.channel_names(host.input_stash[0].get("settings", {}).get("terrain_channels", [])) not in [PackedStringArray(["height"]), HEGoIslandStageMaterials.input_channels()] or not (is_equal_approx(input_spacing, terrain.region_spacing) or is_equal_approx(input_spacing, LEGACY_SPACING)): return {"ok": false, "message": "MaterialCook requires the final cumulative height/material/simulation input at the terrain's %s m region spacing (or the saved legacy 4 m / height-only binding); use the explicit stage input migration to upgrade" % String.num(terrain.region_spacing)}
+	var legacy_input := HEGoIslandStageMaterials.channel_names(host.input_stash[0].settings.terrain_channels) == PackedStringArray(["height"]) or not is_equal_approx(input_spacing, terrain.region_spacing)
+	if upgrade_legacy_input and legacy_input:
 		var rows := host.input_stash.duplicate(true)
-		rows[0].settings = HEGoIslandStageMaterials.input_settings(4.0, rows[0].settings, true)
+		rows[0].settings = HEGoIslandStageMaterials.input_settings(4.0, rows[0].settings, true, terrain.region_spacing)
 		host.input_stash = rows
 		host.hego_notify_cook_inputs_changed()
 		target.mark_stale("Inputs changed; explicit recook required")

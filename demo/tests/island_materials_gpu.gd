@@ -55,21 +55,20 @@ func inventory() -> Dictionary:
 func actual_point(ids_wanted: Array, preferred: Vector2, low: float, high: float, cliff: bool = false) -> Vector2:
 	# Camera selection reads the real saved Houdini controls; it does not create
 	# or edit material weights. A nearby clear example is useful for visual QA.
-	var ids: Image = renderer._control_ids
-	var weights: Image = renderer._control_weights
 	var best := preferred
 	var best_score := -INF
-	for y in range(4, ids.get_height() - 4, 8):
-		for x in range(4, ids.get_width() - 4, 8):
-			var point := terrain.base_bounds.position + terrain.base_bounds.size * Vector2(float(x) / (ids.get_width() - 1), float(y) / (ids.get_height() - 1))
-			if point.distance_to(preferred) > 420.0: continue
+	# The controls are the baked regions' material ids and weights (one lattice at the region
+	# spacing); sample them on an 8 m grid around the preferred point.
+	for y in range(-52, 53):
+		for x in range(-52, 53):
+			var point := preferred + Vector2(x, y) * 8.0
+			if not terrain.base_bounds.has_point(point) or point.distance_to(preferred) > 420.0: continue
 			var height := renderer.sample_render_height(point)
 			if height < low or height > high: continue
-			var selected := ids.get_pixel(x, y)
-			var painted := weights.get_pixel(x, y)
+			var blend := renderer.sample_control_blend(point)
 			var influence := 0.0
 			for slot in range(4):
-				if roundi(selected[slot] * 255.0) in ids_wanted: influence += painted[slot]
+				if int(blend.ids[slot]) in ids_wanted: influence += float(blend.weights[slot])
 			if influence < 0.4: continue
 			if cliff:
 				var gradient := Vector2(renderer.sample_render_height(point + Vector2(4, 0)) - renderer.sample_render_height(point - Vector2(4, 0)), renderer.sample_render_height(point + Vector2(0, 4)) - renderer.sample_render_height(point - Vector2(0, 4))) / 8.0
@@ -138,7 +137,8 @@ func run() -> void:
 	RenderingServer.viewport_set_measure_render_time(root.get_viewport_rid(), true)
 	var actual_inventory := inventory()
 	if actual_inventory.material_count != HEGoIslandMaterialRegistry.count() or actual_inventory.unique_texture_paths != 3 * HEGoIslandMaterialRegistry.count(): fail("Actual residency inventory is incomplete"); return
-	if Vector2i(renderer.get_stats().get("control_resolution", Vector2i.ZERO)) != Vector2i(1025, 1025): fail("Actual32 views require the saved1025-square Houdini controls"); return
+	var expected_lattice := Vector2i((terrain.base_bounds.size / terrain.region_spacing).round()) + Vector2i.ONE
+	if Vector2i(renderer.get_stats().get("control_resolution", Vector2i.ZERO)) != expected_lattice: fail("Actual32 views require region material maps on the terrain lattice %s" % expected_lattice); return
 	var points := {
 		"coast": actual_point([0, 6, 7, 8, 9], Vector2(508, 700), -0.5, 8.0),
 		"cliff": actual_point([2, 3, 10, 11, 12, 13, 14, 15], Vector2(-900, 300), 80.0, 330.0, true),

@@ -6,7 +6,7 @@ extends RefCounted
 ## Deprecated for the editor: StrataEditorPreview composes regions with
 ## StrataRegions.compose_region (materials at the region spacing) and no longer uses the
 ## 4 m / 1025 lattice below. compose(), compose_region() and the pack helpers stay for the
-## island binding (Track H) and tests; signature() is still the editor's material cache key.
+## legacy 4 m / 1025 fixtures and tests (the island binding is retired); signature() is still the editor's material cache key.
 const DEFAULT_SPACING := 4.0
 const MAX_SIDE := 1025
 

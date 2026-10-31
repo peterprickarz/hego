@@ -22,13 +22,15 @@ static func channel_names(value: Variant) -> PackedStringArray:
 		return names
 	return PackedStringArray(value) if value is Array or value is PackedStringArray else PackedStringArray()
 
-static func input_settings(mask_spacing: float, previous: Dictionary = {}, final_pass: bool = false) -> Dictionary:
+## [param final_spacing] is the lattice of the final material pass (the terrain's
+## region_spacing, 1 m for the island); the erosion stages keep their bounded mask grids.
+static func input_settings(mask_spacing: float, previous: Dictionary = {}, final_pass: bool = false, final_spacing: float = 1.0) -> Dictionary:
 	var settings := previous.duplicate(true)
 	settings.terrain_mode = "cumulative"
 	settings.terrain_channels = input_channels()
 	settings.terrain_max_samples = previous.get("terrain_max_samples", StrataProcedural.MAX_SAMPLES)
 	if final_pass:
-		settings.terrain_spacing = 4.0
+		settings.terrain_spacing = final_spacing
 		settings.erase("terrain_channel_spacings")
 	else:
 		# Preserve existing height input spacing, including an absent/native value.
@@ -66,9 +68,9 @@ static func migrate(scene: Node3D) -> Dictionary:
 		if not (inputs is Array or inputs is PackedStringArray) or inputs.size() != 1 or host.get_node_or_null(NodePath(String(inputs[0]))) != below: return _error(label + " reads a different source layer")
 		var settings: Dictionary = rows[0].get("settings", {})
 		if settings.get("terrain_mode", "cumulative") != "cumulative" or channel_names(settings.get("terrain_channels", "height")) not in [PackedStringArray(["height"]), input_channels()]: return _error(label + " uses custom input channels/mode")
-		var next_settings := input_settings(8.0 if index == 0 else 4.0, settings, index == 2)
+		var next_settings := input_settings(8.0 if index == 0 else 4.0, settings, index == 2, terrain.region_spacing)
 		if settings.has("terrain_channel_spacings") and settings.terrain_channel_spacings != next_settings.get("terrain_channel_spacings", {}): return _error(label + " has custom channel spacing overrides")
-		if index == 2 and float(settings.get("terrain_spacing", 0.0)) != 4.0: return _error("MaterialCook requires its existing 4 m input lattice")
+		if index == 2 and not float(settings.get("terrain_spacing", 0.0)) in [terrain.region_spacing, HEGoIslandMaterials.LEGACY_SPACING]: return _error("MaterialCook requires its existing 4 m legacy or %s m terrain-spacing input lattice" % String.num(terrain.region_spacing))
 		rows[0].settings = next_settings
 		pending.append({"host": host, "rows": rows})
 	var changed := false

@@ -28,11 +28,16 @@ signal authoring_preview_changed
 		textured_editor_preview = value
 		queue_preview_update()
 @export var editor_materials: Array[StrataMaterial] = []
+## Deprecated and unused: the editor preview and the bake compose material IDs and weights
+## per region from [member editor_material_channels]. Kept so scenes that saved them still
+## load; nothing writes, saves or reads them any more (only the legacy StrataMaterialControls
+## helpers and old tests assign them).
 @export var editor_control_ids: Image
+## Deprecated, see [member editor_control_ids].
 @export var editor_control_weights: Image
-## Ordered scalar channel names matching editor_materials IDs. When supplied,
-## editor controls are composed from the enabled stack through its cutoff.
-## Cached editor_control_* remain the separately saved complete result.
+## Ordered scalar channel names matching editor_materials IDs. The editor preview and the
+## bake compose the material maps of every region from the enabled stack through these
+## channels, so manual layers above a procedural pass are honoured.
 @export var editor_material_channels := PackedStringArray():
 	set(value):
 		editor_material_channels = value
@@ -53,11 +58,13 @@ signal authoring_preview_changed
 	set(value):
 		if is_finite(value) and value > 0.0: region_spacing = value
 		queue_preview_update()
-## Cells per region side, a power of two from 16 to 4096. A region is the unit the editor
-## composes, uploads and re-composes after a brush dab.
-@export_range(16, 4096, 1) var region_cells := 256:
+## Cells per region side: 0 (the default) chooses automatically, the largest power of two at or
+## below 256 and the terrain's side in cells (at least 16), so a 64 m terrain at 1 m gets
+## 64-cell regions and large terrains 256. Otherwise a power of two from 16 to 4096. A region is
+## the unit the editor composes, uploads and re-composes after a brush dab.
+@export_range(0, 4096, 1) var region_cells := 0:
 	set(value):
-		region_cells = clampi(nearest_po2(clampi(value, StrataRegions.MIN_CELLS, StrataRegions.MAX_CELLS)), StrataRegions.MIN_CELLS, StrataRegions.MAX_CELLS)
+		region_cells = 0 if value <= 0 else clampi(nearest_po2(clampi(value, StrataRegions.MIN_CELLS, StrataRegions.MAX_CELLS)), StrataRegions.MIN_CELLS, StrataRegions.MAX_CELLS)
 		queue_preview_update()
 @export_group("")
 var editor_renderer: StrataRenderer
@@ -130,11 +137,6 @@ func _ready() -> void:
 		StrataStorage.load_layers(self)
 		if runtime_data == null:
 			runtime_data = StrataStorage.load_runtime_data(self)
-		if editor_control_ids == null or editor_control_weights == null:
-			var controls := StrataStorage.load_control_maps(self)
-			if not controls.is_empty():
-				editor_control_ids = controls.ids
-				editor_control_weights = controls.weights
 	# Saved together with its layers, a fresh bake stays fresh after reload.
 	if runtime_data != null and not runtime_bake_stale:
 		_runtime_signature = StrataBake.stack_signature(self)
@@ -165,13 +167,17 @@ func _get_configuration_warnings() -> PackedStringArray:
 	var warnings := PackedStringArray()
 	if is_inside_tree() and not is_transform_valid():
 		warnings.append("Terrain supports translation and yaw with unit scale, including its parents. Sculpting is disabled for pitch, roll, shear or scale.")
-	var extent := float(region_cells) * region_spacing
+	var extent := float(effective_region_cells()) * region_spacing
 	var regions_across := base_bounds.size / extent
 	if base_bounds.size.x > 0.0 and base_bounds.size.y > 0.0 and (absf(regions_across.x - roundf(regions_across.x)) > 1e-6 or absf(regions_across.y - roundf(regions_across.y)) > 1e-6):
 		warnings.append("The bounds are not a multiple of the region extent (%s m = region_cells x region_spacing); the last regions extend past the bounds, where they compose to the channel defaults." % String.num(extent, 4))
 	var checked := StrataRegions.validate_spec(region_spec())
 	if not checked.ok: warnings.append("Region settings are invalid: " + String(checked.message))
 	return warnings
+
+## The cells per region side in effect: [member region_cells], or the automatic size when it is 0.
+func effective_region_cells() -> int:
+	return StrataRegions.resolve_cells(region_cells, base_bounds, region_spacing)
 
 ## The region spec the editor preview composes and a bake of the same settings would use:
 ## [method StrataRegions.standard_spec] over the bounds with [member region_spacing] and
@@ -180,7 +186,7 @@ func _get_configuration_warnings() -> PackedStringArray:
 ## layer owns a tint or AO channel (as StrataBake decides). The editor always keeps the
 ## holes map, and its macro map has the scale that comes closest to 4 m.
 func region_spec() -> Dictionary:
-	var spec := StrataRegions.standard_spec(base_bounds, region_spacing, region_cells)
+	var spec := StrataRegions.standard_spec(base_bounds, region_spacing, effective_region_cells())
 	var maps: Dictionary = spec.maps
 	if editor_material_channels.is_empty():
 		maps.erase(StrataRegions.MAP_MATERIAL_IDS)
@@ -424,8 +430,12 @@ func _validate_property(property: Dictionary) -> void:
 		property.usage = PROPERTY_USAGE_STORAGE
 	if property.name in ["runtime_data", "runtime_bake_stale"]:
 		property.usage |= PROPERTY_USAGE_READ_ONLY
-	# With a storage directory the bake and control maps live in their files, not in the scene.
-	if property.name in ["runtime_data", "editor_control_ids", "editor_control_weights"] and not storage_directory.strip_edges().is_empty():
+	# With a storage directory the bake lives in its files, not in the scene.
+	if property.name == "runtime_data" and not storage_directory.strip_edges().is_empty():
 		property.usage &= ~PROPERTY_USAGE_STORAGE
+	# Deprecated control maps: still loaded from old scenes, hidden from the inspector, and
+	# never kept beside a storage directory (nothing saves them there any more).
+	if property.name in ["editor_control_ids", "editor_control_weights"]:
+		property.usage = PROPERTY_USAGE_NONE if not storage_directory.strip_edges().is_empty() else PROPERTY_USAGE_STORAGE
 	if property.name == "near_displacement_status":
 		property.usage = (property.usage | PROPERTY_USAGE_READ_ONLY) & ~PROPERTY_USAGE_STORAGE

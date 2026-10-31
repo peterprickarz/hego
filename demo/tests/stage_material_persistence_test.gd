@@ -28,14 +28,15 @@ func publish(host: Node, stage: StrataLayer, fields: Array) -> Dictionary:
 	return StrataProcedural.commit_fields(ticket, [{"layer_id": stage.layer_id, "fields": fields}])
 
 func publish_final(host: Node, target: StrataLayer, assigned: bool) -> Dictionary:
-	# The strict island packer requires its real 1025-square 4 m lattice. Reuse the
-	# same input images across zero channels; native field ownership stays separate.
-	var zero := Image.create(1025, 1025, false, Image.FORMAT_RF)
-	var one := Image.create(1025, 1025, false, Image.FORMAT_RF); one.fill(Color(1, 0, 0, 1))
+	# The island's validation requires the terrain's 1 m lattice over its bounds (4097 x 4097);
+	# the fixture terrain is 8 m wide. Reuse the same input images across zero channels;
+	# native field ownership stays separate.
+	var zero := Image.create(9, 9, false, Image.FORMAT_RF)
+	var one := Image.create(9, 9, false, Image.FORMAT_RF); one.fill(Color(1, 0, 0, 1))
 	var names := HEGoIslandMaterials.channels()
 	var fields: Array = []
 	for index in range(names.size()):
-		fields.append({"name": String(names[index]), "image": one if assigned and index == 1 else zero, "sample_origin": Vector3(-2048, 0, -2048), "sample_step_x": Vector3(4, 0, 0), "sample_step_y": Vector3(0, 0, 4)})
+		fields.append({"name": String(names[index]), "image": one if assigned and index == 1 else zero, "sample_origin": Vector3(-4, 0, -4), "sample_step_x": Vector3(1, 0, 0), "sample_step_y": Vector3(0, 0, 1)})
 	var producer := target.producer_id if not target.producer_id.is_empty() else "final-persistence-fixture"
 	var ticket := StrataProcedural.begin_transaction(host, producer, [{"layer": target, "channels": names, "required_channels": names}], [])
 	if not ticket.ok: return ticket
@@ -60,10 +61,6 @@ func run() -> void:
 	hand.data.set_sample(&"height", Vector2i.ZERO, 0.0)
 	var coarse := StrataLayer.new(); coarse.name = "CoarseErosion"; coarse.procedural = true; terrain.add_child(coarse)
 	var detail := StrataLayer.new(); detail.name = "DetailErosion"; detail.procedural = true; terrain.add_child(detail)
-	var saved_ids := Image.create(1, 1, false, Image.FORMAT_RGBA8)
-	var saved_weights := Image.create(1, 1, false, Image.FORMAT_RGBAF)
-	terrain.editor_control_ids = saved_ids; terrain.editor_control_weights = saved_weights
-	var binding: Node = load("res://island/island_material_binding.gd").new(); scene.add_child(binding); binding.setup(terrain)
 	await process_frame
 	check(coarse.procedural_fields.is_empty() and detail.procedural_fields.is_empty() and not DirAccess.dir_exists_absolute(storage + "/coarse_erosion"), "opening/tracking stages never invents or persists a cook")
 	var expected := 9 + HEGoIslandMaterialRegistry.count()
@@ -75,7 +72,7 @@ func run() -> void:
 			var field: StrataFieldData = stage.procedural_fields[channel]
 			external = external and field.resource_path == folder + "/" + String(channel) + ".res" and FileAccess.file_exists(field.resource_path)
 		check(external and stage.procedural_fields.size() == expected and not stage.procedural_stale and DirAccess.get_files_at(folder).size() == expected, "a committed stage is saved as one file per channel at fixed paths: " + String(stage.name))
-	check(terrain.editor_control_ids == saved_ids and terrain.editor_control_weights == saved_weights, "mixed-stage persistence leaves separately saved final controls unchanged")
+	check(terrain.editor_control_ids == null and terrain.editor_control_weights == null, "stage persistence never creates the retired control maps")
 	var before := HEGoIslandMaterials.layer_content_hash(detail)
 	var packed_before := StrataMaterialControls.compose(terrain, HEGoIslandMaterials.channels(), detail)
 	var fixture := PackedScene.new(); var fixture_path := "user://stage_persistence_%d.tscn" % OS.get_process_id()
@@ -113,23 +110,20 @@ func run() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(blocked))
 	check(publish(scene, detail, outputs(29.0)).ok and FileAccess.file_exists(detail_folder + "/sediment.res") and detail.sample_channel(&"height", Vector2.ZERO).value == 29.0 and not "NOT SAVED" in detail.procedural_status, "a later cook saves normally once the directory is writable again")
 
-	# The final material stage packs into the terrain's control maps and saves them.
-	terrain.base_bounds = Rect2(-2048, -2048, 4096, 4096)
+	# The final material stage commits its fields; nothing is packed, no control maps exist.
 	var final_target := StrataLayer.new(); final_target.name = HEGoIslandMaterials.LAYER; final_target.procedural = true; terrain.add_child(final_target)
 	await process_frame
-	var before_zero_revision := final_target.procedural_revision
-	check(publish_final(scene, final_target, false).ok, "complete finite zero-total final fixture passes generic transaction validation")
+	check(publish_final(scene, final_target, true).ok, "a complete final material cook commits")
 	await process_frame
-	await process_frame
-	check(final_target.procedural_fields.is_empty() and final_target.procedural_stale and final_target.procedural_revision > before_zero_revision + 1 and "positive total weight" in final_target.procedural_status and "previous complete material fields and controls retained" in final_target.procedural_status, "strict pack failure restores the previous (empty) fields and reports the coverage error with a monotonic revision")
-	check(terrain.editor_control_ids == saved_ids and terrain.editor_control_weights == saved_weights and not FileAccess.file_exists(StrataStorage.control_ids_path(terrain)), "zero-total failure keeps the previous controls and writes no control files")
-	check(publish_final(scene, final_target, true).ok, "later explicit final cook can recover with a complete positive assignment")
-	await process_frame
-	await process_frame
-	check(not final_target.procedural_stale and terrain.editor_control_ids != saved_ids and roundi(terrain.editor_control_ids.get_pixel(0, 0).r * 255.0) == 1 and terrain.editor_control_weights.get_pixel(0, 0).r == 1.0, "a complete material cook packs valid controls")
-	check(FileAccess.file_exists(StrataStorage.control_ids_path(terrain)) and FileAccess.file_exists(StrataStorage.control_weights_path(terrain)) and terrain.editor_control_ids.resource_path == StrataStorage.control_ids_path(terrain), "the control maps are saved at their fixed storage paths")
-	var saved_controls := StrataStorage.load_control_maps(terrain)
-	check(not saved_controls.is_empty() and saved_controls.ids.get_data() == terrain.editor_control_ids.get_data(), "saved control maps reload byte-identical")
+	check(not final_target.procedural_stale and final_target.procedural_fields.size() == HEGoIslandMaterialRegistry.count(), "the final stage holds every registry field")
+	check(HEGoIslandMaterials.validate(final_target).ok, "the committed fields are on the terrain's region lattice and cover its bounds")
+	check(terrain.editor_control_ids == null and terrain.editor_control_weights == null and not FileAccess.file_exists(StrataStorage.control_ids_path(terrain)) and not FileAccess.file_exists(StrataStorage.control_weights_path(terrain)), "no control maps are packed or written for the final stage")
+	terrain.editor_material_channels = HEGoIslandMaterials.channels()
+	var composed := StrataRegions.compose_region(terrain, null, Vector2i.ZERO, terrain.region_spec())
+	check(composed.get("ok", false), "the region composes the committed materials from the stack: " + str(composed.get("message")))
+	if composed.get("ok", false):
+		var apron: int = terrain.region_spec().maps.material_ids.apron
+		check(composed.region.get_image(StrataRegions.MAP_MATERIAL_IDS, 0).get_pixel(apron, apron).r8 == 1, "the stack composition carries the assigned material id")
 	for layer in terrain.get_layers():
 		if layer.procedural: continue
 		var saved := StrataStorage.save_layer_data(terrain, layer)
