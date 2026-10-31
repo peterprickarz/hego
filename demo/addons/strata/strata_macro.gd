@@ -61,6 +61,9 @@ static func owned_channels(terrain: StrataTerrain3D, through_layer: StrataLayer 
 		if layer == through_layer: break
 	return owned
 
+## Deprecated for the editor preview, which composes macro maps per region
+## (StrataRegions.compose_region); the whole-terrain form stays for the island binding and
+## bakes of a single map.
 ## Composes the four channels on an endpoint-aligned lattice and packs them.
 ## Options: spacing (4 m; the actual step is returned when bounds are not a
 ## whole number of intervals), bounds (terrain-local XZ inside base_bounds,

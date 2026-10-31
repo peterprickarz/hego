@@ -40,8 +40,25 @@ signal authoring_preview_changed
 ## Minimum camera clip distance while viewing this terrain in the editor.
 ## This changes the editor camera only, not global EditorSettings.
 @export_range(100.0, 100000.0, 100.0) var editor_far_clip := 24000.0
-## External image caches are references only; the editor composes the live stack.
-@export_range(0.25, 8.0, 0.25) var editor_compile_spacing := 1.0
+## Deprecated alias of [member region_spacing] (same storage), kept so existing scenes and
+## scripts keep working. It is no longer shown in the inspector.
+@export_range(0.25, 8.0, 0.25) var editor_compile_spacing: float:
+	get: return region_spacing
+	set(value): region_spacing = value
+@export_group("Regions")
+## Metres between height samples of the editor's region maps. Heights, holes and material
+## IDs and weights are composed at this spacing; the macro tint at a quarter of the sample
+## density (about 4 m). The same value is the default bake spacing of the island.
+@export_range(0.0625, 16.0, 0.0625) var region_spacing := 1.0:
+	set(value):
+		if is_finite(value) and value > 0.0: region_spacing = value
+		queue_preview_update()
+## Cells per region side, a power of two from 16 to 4096. A region is the unit the editor
+## composes, uploads and re-composes after a brush dab.
+@export_range(16, 4096, 1) var region_cells := 256:
+	set(value):
+		region_cells = clampi(nearest_po2(clampi(value, StrataRegions.MIN_CELLS, StrataRegions.MAX_CELLS)), StrataRegions.MIN_CELLS, StrataRegions.MAX_CELLS)
+		queue_preview_update()
 @export_group("")
 var editor_renderer: StrataRenderer
 var editor_preview_bridge: Node
@@ -145,9 +162,35 @@ func is_transform_valid() -> bool:
 	return basis.y.is_equal_approx(Vector3.UP) and is_equal_approx(basis.x.length(), 1.0) and is_equal_approx(basis.z.length(), 1.0) and is_equal_approx(basis.determinant(), 1.0)
 
 func _get_configuration_warnings() -> PackedStringArray:
+	var warnings := PackedStringArray()
 	if is_inside_tree() and not is_transform_valid():
-		return PackedStringArray(["Terrain supports translation and yaw with unit scale, including its parents. Sculpting is disabled for pitch, roll, shear or scale."])
-	return PackedStringArray()
+		warnings.append("Terrain supports translation and yaw with unit scale, including its parents. Sculpting is disabled for pitch, roll, shear or scale.")
+	var extent := float(region_cells) * region_spacing
+	var regions_across := base_bounds.size / extent
+	if base_bounds.size.x > 0.0 and base_bounds.size.y > 0.0 and (absf(regions_across.x - roundf(regions_across.x)) > 1e-6 or absf(regions_across.y - roundf(regions_across.y)) > 1e-6):
+		warnings.append("The bounds are not a multiple of the region extent (%s m = region_cells x region_spacing); the last regions extend past the bounds, where they compose to the channel defaults." % String.num(extent, 4))
+	var checked := StrataRegions.validate_spec(region_spec())
+	if not checked.ok: warnings.append("Region settings are invalid: " + String(checked.message))
+	return warnings
+
+## The region spec the editor preview composes and a bake of the same settings would use:
+## [method StrataRegions.standard_spec] over the bounds with [member region_spacing] and
+## [member region_cells]. Material ids and weights are present only when
+## [member editor_material_channels] is not empty and the macro map only when an enabled
+## layer owns a tint or AO channel (as StrataBake decides). The editor always keeps the
+## holes map, and its macro map has the scale that comes closest to 4 m.
+func region_spec() -> Dictionary:
+	var spec := StrataRegions.standard_spec(base_bounds, region_spacing, region_cells)
+	var maps: Dictionary = spec.maps
+	if editor_material_channels.is_empty():
+		maps.erase(StrataRegions.MAP_MATERIAL_IDS)
+		maps.erase(StrataRegions.MAP_MATERIAL_WEIGHTS)
+	if StrataMacro.has_macro_channels(self):
+		var scale := 1 << clampi(roundi(log(StrataMacro.DEFAULT_SPACING / region_spacing) / log(2.0)), 0, 5)
+		maps[StrataRegions.MAP_MACRO] = StrataRegions.map(Image.FORMAT_RGBAH, StrataRegions.KIND_SAMPLE, scale, 1)
+	else:
+		maps.erase(StrataRegions.MAP_MACRO)
+	return spec
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_TRANSFORM_CHANGED and Engine.is_editor_hint():
@@ -377,6 +420,8 @@ func sample_runtime_channel(name: StringName, world_position: Vector3, interpola
 	return runtime_data.sample_channel_world(name, world_position, global_transform, interpolation)
 
 func _validate_property(property: Dictionary) -> void:
+	if property.name == "editor_compile_spacing":
+		property.usage = PROPERTY_USAGE_STORAGE
 	if property.name in ["runtime_data", "runtime_bake_stale"]:
 		property.usage |= PROPERTY_USAGE_READ_ONLY
 	# With a storage directory the bake and control maps live in their files, not in the scene.

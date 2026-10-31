@@ -138,3 +138,38 @@ bytes per region, 113.5 MB for 256 regions. The 1025-texel control maps become s
 (ids 17,956 and RGBAF weights 71,824 bytes per region), which is why this is below the plan's
 number; 1 m controls written by the planned producers cost the plan's figure. The 16-cell test
 fixture costs 6,084 bytes per region.
+
+## Editor preview (Track E)
+
+`StrataEditorPreview` composes the live authoring stack as regions and binds them with
+`set_regions`; it no longer feeds whole-terrain images to the adapters, and it no longer uses the
+4 m material lattice (`StrataMaterialControls`) or `StrataMacro.compose` (both kept, deprecated for
+the editor, for the island binding).
+
+- Spec: `StrataTerrain3D.region_spec()` = `StrataRegions.standard_spec(base_bounds, region_spacing,
+  region_cells)`; material ids/weights only when `editor_material_channels` is not empty (as
+  `StrataBake`), macro only when an enabled layer owns a tint or AO channel (scale nearest to 4 m),
+  holes always. `editor_compile_spacing` is an alias of `region_spacing`.
+- Renderer set-up: there is no public "configure without a field" entry, so the bridge configures
+  the renderer with a two-sample stand-in field and then calls `set_regions`.
+- Full refresh, time sliced (`StrataEditorPreview.SLICE_MS` = 4 ms of composition per frame, progress in
+  `status`): pass 1 composes height and holes of every region with `compose_region` (material and macro
+  maps start unassigned/neutral) and binds them; pass 2 composes materials and macro per region and
+  writes them with `update_region_window`. `refresh_now()` / `compose_cache()` complete a refresh
+  synchronously (tests, headless).
+- Cache: one signature per map class (height, holes, materials, macro) from
+  `StrataMaterialControls.signature` over the class's channels, without the cutoff, so moving the
+  cutoff across layers that hold none of them recomposes nothing. A changed signature recomposes that
+  class only, region by region with `update_region_window`.
+- Dab: `can_patch_region()` records which classes are current; `refresh_region()` finds the regions with
+  `regions_touching`, composes only the texel rectangle the dab can change (windows of the maps'
+  own lattices) and writes it with `update_region_window`. Height dabs touch height only, material
+  dabs ids and weights, hole dabs holes, tint/AO dabs macro. A dab that introduces a channel's
+  ownership (first tint sample) changes the whole class and falls back to a full refresh of it. At
+  spacings that are not powers of two whole region maps are recomposed instead of windows.
+- It calls the private `StrataRegionCompose._compose_plane/_compose_mask/_compose_materials/_compose_macro`
+  for sub-windows; a public `compose_map(terrain, through, map, window, spec)` would replace that.
+
+Measured on the saved island (256 regions of 256 cells): a 12 m-radius dab costs 1 ms (height) and 2.2 ms
+(materials); a full refresh is compute bound by the 1 m material pack (about 80 ms per region, 13 ms
+per height region), roughly 26 s in total, sliced across frames.

@@ -36,9 +36,13 @@ brush and the textured editor view; the node and resource types are available ei
    `res://levels/valley/terrain`, so the terrain's data goes into
    [one file per layer](index.md#where-the-data-lives) rather than into the scene.
 
-The textured editor view composes the terrain every `editor_compile_spacing` metres (1 m by
-default) and can draw at most 4097 samples per side, so raise that spacing for terrains
-larger than about 4 km.
+The textured editor view is built from square regions. In the *Regions* group, `region_spacing`
+sets the metres between samples (1 m by default; heights, holes and material weights are all
+composed at that spacing, so a brush or mask can place a feature as narrow as one sample) and
+`region_cells` the cells per region side (a power of two from 16 to 4096, 256 by default). A
+4 km island at the defaults is 16 x 16 regions of 256 m. Bounds that are not a multiple of the
+region size give a warning; the last regions then extend past the bounds. The older
+`editor_compile_spacing` is an alias of `region_spacing`.
 
 Keep the terrain's transform to translation and rotation around Y with unit scale,
 including its parents. The node shows a configuration warning otherwise, and the brush is

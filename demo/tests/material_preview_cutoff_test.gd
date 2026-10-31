@@ -23,6 +23,21 @@ func contribution(packed: Dictionary, point: Vector2i, id: int) -> float:
 		if roundi(ids[slot] * 255.0) == id: result += weights[slot]
 	return result
 
+## Material weights of lattice sample (0, 0): texel (apron, apron) of region (0, 0).
+func texel_weights(bridge: StrataEditorPreview) -> Color:
+	var region := bridge.get_region(Vector2i.ZERO)
+	return region.get_image("material_weights").get_pixel(region.apron, region.apron)
+
+## Weight of material [param id] at lattice sample (0, 0).
+func share(bridge: StrataEditorPreview, id: int) -> float:
+	var region := bridge.get_region(Vector2i.ZERO)
+	var ids := region.get_image("material_ids").get_pixel(region.apron, region.apron)
+	var weights := texel_weights(bridge)
+	var result := 0.0
+	for slot in range(4):
+		if roundi(ids[slot] * 255.0) == id: result += weights[slot]
+	return result
+
 func run() -> void:
 	var terrain := StrataTerrain3D.new(); terrain.base_bounds = Rect2(0, 0, 8, 8); terrain.set_preview_enabled(false)
 	var height := StrataLayer.new(); height.name = "HeightOnly"; terrain.add_child(height)
@@ -81,22 +96,21 @@ func run() -> void:
 	terrain.editor_control_ids = packed.ids; terrain.editor_control_weights = packed.weights
 	var saved_ids := terrain.editor_control_ids.get_data(); var saved_weights := terrain.editor_control_weights.get_data()
 	var bridge := StrataEditorPreview.new(); terrain.add_child(bridge); bridge.setup(terrain)
-	bridge._compose_material_controls(height)
-	check(bridge._material_controls.weights.get_pixel(0, 0) == Color(0, 0, 0, 0), "editor binds composed stage controls even when saved final maps exist")
+	terrain.preview_through_layer = height
+	check(bridge.compose_cache() and bridge.get_stats().regions == 1, "the editor bridge composes its regions without a renderer")
+	check(texel_weights(bridge) == Color(0, 0, 0, 0), "editor binds composed stage controls even when saved final maps exist")
 	var compiles: int = bridge.get_stats().material_compositions
-	bridge._compose_material_controls(height)
-	check(bridge.get_stats().material_compositions == compiles, "unchanged material inputs reuse their packed controls")
+	check(bridge.compose_cache() and bridge.get_stats().material_compositions == compiles, "unchanged material inputs reuse their packed controls")
 	height.data.set_sample(&"height", Vector2i.ONE, 23)
-	bridge._compose_material_controls(height)
-	check(bridge.get_stats().material_compositions == compiles, "height dabs do not trigger material composition")
-	bridge._compose_material_controls(null)
-	check(is_equal_approx(contribution(bridge._material_controls, Vector2i.ZERO, 0), .8), "returning to final layer restores the current complete enabled composition")
+	check(bridge.compose_cache() and bridge.get_stats().material_compositions == compiles, "height dabs do not trigger material composition")
+	terrain.preview_through_layer = null
+	check(bridge.compose_cache() and absf(share(bridge, 0) - .8) < .005, "returning to final layer restores the current complete enabled composition")
 	check(terrain.editor_control_ids.get_data() == saved_ids and terrain.editor_control_weights.get_data() == saved_weights, "preview cutoffs never replace or mutate persisted final controls")
+	# Without ordered material channels the regions have no material maps (the saved final
+	# 4 m control images no longer drive the editor preview), and the status explains why.
 	terrain.editor_material_channels = PackedStringArray()
-	bridge._compose_material_controls(height)
-	check(bridge._material_controls.weights.get_pixel(0, 0) == Color(0, 0, 0, 0) and bridge._material_status.contains("configure ordered"), "legacy controls without provenance stay unassigned at selected stages with an explanation")
-	bridge._compose_material_controls(null)
-	check(bridge._material_controls.ids == terrain.editor_control_ids, "legacy final only cached controls remain compatible")
+	terrain.preview_through_layer = height
+	check(bridge.compose_cache() and not bridge.get_spec().maps.has("material_ids") and bridge._material_problem().contains("configure ordered"), "controls without ordered channels stay unassigned with an explanation")
 	terrain.editor_material_channels = PackedStringArray(["material_a"])
 	terrain.editor_materials.resize(1)
 	packed = StrataMaterialControls.compose(terrain, terrain.editor_material_channels)

@@ -62,6 +62,19 @@ func run() -> void:
 	print("MATERIAL_PREVIEW_GPU checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)
 
+## Frames until the bridge's sliced composition has finished, then a draw.
+func settle(bridge: StrataEditorPreview) -> void:
+	var frames := 0
+	await process_frame
+	while bridge.is_busy() and frames < 600:
+		await process_frame
+		frames += 1
+	await draw()
+## Material weights of lattice sample (0, 0): texel (apron, apron) of region (0, 0).
+func lattice_weights(bridge: StrataEditorPreview) -> Color:
+	var region := bridge.renderer.get_region(Vector2i.ZERO)
+	return region.get_image("material_weights").get_pixel(region.apron, region.apron)
+
 func test_editor_bridge(material: StrataMaterial, saved_ids: Image, saved_weights: Image) -> void:
 	var terrain := StrataTerrain3D.new(); terrain.base_bounds = Rect2(-8, -8, 16, 16); terrain.set_preview_enabled(false)
 	terrain.editor_materials = [material]; terrain.editor_material_channels = PackedStringArray(["material_a"])
@@ -75,25 +88,25 @@ func test_editor_bridge(material: StrataMaterial, saved_ids: Image, saved_weight
 	root.add_child(terrain)
 	var camera := Camera3D.new(); camera.position = Vector3(0, 20, 0); terrain.add_child(camera); camera.look_at(Vector3.ZERO, Vector3.FORWARD); camera.current = true
 	var bridge := StrataEditorPreview.new(); terrain.add_child(bridge); bridge.setup(terrain); bridge.set_camera(camera)
-	await draw()
-	check(is_instance_valid(bridge.renderer) and bridge.renderer._control_weights.get_pixel(0, 0) == Color(0, 0, 0, 0), "actual editor bridge initially binds the selected early stage instead of saved final controls")
+	await settle(bridge)
+	check(is_instance_valid(bridge.renderer) and lattice_weights(bridge) == Color(0, 0, 0, 0), "actual editor bridge initially binds the selected early stage instead of saved final controls")
 	terrain.preview_through_layer = distribution
-	await draw()
-	check(bridge.renderer._control_weights.get_pixel(0, 0) == Color(1, 0, 0, 0), "changing the actual editor cutoff binds its newly included material stage")
+	await settle(bridge)
+	check(lattice_weights(bridge) == Color(1, 0, 0, 0), "changing the actual editor cutoff binds its newly included material stage")
 	distribution.enabled = false
-	await draw()
-	check(bridge.renderer._control_weights.get_pixel(0, 0) == Color(0, 0, 0, 0), "disabling the material stage clears the actual renderer assignment")
+	await settle(bridge)
+	check(lattice_weights(bridge) == Color(0, 0, 0, 0), "disabling the material stage clears the actual renderer assignment")
 	distribution.enabled = true; terrain.move_child(distribution, 0); terrain.preview_through_layer = height
-	await draw()
-	check(bridge.renderer._control_weights.get_pixel(0, 0) == Color(1, 0, 0, 0), "layer reorder refreshes actual editor controls through the current cutoff")
-	var previous_ids: PackedByteArray = bridge.renderer._control_ids.get_data()
-	var previous_weights: PackedByteArray = bridge.renderer._control_weights.get_data()
+	await settle(bridge)
+	check(lattice_weights(bridge) == Color(1, 0, 0, 0), "layer reorder refreshes actual editor controls through the current cutoff")
+	var previous_ids: PackedByteArray = bridge.renderer.get_region(Vector2i.ZERO).get_image("material_ids").get_data()
+	var previous_weights: PackedByteArray = bridge.renderer.get_region(Vector2i.ZERO).get_image("material_weights").get_data()
 	# Deliberately invalid configuration: the expected renderer error below is
 	# part of this rollback test, never an island asset or editor change.
 	print("MATERIAL_PREVIEW_GPU expected invalid empty-pool renderer error follows")
 	terrain.editor_materials = []; bridge.sync_configuration()
-	await draw()
-	check(bridge.status.contains("previous rendered terrain retained") and bridge.renderer._control_ids.get_data() == previous_ids and bridge.renderer._control_weights.get_data() == previous_weights, "failed editor reconfiguration restores the previous material control maps")
+	await settle(bridge)
+	check(bridge.status.contains("previous rendered terrain retained") and bridge.renderer.get_region(Vector2i.ZERO).get_image("material_ids").get_data() == previous_ids and bridge.renderer.get_region(Vector2i.ZERO).get_image("material_weights").get_data() == previous_weights, "failed editor reconfiguration retains the previous material region maps")
 	check(terrain.editor_control_ids == saved_ids and terrain.editor_control_weights == saved_weights and saved_weights.get_pixel(0, 0) == Color(1, 0, 0, 0), "actual editor stage changes preserve separately saved final bindings")
 	terrain.free()
 	await process_frame

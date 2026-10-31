@@ -111,42 +111,35 @@ func run() -> void:
 	var strict: Dictionary = StrataLayerData.pack_material_weights([Image.create(2, 2, false, Image.FORMAT_RF)])
 	check(not strict.ok, "the strict producer pack still rejects unassigned texels")
 
-	# The editor bridge: a height dab reuses the cached controls; a material dab patches
-	# its rectangle of the cached and renderer maps, matching a complete composition.
-	var bridge := StrataEditorPreview.new()
-	bridge.terrain = terrain
+	# The editor bridge on regions (no renderer): a height dab reuses the cached materials; a
+	# material dab patches its rectangles of the touched regions, matching a complete composition.
 	terrain.preview_through_layer = hand
-	check(bridge._compose_material_controls(hand) and bridge._material_full, "bridge composes the complete lattice once")
-	var renderer := StrataRenderer.new()
-	check(renderer.set_control_maps(bridge._material_controls.ids, bridge._material_controls.weights), "renderer accepts the composed maps")
-	bridge.renderer = renderer
+	terrain.region_cells = 16
+	var bridge := StrataEditorPreview.new()
+	terrain.add_child(bridge)
+	bridge.terrain = terrain
+	check(bridge.compose_cache() and bridge.get_stats().regions == 16 and bridge.get_stats().material_compositions == 1, "bridge composes every region once")
 	var compositions: int = bridge.get_stats().material_compositions
 	StrataBrush.apply_brush(hand, Vector2(20.0, 30.0), 4.0, 0.6, "lower", &"height")
-	check(not bridge._compose_material_controls(hand) and bridge.get_stats().material_compositions == compositions, "a height dab does not recompose material controls")
+	check(bridge.compose_cache() and bridge.get_stats().material_compositions == compositions, "a height dab does not recompose material controls")
 	for dab in range(3):
 		var point := Vector2(12.0 + dab * 6.0, 26.0 + dab * 3.0)
-		bridge._material_patchable = bridge._material_state(hand) == bridge._material_signature
-		check(bridge._material_patchable, "controls are current before material dab %d" % dab)
+		check(bridge.can_patch_region(), "regions are current before material dab %d" % dab)
 		check(StrataBrush.apply_brush(hand, point, 4.0, 0.7, "raise", &"material_d") > 0, "material dab %d applies" % dab)
-		check(bridge._refresh_material_region(point, 4.0 + 2.0 * hand.data.sample_spacing), "material dab %d patches its rectangle" % dab)
+		bridge.refresh_region(point, 4.0, hand.data.sample_spacing, &"material_d", true)
+	check(bridge.get_stats().material_regions == 3 and bridge.get_stats().material_compositions == compositions, "every material dab patched its rectangle without recomposing the class")
 	check(StrataBrush.apply_brush(hand, Vector2(24.0, 32.0), 3.0, 1.0, "erase", &"material_d") > 0, "material erase applies")
-	bridge._material_patchable = false
-	check(not bridge._refresh_material_region(Vector2(24.0, 32.0), 5.0), "a dab after which the cache was not current falls back to a complete composition")
-	check(bridge._compose_material_controls(hand), "the fallback recomposes the complete map")
-	renderer.set_control_maps(bridge._material_controls.ids, bridge._material_controls.weights) # as _refresh() does
-	bridge._material_patchable = true
+	check(bridge.compose_cache() and bridge.get_stats().material_compositions == compositions + 1, "a change the dab path did not see recomposes the class")
 	StrataBrush.apply_brush(hand, Vector2(36.0, 12.0), 4.0, 0.7, "raise", &"material_c")
-	check(bridge._refresh_material_region(Vector2(36.0, 12.0), 6.0), "a material dab after the fallback patches again")
-	check(not bridge._compose_material_controls(hand) and bridge.get_stats().material_compositions == compositions + 1, "patched controls stay current: no complete recomposition per dab")
-	check(bridge.get_stats().material_regions == 4, "every patching dab is counted")
-	var complete := StrataMaterialControls.compose(terrain, channels, hand)
-	check(same_maps(bridge._material_controls, complete), "patched cached controls equal a complete composition")
-	var expected := StrataRenderer.new()
-	expected.set_control_maps(complete.ids, complete.weights)
-	check(renderer._control_ids.get_data() == expected._control_ids.get_data() and renderer._control_weights.get_data() == expected._control_weights.get_data(), "patched renderer maps equal set_control_maps of a complete composition")
-	check(not renderer.update_control_region(complete.ids.get_region(Rect2i(0, 0, 3, 3)), complete.weights.get_region(Rect2i(0, 0, 3, 3)), Vector2i(12, 12)), "an out-of-range region is refused")
-	expected.free()
-	renderer.free()
+	check(bridge.compose_cache() and bridge.get_stats().material_compositions == compositions + 2, "a material dab the dab path did not see recomposes the class")
+	var spec := terrain.region_spec()
+	var equal := true
+	for y in range(StrataRegions.grid_size(spec).y):
+		for x in range(StrataRegions.grid_size(spec).x):
+			var fresh := StrataRegions.compose_region(terrain, hand, Vector2i(x, y), spec)
+			for name in ["material_ids", "material_weights", "height"]:
+				equal = equal and fresh.ok and bridge.get_region(Vector2i(x, y)).get_image(name).get_data() == fresh.region.get_image(name).get_data()
+	check(equal, "patched cached regions equal a complete composition")
 	bridge.free()
 	terrain.free()
 	control_prepare_checks()
