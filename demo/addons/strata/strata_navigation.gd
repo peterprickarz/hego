@@ -120,9 +120,11 @@ func get_navigation_map() -> RID:
 	return get_world_3d().navigation_map if is_inside_tree() else RID()
 
 func get_tile_grid() -> Vector2i:
-	if data == null or data.resolution.x < 2 or tile_cells < 1:
+	if data == null or tile_cells < 1:
 		return Vector2i.ZERO
 	var cells := data.get_cell_resolution()
+	if cells.x < 1 or cells.y < 1:
+		return Vector2i.ZERO
 	return Vector2i(ceili(float(cells.x) / tile_cells), ceili(float(cells.y) / tile_cells))
 
 func get_tile_cells(key: Vector2i) -> Rect2i:
@@ -407,25 +409,36 @@ func build_source_faces(cells: Rect2i) -> PackedVector3Array:
 	var faces := PackedVector3Array()
 	if not data.has_nav_profile(profile):
 		return faces
-	var width := data.resolution.x
-	var cell_width := width - 1
-	var heights := data.heights
-	var holes := data.holes
-	var exclusions := data.get_nav_profile_mask(profile)
+	var cells_rect := cells.intersection(Rect2i(Vector2i.ZERO, data.get_cell_resolution()))
+	if cells_rect.size.x < 1 or cells_rect.size.y < 1:
+		return faces
+	cells = cells_rect
+	var width := cells.size.x + 1
+	var heights := data.heights_window(cells)
+	if heights.size() != width * (cells.size.y + 1):
+		return faces
+	# Masks absent from the manifest block nothing.
+	var holes := PackedByteArray()
+	if data.has_map(StrataRegions.MAP_HOLES):
+		holes = data.cell_mask_window(StrataRegions.MAP_HOLES, cells)
+	var exclusions := PackedByteArray()
+	var exclusion_map := data.nav_profile_map(profile)
+	if data.has_map(exclusion_map):
+		exclusions = data.cell_mask_window(exclusion_map, cells)
 	var origin := data.bounds.position
 	var spacing := data.get_spacing()
 	faces.resize(cells.size.x * cells.size.y * 6)
 	var write := 0
-	for z in range(cells.position.y, cells.end.y):
-		var z0 := origin.y + z * spacing
-		var z1 := origin.y + (z + 1) * spacing
-		for x in range(cells.position.x, cells.end.x):
-			var cell := z * cell_width + x
+	for lz in range(cells.size.y):
+		var z0 := origin.y + (cells.position.y + lz) * spacing
+		var z1 := origin.y + (cells.position.y + lz + 1) * spacing
+		for lx in range(cells.size.x):
+			var cell := lz * cells.size.x + lx
 			if not holes.is_empty() and holes[cell] == StrataRuntimeData.MASK_SET or not exclusions.is_empty() and exclusions[cell] == StrataRuntimeData.MASK_SET:
 				continue
-			var x0 := origin.x + x * spacing
-			var x1 := origin.x + (x + 1) * spacing
-			var row := z * width + x
+			var x0 := origin.x + (cells.position.x + lx) * spacing
+			var x1 := origin.x + (cells.position.x + lx + 1) * spacing
+			var row := lz * width + lx
 			var a := Vector3(x0, heights[row], z0)
 			var b := Vector3(x1, heights[row + 1], z0)
 			var c := Vector3(x0, heights[row + width], z1)

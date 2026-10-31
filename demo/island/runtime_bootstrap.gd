@@ -37,7 +37,7 @@ func _ready() -> void:
 		if baked.get("pending", false): baked = await navigation.bake_finished
 		if not baked.get("ok", false): push_error("Runtime navigation region failed: " + str(baked)); return
 	ready_for_capture = true
-	print("ISLAND_COMPILED_RUNTIME_READY resolution=", data.resolution, " macro=", data.has_macro(), " shader_macro=", renderer._shader_material.get_shader_parameter("has_terrain_macro_map"))
+	print("ISLAND_COMPILED_RUNTIME_READY cells=", data.get_cell_resolution(), " macro=", data.has_macro(), " shader_macro=", renderer._shader_material.get_shader_parameter("has_terrain_macro_map"))
 
 func _process(_delta: float) -> void:
 	if not ready_for_capture: return

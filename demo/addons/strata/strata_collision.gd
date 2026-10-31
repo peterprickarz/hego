@@ -91,9 +91,11 @@ func is_transform_valid() -> bool:
 	return global_transform.is_finite() and basis.y.is_equal_approx(Vector3.UP) and is_equal_approx(basis.x.length(), 1.0) and is_equal_approx(basis.z.length(), 1.0) and is_equal_approx(basis.determinant(), 1.0)
 
 func get_chunk_grid() -> Vector2i:
-	if data == null or data.resolution.x < 2 or data.resolution.y < 2 or chunk_cells < 1:
+	if data == null or chunk_cells < 1:
 		return Vector2i.ZERO
 	var cells := data.get_cell_resolution()
+	if cells.x < 1 or cells.y < 1:
+		return Vector2i.ZERO
 	return Vector2i(ceili(float(cells.x) / chunk_cells), ceili(float(cells.y) / chunk_cells))
 
 ## Cell rectangle covered by a chunk.
@@ -254,16 +256,16 @@ func _build_chunk(key: Vector2i) -> Dictionary:
 	if cells.size.x < 1 or cells.size.y < 1:
 		return {}
 	var has_hole := false
-	var all_holes := true
-	if not data.holes.is_empty():
-		var cell_width := data.resolution.x - 1
-		for z in range(cells.position.y, cells.end.y):
-			var row := data.holes.slice(z * cell_width + cells.position.x, z * cell_width + cells.end.x)
-			var masked := row.count(StrataRuntimeData.MASK_SET)
-			has_hole = has_hole or masked > 0
-			all_holes = all_holes and masked == row.size()
-	else:
-		all_holes = false
+	var all_holes := false
+	# One apron-free window of the hole map; a map absent from the manifest means no holes.
+	var hole_bytes := PackedByteArray()
+	if data.has_map(StrataRegions.MAP_HOLES):
+		hole_bytes = data.cell_mask_window(StrataRegions.MAP_HOLES, cells)
+		if hole_bytes.size() != cells.size.x * cells.size.y:
+			return {}
+		var masked := hole_bytes.count(StrataRuntimeData.MASK_SET)
+		has_hole = masked > 0
+		all_holes = masked == hole_bytes.size()
 	_stats.builds += 1
 	if all_holes:
 		return {"kind": ChunkKind.EMPTY, "body": null, "cells": cells}
@@ -299,11 +301,9 @@ func _build_chunk(key: Vector2i) -> Dictionary:
 	return {"kind": kind, "body": body, "cells": cells}
 
 func _heightmap_shape(cells: Rect2i, spacing: float) -> HeightMapShape3D:
-	var width := data.resolution.x
-	var map := PackedFloat32Array()
-	for z in range(cells.position.y, cells.end.y + 1):
-		var start := z * width + cells.position.x
-		map.append_array(data.heights.slice(start, start + cells.size.x + 1))
+	var map := data.heights_window(cells)
+	if map.size() != (cells.size.x + 1) * (cells.size.y + 1):
+		return null
 	if spacing != 1.0:
 		var inverse := 1.0 / spacing
 		for index in range(map.size()):
@@ -322,23 +322,24 @@ func _heightmap_shape(cells: Rect2i, spacing: float) -> HeightMapShape3D:
 ## every such seam lies inside one shape, whose shared vertices are identical.
 func _concave_shape(chunk_cells_rect: Rect2i, center_lattice: Vector2, spacing: float) -> ConcavePolygonShape3D:
 	var cells := chunk_cells_rect.grow(1).intersection(Rect2i(Vector2i.ZERO, data.get_cell_resolution()))
-	var width := data.resolution.x
-	var cell_width := width - 1
+	var width := cells.size.x + 1
+	var heights := data.heights_window(cells)
+	var holes := data.cell_mask_window(StrataRegions.MAP_HOLES, cells)
+	if heights.size() != width * (cells.size.y + 1) or holes.size() != cells.size.x * cells.size.y:
+		return null
 	var faces := PackedVector3Array()
-	var solid := cells.size.x * cells.size.y - _count_holes(cells)
+	var solid := cells.size.x * cells.size.y - holes.count(StrataRuntimeData.MASK_SET)
 	faces.resize(solid * 6)
 	var write := 0
-	var heights := data.heights
-	var holes := data.holes
-	for z in range(cells.position.y, cells.end.y):
-		var z0 := (z - center_lattice.y) * spacing
-		var z1 := (z + 1 - center_lattice.y) * spacing
-		for x in range(cells.position.x, cells.end.x):
-			if holes[z * cell_width + x] == StrataRuntimeData.MASK_SET:
+	for lz in range(cells.size.y):
+		var z0 := (cells.position.y + lz - center_lattice.y) * spacing
+		var z1 := (cells.position.y + lz + 1 - center_lattice.y) * spacing
+		for lx in range(cells.size.x):
+			if holes[lz * cells.size.x + lx] == StrataRuntimeData.MASK_SET:
 				continue
-			var x0 := (x - center_lattice.x) * spacing
-			var x1 := (x + 1 - center_lattice.x) * spacing
-			var row := z * width + x
+			var x0 := (cells.position.x + lx - center_lattice.x) * spacing
+			var x1 := (cells.position.x + lx + 1 - center_lattice.x) * spacing
+			var row := lz * width + lx
 			var a := Vector3(x0, heights[row], z0)
 			var b := Vector3(x1, heights[row + 1], z0)
 			var c := Vector3(x0, heights[row + width], z1)
@@ -349,13 +350,6 @@ func _concave_shape(chunk_cells_rect: Rect2i, center_lattice: Vector2, spacing: 
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(faces)
 	return shape
-
-func _count_holes(cells: Rect2i) -> int:
-	var cell_width := data.resolution.x - 1
-	var count := 0
-	for z in range(cells.position.y, cells.end.y):
-		count += data.holes.slice(z * cell_width + cells.position.x, z * cell_width + cells.end.x).count(StrataRuntimeData.MASK_SET)
-	return count
 
 func get_resident_chunks() -> Array[Vector2i]:
 	var result: Array[Vector2i] = []

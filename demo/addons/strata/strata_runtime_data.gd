@@ -89,14 +89,9 @@ var _missing: Dictionary = {}
 var resolution: Vector2i:
 	get: return get_cell_resolution() + Vector2i.ONE
 
-# Transitional whole-lattice views, assembled from the regions once and cached, so that
-# StrataCollision and StrataNavigation keep working on small terrains until they read region
-# windows (heights_window / cell_mask_window). They cost a second copy of the lattice and are
-# not meant for large terrains. validate_payload() and assigning regions drop the caches.
-var heights: PackedFloat32Array:
-	get:
-		if _compat_heights.is_empty(): _compat_heights = heights_window(Rect2i(Vector2i.ZERO, get_cell_resolution()))
-		return _compat_heights
+# Transitional whole-lattice hole view, assembled from the regions once and cached (a second copy
+# of the hole lattice, not meant for large terrains). Only runtime_data_test still reads it;
+# production code uses cell_mask_window / is_hole_cell. validate_payload() drops the cache.
 ## (resolution - 1) cells, row-major; empty when no cell is a hole.
 var holes: PackedByteArray:
 	get:
@@ -104,7 +99,6 @@ var holes: PackedByteArray:
 			_compat_holes = cell_mask_window(StrataRegions.MAP_HOLES, Rect2i(Vector2i.ZERO, get_cell_resolution()))
 			if _compat_holes.count(MASK_SET) == 0: _compat_holes = PackedByteArray()
 		return _compat_holes
-var _compat_heights := PackedFloat32Array()
 var _compat_holes := PackedByteArray()
 
 func _get_property_list() -> Array[Dictionary]:
@@ -333,7 +327,6 @@ func validate(deep: bool = false) -> Dictionary:
 ## Revalidates after intentional in-place edits to embedded region bytes.
 func validate_payload() -> Dictionary:
 	_payload_checked = false
-	_compat_heights = PackedFloat32Array()
 	_compat_holes = PackedByteArray()
 	return validate()
 

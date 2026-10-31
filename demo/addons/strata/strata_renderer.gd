@@ -213,16 +213,43 @@ func configure(source: StrataTerrain3D, materials: Array[StrataMaterial], height
 
 ## Compiled-only runtime path: no authoring layers or Houdini session required.
 func configure_runtime(source: Node3D, data: StrataRuntimeData, materials: Array[StrataMaterial]) -> bool:
-	if data == null or not data.validate().get("ok", false): return false
+	if data == null or not data.validate().get("ok", false) or not data.is_resident(): return false
 	if render_settings == null: render_settings = data.get("render_settings") if data.get("render_settings") != null else StrataRenderSettings.new()
-	if data.material_ids != null and not _validate_control_images(data.material_ids, data.material_weights, materials.size()): return false
-	if not _configure(source, materials, data.get_spacing(), data.to_compiled_field(), data.bounds, true): return false
-	if data.material_ids != null and not set_control_maps(data.material_ids, data.material_weights): return false
-	if not set_hole_image(data.get_hole_image()): return false
-	if data.has_method("get_macro_binding"):
-		var macro: Dictionary = data.call("get_macro_binding")
-		if macro.get("ok", false): return set_macro_map(macro.image, macro.bounds)
-	return true
+	var input := _runtime_region_input(data, materials.size())
+	if input.is_empty(): return false
+	return _configure(source, materials, data.get_spacing(), {}, data.bounds, true, input)
+
+## The region spec (shader maps only) and the region set of the whole grid of a runtime
+## manifest, or {} after a warning. Material ids are checked against the pool size.
+func _runtime_region_input(data: StrataRuntimeData, material_count: int) -> Dictionary:
+	var spec := data.get_spec().duplicate(true)
+	var maps := {}
+	for name in spec.maps:
+		if _SHADER_MAPS.has(name): maps[name] = spec.maps[name]
+	spec.maps = maps
+	var regions := {}
+	var grid := data.grid
+	for y in range(grid.y):
+		for x in range(grid.x):
+			var region := data.get_region(Vector2i(x, y))
+			if region == null:
+				push_warning("Runtime region (%d, %d) is unavailable; renderer not configured." % [x, y])
+				return {}
+			regions[Vector2i(x, y)] = region
+	if maps.has(StrataRegions.MAP_MATERIAL_IDS) and maps.has(StrataRegions.MAP_MATERIAL_WEIGHTS):
+		var native := ClassDB.class_has_method(&"StrataLayerData", &"prepare_control_maps")
+		for region: StrataRegionData in regions.values():
+			var ids := region.get_image(StrataRegions.MAP_MATERIAL_IDS, 0)
+			var weights := region.get_image(StrataRegions.MAP_MATERIAL_WEIGHTS, 0)
+			if ids == null or weights == null: return {}
+			if native:
+				var checked: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, material_count)
+				if not checked.get("ok", false):
+					push_warning("Region %s: %s" % [region.region, checked.get("message", "invalid material controls")])
+					return {}
+			elif not _validate_control_images(ids, weights, material_count):
+				return {}
+	return {"spec": spec, "regions": regions}
 
 func _bounds_for_source() -> Rect2:
 	return _runtime_bounds if _runtime_mode else (_source as StrataTerrain3D).base_bounds
@@ -231,7 +258,8 @@ static func _valid_transform(source: Node3D) -> bool:
 	var basis := source.global_basis
 	return source.global_transform.is_finite() and basis.x.is_equal_approx(Vector3(basis.x.x, 0.0, basis.x.z).normalized()) and basis.y.is_equal_approx(Vector3.UP) and basis.z.is_equal_approx(Vector3(basis.z.x, 0.0, basis.z.z).normalized()) and absf(basis.determinant() - 1.0) < 0.0001
 
-func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing: float, compiled: Dictionary, bounds: Rect2, runtime_mode: bool) -> bool:
+## [param region_input] ({spec, regions}) binds a region set instead of a heightfield.
+func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing: float, compiled: Dictionary, bounds: Rect2, runtime_mode: bool, region_input: Dictionary = {}) -> bool:
 	var device := RenderingServer.get_rendering_device()
 	if device == null or RenderingServer.get_current_rendering_method() != "forward_plus":
 		push_error("Terrain renderer experiment requires a real Forward+ RenderingDevice.")
@@ -252,13 +280,13 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 	if not is_finite(height_spacing) or height_spacing <= 0.0 or materials.is_empty() or materials.size() > 32:
 		push_error("Renderer requires positive height spacing and one to 32 materials.")
 		return false
-	if not _validate_lod_parameters(bounds) or _height_dimensions(bounds, height_spacing) == Vector2i.ZERO:
+	if not _validate_lod_parameters(bounds) or region_input.is_empty() and _height_dimensions(bounds, height_spacing) == Vector2i.ZERO:
 		return false
 	for material in materials:
 		if not _valid_material(material):
 			push_error("Terrain material UV/triplanar/displacement/height-blend parameters are invalid.")
 			return false
-	if _control_ids != null and not _validate_control_images(_control_ids, _control_weights, materials.size()):
+	if region_input.is_empty() and _control_ids != null and not _validate_control_images(_control_ids, _control_weights, materials.size()):
 		return false
 	if not ClassDB.class_exists("StrataMesher"):
 		push_error("Native StrataMesher is unavailable; rebuild the standalone extension.")
@@ -294,11 +322,13 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 	_ownership_texture = ImageTexture.create_from_image(empty_ownership)
 	_shader_material.set_shader_parameter("ownership_field", _ownership_texture)
 	_shader_material.set_shader_parameter("show_ownership", false)
-	_triangle_height_sampling = not compiled.is_empty()
+	_triangle_height_sampling = not compiled.is_empty() or not region_input.is_empty()
 	_shader_material.set_shader_parameter("triangle_height_sampling", _triangle_height_sampling)
-	if _control_ids == null:
+	if not region_input.is_empty():
+		_control_ids = null; _control_weights = null
+	elif _control_ids == null:
 		_make_control_fixture()
-	if not refresh_heightfield():
+	if not (set_regions(region_input.spec, region_input.regions) if not region_input.is_empty() else refresh_heightfield()):
 		_source = previous.source
 		_runtime_mode = previous.runtime_mode
 		_runtime_bounds = previous.runtime_bounds

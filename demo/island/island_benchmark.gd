@@ -77,7 +77,7 @@ func _run() -> void:
 		push_error("Island scene needs a terrain source, StrataRenderer, and Camera3D.")
 		quit(2)
 		return
-	if _source.runtime_data == null or _source.runtime_bake_stale or not _source.runtime_data.is_resident() or _source.runtime_data.resolution != Vector2i(4097, 4097):
+	if _source.runtime_data == null or _source.runtime_bake_stale or not _source.runtime_data.is_resident() or _source.runtime_data.get_cell_resolution() != Vector2i(4096, 4096):
 		push_error("Benchmark requires a current, resident 4097x4097 compiled runtime cache; visual preview data is not enough.")
 		quit(2)
 		return

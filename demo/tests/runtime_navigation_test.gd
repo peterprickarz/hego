@@ -128,7 +128,8 @@ func walkable_columns(mask: PackedByteArray, cells: Vector2i) -> Array:
 
 ## Independent per-cell reference: float64 corner means, triangle normals.
 static func reference_walkable(source: StrataRuntimeData, rule: Dictionary, cell: Vector2i) -> Variant:
-	var w := source.resolution.x
+	var lattice := source.get_cell_resolution()
+	var w := lattice.x + 1
 	var i := cell.y * w + cell.x
 	if rule.has("all"):
 		var result: Variant = true
@@ -151,10 +152,11 @@ static func reference_walkable(source: StrataRuntimeData, rule: Dictionary, cell
 		return not source.is_nav_excluded_cell(cell)
 	if rule.has("slope_min") or rule.has("slope_max"):
 		var s := source.get_spacing()
-		var a := Vector3(0, source.heights[i], 0)
-		var b := Vector3(s, source.heights[i + 1], 0)
-		var c := Vector3(0, source.heights[i + w], s)
-		var d := Vector3(s, source.heights[i + w + 1], s)
+		var heights := source.heights_window(Rect2i(Vector2i.ZERO, lattice))
+		var a := Vector3(0, heights[i], 0)
+		var b := Vector3(s, heights[i + 1], 0)
+		var c := Vector3(0, heights[i + w], s)
+		var d := Vector3(s, heights[i + w + 1], s)
 		var steep := 0.0
 		for triangle in [[a, b, c], [b, d, c]]:
 			var normal: Vector3 = (triangle[1] - triangle[0]).cross(triangle[2] - triangle[0]).normalized()
@@ -163,7 +165,7 @@ static func reference_walkable(source: StrataRuntimeData, rule: Dictionary, cell
 		var high := float(rule.get("slope_max", 90.0))
 		if absf(steep - low) < 0.001 or absf(steep - high) < 0.001: return null
 		return steep >= low and steep <= high
-	var values: PackedFloat32Array = source.heights if rule.has("height_min") or rule.has("height_max") else source.channels[rule.channel].values
+	var values := source.heights_window(Rect2i(Vector2i.ZERO, lattice)) if rule.has("height_min") or rule.has("height_max") else source.map_window_bytes(rule.channel, Rect2i(Vector2i.ZERO, lattice)).to_float32_array()
 	var mean := (float(values[i]) + values[i + 1] + values[i + w] + values[i + w + 1]) * 0.25
 	var low := float(rule.get("height_min", rule.get("min", -INF)))
 	var high := float(rule.get("height_max", rule.get("max", INF)))
@@ -175,12 +177,9 @@ static func reference_walkable(source: StrataRuntimeData, rule: Dictionary, cell
 func check_rules() -> void:
 	var ramp_data := make_data(Rect2(0, 0, 9, 3), Vector2i(10, 4), ramp)
 	var cells := ramp_data.get_cell_resolution()
-	ramp_data.nav_exclusions = cell_mask(cells, [Rect2i(0, 1, 9, 1)])
-	var fungal := PackedFloat32Array(); fungal.resize(40)
-	for j in range(4): fungal[j * 10 + 4] = 1.0
-	var full := PackedFloat32Array(); full.resize(40); full.fill(1.0)
-	ramp_data.channels = {"fungal_network": {"values": fungal, "coverage": full}}
-	ramp_data.channel_names = PackedStringArray(["fungal_network"])
+	add_cell_map(ramp_data, "nav_exclusion", [Rect2i(0, 1, 9, 1)])
+	add_channel(ramp_data, "fungal_network", func(i: int, _j: int) -> float: return 1.0 if i == 4 else 0.0)
+	finish_data(ramp_data)
 	check(ramp_data.validate().ok, "ramp fixture valid")
 	# Cell means by column: 0, 0, 0, 0.5, 1.5, 2.5, 4, 6, 8; slopes 0, 45, 63.4.
 	var expectations := [
@@ -204,7 +203,7 @@ func check_rules() -> void:
 		var mask := StrataNavProfiles.evaluate(ramp_data, entry[0])
 		check(walkable_columns(mask, cells) == entry[1], "ramp rule %s walkable columns %s (expected %s)" % [entry[0], walkable_columns(mask, cells), entry[1]])
 	# Exclusion literal: the middle row; the default rule reproduces nav_exclusions.
-	check(StrataNavProfiles.evaluate(ramp_data, StrataNavProfiles.DEFAULT_RULE) == ramp_data.nav_exclusions, "the default rule is exactly nav_exclusions")
+	check(StrataNavProfiles.evaluate(ramp_data, StrataNavProfiles.DEFAULT_RULE) == ramp_data.cell_mask_window("nav_exclusion", Rect2i(Vector2i.ZERO, cells)), "the default rule is exactly nav_exclusions")
 	var inverted := StrataNavProfiles.evaluate(ramp_data, {"not": {"exclusion": true}})
 	check(inverted.count(255) == 18 and inverted[9] == 0 and inverted[0] == 255, "not exclusion walks only the excluded row")
 	var excluded_flat := StrataNavProfiles.evaluate(ramp_data, {"all": [{"exclusion": true}, {"slope_max": 30.0}]})
@@ -245,17 +244,16 @@ func run() -> void:
 	data = make_data(Rect2(-48.0, -24.0, 96.0, 48.0), Vector2i(97, 49), gentle)
 	var cells := data.get_cell_resolution()
 	# Hole wall leaving a gap at the top; exclusion pad reaching the far edge.
-	data.holes = cell_mask(cells, [Rect2i(44, 0, 4, 34)])
-	data.nav_exclusions = cell_mask(cells, [Rect2i(60, 36, 6, 12)])
+	add_cell_map(data, "holes", [Rect2i(44, 0, 4, 34)])
+	add_cell_map(data, "nav_exclusion", [Rect2i(60, 36, 6, 12)])
 	# Footpath: an L of path samples, x 4..10 for z 4..45 and z 38..45 for x 4..40.
 	var footpath := PackedFloat32Array(); footpath.resize(97 * 49)
-	var covered := PackedFloat32Array(); covered.resize(97 * 49); covered.fill(1.0)
 	for j in range(49):
 		for i in range(97):
 			if i >= 4 and i <= 10 and j >= 4 and j <= 45 or j >= 38 and j <= 45 and i >= 4 and i <= 40:
 				footpath[j * 97 + i] = 1.0
-	data.channels = {"footpath": {"values": footpath, "coverage": covered}}
-	data.channel_names = PackedStringArray(["footpath"])
+	add_channel(data, "footpath", func(i: int, j: int) -> float: return footpath[j * 97 + i])
+	finish_data(data)
 	var applied := StrataNavProfiles.apply(data, [{"name": &"paths", "rule": {"channel": "footpath", "min": 0.5}}])
 	check(applied.ok and data.get_nav_profile_names() == [&"default", &"paths"], "paths profile evaluated: %s" % applied)
 	# Walkable: cells with at least two of four path corners (mean >= 0.5); the

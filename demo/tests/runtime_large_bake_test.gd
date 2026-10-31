@@ -41,7 +41,7 @@ func run() -> void:
 		finish("RUNTIME_LARGE_BAKE_TEST")
 		return
 	var data := terrain.runtime_data
-	check(data.resolution == Vector2i(4097, 4097) and data.holes.count(255) == 24, "full-resolution data and canonical holes")
+	check(data.get_cell_resolution() == Vector2i(4096, 4096) and data.cell_mask_window("holes", Rect2i(Vector2i.ZERO, data.get_cell_resolution())).count(255) == 24, "full-resolution data and canonical holes")
 	near(data.sample_height(Vector2(0, 0)).value, terrain.sample_height(Vector2(0, 0)), 0.000002, "baked centre matches the stack")
 	near(data.sample_height(Vector2(1000.0, -1500.0)).value, terrain.sample_height(Vector2(1000.0, -1500.0)), 0.000002, "baked far point matches the stack")
 	holes = null

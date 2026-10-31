@@ -68,7 +68,9 @@ Terrain-local XZ everywhere. `Status` is `OK`, `OUTSIDE`, `ABSENT`, `NOT_RESIDEN
 
 Renderer adapters keep working by assembling whole images from the regions: `create_height_image()`, `to_compiled_field()` (same shape as `StrataProcedural.compile_heightfield()`), `get_hole_image()`, `get_nav_exclusion_image()`. They return null or `{ok: false, message}` when a side exceeds 4097 samples or a region is unavailable.
 
-`heights` and `holes` are **transitional** whole-lattice properties that assemble from the regions once and cache the result, so `StrataCollision` and `StrataNavigation` keep working on small terrains until they read the windows. Do not use them in new code.
+`StrataCollision` and `StrataNavigation` read only these windows (`heights_window`, and `cell_mask_window` for `holes` and the profile's `nav_profile_map`), so chunk and tile sizes need not divide the region size. `holes` is the one remaining **transitional** whole-lattice property (assembled once and cached; only `runtime_data_test` reads it); do not use it in new code. The whole-lattice `heights` property is gone.
+
+`StrataRenderer.configure_runtime(source, data, materials)` builds the renderer from the manifest: the spec (bounds, spacing, cells, apron) with the maps the shader reads (`height`, `material_ids`, `material_weights`, `holes`, `macro`), and `set_regions()` with every region of the grid. Material ids are validated against the pool size; a missing region or invalid ids make it return false with the previous renderer state kept.
 
 ### Canonical surface
 

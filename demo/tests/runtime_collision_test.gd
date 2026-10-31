@@ -54,7 +54,8 @@ func expect_surface(data: StrataRuntimeData, local: Vector2, label: String, node
 func run() -> void:
 	# 40 x 24 cells, rectangular, fractional negative origin; 16-cell chunks.
 	var data := make_data(Rect2(-20.25, 10.5, 40.0, 24.0), Vector2i(41, 25))
-	data.holes = cell_mask(data.get_cell_resolution(), [Rect2i(18, 3, 3, 2), Rect2i(37, 20, 1, 1)])
+	add_cell_map(data, "holes", [Rect2i(18, 3, 3, 2), Rect2i(37, 20, 1, 1)])
+	finish_data(data)
 	check(data.validate().ok, "fixture valid")
 	check(data.height_min < 0.0 and data.height_max > 0.0, "fixture has negative and positive heights")
 
@@ -111,7 +112,7 @@ func run() -> void:
 			var exact := true
 			for z in range(cells.size.y + 1):
 				for x in range(cells.size.x + 1):
-					exact = exact and shape.map_data[z * shape.map_width + x] == data.heights[(cells.position.y + z) * 41 + cells.position.x + x]
+					exact = exact and shape.map_data[z * shape.map_width + x] == data.get_height_at(cells.position + Vector2i(x, z))
 			check(exact, "heightmap %s copies compiled heights exactly" % key)
 		elif shape is ConcavePolygonShape3D:
 			var faces: PackedVector3Array = shape.get_faces()
@@ -260,16 +261,35 @@ func run() -> void:
 	check(collision.get_resident_chunks().is_empty() and collision.get_chunk_grid() == Vector2i(5, 3), "valid chunk configuration change invalidates old shape indexing")
 	collision.chunk_cells = 16
 
+	# Chunks that do not divide the 16-cell regions read windows across region edges.
+	collision.chunk_cells = 24
+	check(collision.prepare_region(data.bounds).ok and collision.get_chunk_grid() == Vector2i(2, 1), "24-cell chunks over 16-cell regions build")
+	await settle()
+	for key in collision.get_resident_chunks():
+		var odd_shape: Shape3D = collision.get_chunk_info(key).body.get_node("Shape").shape
+		if odd_shape is HeightMapShape3D:
+			var odd_cells: Rect2i = collision.get_chunk_info(key).cells
+			var odd_exact := true
+			for z in range(odd_cells.size.y + 1):
+				for x in range(odd_cells.size.x + 1):
+					odd_exact = odd_exact and odd_shape.map_data[z * odd_shape.map_width + x] == data.get_height_at(odd_cells.position + Vector2i(x, z))
+			check(odd_exact, "24-cell heightmap %s copies heights across region seams exactly" % key)
+	for index in range(200):
+		expect_surface(data, data.lattice_to_local(Vector2(rng.randf_range(0.0, 40.0), rng.randf_range(0.0, 24.0))), "24-cell chunks")
+	collision.chunk_cells = 16
+
 	# Atomic replacement with a new bake; failed replacement keeps the old one.
 	collision.prepare_region(data.bounds)
-	var raised := make_data(data.bounds, data.resolution, func(i: int, j: int) -> float: return fixture_height(i, j) + 5.0)
-	raised.holes = data.holes.duplicate()
+	var raised := make_data(data.bounds, Vector2i(41, 25), func(i: int, j: int) -> float: return fixture_height(i, j) + 5.0)
+	add_cell_map(raised, "holes", [Rect2i(18, 3, 3, 2), Rect2i(37, 20, 1, 1)])
+	finish_data(raised)
 	var replaced := collision.replace_data(raised)
 	check(replaced.ok and replaced.resident == 6 and collision.data == raised, "replace_data rebuilds all resident chunks: %s" % replaced)
 	await settle()
 	expect_surface(raised, data.lattice_to_local(Vector2(10.4, 12.7)), "after replace")
-	var broken := make_data(data.bounds, data.resolution)
-	broken.heights.resize(3)
+	var broken := make_data(data.bounds, Vector2i(41, 25))
+	broken.regions.erase(Vector2i(1, 0))
+	check(not broken.validate_payload().get("ok", true) or not broken.validate().ok, "fixture with a missing region is invalid")
 	var rejected := collision.replace_data(broken)
 	check(not rejected.ok and collision.data == raised and collision.get_resident_chunks().size() == 6, "invalid replacement keeps previous data and shapes")
 	await settle()
@@ -277,7 +297,8 @@ func run() -> void:
 
 	# Non-unit spacing (2 m) uses a uniformly scaled heightmap and scaled faces.
 	var coarse := make_data(Rect2(-8.0, -6.0, 16.0, 12.0), Vector2i(9, 7))
-	coarse.holes = cell_mask(coarse.get_cell_resolution(), [Rect2i(1, 1, 1, 1)])
+	add_cell_map(coarse, "holes", [Rect2i(1, 1, 1, 1)])
+	finish_data(coarse)
 	check(coarse.validate().ok and coarse.get_spacing() == 2.0, "2 m fixture")
 	var coarse_root := Node3D.new()
 	coarse_root.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(-71.0)), Vector3(-300.0, 12.0, 80.0))
