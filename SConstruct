@@ -72,6 +72,14 @@ if _target_platform == "linux":
 else:
     env = SConscript("godot-cpp/SConstruct")
 
+# godot-cpp v10 archives about a thousand generated objects. Spawned through `sh -c`, the
+# whole ar command is one argument, and Linux caps a single argument at 128 KiB; the long
+# container/profile build paths push the static-library link over that. Hand GNU ar a
+# response file instead (GNU ar on Linux and MinGW accepts @file; Apple's ar does not).
+if env["platform"] in ("linux", "windows"):
+    env["MAXLINELENGTH"] = 64 * 1024
+    env["ARCOM"] = "${TEMPFILE('$AR $ARFLAGS $TARGET $SOURCES', '$ARCOMSTR')}"
+
 # godot-cpp links libstdc++ and libgcc statically by default. That is what lets a binary
 # load on distributions older than the machine that built it, and it is the same choice
 # the official Godot builds make - they carry no libstdc++ dependency at all. These flags
