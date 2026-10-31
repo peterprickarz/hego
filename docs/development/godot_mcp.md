@@ -54,3 +54,17 @@ Open the demo project in the Godot editor first, then reconnect the MCP server i
   `hego`, `strata`, `hego_strata` or `hego_terrain3d` packages.
 - The bridge only activates in debug sessions, but review it before exporting the demo.
 - Prefer read-only inspection; the tools can also edit scenes and run scripts in the editor.
+
+## Querying the addon without an MCP client
+
+The addon speaks plain JSON over its WebSocket: send `{"id": "<any>", "command": "<name>",
+"params": {...}}` and read one JSON reply with the same `id`, a `status` and a `result`. Node
+20+ has a `WebSocket` global, so a ten-line script is enough when the MCP server is not wired
+into the agent session. Useful read-only commands: `get_log_messages` (editor errors and
+warnings captured by the addon's `Logger`), `get_scene_tree`, `get_selected_nodes`,
+`get_node_properties` with `node_path` relative to the edited scene root, and
+`capture_editor_screenshot` with `{"viewport": "3d"}` (returns `image_base64`).
+
+`get_node_properties` serializes every property value. On a `StrataLayer` or the textured
+preview renderer that means megabytes of sample data and textures, so the call stalls the
+editor for seconds and times out; query the terrain or the bridge node instead.
