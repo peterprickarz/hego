@@ -158,6 +158,12 @@ input is validated for IDs and returned as RGBA8 with every texel whose bytes su
 other than 0 or 255 renormalized to sum to 255 by the same apportionment; zero-sum texels are
 kept. RGBAF/RGBAH input is normalized and returned as RGBAF as before.
 
+`quantize_material_weights(rgbaf_image)` is the region composition's byte quantisation of the
+sparse pack's RGBAF weights (`round(w / total * 255)` per slot, the largest slot takes the
+remainder so an assigned texel sums to 255, unassigned texels stay 0). It is not the
+largest-remainder apportionment of `weights_format = RGBA8` above; the region maps keep the
+rounding they always had.
+
 ## Windowed composition at region scale
 
 `compose_dense(..., index_offset)` composes a window of a lattice of any size up to the 20 Mi
@@ -171,6 +177,98 @@ mask because cell rectangles are computed as `bounds.position + cell * (bounds.s
 Keep the cell size exactly representable (for example a whole number of metres, or dyadic
 fractions) so window and full cell corners are identical doubles; the cost scales with the
 cells inside the window, not with the whole terrain.
+
+## Parallel region composition
+
+`StrataRegions.compose_regions(terrain, through_layer, spec, xys, options)` composes many
+regions at once, one region per `WorkerThreadPool` group task, and returns
+`{ok, message, regions: {xy: StrataRegionData}}`. Each region is byte for byte what
+`compose_region` returns; `options.threads = false` (or a platform without threads) runs the
+same code serially. The call blocks until every region is done and stops handing out new
+regions after the first failure.
+
+Thread-safety, as audited and tested:
+
+- **Native read paths.** `compose_dense`, `compile_cell_mask` and `pack_material_weights(_sparse)`
+  keep all working state in locals. `compose_dense` and `compile_cell_mask` build their
+  `GridSampler`s per call (each holds a `Ref` to the layer data, whose reference count is
+  atomic, and a tile-pointer lookup it owns) and only *read* the `StrataLayerData` tile maps
+  (`channels` is never touched on these paths; there are no caches, lazy indices, mutable
+  members or static scratch buffers in `terrain/src`). Concurrent calls over the same
+  `StrataLayerData` are therefore safe **as long as nothing writes that data**. Writes
+  (`set_sample`, `replace_dense`, `patch_dense`, `restore`, ...) are not synchronized and must not
+  overlap a composition: the layers are frozen between `capture()` and the end of
+  `compose_regions`. `terrain_bulk_test` composes 64 windows concurrently over shared data three
+  times and compares them with the serial result.
+- **Script side.** The scene tree (`get_children`, `is_inside_tree`, transforms) and the
+  layers' properties are read once, on the calling thread, by `StrataRegionCompose.capture()`,
+  which also builds the lazily initialised shared state (`StrataMacro` neutral data,
+  `StrataMaterialControls` native-method table). The tasks run `compose()` with that capture
+  (`options.capture`) and touch only the captured descriptor arrays, their own locals and
+  engine resources they create (`Image`, `StrataRegionData`). Captured descriptor
+  Dictionaries are shared read-only; the mask `mapping`/`threshold` fields are set during
+  capture, never during composition. With `options.capture` set, a map the capture lacks is an
+  error instead of a live read, so nothing silently falls back to the tree. `compose_map`
+  and `compose` can be called from any thread with a capture; without one they read the live
+  terrain and belong on the main thread.
+- **Mips.** `build_mips` works on one `StrataRegionData` and calls pure native helpers, so
+  one region per task is safe (tested against serial mips).
+- **Limits.** The pool needs `OS.has_feature("threads")`. Memory is the regions in flight plus
+  the finished ones (about 0.9 MB per region for the standard spec at 256 cells, before
+  mips). The speed-up on 16 threads is about 4x for composition; it is bounded by memory
+  bandwidth and by the debug build, not by locking.
+
+### Where the time went (synthetic island, 16 x 16 regions of 256 cells at 1 m)
+
+`tests/region_compose_benchmark.gd` (a benchmark, not part of `run_tests.sh`) builds a
+synthetic fixture shaped like the island (smooth noise: it is *not* island data) and times
+every region serially per map class, the whole `compose_region`, `build_mips` and the parallel
+paths. Linux debug build, 16 threads:
+
+| | before | after (serial) | after (16 threads) |
+| --- | --- | --- | --- |
+| height (native `compose_dense` 1.4 s of 1.5 s) | 1.6 s | 1.5 s | |
+| holes | 0.6 s | 0.7 s | |
+| materials (4 planes) | 13.5 s | 4.1 s | |
+| macro | 0.3 s | 0.3 s | |
+| `compose_region` x 256 | 16.3 s | 6.7 s | 1.7 s |
+| `build_mips` x 256, 5 levels | 33.0 s | 0.4 s | 0.05 s |
+
+Materials were dominated by the per-texel byte quantisation loop in script (now native
+`quantize_material_weights`), and the mips by their per-texel filters (now native
+`downsample_samples` / `downsample_materials`). What remains is native composition itself.
+The saved island measures 14.1 s serial and 3.6 s with `compose_regions` for all 256 regions
+(its material planes are the long pole; the island was not measured before the change).
+
+## Mips
+
+Level `l` texel `u` of a sample map is lattice index `(u - apron) << l`, so levels share
+lattice points. `StrataRegions.build_mips` builds the **height** map by decimation: texel `u`
+at level `l` is texel `2u - apron` of level `l - 1` (the coincident sample, clamped at the
+edges), so heights agree exactly at shared points across tiers and with a direct composition
+at that level. Other scalar sample maps keep the `[1 2 1] / 4` tent filter, material ids the
+majority rule, cell maps "any". The per-texel work is native
+(`downsample_samples(values, planes, source_size, target_size, apron, mode)` with mode 0 tent, 1
+cell maximum, 2 decimation; `downsample_materials(ids, weights, ...)`); builds without them
+fall back to script loops with identical results.
+
+## Composing at a level
+
+`StrataRegionCompose.compose_map` honours `window.level` of `StrataRegions.map_window(...,
+level)` and `StrataRegions.coarse_window(spec, description, level)`: the window's `step` is the
+map's texel step at that level and `first` an index of that coarser lattice, so the native call
+composes the coarse lattice directly (a terrain-wide coarse map is one call with
+`first = (0, 0)`). `step` is checked against the level.
+
+- **Height** is bit-identical to decimating the level-0 composition at the shared lattice
+  points: `origin + step * 2^l * i` and `origin + step * (i << l)` are the same single
+  rounding, and equals the decimated mip texels wherever the mip is not edge-clamped.
+- **Everything else** (material ids and weights, hole and exclusion masks, macro, channels) is
+  composed directly on the coarse lattice. That is **not** the mip downsample of the level-0
+  map: a coarse material texel carries the materials at its own point rather than the heaviest
+  of its block, a coarse hole cell only the area of that coarse cell. It is meant for editor
+  previews and far/coarse residency; baked data must come from level 0 plus `build_mips`.
+- `options.sources` are level-0 lattices and are rejected at a level above 0.
 
 ## Allocation and work limits
 

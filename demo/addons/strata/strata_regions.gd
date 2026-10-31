@@ -300,24 +300,82 @@ static func region_bytes(spec: Dictionary, mip_levels: int = 1) -> int:
 ## Options: channels (PackedStringArray of custom channel maps present in the spec),
 ## nav_profiles (Array of {name, rule}), sources (whole-lattice overrides), mask_options.
 static func compose_region(terrain: Object, through_layer: Object, xy: Vector2i, spec: Dictionary, options: Dictionary = {}) -> Dictionary:
+	var script := _compose_class()
+	if script == null:
+		return _error("Region composition needs the Strata editor-side addon (%s is not available in this project)" % COMPOSE_CLASS)
+	return script.call("compose", terrain, through_layer, xy, spec, options)
+
+static func _compose_class() -> Script:
 	if _compose_script == null:
 		for entry in ProjectSettings.get_global_class_list():
 			if String(entry["class"]) == COMPOSE_CLASS:
 				_compose_script = load(String(entry["path"]))
 				break
-	if _compose_script == null:
+	return _compose_script
+
+## Composes the regions [param xys] of [param terrain] concurrently, one region per
+## WorkerThreadPool task, and returns {ok, message, regions: {xy: StrataRegionData}}. Each
+## region is exactly what [method compose_region] returns (the bytes do not depend on the
+## thread count or order); the first failure is reported and the rest are skipped. Options as
+## compose_region(), plus threads (default true; false composes serially on the calling
+## thread, as does a platform without threads) and capture (a StrataRegionCompose.capture()
+## result; made here when absent). The scene tree and the layers are read once, on the calling
+## thread, before any task starts; the tasks only read the captured layer data, so the layers
+## must not be edited until this returns. The call blocks until every region is done; call it
+## from the main thread (or after capture() from any thread). Native read paths are
+## thread-safe (docs/development/terrain_bulk.md, "Parallel composition").
+static func compose_regions(terrain: Object, through_layer: Object, spec: Dictionary, xys: Array[Vector2i], options: Dictionary = {}) -> Dictionary:
+	var script := _compose_class()
+	if script == null:
 		return _error("Region composition needs the Strata editor-side addon (%s is not available in this project)" % COMPOSE_CLASS)
-	return _compose_script.call("compose", terrain, through_layer, xy, spec, options)
+	var regions := {}
+	if xys.is_empty(): return {"ok": true, "message": "", "regions": regions}
+	var local := options.duplicate()
+	if not local.has("capture"):
+		var captured: Dictionary = script.call("capture", terrain, through_layer, spec, options)
+		if not captured.get("ok", false): return captured
+		local["capture"] = captured
+	var threaded := bool(options.get("threads", true)) and OS.has_feature("threads") and xys.size() > 1
+	var outcomes: Array = []
+	outcomes.resize(xys.size())
+	if not threaded:
+		for index in range(xys.size()):
+			var composed: Dictionary = script.call("compose", terrain, through_layer, xys[index], spec, local)
+			if not composed.ok: return _error("Region %s: %s" % [xys[index], composed.message])
+			regions[xys[index]] = composed.region
+		return {"ok": true, "message": "", "regions": regions}
+	var failed := [false]
+	var mutex := Mutex.new()
+	var task := func(index: int) -> void:
+		if failed[0]: return
+		var composed: Dictionary = script.call("compose", terrain, through_layer, xys[index], spec, local)
+		mutex.lock()
+		outcomes[index] = composed
+		if not composed.ok: failed[0] = true
+		mutex.unlock()
+	var group := WorkerThreadPool.add_group_task(task, xys.size(), -1, false, "Strata region composition")
+	WorkerThreadPool.wait_for_group_task_completion(group)
+	for index in range(xys.size()):
+		var composed: Variant = outcomes[index]
+		if composed == null: continue
+		if not composed.ok: return _error("Region %s: %s" % [xys[index], composed.message])
+		regions[xys[index]] = composed.region
+	return {"ok": true, "message": "", "regions": regions}
 
 # Mips ----------------------------------------------------------------
 
 ## Adds levels 1..levels-1 to every map of [param region] (capped per map at max_level + 1) and
-## drops any existing ones. Scalar sample maps (height, channels, coverage, macro) use a
-## separable [1 2 1] / 4 filter centred on the texel that lies at the coarse texel's position
-## (coarse texel u is level-0 texel 2u - apron, edges clamped); cell maps take the maximum
-## over the 2 x 2 texels the coarse cell covers (any set cell stays set); material_ids keep, per
-## coarse texel, the up to four heaviest ids over the 2 x 2 block starting at that centre texel,
-## and material_weights are renormalised from those sums to total 255.
+## drops any existing ones. Level l texel u of a sample map covers lattice index (u - apron) << l,
+## so levels share lattice points: the height map is decimated (a coarse texel is the
+## coincident level-0 sample, source texel 2u - apron of the previous level, clamped at the
+## edges), which makes heights identical at shared points across tiers. The other scalar sample
+## maps (channels, coverage, macro) use a separable [1 2 1] / 4 filter centred on that texel;
+## cell maps take the maximum over the 2 x 2 texels the coarse cell covers (any set cell stays
+## set); material_ids keep, per coarse texel, the up to four heaviest ids over the 2 x 2 block
+## starting at that centre texel, and material_weights are renormalised from those sums to
+## total 255. The per-texel work is native (StrataLayerData.downsample_samples and
+## downsample_materials, safe on worker threads, one region per task) with a script fallback of
+## identical results for builds without them.
 static func build_mips(region: StrataRegionData, levels: int) -> void:
 	var names := region.map_names()
 	var paired := region.has_map(MAP_MATERIAL_IDS) and region.has_map(MAP_MATERIAL_WEIGHTS)
@@ -332,7 +390,7 @@ static func build_mips(region: StrataRegionData, levels: int) -> void:
 		var entry: Dictionary = region.maps[name]
 		for level in range(1, count):
 			var source: PackedByteArray = (entry.levels as Array)[level - 1]
-			(entry.levels as Array).append(_downsample(region.cells, description, level - 1, source))
+			(entry.levels as Array).append(_downsample(region.cells, description, level - 1, source, name == MAP_HEIGHT))
 	if paired:
 		var ids_entry: Dictionary = region.maps[MAP_MATERIAL_IDS]
 		var weights_entry: Dictionary = region.maps[MAP_MATERIAL_WEIGHTS]
@@ -344,7 +402,12 @@ static func build_mips(region: StrataRegionData, levels: int) -> void:
 			(weights_entry.levels as Array).append(mixed.weights)
 	region.revision += 1
 
-static func _downsample(cells: int, description: Dictionary, from_level: int, bytes: PackedByteArray) -> PackedByteArray:
+## True when the loaded native extension has [param method] (builds from before the mip
+## helpers fall back to the script implementations below, with identical results).
+static func _has_native(method: StringName) -> bool:
+	return ClassDB.class_exists(&"StrataLayerData") and ClassDB.class_has_method(&"StrataLayerData", method)
+
+static func _downsample(cells: int, description: Dictionary, from_level: int, bytes: PackedByteArray, decimate: bool = false) -> PackedByteArray:
 	var format := int(description.format)
 	var source_size := map_size(cells, description, from_level)
 	var target_size := map_size(cells, description, from_level + 1)
@@ -357,9 +420,28 @@ static func _downsample(cells: int, description: Dictionary, from_level: int, by
 	elif format != Image.FORMAT_RF:
 		image.convert(Image.FORMAT_RF)
 	var values := image.get_data().to_float32_array()
+	var is_cell := String(description.kind) == KIND_CELL
+	var result: PackedFloat32Array
+	if _has_native(&"downsample_samples"):
+		var mode := 1 if is_cell else (2 if decimate else 0)
+		result = ClassDB.class_call_static(&"StrataLayerData", &"downsample_samples", values, planes, source_size, target_size, apron, mode)
+	else:
+		result = _downsample_script(values, planes, is_cell, decimate, source_size, target_size, apron)
+	var output := Image.create_from_data(target_size.x, target_size.y, false, Image.FORMAT_RGBAF if planes == 4 else Image.FORMAT_RF, result.to_byte_array())
+	if output.get_format() != format: output.convert(format)
+	return output.get_data()
+
+static func _downsample_script(values: PackedFloat32Array, planes: int, is_cell: bool, decimate: bool, source_size: Vector2i, target_size: Vector2i, apron: int) -> PackedFloat32Array:
 	var result := PackedFloat32Array()
 	result.resize(target_size.x * target_size.y * planes)
-	if String(description.kind) == KIND_CELL:
+	if decimate and not is_cell:
+		for v in range(target_size.y):
+			var y := clampi(2 * v - apron, 0, source_size.y - 1)
+			for u in range(target_size.x):
+				var x := clampi(2 * u - apron, 0, source_size.x - 1)
+				for plane in range(planes):
+					result[(v * target_size.x + u) * planes + plane] = values[(y * source_size.x + x) * planes + plane]
+	elif is_cell:
 		for v in range(target_size.y):
 			for u in range(target_size.x):
 				for plane in range(planes):
@@ -392,14 +474,15 @@ static func _downsample(cells: int, description: Dictionary, from_level: int, by
 			for u in range(target_size.x):
 				for plane in range(planes):
 					result[(v * target_size.x + u) * planes + plane] = (rows[(top * target_size.x + u) * planes + plane] + 2.0 * rows[(middle * target_size.x + u) * planes + plane] + rows[(bottom * target_size.x + u) * planes + plane]) * 0.25
-	var output := Image.create_from_data(target_size.x, target_size.y, false, Image.FORMAT_RGBAF if planes == 4 else Image.FORMAT_RF, result.to_byte_array())
-	if output.get_format() != format: output.convert(format)
-	return output.get_data()
+	return result
 
 static func _downsample_materials(cells: int, description: Dictionary, from_level: int, ids: PackedByteArray, weights: PackedByteArray) -> Dictionary:
 	var source_size := map_size(cells, description, from_level)
 	var target_size := map_size(cells, description, from_level + 1)
 	var apron := int(description.get("apron", DEFAULT_APRON))
+	if _has_native(&"downsample_materials"):
+		var native: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"downsample_materials", ids, weights, source_size, target_size, apron)
+		if native.get("ok", false): return native
 	var out_ids := PackedByteArray(); out_ids.resize(target_size.x * target_size.y * 4)
 	var out_weights := PackedByteArray(); out_weights.resize(target_size.x * target_size.y * 4)
 	for v in range(target_size.y):

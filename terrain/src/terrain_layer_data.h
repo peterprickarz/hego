@@ -6,6 +6,8 @@
 #include <godot_cpp/core/binder_common.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/string_name.hpp>
 #include <godot_cpp/variant/vector2.hpp>
@@ -108,6 +110,13 @@ public:
             godot::Vector3 p_origin, godot::Vector3 p_step_x, godot::Vector3 p_step_y, godot::Vector2i p_resolution,
             godot::Rect2 p_bounds, bool p_include_coverage = true, double p_subtract_datum = 0.0,
             godot::Vector2i p_index_offset = godot::Vector2i());
+    // Region composition helpers (pure functions, safe to call from worker threads):
+    // quantize_material_weights turns an RGBAF weight image into the RGBA8 bytes of the editor
+    // material maps; downsample_samples / downsample_materials are one mip step (see the
+    // definitions for the three sample modes).
+    static godot::Dictionary quantize_material_weights(const godot::Ref<godot::Image> &p_weights);
+    static godot::PackedFloat32Array downsample_samples(const godot::PackedFloat32Array &p_values, int64_t p_planes, godot::Vector2i p_source, godot::Vector2i p_target, int64_t p_apron, int64_t p_mode);
+    static godot::Dictionary downsample_materials(const godot::PackedByteArray &p_ids, const godot::PackedByteArray &p_weights, godot::Vector2i p_source, godot::Vector2i p_target, int64_t p_apron);
     static godot::Dictionary compile_cell_mask(const godot::Array &p_layers, godot::StringName p_channel,
             godot::Rect2 p_bounds, godot::Vector2i p_vertex_resolution, int64_t p_max_work = 268435456, int p_max_fragments = 4096);
 

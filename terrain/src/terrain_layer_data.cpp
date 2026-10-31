@@ -56,6 +56,9 @@ void StrataLayerData::_bind_methods() {
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("prepare_control_maps", "ids", "weights", "material_count"), &StrataLayerData::prepare_control_maps);
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("compose_dense", "layers", "channel", "origin", "step_x", "step_y", "resolution", "bounds", "include_coverage", "subtract_datum", "index_offset"), &StrataLayerData::compose_dense, DEFVAL(true), DEFVAL(0.0), DEFVAL(Vector2i()));
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("compile_cell_mask", "layers", "channel", "bounds", "vertex_resolution", "max_work", "max_fragments"), &StrataLayerData::compile_cell_mask, DEFVAL(int64_t(268435456)), DEFVAL(4096));
+    ClassDB::bind_static_method("StrataLayerData", D_METHOD("quantize_material_weights", "weights"), &StrataLayerData::quantize_material_weights);
+    ClassDB::bind_static_method("StrataLayerData", D_METHOD("downsample_samples", "values", "planes", "source_size", "target_size", "apron", "mode"), &StrataLayerData::downsample_samples);
+    ClassDB::bind_static_method("StrataLayerData", D_METHOD("downsample_materials", "ids", "weights", "source_size", "target_size", "apron"), &StrataLayerData::downsample_materials);
     BIND_ENUM_CONSTANT(VALUE_FLOAT32);
     BIND_ENUM_CONSTANT(VALUE_UNORM8);
     BIND_ENUM_CONSTANT(VALUE_UNORM16);

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <vector>
 
 using namespace godot;
 
@@ -239,6 +240,154 @@ Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool
     result["coverage"] = coverage; result["samples"] = count;
     result["discarded_weight_max"] = discarded_max; result["discarded_weight_mean"] = discarded_sum / count;
     if (allow_unassigned) { result["unassigned"] = unassigned; result["empty"] = unassigned == count; }
+    return result;
+}
+
+// Byte weights of the editor material maps: round(w / total * 255) per slot, the slot with the
+// largest byte (the first on ties) takes the remainder so an assigned texel sums to 255, and a
+// texel without weight stays 0. Same arithmetic, in double, as the region composition used to
+// run per texel in script, so the bytes are unchanged. Pure function of its input.
+Dictionary StrataLayerData::quantize_material_weights(const Ref<Image> &p_weights) {
+    if (p_weights.is_null() || p_weights->is_compressed() || p_weights->get_format() != Image::FORMAT_RGBAF || !valid_size(p_weights->get_size()))
+        return failure("Weights to quantize must be an uncompressed RGBAF image.");
+    const int64_t count = int64_t(p_weights->get_width()) * p_weights->get_height();
+    const PackedByteArray source = p_weights->get_data();
+    if (source.size() < count * 16) return failure("Weight payload has an invalid byte count.");
+    PackedByteArray bytes;
+    bytes.resize(count * 4);
+    std::memset(bytes.ptrw(), 0, bytes.size());
+    const uint8_t *in = source.ptr();
+    uint8_t *out = bytes.ptrw();
+    for (int64_t texel = 0; texel < count; ++texel) {
+        const int64_t base = texel * 4;
+        double w[4];
+        for (int slot = 0; slot < 4; ++slot) w[slot] = double(load_float(in, base + slot));
+        const double total = w[0] + w[1] + w[2] + w[3];
+        if (total <= 0.0) continue;
+        int assigned = 0, largest = 0;
+        for (int slot = 0; slot < 4; ++slot) {
+            const double rounded = std::round(w[slot] / total * 255.0);
+            const int quantized = rounded < 0.0 ? 0 : (rounded > 255.0 ? 255 : int(rounded));
+            out[base + slot] = uint8_t(quantized);
+            assigned += quantized;
+            if (quantized > out[base + largest]) largest = slot;
+        }
+        out[base + largest] = uint8_t(std::clamp(int(out[base + largest]) + 255 - assigned, 0, 255));
+    }
+    Dictionary result;
+    result["ok"] = true;
+    result["image"] = Image::create_from_data(p_weights->get_width(), p_weights->get_height(), false, Image::FORMAT_RGBA8, bytes);
+    return result;
+}
+
+// One mip step of a region map held as float planes. mode 0: separable [1 2 1] / 4 filter
+// centred on the texel at the coarse texel's position (coarse texel u is source texel
+// 2u - apron, edges clamped); mode 1: maximum over the 2 x 2 texels starting there (cell maps);
+// mode 2: the coincident source texel itself (decimation, heights). Arithmetic matches the
+// script implementation it replaces, in double with float32 intermediates.
+PackedFloat32Array StrataLayerData::downsample_samples(const PackedFloat32Array &p_values, int64_t p_planes, Vector2i p_source, Vector2i p_target, int64_t p_apron, int64_t p_mode) {
+    ERR_FAIL_COND_V_MSG(p_planes < 1 || p_planes > 4 || p_mode < 0 || p_mode > 2 || p_source.x < 1 || p_source.y < 1 || p_target.x < 1 || p_target.y < 1 || p_apron < 0, PackedFloat32Array(), "Invalid downsample request.");
+    ERR_FAIL_COND_V_MSG(int64_t(p_source.x) * p_source.y * p_planes > (1LL << 28) || int64_t(p_target.x) * p_target.y * p_planes > (1LL << 28), PackedFloat32Array(), "Downsample size is out of bounds.");
+    ERR_FAIL_COND_V_MSG(p_values.size() != int64_t(p_source.x) * p_source.y * p_planes, PackedFloat32Array(), "Downsample source has the wrong sample count.");
+    const int planes = int(p_planes);
+    const int sx = p_source.x, sy = p_source.y, tx = p_target.x, ty = p_target.y, apron = int(p_apron);
+    PackedFloat32Array result;
+    result.resize(int64_t(tx) * ty * planes);
+    const float *values = p_values.ptr();
+    float *out = result.ptrw();
+    if (p_mode == 1) {
+        for (int v = 0; v < ty; ++v) for (int u = 0; u < tx; ++u) for (int plane = 0; plane < planes; ++plane) {
+            double best = -std::numeric_limits<double>::infinity();
+            for (int dy = 0; dy < 2; ++dy) {
+                const int y = 2 * v - apron + dy;
+                if (y < 0 || y >= sy) continue;
+                for (int dx = 0; dx < 2; ++dx) {
+                    const int x = 2 * u - apron + dx;
+                    if (x < 0 || x >= sx) continue;
+                    best = std::max(best, double(values[(int64_t(y) * sx + x) * planes + plane]));
+                }
+            }
+            out[(int64_t(v) * tx + u) * planes + plane] = best > -std::numeric_limits<double>::infinity() ? float(best) : 0.0f;
+        }
+    } else if (p_mode == 2) {
+        for (int v = 0; v < ty; ++v) {
+            const int y = std::clamp(2 * v - apron, 0, sy - 1);
+            for (int u = 0; u < tx; ++u) {
+                const int x = std::clamp(2 * u - apron, 0, sx - 1);
+                for (int plane = 0; plane < planes; ++plane) out[(int64_t(v) * tx + u) * planes + plane] = values[(int64_t(y) * sx + x) * planes + plane];
+            }
+        }
+    } else {
+        std::vector<float> rows(size_t(tx) * sy * planes);
+        for (int y = 0; y < sy; ++y) for (int u = 0; u < tx; ++u) {
+            const int centre = 2 * u - apron;
+            const int left = std::clamp(centre - 1, 0, sx - 1), middle = std::clamp(centre, 0, sx - 1), right = std::clamp(centre + 1, 0, sx - 1);
+            for (int plane = 0; plane < planes; ++plane)
+                rows[(size_t(y) * tx + u) * planes + plane] = float((double(values[(int64_t(y) * sx + left) * planes + plane]) + 2.0 * double(values[(int64_t(y) * sx + middle) * planes + plane]) + double(values[(int64_t(y) * sx + right) * planes + plane])) * 0.25);
+        }
+        for (int v = 0; v < ty; ++v) {
+            const int centre = 2 * v - apron;
+            const int top = std::clamp(centre - 1, 0, sy - 1), middle = std::clamp(centre, 0, sy - 1), bottom = std::clamp(centre + 1, 0, sy - 1);
+            for (int u = 0; u < tx; ++u) for (int plane = 0; plane < planes; ++plane)
+                out[(int64_t(v) * tx + u) * planes + plane] = float((double(rows[(size_t(top) * tx + u) * planes + plane]) + 2.0 * double(rows[(size_t(middle) * tx + u) * planes + plane]) + double(rows[(size_t(bottom) * tx + u) * planes + plane])) * 0.25);
+        }
+    }
+    return result;
+}
+
+// One mip step of a material id / weight pair (RGBA8 each): per coarse texel the up to four
+// heaviest ids, by summed weight (ties: lower id), over the 2 x 2 texels starting at the
+// centre texel, with weights renormalised to total 255.
+Dictionary StrataLayerData::downsample_materials(const PackedByteArray &p_ids, const PackedByteArray &p_weights, Vector2i p_source, Vector2i p_target, int64_t p_apron) {
+    if (p_source.x < 1 || p_source.y < 1 || p_target.x < 1 || p_target.y < 1 || p_apron < 0 || int64_t(p_source.x) * p_source.y > (1LL << 26) || int64_t(p_target.x) * p_target.y > (1LL << 26)) return failure("Invalid material downsample request.");
+    if (p_ids.size() != int64_t(p_source.x) * p_source.y * 4 || p_weights.size() != p_ids.size()) return failure("Material downsample source has the wrong byte count.");
+    const int sx = p_source.x, sy = p_source.y, tx = p_target.x, ty = p_target.y, apron = int(p_apron);
+    PackedByteArray out_ids, out_weights;
+    out_ids.resize(int64_t(tx) * ty * 4); out_weights.resize(out_ids.size());
+    std::memset(out_ids.ptrw(), 0, out_ids.size()); std::memset(out_weights.ptrw(), 0, out_weights.size());
+    const uint8_t *ids = p_ids.ptr(), *weights = p_weights.ptr();
+    uint8_t *oi = out_ids.ptrw(), *ow = out_weights.ptrw();
+    for (int v = 0; v < ty; ++v) for (int u = 0; u < tx; ++u) {
+        int sum_id[8], sum[8], used = 0;
+        for (int dy = 0; dy < 2; ++dy) {
+            const int y = std::clamp(2 * v - apron, 0, sy - 1) + dy;
+            if (y >= sy) continue;
+            for (int dx = 0; dx < 2; ++dx) {
+                const int x = std::clamp(2 * u - apron, 0, sx - 1) + dx;
+                if (x >= sx) continue;
+                const int64_t base = (int64_t(y) * sx + x) * 4;
+                for (int slot = 0; slot < 4; ++slot) {
+                    const int weight = weights[base + slot];
+                    if (weight <= 0) continue;
+                    int found = 0;
+                    while (found < used && sum_id[found] != ids[base + slot]) ++found;
+                    if (found == used) { sum_id[used] = ids[base + slot]; sum[used] = 0; ++used; }
+                    sum[found] += weight;
+                }
+            }
+        }
+        if (used == 0) continue;
+        for (int i = 1; i < used; ++i) {
+            const int id = sum_id[i], value = sum[i];
+            int j = i - 1;
+            while (j >= 0 && (sum[j] < value || (sum[j] == value && sum_id[j] > id))) { sum_id[j + 1] = sum_id[j]; sum[j + 1] = sum[j]; --j; }
+            sum_id[j + 1] = id; sum[j + 1] = value;
+        }
+        const int kept = std::min(4, used);
+        int total = 0;
+        for (int slot = 0; slot < kept; ++slot) total += sum[slot];
+        int assigned = 0;
+        const int64_t target = (int64_t(v) * tx + u) * 4;
+        for (int slot = 0; slot < kept; ++slot) {
+            const int weight = int(std::round(double(sum[slot]) * 255.0 / double(total)));
+            oi[target + slot] = uint8_t(sum_id[slot]);
+            ow[target + slot] = uint8_t(weight);
+            assigned += weight;
+        }
+        ow[target] = uint8_t(std::clamp(int(ow[target]) + 255 - assigned, 0, 255));
+    }
+    Dictionary result;
+    result["ok"] = true; result["ids"] = out_ids; result["weights"] = out_weights;
     return result;
 }
 

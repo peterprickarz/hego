@@ -115,6 +115,39 @@ func quantize(weights: PackedFloat32Array, texel: int) -> PackedByteArray:
 	out[largest] = clampi(out[largest] + 255 - sum, 0, 255)
 	return out
 
+## Reference for one material mip step: the up to four heaviest ids over the 2 x 2 block
+## starting at the centre texel, ties to the lower id, weights renormalised to 255.
+func reference_materials(ids: PackedByteArray, weights: PackedByteArray, source_size: Vector2i, target_size: Vector2i, apron: int) -> Dictionary:
+	var out_ids := PackedByteArray(); out_ids.resize(target_size.x * target_size.y * 4)
+	var out_weights := PackedByteArray(); out_weights.resize(target_size.x * target_size.y * 4)
+	for v in range(target_size.y):
+		for u in range(target_size.x):
+			var sums := {}
+			for dy in range(2):
+				var y := clampi(2 * v - apron, 0, source_size.y - 1) + dy
+				if y >= source_size.y: continue
+				for dx in range(2):
+					var x := clampi(2 * u - apron, 0, source_size.x - 1) + dx
+					if x >= source_size.x: continue
+					var base := (y * source_size.x + x) * 4
+					for slot in range(4):
+						var weight := weights[base + slot]
+						if weight > 0: sums[ids[base + slot]] = int(sums.get(ids[base + slot], 0)) + weight
+			if sums.is_empty(): continue
+			var ranked: Array = sums.keys()
+			ranked.sort_custom(func(a: int, b: int) -> bool: return sums[a] > sums[b] or sums[a] == sums[b] and a < b)
+			var total := 0
+			for slot in range(mini(4, ranked.size())): total += int(sums[ranked[slot]])
+			var assigned := 0
+			var target := (v * target_size.x + u) * 4
+			for slot in range(mini(4, ranked.size())):
+				var weight := int(roundf(float(sums[ranked[slot]]) * 255.0 / float(total)))
+				out_ids[target + slot] = ranked[slot]
+				out_weights[target + slot] = weight
+				assigned += weight
+			out_weights[target] = clampi(int(out_weights[target]) + 255 - assigned, 0, 255)
+	return {"ids": out_ids, "weights": out_weights}
+
 func run() -> void:
 	host = Node.new(); host.name = "Producer"; root.add_child(host)
 	build_terrain()
@@ -327,8 +360,8 @@ func run() -> void:
 	StrataRegions.build_mips(mipped, 3)
 	check(mipped.validate().ok, "mipped region validates: %s" % mipped.validate())
 	check(mipped.level_count("height") == 3 and mipped.level_count("holes") == 3 and mipped.level_count("macro") == 3 and mipped.level_count("nav_wet") == 3, "every map gets three levels")
-	var level0 := mipped.level_bytes("height", 0).to_float32_array()
-	var level1 := mipped.level_bytes("height", 1).to_float32_array()
+	var level0 := mipped.level_bytes("mask", 0).to_float32_array()
+	var level1 := mipped.level_bytes("mask", 1).to_float32_array()
 	var side0 := CELLS + 1 + 2 * APRON
 	var side1 := CELLS / 2 + 1 + 2 * APRON
 	var filter_ok := side1 * side1 == level1.size()
@@ -339,7 +372,7 @@ func run() -> void:
 		var horizontal := func(dy: int) -> float: return (tap.call(-1, dy) + 2.0 * tap.call(0, dy) + tap.call(1, dy)) * 0.25
 		var expected_value: float = (horizontal.call(-1) + 2.0 * horizontal.call(0) + horizontal.call(1)) * 0.25
 		filter_ok = filter_ok and absf(level1[probe.y * side1 + probe.x] - expected_value) <= 1.0e-5
-	check(filter_ok, "height level 1 is the [1 2 1] / 4 filter at the coarse texel's own position")
+	check(filter_ok, "scalar channel level 1 is the [1 2 1] / 4 filter at the coarse texel's own position")
 	var holes0 := mipped.level_bytes("holes", 0)
 	var holes1 := mipped.level_bytes("holes", 1)
 	var holes_side0 := CELLS + 2 * APRON
@@ -367,6 +400,151 @@ func run() -> void:
 	var level_zero_kept: bool = mipped.level_bytes("height", 0) == regions[Vector2i(1, 2)].level_bytes("height", 0) and mipped.level_bytes("material_ids", 0) == regions[Vector2i(1, 2)].level_bytes("material_ids", 0)
 	check(level_zero_kept, "mips never change level 0")
 	check(StrataRegions.region_bytes(spec, 3) > StrataRegions.region_bytes(spec, 1), "planned region bytes count the mips")
+
+	# Height mips are decimated: level l texel u is level-0 texel ((u - apron) << l) + apron (edges
+	# clamped), the sample at the same lattice point.
+	var decimated_ok := true
+	var decimated_problem := ""
+	var height0 := mipped.level_bytes("height", 0).to_float32_array()
+	for level in range(1, 3):
+		var level_values := mipped.level_bytes("height", level).to_float32_array()
+		var level_side := (CELLS >> level) + 1 + 2 * APRON
+		decimated_ok = decimated_ok and level_values.size() == level_side * level_side
+		for v in range(level_side):
+			for u in range(level_side):
+				var x := clampi(((u - APRON) << level) + APRON, 0, side0 - 1)
+				var y := clampi(((v - APRON) << level) + APRON, 0, side0 - 1)
+				if decimated_ok and level_values[v * level_side + u] != height0[y * side0 + x]:
+					decimated_ok = false
+					decimated_problem = "level %d texel %s" % [level, Vector2i(u, v)]
+	check(decimated_ok, "height level l texel u is the level-0 sample at lattice index (u - apron) << l: " + decimated_problem)
+	var extrema_kept: bool = mipped.height_min == regions[Vector2i(1, 2)].height_min and mipped.height_max == regions[Vector2i(1, 2)].height_max
+	check(extrema_kept, "mips leave the region's height extrema alone")
+	# The native mip helpers equal the script implementations (and the old material reference).
+	var parity_ok := true
+	for planes in [1, 4]:
+		for case in [[0, false], [1, false], [2, false]]:
+			var source_size := Vector2i(21, 21)
+			var source := PackedFloat32Array()
+			for index in range(source_size.x * source_size.y * planes): source.append(float((index * 7919) % 101) * 0.37 - 3.0)
+			var target_size := Vector2i(13, 13)
+			var native: PackedFloat32Array = StrataLayerData.downsample_samples(source, planes, source_size, target_size, APRON, case[0])
+			var script := StrataRegions._downsample_script(source, planes, case[0] == 1, case[0] == 2, source_size, target_size, APRON)
+			parity_ok = parity_ok and native == script and native.size() == script.size() and not native.is_empty()
+	check(parity_ok, "native downsample_samples equals the script implementation for tent, cell and decimation modes")
+	var material_ids := PackedByteArray()
+	var material_weights := PackedByteArray()
+	var material_size := Vector2i(11, 11)
+	for texel in range(material_size.x * material_size.y):
+		var picks := [(texel * 3) % 7, (texel * 5 + 1) % 7, (texel * 2 + 3) % 5, (texel + 4) % 7]
+		for slot in range(4):
+			material_ids.append(picks[slot])
+			material_weights.append(0 if (texel + slot) % 5 == 0 else 20 + ((texel * 13 + slot * 29) % 80))
+	var material_target := Vector2i(8, 8)
+	var native_materials: Dictionary = StrataLayerData.downsample_materials(material_ids, material_weights, material_size, material_target, APRON)
+	var reference := reference_materials(material_ids, material_weights, material_size, material_target, APRON)
+	check(native_materials.ok and native_materials.ids == reference.ids and native_materials.weights == reference.weights, "native downsample_materials equals the reference ranking and renormalisation")
+
+	# compose_map at a level: heights decimate the level-0 composition exactly.
+	var full_height_window := {"first": Vector2i.ZERO, "size": StrataRegions.terrain_samples(spec), "origin": terrain.base_bounds.position, "step": 1.0, "level": 0}
+	var full_height := StrataRegionCompose.compose_map(terrain, null, "height", full_height_window, spec)
+	check(full_height.ok and (full_height.image as Image).get_size() == Vector2i(65, 65), "the whole 65 x 65 height lattice composes")
+	var full_floats: PackedFloat32Array = (full_height.image as Image).get_data().to_float32_array()
+	for level in range(1, 3):
+		var coarse_window := StrataRegions.coarse_window(spec, spec.maps.height, level)
+		var coarse := StrataRegionCompose.compose_map(terrain, null, "height", coarse_window, spec)
+		check(coarse.ok and (coarse.image as Image).get_size() == StrataRegions.coarse_map_size(spec, spec.maps.height, level), "the coarse height window at level %d composes: %s" % [level, coarse.get("message")])
+		if not coarse.ok: continue
+		var coarse_floats: PackedFloat32Array = (coarse.image as Image).get_data().to_float32_array()
+		var coarse_side: int = (coarse_window.size as Vector2i).x
+		var equal := true
+		for v in range(coarse_side):
+			for u in range(coarse_side):
+				equal = equal and coarse_floats[v * coarse_side + u] == full_floats[(v << level) * 65 + (u << level)]
+		check(equal, "coarse height at level %d equals the decimated full composition" % level)
+		# A region window at the level equals the decimated mip texels wherever the mip is not clamped.
+		var level_window := StrataRegions.map_window(spec, Vector2i(1, 2), spec.maps.height, level)
+		var composed_level := StrataRegionCompose.compose_map(terrain, null, "height", level_window, spec)
+		var mip_values := mipped.level_bytes("height", level).to_float32_array()
+		var level_floats: PackedFloat32Array = (composed_level.image as Image).get_data().to_float32_array()
+		var level_side := (level_window.size as Vector2i).x
+		var level_equal: bool = composed_level.ok and level_floats.size() == mip_values.size()
+		for v in range(level_side):
+			for u in range(level_side):
+				var x0 := ((u - APRON) << level) + APRON
+				var y0 := ((v - APRON) << level) + APRON
+				if x0 < 0 or y0 < 0 or x0 >= side0 or y0 >= side0: continue
+				level_equal = level_equal and level_floats[v * level_side + u] == mip_values[v * level_side + u]
+		check(level_equal, "a region height window at level %d equals that level of the decimated mips" % level)
+	# The other maps compose directly on the coarse lattice (a preview, not the mip downsample).
+	var coarse_ok := true
+	var coarse_problem := ""
+	for name in ["material_ids", "material_weights", "holes", "nav_exclusion", "macro", "mask"]:
+		var coarse_description: Dictionary = spec.maps[name]
+		var coarse_window := StrataRegions.coarse_window(spec, coarse_description, 1)
+		var composed_coarse := StrataRegionCompose.compose_map(terrain, null, name, coarse_window, spec)
+		if not composed_coarse.ok or (composed_coarse.image as Image).get_size() != coarse_window.size or (composed_coarse.image as Image).get_format() != int(coarse_description.format):
+			coarse_ok = false; coarse_problem = "%s: %s" % [name, composed_coarse.get("message")]; break
+	check(coarse_ok, "every map composes over its coarse window: " + coarse_problem)
+	var coarse_holes := StrataRegionCompose.compose_map(terrain, null, "holes", StrataRegions.coarse_window(spec, spec.maps.holes, 1), spec)
+	check(coarse_holes.ok and (coarse_holes.image as Image).get_data().count(255) > 0, "the coarse hole mask keeps the painted holes")
+	var bad_level := StrataRegions.coarse_window(spec, spec.maps.height, 1)
+	bad_level.step = 3.0
+	check(not StrataRegionCompose.compose_map(terrain, null, "height", bad_level, spec).ok, "a window whose step does not match its level is rejected")
+	var too_deep := StrataRegions.coarse_window(spec, spec.maps.height, 1)
+	too_deep.level = 9
+	check(not StrataRegionCompose.compose_map(terrain, null, "height", too_deep, spec).ok, "a level past the map's deepest is rejected")
+	check(not StrataRegionCompose.compose_map(terrain, null, "height", StrataRegions.coarse_window(spec, spec.maps.height, 1), spec, {"sources": {"height": Image.create(65, 65, false, Image.FORMAT_RF)}}).ok, "level-0 sources are rejected at a coarser level")
+
+	# Parallel composition: every region of an 8 x 8 grid (8 m regions of 16 cells at 0.5 m)
+	# composed concurrently equals the serial result byte for byte, three times over.
+	var fine_spec := StrataRegions.standard_spec(terrain.base_bounds, 0.5, CELLS, APRON)
+	for key in ["nav_exclusion", "mask", "mask__coverage", "nav_wet", "nav_flat"]:
+		fine_spec.maps[key] = spec.maps[key]
+	check(StrataRegions.validate_spec(fine_spec).ok and StrataRegions.grid_size(fine_spec) == Vector2i(8, 8), "the 0.5 m spec is an 8 x 8 grid")
+	var all_regions: Array[Vector2i] = []
+	for y in range(8):
+		for x in range(8): all_regions.append(Vector2i(x, y))
+	var serial := StrataRegions.compose_regions(terrain, null, fine_spec, all_regions, options.merged({"threads": false}))
+	check(serial.ok and serial.regions.size() == 64, "serial compose_regions composes 64 regions: %s" % serial.get("message"))
+	var identical_runs := 0
+	for run_index in range(3):
+		var parallel := StrataRegions.compose_regions(terrain, null, fine_spec, all_regions, options)
+		var same: bool = parallel.ok and parallel.regions.size() == 64
+		if same:
+			for xy in all_regions:
+				var a: StrataRegionData = serial.regions[xy]
+				var b: StrataRegionData = parallel.regions[xy]
+				same = same and a.map_names() == b.map_names() and a.height_min == b.height_min and a.height_max == b.height_max and a.origin == b.origin
+				for name in a.map_names():
+					same = same and a.level_bytes(name) == b.level_bytes(name)
+		if same: identical_runs += 1
+	check(identical_runs == 3, "concurrent compose of all 64 regions equals the serial result byte for byte, 3 of 3 runs (%d)" % identical_runs)
+	var single := StrataRegions.compose_region(terrain, null, Vector2i(5, 2), fine_spec, options)
+	check(single.ok and single.region.level_bytes("height") == serial.regions[Vector2i(5, 2)].level_bytes("height") and single.region.level_bytes("material_weights") == serial.regions[Vector2i(5, 2)].level_bytes("material_weights"), "compose_regions equals compose_region")
+	var outside := StrataRegions.compose_regions(terrain, null, fine_spec, [Vector2i(0, 0), Vector2i(9, 9)] as Array[Vector2i], options)
+	check(not outside.ok and String(outside.message).contains("outside"), "a region outside the grid fails the batch: %s" % outside.get("message"))
+	# Mips built concurrently equal serial mips.
+	var pool: Array = []
+	var pool_reference: Array = []
+	for xy in all_regions:
+		pool.append(StrataRuntimeData.clone_region(serial.regions[xy]))
+		pool_reference.append(StrataRuntimeData.clone_region(serial.regions[xy]))
+	for region: StrataRegionData in pool_reference: StrataRegions.build_mips(region, 3)
+	var mips_group := WorkerThreadPool.add_group_task(func(index: int) -> void: StrataRegions.build_mips(pool[index], 3), pool.size())
+	WorkerThreadPool.wait_for_group_task_completion(mips_group)
+	var mips_same := true
+	for index in range(pool.size()):
+		for name in pool[index].map_names():
+			for level in range(pool[index].level_count(name)):
+				mips_same = mips_same and pool[index].level_bytes(name, level) == pool_reference[index].level_bytes(name, level)
+	check(mips_same, "mips built on worker threads equal serial mips")
+	# An explicit capture works off the main thread.
+	var captured := StrataRegionCompose.capture(terrain, null, fine_spec, options)
+	var off_thread: Array = []
+	var off_group := WorkerThreadPool.add_task(func() -> void: off_thread.append(StrataRegionCompose.compose(terrain, null, Vector2i(3, 3), fine_spec, options.merged({"capture": captured}))))
+	WorkerThreadPool.wait_for_task_completion(off_group)
+	check(captured.ok and off_thread.size() == 1 and off_thread[0].ok and off_thread[0].region.level_bytes("height") == serial.regions[Vector2i(3, 3)].level_bytes("height"), "a captured composition runs on a worker thread")
 
 	# Embedded and external regions behave identically through the manifest.
 	var baked := StrataBake.compile(terrain, {"region_cells": CELLS, "mip_levels": 2, "cell_masks": true, "channels": PackedStringArray(["mask"]), "nav_profiles": options.nav_profiles})

@@ -29,6 +29,8 @@ func run() -> void:
 	check_mixed_grids()
 	check_region_scale_windows()
 	check_region_scale_cell_mask_windows()
+	check_region_helpers()
+	check_concurrent_reads()
 	print("TERRAIN_BULK checks=%d failures=%d" % [checks, failures.size()])
 	if OS.get_cmdline_user_args().has("--large"):
 		check_large_grid()
@@ -112,6 +114,74 @@ func check_mixed_grids() -> void:
 		edits.procedural_fields["height"].data.set_sample(&"height", Vector2i.ZERO, -3)
 		check(not StrataProcedural.token_is_current(compiled.token), "later source edits invalidate compiled revision tokens")
 	terrain.free()
+
+## quantize_material_weights and the mip helpers: small exact cases.
+func check_region_helpers() -> void:
+	var weights := PackedFloat32Array([
+		0.5, 0.25, 0.25, 0.0, # 127.5 -> 128, 64, 64 sum 256: the largest slot gives one back
+		0.0, 0.0, 0.0, 0.0, # unassigned stays zero
+		1.0, 0.0, 0.0, 0.0,
+		1.0, 1.0, 1.0, 0.0,
+	])
+	var image := Image.create_from_data(4, 1, false, Image.FORMAT_RGBAF, weights.to_byte_array())
+	var quantized: Dictionary = StrataLayerData.quantize_material_weights(image)
+	var bytes: PackedByteArray = (quantized.image as Image).get_data() if quantized.get("ok", false) else PackedByteArray()
+	check(bytes == PackedByteArray([127, 64, 64, 0, 0, 0, 0, 0, 255, 0, 0, 0, 85, 85, 85, 0]), "quantize_material_weights rounds, gives the remainder to the largest slot and keeps unassigned texels at zero: %s" % bytes)
+	check(not StrataLayerData.quantize_material_weights(Image.create(2, 2, false, Image.FORMAT_RF)).ok, "quantize_material_weights rejects non-RGBAF images")
+	var values := PackedFloat32Array()
+	for index in range(25): values.append(float(index))
+	var decimated: PackedFloat32Array = StrataLayerData.downsample_samples(values, 1, Vector2i(5, 5), Vector2i(3, 3), 1, 2)
+	check(decimated == PackedFloat32Array([0, 1, 3, 5, 6, 8, 15, 16, 18]) , "decimation takes source texel 2u - apron, clamped: %s" % decimated)
+	var cells: PackedFloat32Array = StrataLayerData.downsample_samples(PackedFloat32Array([0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]), 1, Vector2i(4, 4), Vector2i(2, 2), 0, 1)
+	check(cells == PackedFloat32Array([0, 0, 1, 0]), "cell downsampling takes the maximum of each 2 x 2 block: %s" % cells)
+	var tent: PackedFloat32Array = StrataLayerData.downsample_samples(PackedFloat32Array([4, 4, 4, 4, 4, 4, 4, 4, 4]), 1, Vector2i(3, 3), Vector2i(2, 2), 0, 0)
+	check(tent == PackedFloat32Array([4, 4, 4, 4]), "the tent filter preserves a constant field, edges included")
+	check(StrataLayerData.downsample_samples(values, 1, Vector2i(4, 4), Vector2i(2, 2), 0, 0).is_empty(), "a source of the wrong size is rejected")
+	var mixed: Dictionary = StrataLayerData.downsample_materials(PackedByteArray([3, 5, 0, 0, 3, 7, 0, 0]), PackedByteArray([100, 50, 0, 0, 100, 150, 0, 0]), Vector2i(2, 1), Vector2i(1, 1), 0)
+	check(mixed.get("ok", false) and mixed.ids.slice(0, 3) == PackedByteArray([3, 7, 5]) and mixed.weights.slice(0, 3) == PackedByteArray([127, 96, 32]), "material downsampling ranks ids by summed weight, ties to the lower id, and totals 255: %s %s" % [mixed.get("ids"), mixed.get("weights")])
+
+## compose_dense, pack and compile_cell_mask read-only paths are thread safe: many tasks reading the
+## same layer data compose exactly what a single thread composes.
+func check_concurrent_reads() -> void:
+	var data := StrataLayerData.new()
+	data.sample_spacing = 2.0
+	var image := Image.create(129, 129, false, Image.FORMAT_RF)
+	for y in range(129):
+		for x in range(129): image.set_pixel(x, y, Color(sin(x * 0.2) + cos(y * 0.13), 0, 0, 1))
+	data.replace_dense(&"height", Vector2i.ZERO, image)
+	data.replace_dense(&"hole", Vector2i(8, 8), Image.create_from_data(20, 20, false, Image.FORMAT_RF, _ones(400)))
+	var layers := [descriptor(data, Vector3.ZERO, Vector3(2, 0, 0), Vector3(0, 0, 2))]
+	var origin := Vector3.ZERO
+	var tasks := 64
+	var results: Array = []
+	results.resize(tasks)
+	var mutex := Mutex.new()
+	var work := func(index: int) -> void:
+		var window := Vector2i((index % 8) * 16 - 4, (index / 8) * 16 - 4)
+		var height: Dictionary = StrataLayerData.compose_dense(layers, &"height", origin, Vector3(1, 0, 0), Vector3(0, 0, 1), Vector2i(24, 24), Rect2(0, 0, 256, 256), true, 0.0, window)
+		var mask: Dictionary = StrataLayerData.compile_cell_mask(layers, &"hole", Rect2(Vector2(window), Vector2(24, 24)), Vector2i(25, 25))
+		mutex.lock()
+		results[index] = [(height.image as Image).get_data(), (height.coverage as Image).get_data(), mask.mask]
+		mutex.unlock()
+	var reference: Array = []
+	reference.resize(tasks)
+	for index in range(tasks):
+		var window := Vector2i((index % 8) * 16 - 4, (index / 8) * 16 - 4)
+		var height: Dictionary = StrataLayerData.compose_dense(layers, &"height", origin, Vector3(1, 0, 0), Vector3(0, 0, 1), Vector2i(24, 24), Rect2(0, 0, 256, 256), true, 0.0, window)
+		var mask: Dictionary = StrataLayerData.compile_cell_mask(layers, &"hole", Rect2(Vector2(window), Vector2(24, 24)), Vector2i(25, 25))
+		reference[index] = [(height.image as Image).get_data(), (height.coverage as Image).get_data(), mask.mask]
+	var equal := true
+	for round_index in range(3):
+		var group := WorkerThreadPool.add_group_task(work, tasks)
+		WorkerThreadPool.wait_for_group_task_completion(group)
+		equal = equal and results == reference
+	check(equal, "concurrent compose_dense and compile_cell_mask over shared layer data equal the serial result, 3 rounds")
+
+func _ones(count: int) -> PackedByteArray:
+	var floats := PackedFloat32Array()
+	floats.resize(count)
+	floats.fill(1.0)
+	return floats.to_byte_array()
 
 func memory_kib(field: String) -> int:
 	var file := FileAccess.open("/proc/self/status", FileAccess.READ)
