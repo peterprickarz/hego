@@ -45,11 +45,12 @@ into `demo/addons/`), imports it and runs:
 
 | Suite | Coverage |
 | --- | --- |
-| `runtime_data_test.gd` | lattice, statuses, holes, thresholds, channels, conversions, 4097² payload |
+| `runtime_data_test.gd` | the format 2 manifest: lattice, statuses, holes, thresholds, channels, region windows, external regions, validation, a 4 km grid of 256 regions with a navigation profile |
+| `region_compose_test.gd` | a region equals the matching window of a whole-terrain composition bit for bit (height, materials, masks, macro, channels), mips, per-region navigation masks, embedded vs external regions |
 | `runtime_collision_test.gd` | real raycasts: signed heights, chunk edges and interiors, a yaw seam sweep, holes over a floor, 2 m spacing, camera independence, bounded residency, tracking, atomic replacement, teardown |
 | `runtime_navigation_test.gd` | real `NavigationServer3D` paths around a hole and an exclusion and across tiles, slope/climb settings, async publication, supersession, teardown |
-| `runtime_bake_test.gd` | a five-layer stack with real procedural transactions: stale rejection, preview cutoff, failure retention, stale tracking, export, save/reload |
-| `runtime_roundtrip_test.gd` | a second project with only the three runtime scripts: loads the export, checks hashes and queries, collides, navigates, resaves |
+| `runtime_bake_test.gd` | a five-layer stack with real procedural transactions, baked into 16-cell regions: stale rejection, preview cutoff, failure retention, stale tracking, budgets, export, save/reload, storage directory with region files |
+| `runtime_roundtrip_test.gd` | a second project with only the runtime scripts (regions, region data, runtime data, profiles, collision, navigation, settings): loads the export, checks hashes and queries, collides, navigates, resaves |
 | `runtime_large_bake_test.gd` (`--large`) | a 4097² 1 m bake with bounded collision and navigation |
 
 ```sh

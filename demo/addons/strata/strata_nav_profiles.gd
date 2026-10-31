@@ -74,7 +74,66 @@ static func validate_profiles(profiles: Variant, channel_names: Variant = Packed
 		if not checked.ok: return _error("Navigation profile %s: %s" % [label, checked.message])
 	return {"ok": true, "message": ""}
 
-## Canonical cell mask of a rule, 255 = blocked. Empty on error (also reported).
+## Evaluates one rule on a region: the region's height map (sample kind, apron included) gives
+## every cell of the region's cell maps its four corners, so the mask has the size of a cell map
+## (cells + 2 * apron per axis). Channel terms read the channel maps the region holds and the
+## exclusion term its nav_exclusion map (absent = nothing excluded). Cell means and slopes are
+## the same arithmetic on the same corners as on any other window of the lattice, so the cells
+## of a region equal the matching cells of a whole-terrain evaluation. {ok, message, mask,
+## blocked_cells, terms, ms}; mask is always full size (0 = walkable, 255 = blocked).
+static func evaluate_region_checked(region: StrataRegionData, rule: Dictionary, channel_names: Variant = PackedStringArray()) -> Dictionary:
+	var started := Time.get_ticks_usec()
+	if region == null or not region.has_map(StrataRegions.MAP_HEIGHT):
+		return _error("Navigation profiles need the region's height map")
+	var compiled := _compile(rule, PackedStringArray(channel_names))
+	if not compiled.ok: return compiled
+	var leaves: Array = compiled.leaves
+	var side := StrataRegions.map_size(region.cells, region.description(StrataRegions.MAP_HEIGHT)).x
+	var channels := {}
+	for leaf in leaves:
+		if leaf.kind == Term.CHANNEL:
+			var name := String(leaf.channel)
+			var values := _channel_floats(region, name, side)
+			if values.is_empty(): return _error("channel %s is not in the region" % name)
+			channels[name] = values
+	var heights := region.level_bytes(StrataRegions.MAP_HEIGHT).to_float32_array()
+	var exclusion := region.level_bytes(StrataRegions.MAP_NAV_EXCLUSION)
+	if exclusion.count(BLOCKED) == 0: exclusion = PackedByteArray()
+	var cells := side - 1
+	var mask := _evaluate(compiled, heights, Vector2i(side, side), region.spacing, channels, exclusion)
+	var blocked := mask.count(BLOCKED)
+	if mask.size() != cells * cells: return _error("Navigation mask size mismatch")
+	return {"ok": true, "message": "", "mask": mask, "blocked_cells": blocked, "terms": leaves.size(), "ms": (Time.get_ticks_usec() - started) / 1000.0}
+
+## Whole-terrain mask of a rule: every region evaluated on its own and the regions' own cells
+## stitched over data.get_cell_resolution() cells (255 = blocked, empty when nothing is blocked).
+## {ok, message, mask, blocked_cells, terms, ms}.
+static func evaluate_checked(data: StrataRuntimeData, rule: Dictionary) -> Dictionary:
+	var started := Time.get_ticks_usec()
+	if data == null or not data.is_resident(): return _error("Navigation profiles need resident runtime regions")
+	var size := data.get_cell_resolution()
+	var mask := PackedByteArray()
+	var terms := 0
+	for ry in range(data.grid.y):
+		var masks: Array[PackedByteArray] = []
+		for rx in range(data.grid.x):
+			var region := data.get_region(Vector2i(rx, ry))
+			if region == null: return _error("Region %d,%d is not available" % [rx, ry])
+			var evaluated := evaluate_region_checked(region, rule, data.channel_names)
+			if not evaluated.ok: return evaluated
+			terms = evaluated.terms
+			masks.append(evaluated.mask)
+		var side := data.cells + 2 * data.apron
+		for row in range(data.cells):
+			if ry * data.cells + row >= size.y: break
+			for rx in range(data.grid.x):
+				var width := mini(data.cells, size.x - rx * data.cells)
+				if width <= 0: break
+				mask.append_array(masks[rx].slice((row + data.apron) * side + data.apron, (row + data.apron) * side + data.apron + width))
+	var blocked := mask.count(BLOCKED)
+	if blocked == 0: mask = PackedByteArray()
+	return {"ok": true, "message": "", "mask": mask, "blocked_cells": blocked, "terms": terms, "ms": (Time.get_ticks_usec() - started) / 1000.0}
+
 static func evaluate(data: StrataRuntimeData, rule: Dictionary) -> PackedByteArray:
 	var result := evaluate_checked(data, rule)
 	if not result.ok:
@@ -82,18 +141,29 @@ static func evaluate(data: StrataRuntimeData, rule: Dictionary) -> PackedByteArr
 		return PackedByteArray()
 	return result.mask
 
-## {ok, message, mask, blocked_cells, terms, ms}.
-static func evaluate_checked(data: StrataRuntimeData, rule: Dictionary) -> Dictionary:
-	var started := Time.get_ticks_usec()
-	if data == null or not data.is_resident():
-		return _error("Navigation profiles need resident runtime heights")
-	var compiled := _compile(rule, data.channel_names)
-	if not compiled.ok: return compiled
+static func evaluate_region(region: StrataRegionData, rule: Dictionary, channel_names: Variant = PackedStringArray()) -> PackedByteArray:
+	var result := evaluate_region_checked(region, rule, channel_names)
+	if not result.ok:
+		push_error("Strata navigation profile: " + String(result.message))
+		return PackedByteArray()
+	return result.mask
+
+## A channel map as float32 samples (any scalar format, 0..1 for byte formats); empty when the
+## region has no such map or it has the wrong size.
+static func _channel_floats(region: StrataRegionData, name: String, side: int) -> PackedFloat32Array:
+	if not region.has_map(name): return PackedFloat32Array()
+	var bytes := region.level_bytes(name)
+	var format := int(region.description(name).format)
+	if format == Image.FORMAT_RF: return bytes.to_float32_array()
+	var image := Image.create_from_data(side, side, false, format, bytes)
+	image.convert(Image.FORMAT_RF)
+	return image.get_data().to_float32_array()
+
+## Leaf passes over float arrays on a (width x height) sample lattice with a mask of
+## (width - 1) x (height - 1) cells. exclusion: canonical cell bytes, empty = none.
+static func _evaluate(compiled: Dictionary, heights: PackedFloat32Array, resolution: Vector2i, spacing: float, channels: Dictionary, exclusion: PackedByteArray) -> PackedByteArray:
 	var leaves: Array = compiled.leaves
-	for leaf in leaves:
-		if leaf.kind == Term.CHANNEL and not data.channels.has(String(leaf.channel)):
-			return _error("channel %s is not resident (evicted after the bake)" % leaf.channel)
-	var cells := data.get_cell_resolution()
+	var cells := resolution - Vector2i.ONE
 	var count := cells.x * cells.y
 	var flags := PackedByteArray()
 	flags.resize(count)
@@ -117,21 +187,21 @@ static func evaluate_checked(data: StrataRuntimeData, rule: Dictionary) -> Dicti
 		var bit := 1 << index
 		match int(leaf.kind):
 			Term.EXCLUSION:
-				if data.nav_exclusions.is_empty():
+				if exclusion.is_empty():
 					constants[index] = true
 				else:
-					_exclusion_pass(data.nav_exclusions, flags, bit, fresh)
+					_exclusion_pass(exclusion, flags, bit, fresh)
 			Term.CHANNEL:
-				_mean_pass(data.channels[String(leaf.channel)].values, data.resolution, flags, bit, leaf.min, leaf.max)
+				_mean_pass(channels[String(leaf.channel)], resolution, flags, bit, leaf.min, leaf.max)
 			Term.HEIGHT:
-				_mean_pass(data.heights, data.resolution, flags, bit, leaf.min, leaf.max)
+				_mean_pass(heights, resolution, flags, bit, leaf.min, leaf.max)
 			Term.SLOPE:
 				if leaf.min <= 0.0 and leaf.max >= 90.0:
 					constants[index] = true
 				elif only_literals and narrowed and literals.has(index) and flags.count(pattern) * 3 < count:
-					_slope_pass(data, flags, bit, leaf.min, leaf.max, pattern)
+					_slope_pass(heights, resolution, spacing, flags, bit, leaf.min, leaf.max, pattern)
 				else:
-					_slope_pass(data, flags, bit, leaf.min, leaf.max, -1)
+					_slope_pass(heights, resolution, spacing, flags, bit, leaf.min, leaf.max, -1)
 		if constants.has(index): continue
 		fresh = false
 		if literals.has(index) and only_literals:
@@ -139,10 +209,7 @@ static func evaluate_checked(data: StrataRuntimeData, rule: Dictionary) -> Dicti
 			narrowed = true
 		else:
 			only_literals = false
-	var mask := _map_flags(flags, compiled.tree, leaves.size(), constants)
-	var blocked := mask.count(BLOCKED)
-	if blocked == 0: mask = PackedByteArray()
-	return {"ok": true, "message": "", "mask": mask, "blocked_cells": blocked, "terms": leaves.size(), "ms": (Time.get_ticks_usec() - started) / 1000.0}
+	return _map_flags(flags, compiled.tree, leaves.size(), constants)
 
 ## Leaf index -> required truth for the root's top-level literals. A leaf used
 ## with both polarities is left out (the rule then needs every pass).
@@ -196,25 +263,79 @@ static func _map_flags(flags: PackedByteArray, tree: Array, terms: int, constant
 		mask[index] = table[flags[index]]
 	return mask
 
-## Validates every profile, evaluates them all, then replaces data.nav_profiles
-## and data.nav_profile_rules together. On failure the data is untouched.
-## {ok, message, report: {name: {blocked_cells, terms, ms}}, ms}.
-static func apply(data: StrataRuntimeData, profiles: Array) -> Dictionary:
+## Validates every profile, evaluates them all on [param region] and only then writes the
+## nav_<name> cell maps (L8, 255 = blocked) into it, so a failure leaves the region untouched.
+## Channel terms read the maps named in [param channel_names] (the channels the bake retained).
+## {ok, message, report: {name: {blocked_cells (the region's own cells), terms, ms}}, ms}.
+static func apply_region(region: StrataRegionData, profiles: Array, channel_names: Variant = PackedStringArray()) -> Dictionary:
 	var started := Time.get_ticks_usec()
-	if data == null: return _error("Navigation profiles need runtime data")
-	var checked := validate_profiles(profiles, data.channel_names)
+	if region == null: return _error("Navigation profiles need a region")
+	var checked := validate_profiles(profiles, channel_names)
 	if not checked.ok: return checked
 	var masks := {}
-	var rules := {DEFAULT: DEFAULT_RULE.duplicate(true)}
 	var report := {}
 	for entry in profiles:
 		var name := StringName(entry.name)
-		var evaluated := evaluate_checked(data, entry.rule)
+		var evaluated := evaluate_region_checked(region, entry.rule, channel_names)
 		if not evaluated.ok: return _error("Navigation profile %s: %s" % [name, evaluated.message])
 		masks[name] = evaluated.mask
-		rules[name] = (entry.rule as Dictionary).duplicate(true)
-		report[name] = {"blocked_cells": evaluated.blocked_cells, "terms": evaluated.terms, "ms": evaluated.ms}
-	data.nav_profiles = masks
+		report[name] = {"blocked_cells": _interior_count(evaluated.mask, region), "terms": evaluated.terms, "ms": evaluated.ms}
+	var side := StrataRegions.map_size(region.cells, region.description(StrataRegions.MAP_HEIGHT)).x - 1
+	for name in masks:
+		var description := StrataRegions.map(Image.FORMAT_L8, StrataRegions.KIND_CELL, 1, region.apron)
+		if not region.set_image(StrataRegions.nav_map_name(name), Image.create_from_data(side, side, false, Image.FORMAT_L8, masks[name]), 0, description):
+			return _error("Navigation profile %s does not fit the region" % name)
+	return {"ok": true, "message": "", "report": report, "ms": (Time.get_ticks_usec() - started) / 1000.0}
+
+## Blocked cells among the region's own cells x cells (apron excluded).
+static func _interior_count(mask: PackedByteArray, region: StrataRegionData) -> int:
+	var side := region.cells + 2 * region.apron
+	var total := 0
+	for row in range(region.apron, region.apron + region.cells):
+		total += mask.slice(row * side + region.apron, row * side + region.apron + region.cells).count(BLOCKED)
+	return total
+
+## apply_region() on every region of [param data] (loaded one by one), then records the profile
+## maps in data.maps and the rules (default included) in data.nav_profile_rules. Replaces the
+## existing profiles; on failure nothing changes. Embedded regions are modified in place;
+## external ones must be saved again by the caller.
+static func apply(data: StrataRuntimeData, profiles: Array) -> Dictionary:
+	var started := Time.get_ticks_usec()
+	if data == null or not data.is_resident(): return _error("Navigation profiles need resident runtime regions")
+	var checked := validate_profiles(profiles, data.channel_names)
+	if not checked.ok: return checked
+	var staged := {}
+	var report := {}
+	for y in range(data.grid.y):
+		for x in range(data.grid.x):
+			var region := data.get_region(Vector2i(x, y))
+			if region == null: return _error("Region %d,%d is not available" % [x, y])
+			var copy := StrataRegionData.new()
+			copy.region = region.region; copy.cells = region.cells; copy.apron = region.apron; copy.spacing = region.spacing
+			copy.maps = region.maps.duplicate()
+			var applied := apply_region(copy, profiles, data.channel_names)
+			if not applied.ok: return applied
+			staged[Vector2i(x, y)] = copy
+			for name in applied.report:
+				if not report.has(name): report[name] = {"blocked_cells": 0, "terms": applied.report[name].terms, "ms": 0.0}
+				report[name].blocked_cells += applied.report[name].blocked_cells
+				report[name].ms += applied.report[name].ms
+	var rules := {DEFAULT: DEFAULT_RULE.duplicate(true)}
+	for entry in profiles: rules[StringName(entry.name)] = (entry.rule as Dictionary).duplicate(true)
+	for xy: Vector2i in staged:
+		var region := data.get_region(xy)
+		for name in region.map_names():
+			if StrataRegions.is_nav_profile_map(name): region.remove_map(name)
+		for name in (staged[xy] as StrataRegionData).map_names():
+			if StrataRegions.is_nav_profile_map(name):
+				var image: Image = (staged[xy] as StrataRegionData).get_image(name)
+				region.set_image(name, image, 0, (staged[xy] as StrataRegionData).description(name))
+	var spec_maps := data.maps.duplicate()
+	for name in spec_maps.keys():
+		if StrataRegions.is_nav_profile_map(String(name)): spec_maps.erase(name)
+	for entry in profiles:
+		spec_maps[StrataRegions.nav_map_name(StringName(entry.name))] = StrataRegions.map(Image.FORMAT_L8, StrataRegions.KIND_CELL, 1, data.apron)
+	data.maps = spec_maps
 	data.nav_profile_rules = rules
 	return {"ok": true, "message": "", "report": report, "ms": (Time.get_ticks_usec() - started) / 1000.0}
 
@@ -338,11 +459,9 @@ static func _mean_pass(values: PackedFloat32Array, resolution: Vector2i, flags: 
 ## Sets `bit` where the steeper canonical triangle's slope is in low..high
 ## degrees, compared as squared rise over squared run (no per-cell atan). With
 ## pattern >= 0 only cells whose flags equal pattern are visited.
-static func _slope_pass(data: StrataRuntimeData, flags: PackedByteArray, bit: int, low: float, high: float, pattern: int) -> void:
-	var heights := data.heights
-	var width := data.resolution.x
+static func _slope_pass(heights: PackedFloat32Array, resolution: Vector2i, spacing: float, flags: PackedByteArray, bit: int, low: float, high: float, pattern: int) -> void:
+	var width := resolution.x
 	var cell_width := width - 1
-	var spacing := data.get_spacing()
 	var low_limit := -INF if low <= 0.0 else pow(tan(deg_to_rad(low)) * spacing, 2.0)
 	var high_limit := INF if high >= 90.0 else pow(tan(deg_to_rad(high)) * spacing, 2.0)
 	if pattern >= 0:
@@ -362,7 +481,7 @@ static func _slope_pass(data: StrataRuntimeData, flags: PackedByteArray, bit: in
 				flags[index] = pattern | bit
 			index = flags.find(pattern, index + 1)
 		return
-	for z in data.resolution.y - 1:
+	for z in resolution.y - 1:
 		var row := z * width
 		var cell := z * cell_width
 		var a := heights[row]

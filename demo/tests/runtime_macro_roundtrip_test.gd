@@ -15,7 +15,7 @@ func run() -> void:
 	var probe: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://export/macro_probe.json"))
 	if data != null and probe is Dictionary:
 		var bounds := Rect2(probe.bounds[0], probe.bounds[1], probe.bounds[2], probe.bounds[3])
-		check(data.has_macro() and data.macro_bounds == bounds and data.get_macro_binding().ok, "macro map and exact bounds survive the runtime-only load")
+		check(data.has_macro() and data.get_macro_bounds() == bounds and data.get_macro_binding().ok, "macro map and exact bounds survive the runtime-only load")
 		check(data.render_settings != null and data.render_settings.has_method("parameters"), "baked render settings load in the runtime-only project")
 		for sample in probe.samples:
 			var result := data.sample_macro(Vector2(sample[0], sample[1]))

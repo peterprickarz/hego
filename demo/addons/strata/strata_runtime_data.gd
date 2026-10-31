@@ -1,109 +1,121 @@
 class_name StrataRuntimeData
 extends Resource
-## Compiled runtime terrain. Built-in types only: it loads, samples, collides and
-## navigates without the native terrain extension, HEGo or Houdini.
+## Compiled runtime terrain, format 2: the manifest of a region grid (see
+## docs/development/strata_regions_plan.md and docs/development/terrain_runtime.md). Built-in
+## types only: it loads, samples, collides and navigates without the native terrain
+## extension, HEGo or Houdini.
 ##
-## Lattice: sample (i, j) lies at bounds.position + spacing * (i, j) in
-## terrain-local XZ, endpoints included. Cell (x, z) spans samples a=(x, z),
-## b=(x+1, z), c=(x, z+1), d=(x+1, z+1) and is split into triangles (a, b, c)
-## and (b, d, c). This is Godot Physics' HeightMapShape3D triangulation and the
-## canonical surface for CPU queries, collision and navigation.
+## Lattice: sample (i, j) lies at bounds.position + spacing * (i, j) in terrain-local XZ,
+## endpoints included. Cell (x, z) spans samples a=(x, z), b=(x+1, z), c=(x, z+1), d=(x+1, z+1)
+## and is split into triangles (a, b, c) and (b, d, c). This is Godot Physics' HeightMapShape3D
+## triangulation and the canonical surface for CPU queries, collision and navigation.
+##
+## The manifest holds the spec (bounds, spacing, cells, apron, maps), the channel and navigation
+## profile bookkeeping, render settings and the extrema; the maps themselves live in
+## StrataRegionData resources, embedded in [member regions] or loaded lazily from
+## [member region_directory] by [method get_region]. Format 1 (one monolithic resource) is not
+## migrated: it fails validation and the terrain must be baked again.
 
 enum Status { OK, OUTSIDE, ABSENT, NOT_RESIDENT, HOLE }
 enum Interpolation { TRIANGLE, BILINEAR }
 
-const FORMAT_VERSION := 1
-## Cell masks are 0 (solid) or 255 (masked); float inputs use value >= 0.5.
+const FORMAT_VERSION := 2
+## Cell masks are 0 (solid) or 255 (masked).
 const MASK_SET := 255
+## Largest lattice the whole-image transitional adapters (height image, hole image, compiled
+## field) assemble; region consumers use the windows instead.
 const MAX_SAMPLES := 20 * 1024 * 1024
+const ADAPTER_MAX_SIDE := 4097
+## Payload budget of embedded regions; external regions are not bounded by it.
 const MAX_PAYLOAD_BYTES := 512 * 1024 * 1024
-## Optional terrain-wide macro map: RGBAH, RGB linear tint in 0..2 and A ambient
-## occlusion in 0..1, neutral (1, 1, 1, 1). Its own endpoint-aligned lattice.
+## Total payload below which exports embed their regions by default.
+const EMBED_LIMIT_BYTES := 64 * 1024 * 1024
+## Macro tint/AO: RGBAH, RGB linear tint in 0..2 and A ambient occlusion in 0..1, neutral
+## (1, 1, 1, 1). The region map "macro" holds it at its own scale.
 const MACRO_MAX_SIDE := 4097
 const MACRO_TINT_MAX := 2.0
 const MACRO_NEUTRAL := Color(1.0, 1.0, 1.0, 1.0)
-## Navigation profile that is always present: the nav_exclusions mask itself.
+## Navigation profile that is always present: the nav_exclusion map itself.
 const DEFAULT_NAV_PROFILE := &"default"
+const REGION_FILE := "region_%d_%d.res"
 
 @export var format_version := FORMAT_VERSION
 ## Increments on every published bake of the owning terrain.
 @export var bake_revision := 0
-@export var resolution := Vector2i.ZERO
-## (resolution - 1) cells, row-major. Empty means no masked cells.
-@export var holes := PackedByteArray()
-@export var nav_exclusions := PackedByteArray()
-## Static navigation profiles (StrataNavProfiles): StringName -> canonical cell
-## mask in the holes/nav_exclusions convention, 255 = BLOCKED for that
-## population, empty = nothing blocked. Holes are not repeated in the masks;
-## is_nav_blocked_cell() and StrataNavigation always add them. DEFAULT_NAV_PROFILE
-## is never stored here: it is nav_exclusions (rule {"exclusion": true}).
-@export var nav_profiles := {}
-## Channels listed here were retained by the bake. Evicted ones stay listed.
+## Cells per region axis and the apron (in samples) every full-resolution map carries.
+@export var cells := StrataRegions.DEFAULT_CELLS
+@export var apron := StrataRegions.DEFAULT_APRON
+## Regions per axis, derived from bounds, spacing and cells.
+@export var grid := Vector2i.ZERO
+## The spec maps: name -> {format, kind, scale, apron}. Region files hold exactly these.
+@export var maps := {}
+## Levels per map the bake computed (level 0 included; capped per map by its size).
+@export var mip_levels := 1
+## Channels retained by the bake: each has a map of that name (and maybe "<name>__coverage").
 @export var channel_names := PackedStringArray()
-## Optional renderer controls, stored as validated by the bake.
-@export var material_ids: Image:
+## Embedded regions, Vector2i -> StrataRegionData, the whole grid or none.
+@export var regions: Dictionary = {}:
 	set(value):
-		material_ids = value
+		regions = value
 		_payload_checked = false
-@export var material_weights: Image:
-	set(value):
-		material_weights = value
-		_payload_checked = false
-## Optional terrain-wide tint/AO (see set_macro()). Null means none, which is
-## also how resources saved before this field load.
-@export var macro_image: Image:
-	set(value):
-		macro_image = value
-		_payload_checked = false
-## Optional renderer settings captured by the bake (a duplicate, so later
-## authoring edits never change a published artifact). Typed as Resource so
-## runtime-only projects can parse this script without the settings class.
+## Directory of region_<i>_<j>.res files, loaded on demand when no regions are embedded.
+@export var region_directory := ""
+## Optional renderer settings captured by the bake (a duplicate, so later authoring edits never
+## change a published artifact). Typed as Resource so runtime-only projects can parse this
+## script without the settings class.
 @export var render_settings: Resource
 
-# Floating-point payloads persist as raw bytes (see _get_property_list): Godot
-# text resources (4.4 through 4.7) write floats with ~6 significant digits, which would
-# silently move a .tres/.tscn bake away from its collision and render data.
+# Floating-point values persist as raw bytes (see _get_property_list): Godot text resources
+# (4.4 through 4.7) write floats with ~6 significant digits, which would silently move a .tres
+# or .tscn bake away from its collision and render data.
 var bounds := Rect2()
-var heights := PackedFloat32Array():
-	set(value):
-		heights = value
-		_payload_checked = false
-		_height_scan = {}
+var spacing := 1.0
+## Global height extrema over the terrain's own samples.
 var height_min := 0.0
 var height_max := 0.0
-## Terrain-local XZ of the first and last macro texel centres (endpoints).
-var macro_bounds := Rect2():
-	set(value):
-		macro_bounds = value
-		_payload_checked = false
-## name -> {"values": PackedFloat32Array, "coverage": PackedFloat32Array} on the
-## height lattice. Values are signed and unclamped; coverage > 0 means defined.
-var channels: Dictionary = {}:
-	set(value):
-		channels = value
-		_payload_checked = false
-		_channel_scans = {}
+## Per region (row-major over the grid) the same extrema: [min, max] pairs.
+var region_extrema := PackedFloat64Array()
 ## StringName -> the rule Dictionary each profile was evaluated from, including
-## DEFAULT_NAV_PROFILE after a bake. Persisted as var_to_bytes (see
-## _get_property_list) because text resources round float thresholds.
+## DEFAULT_NAV_PROFILE after a bake. Persisted as var_to_bytes (see _get_property_list).
 var nav_profile_rules := {}
 var _decode_error := ""
 var _payload_checked := false
 var _payload_validation: Dictionary = {}
-var _height_scan: Dictionary = {}
-var _channel_scans: Dictionary = {}
+var _scanned_extrema: Dictionary = {}
+var _region_cache: Dictionary = {}
+var _missing: Dictionary = {}
+
+## Terrain lattice samples per axis (cells + 1).
+var resolution: Vector2i:
+	get: return get_cell_resolution() + Vector2i.ONE
+
+# Transitional whole-lattice views, assembled from the regions once and cached, so that
+# StrataCollision and StrataNavigation keep working on small terrains until they read region
+# windows (heights_window / cell_mask_window). They cost a second copy of the lattice and are
+# not meant for large terrains. validate_payload() and assigning regions drop the caches.
+var heights: PackedFloat32Array:
+	get:
+		if _compat_heights.is_empty(): _compat_heights = heights_window(Rect2i(Vector2i.ZERO, get_cell_resolution()))
+		return _compat_heights
+## (resolution - 1) cells, row-major; empty when no cell is a hole.
+var holes: PackedByteArray:
+	get:
+		if _compat_holes.is_empty() and maps.has(StrataRegions.MAP_HOLES):
+			_compat_holes = cell_mask_window(StrataRegions.MAP_HOLES, Rect2i(Vector2i.ZERO, get_cell_resolution()))
+			if _compat_holes.count(MASK_SET) == 0: _compat_holes = PackedByteArray()
+		return _compat_holes
+var _compat_heights := PackedFloat32Array()
+var _compat_holes := PackedByteArray()
 
 func _get_property_list() -> Array[Dictionary]:
 	var shown := PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY
 	return [
 		{"name": "lattice_data", "type": TYPE_PACKED_BYTE_ARRAY, "usage": PROPERTY_USAGE_STORAGE},
-		{"name": "height_data", "type": TYPE_PACKED_BYTE_ARRAY, "usage": PROPERTY_USAGE_STORAGE},
-		{"name": "channel_data", "type": TYPE_DICTIONARY, "usage": PROPERTY_USAGE_STORAGE},
-		{"name": "macro_lattice", "type": TYPE_PACKED_BYTE_ARRAY, "usage": PROPERTY_USAGE_STORAGE},
+		{"name": "extrema_data", "type": TYPE_PACKED_BYTE_ARRAY, "usage": PROPERTY_USAGE_STORAGE},
 		{"name": "nav_profile_rule_data", "type": TYPE_PACKED_BYTE_ARRAY, "usage": PROPERTY_USAGE_STORAGE},
 		{"name": "nav_profile_rules", "type": TYPE_DICTIONARY, "usage": shown},
 		{"name": "bounds", "type": TYPE_RECT2, "usage": shown},
-		{"name": "macro_bounds", "type": TYPE_RECT2, "usage": shown},
+		{"name": "spacing", "type": TYPE_FLOAT, "usage": shown},
 		{"name": "height_min", "type": TYPE_FLOAT, "usage": shown},
 		{"name": "height_max", "type": TYPE_FLOAT, "usage": shown},
 	]
@@ -111,17 +123,9 @@ func _get_property_list() -> Array[Dictionary]:
 func _get(property: StringName) -> Variant:
 	match property:
 		&"lattice_data":
-			return PackedFloat64Array([bounds.position.x, bounds.position.y, bounds.size.x, bounds.size.y, height_min, height_max]).to_byte_array()
-		&"height_data":
-			return heights.to_byte_array()
-		&"channel_data":
-			var encoded := {}
-			for name in channels:
-				encoded[name] = [channels[name].values.to_byte_array(), channels[name].coverage.to_byte_array()]
-			return encoded
-		&"macro_lattice":
-			if macro_image == null: return PackedByteArray()
-			return PackedFloat64Array([macro_bounds.position.x, macro_bounds.position.y, macro_bounds.size.x, macro_bounds.size.y]).to_byte_array()
+			return PackedFloat64Array([bounds.position.x, bounds.position.y, bounds.size.x, bounds.size.y, spacing, height_min, height_max]).to_byte_array()
+		&"extrema_data":
+			return region_extrema.to_byte_array()
 		&"nav_profile_rule_data":
 			return var_to_bytes(nav_profile_rules) if not nav_profile_rules.is_empty() else PackedByteArray()
 	return null
@@ -129,57 +133,20 @@ func _get(property: StringName) -> Variant:
 func _set(property: StringName, value: Variant) -> bool:
 	match property:
 		&"lattice_data":
-			if not value is PackedByteArray or (value as PackedByteArray).size() != 48:
+			if not value is PackedByteArray or (value as PackedByteArray).size() != 56:
 				_decode_error = "Stored lattice header is malformed"
 				return true
 			var lattice: PackedFloat64Array = (value as PackedByteArray).to_float64_array()
 			bounds = Rect2(lattice[0], lattice[1], lattice[2], lattice[3])
-			height_min = lattice[4]
-			height_max = lattice[5]
+			spacing = lattice[4]
+			height_min = lattice[5]
+			height_max = lattice[6]
 			return true
-		&"height_data":
-			if not value is PackedByteArray or (value as PackedByteArray).size() % 4 != 0 or (value as PackedByteArray).size() > MAX_SAMPLES * 4:
-				_decode_error = "Stored height payload is not float32 data"
-				heights = PackedFloat32Array()
+		&"extrema_data":
+			if not value is PackedByteArray or (value as PackedByteArray).size() % 16 != 0:
+				_decode_error = "Stored region extrema are malformed"
 				return true
-			heights = (value as PackedByteArray).to_float32_array()
-			_height_scan = _scan_floats(heights, resolution)
-			if not _height_scan.ok: _decode_error = "Stored height payload contains nonfinite values"
-			return true
-		&"channel_data":
-			channels = {}
-			if not value is Dictionary:
-				_decode_error = "Stored channel payload must be a Dictionary"
-				return true
-			var decoded_bytes := heights.size() * 4
-			for name in value:
-				if not value[name] is Array:
-					_decode_error = "Stored channel %s payload is malformed" % name
-					continue
-				var entry: Array = value[name]
-				if entry.size() != 2 or not entry[0] is PackedByteArray or not entry[1] is PackedByteArray or entry[0].size() % 4 != 0 or entry[1].size() % 4 != 0:
-					_decode_error = "Stored channel %s payload is malformed" % name
-					continue
-				decoded_bytes += entry[0].size() + entry[1].size()
-				if decoded_bytes > MAX_PAYLOAD_BYTES:
-					_decode_error = "Stored runtime channels exceed the bounded payload budget"
-					break
-				channels[name] = {"values": entry[0].to_float32_array(), "coverage": entry[1].to_float32_array()}
-				var values := _scan_floats(channels[name].values, resolution)
-				var coverage := _scan_floats(channels[name].coverage, resolution)
-				_channel_scans[name] = {"values": values, "coverage": coverage}
-				if not values.ok or not coverage.ok or coverage.min < 0 or coverage.max > 1:
-					_decode_error = "Stored channel %s values/coverage are invalid" % name
-			return true
-		&"macro_lattice":
-			if not value is PackedByteArray or not (value as PackedByteArray).size() in [0, 32]:
-				_decode_error = "Stored macro lattice header is malformed"
-				return true
-			if (value as PackedByteArray).is_empty():
-				macro_bounds = Rect2()
-				return true
-			var lattice: PackedFloat64Array = (value as PackedByteArray).to_float64_array()
-			macro_bounds = Rect2(lattice[0], lattice[1], lattice[2], lattice[3])
+			region_extrema = (value as PackedByteArray).to_float64_array()
 			return true
 		&"nav_profile_rule_data":
 			nav_profile_rules = {}
@@ -196,92 +163,221 @@ func _set(property: StringName, value: Variant) -> bool:
 			return true
 	return false
 
-func get_spacing() -> float:
-	return bounds.size.x / float(resolution.x - 1) if resolution.x > 1 else 0.0
+# Spec and geometry -----------------------------------------------------------
 
+## The spec dictionary StrataRegions expects: {bounds, spacing, cells, apron, maps}.
+func get_spec() -> Dictionary:
+	return {"bounds": bounds, "spacing": spacing, "cells": cells, "apron": apron, "maps": maps}
+
+func get_spacing() -> float:
+	return spacing
+
+## Cells of the terrain's own lattice per axis (bounds / spacing).
 func get_cell_resolution() -> Vector2i:
-	return resolution - Vector2i.ONE
+	if spacing <= 0.0 or not bounds.size.is_finite(): return Vector2i.ZERO
+	return Vector2i(roundi(bounds.size.x / spacing), roundi(bounds.size.y / spacing))
+
+## Cells covered by the region grid (grid * cells), at least get_cell_resolution(). Windows
+## of cells, heights and masks are addressed in this space.
+func cells_resolution() -> Vector2i:
+	return grid * cells
 
 func is_resident() -> bool:
-	return resolution.x > 1 and heights.size() == resolution.x * resolution.y
+	return grid.x > 0 and grid.y > 0 and (not regions.is_empty() or not region_directory.is_empty())
 
-## Resident payloads are scanned once after assignment/decoding, then reused.
-## Treat published arrays as immutable. Call validate_payload() explicitly after
-## intentional in-place array edits, which bypass Godot property setters.
-func validate() -> Dictionary:
-	if not _decode_error.is_empty():
-		return _error(_decode_error)
+func has_map(name: String) -> bool:
+	return maps.has(name)
+
+func description(name: String) -> Dictionary:
+	var entry: Dictionary = maps.get(name, {})
+	return {"format": int(entry.get("format", Image.FORMAT_RF)), "kind": String(entry.get("kind", StrataRegions.KIND_SAMPLE)), "scale": int(entry.get("scale", 1)), "apron": int(entry.get("apron", apron))}
+
+## Levels the bake stored for a map.
+func level_count(name: String) -> int:
+	return StrataRegions.level_count(cells, description(name), mip_levels) if maps.has(name) else 0
+
+func region_path(xy: Vector2i) -> String:
+	return region_directory.path_join(REGION_FILE % [xy.x, xy.y])
+
+## The region at grid index [param xy]: the embedded one, or loaded once from
+## [member region_directory] and kept in memory (Phase A has no eviction). Null outside the
+## grid, when the region is not available, or when its file is malformed.
+func get_region(xy: Vector2i) -> StrataRegionData:
+	if regions.has(xy): return regions[xy]
+	if _region_cache.has(xy): return _region_cache[xy]
+	if region_directory.is_empty() or _missing.has(xy) or xy.x < 0 or xy.y < 0 or xy.x >= grid.x or xy.y >= grid.y: return null
+	var path := region_path(xy)
+	var loaded: StrataRegionData = null
+	if ResourceLoader.exists(path):
+		loaded = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRegionData
+	if loaded == null or loaded.region != xy or not loaded.validate().ok or not _region_matches(loaded):
+		push_error("Strata: region file %s is missing or malformed" % path)
+		_missing[xy] = true
+		return null
+	_region_cache[xy] = loaded
+	return loaded
+
+## Forgets loaded external regions and failed loads, so the next access reads the files again.
+func clear_region_cache() -> void:
+	_region_cache = {}
+	_missing = {}
+
+## Moves the embedded regions into the in-memory cache and points the manifest at a directory
+## whose files the caller has just written (StrataStorage does).
+func attach_region_directory(directory: String) -> void:
+	for xy in regions: _region_cache[xy] = regions[xy]
+	regions = {}
+	region_directory = directory
+	_missing = {}
+
+## Replaces the regions with an embedded set (and the directory with nothing).
+func embed_regions(embedded: Dictionary) -> void:
+	regions = embedded
+	region_directory = ""
+	_region_cache = {}
+	_missing = {}
+
+## Loads every region (external ones included) and embeds them, for exports.
+func load_all_regions() -> Dictionary:
+	var all := {}
+	for y in range(grid.y):
+		for x in range(grid.x):
+			var region := get_region(Vector2i(x, y))
+			if region == null: return {}
+			all[Vector2i(x, y)] = region
+	return all
+
+func region_extremum(xy: Vector2i) -> Vector2:
+	var index := (xy.y * grid.x + xy.x) * 2
+	if xy.x < 0 or xy.y < 0 or xy.x >= grid.x or xy.y >= grid.y or index + 1 >= region_extrema.size(): return Vector2.ZERO
+	return Vector2(region_extrema[index], region_extrema[index + 1])
+
+func _region_matches(region: StrataRegionData) -> bool:
+	if region.cells != cells or region.apron != apron or region.spacing != spacing: return false
+	if region.map_names().size() != maps.size(): return false
+	for name in maps:
+		if not region.has_map(name) or region.description(name) != description(name) or region.level_count(name) != level_count(name): return false
+	return true
+
+## Bytes the stored maps occupy: counted over the embedded regions, planned from the spec for
+## external ones (a missing file counts as planned).
+func payload_bytes() -> int:
+	return grid.x * grid.y * StrataRegions.region_bytes(get_spec(), mip_levels)
+
+# Validation -------------------------------------------------------------------
+
+## Structure of the manifest plus every embedded region (scanned once and cached; call
+## validate_payload() after editing a region's bytes in place). External regions are checked
+## when they load, or all at once with [param deep].
+func validate(deep: bool = false) -> Dictionary:
+	if not _decode_error.is_empty(): return _error(_decode_error)
 	if format_version != FORMAT_VERSION:
-		return _error("Unsupported runtime terrain format version %d" % format_version)
-	if resolution.x < 2 or resolution.y < 2 or resolution.x * resolution.y > MAX_SAMPLES:
-		return _error("Runtime terrain needs 2..%d samples with at least 2 per axis" % MAX_SAMPLES)
+		return _error("Unsupported runtime terrain format version %d (this is format %d; format 1 is not migrated, bake the terrain again)" % [format_version, FORMAT_VERSION])
 	if not bounds.position.is_finite() or not bounds.size.is_finite() or not bounds.end.is_finite() or bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		return _error("Runtime terrain bounds must be finite and positive")
-	var spacing_z := bounds.size.y / float(resolution.y - 1)
-	if not is_equal_approx(get_spacing(), spacing_z):
-		return _error("Runtime terrain requires uniform spacing (%s x %s)" % [get_spacing(), spacing_z])
-	if not heights.is_empty() and heights.size() != resolution.x * resolution.y:
-		return _error("Height payload does not match its resolution")
+	var checked := StrataRegions.validate_spec(get_spec())
+	if not checked.ok: return checked
+	if grid != StrataRegions.grid_size(get_spec()): return _error("Region grid %s does not match the bounds (%s)" % [grid, StrataRegions.grid_size(get_spec())])
+	if not maps.has(StrataRegions.MAP_HEIGHT): return _error("Runtime terrain needs a height map")
+	var height := description(StrataRegions.MAP_HEIGHT)
+	if int(height.format) != Image.FORMAT_RF or height.kind != StrataRegions.KIND_SAMPLE or int(height.scale) != 1:
+		return _error("The height map must be an RF sample map at scale 1")
+	if mip_levels < 1 or mip_levels > 16: return _error("mip_levels must be 1..16")
 	if not is_finite(height_min) or not is_finite(height_max) or height_min > height_max:
 		return _error("Height range must be finite")
-	var cells := (resolution.x - 1) * (resolution.y - 1)
-	if not holes.is_empty() and holes.size() != cells or not nav_exclusions.is_empty() and nav_exclusions.size() != cells:
-		return _error("Cell masks must have (width - 1) x (height - 1) entries")
-	if not _canonical_mask(holes) or not _canonical_mask(nav_exclusions):
-		return _error("Cell masks must contain only 0 and 255")
-	var profile_bytes := 0
-	for name in nav_profiles:
-		if not name is StringName or String(name).strip_edges().is_empty() or name == DEFAULT_NAV_PROFILE:
-			return _error("Navigation profile names must be nonempty StringNames other than %s" % DEFAULT_NAV_PROFILE)
-		var mask: Variant = nav_profiles[name]
-		if not mask is PackedByteArray or not (mask as PackedByteArray).is_empty() and (mask as PackedByteArray).size() != cells or not _canonical_mask(mask):
-			return _error("Navigation profile %s must be an empty or canonical (width - 1) x (height - 1) cell mask" % name)
-		if not nav_profile_rules.get(name) is Dictionary:
-			return _error("Navigation profile %s has no stored rule" % name)
-		profile_bytes += (mask as PackedByteArray).size()
-	for name in nav_profile_rules:
-		if not name is StringName or not (name == DEFAULT_NAV_PROFILE or nav_profiles.has(name)) or not nav_profile_rules[name] is Dictionary:
-			return _error("Navigation profile rule %s has no matching profile mask" % name)
-	var names := {}
+	if region_extrema.size() != grid.x * grid.y * 2: return _error("Per-region height extrema do not match the grid")
+	var seen := {}
 	for name in channel_names:
-		if name.strip_edges().is_empty() or names.has(name): return _error("Runtime channel manifest names must be nonempty and unique")
-		names[name] = true
-	var payload_bytes := heights.size() * 4 + holes.size() + nav_exclusions.size() + profile_bytes
-	for name in channels:
-		if not channel_names.has(String(name)):
-			return _error("Channel payload %s is missing from the manifest" % name)
-		if not channels[name] is Dictionary: return _error("Channel %s payload must be a Dictionary" % name)
-		var entry: Dictionary = channels[name]
-		if not entry.get("values") is PackedFloat32Array or not entry.get("coverage") is PackedFloat32Array or entry.values.size() != resolution.x * resolution.y or entry.coverage.size() != entry.values.size():
-			return _error("Channel %s payload does not match the height lattice" % name)
-		payload_bytes += entry.values.size() * 8
-	if (material_ids == null) != (material_weights == null):
-		return _error("Material ids and weights must be provided together")
-	if material_ids != null and (material_ids.is_compressed() or material_weights.is_compressed() or material_ids.get_width() < 2 or material_ids.get_height() < 2 or material_ids.get_width() > 1025 or material_ids.get_height() > 1025 or material_ids.get_size() != material_weights.get_size() or material_ids.get_format() != Image.FORMAT_RGBA8 or material_weights.get_format() != Image.FORMAT_RGBAF):
-		return _error("Material controls need matching RGBA8 ids and RGBAF weights")
-	if material_ids != null: payload_bytes += material_ids.get_data().size() + material_weights.get_data().size()
-	if macro_image != null:
-		var macro := validate_macro_layout(macro_image, macro_bounds)
-		if not macro.ok: return macro
-		payload_bytes += macro_image.get_data().size()
+		if name.strip_edges().is_empty() or seen.has(name): return _error("Runtime channel manifest names must be nonempty and unique")
+		if not maps.has(name) or maps[name].get("kind") != StrataRegions.KIND_SAMPLE: return _error("Channel %s has no sample map" % name)
+		seen[name] = true
+	for name in maps:
+		var text := String(name)
+		if StrataRegions.is_nav_profile_map(text):
+			var profile := StringName(text.trim_prefix(StrataRegions.NAV_PROFILE_PREFIX))
+			if maps[name].get("kind") != StrataRegions.KIND_CELL or not nav_profile_rules.get(profile) is Dictionary:
+				return _error("Navigation profile map %s needs the cell kind and a stored rule" % text)
+		elif text.ends_with(StrataRegions.COVERAGE_SUFFIX):
+			if not seen.has(text.trim_suffix(StrataRegions.COVERAGE_SUFFIX)): return _error("Coverage map %s has no channel" % text)
+		elif text not in [StrataRegions.MAP_HEIGHT, StrataRegions.MAP_MATERIAL_IDS, StrataRegions.MAP_MATERIAL_WEIGHTS, StrataRegions.MAP_HOLES, StrataRegions.MAP_NAV_EXCLUSION, StrataRegions.MAP_MACRO] and not seen.has(text):
+			return _error("Map %s is neither a standard map nor a retained channel" % text)
+	if maps.has(StrataRegions.MAP_MATERIAL_IDS) != maps.has(StrataRegions.MAP_MATERIAL_WEIGHTS): return _error("Material ids and weights must be provided together")
+	for name in nav_profile_rules:
+		if not name is StringName or not nav_profile_rules[name] is Dictionary: return _error("Navigation profile rule %s is malformed" % name)
+		if name != DEFAULT_NAV_PROFILE and not maps.has(StrataRegions.nav_map_name(name)): return _error("Navigation profile rule %s has no profile map" % name)
 	if render_settings != null and not render_settings.has_method("parameters"):
 		return _error("Runtime render settings must be an StrataRenderSettings resource")
-	if payload_bytes > MAX_PAYLOAD_BYTES: return _error("Runtime payload exceeds the 512 MiB aggregate budget")
-	if not _payload_checked:
-		_payload_validation = _validate_resident_values()
-		_payload_checked = true
-	if not _payload_validation.get("ok", false): return _payload_validation
-	if not heights.is_empty() and (height_min != _payload_validation.min or height_max != _payload_validation.max):
-		return _error("Stored height extrema do not match the resident finite samples")
+	if not regions.is_empty():
+		if payload_bytes() > MAX_PAYLOAD_BYTES: return _error("Embedded runtime payload exceeds the 512 MiB budget; save the regions to a directory")
+		if regions.size() != grid.x * grid.y: return _error("Embedded regions must cover the whole %s grid" % grid)
+		if not _payload_checked:
+			_payload_validation = _validate_embedded()
+			_payload_checked = true
+		if not _payload_validation.get("ok", false): return _payload_validation
+		# The scanned extrema are cached with the scan; the stored ones are compared every time.
+		var global_min := INF
+		var global_max := -INF
+		for xy in regions:
+			var scanned: Vector2 = _scanned_extrema[xy]
+			var extremum := region_extremum(xy)
+			if scanned.x != extremum.x or scanned.y != extremum.y: return _error("Region %s: stored height extrema do not match its samples" % xy)
+			global_min = minf(global_min, scanned.x)
+			global_max = maxf(global_max, scanned.y)
+		if global_min != height_min or global_max != height_max: return _error("Stored height extrema do not match the resident finite samples")
+	elif deep and not region_directory.is_empty():
+		for y in range(grid.y):
+			for x in range(grid.x):
+				if get_region(Vector2i(x, y)) == null: return _error("Region %d,%d is not available" % [x, y])
 	return {"ok": true}
 
-## Explicit ingestion/revalidation hook, including when callers edited a packed
-## array in place. No native extension is required in a runtime-only project.
+## Revalidates after intentional in-place edits to embedded region bytes.
 func validate_payload() -> Dictionary:
 	_payload_checked = false
-	_height_scan = {}
-	_channel_scans = {}
+	_compat_heights = PackedFloat32Array()
+	_compat_holes = PackedByteArray()
 	return validate()
+
+func _validate_embedded() -> Dictionary:
+	_scanned_extrema = {}
+	for xy in regions:
+		if not xy is Vector2i or not StrataRegions.contains_region(get_spec(), xy) or not regions[xy] is StrataRegionData: return _error("Embedded regions must be keyed by their grid index")
+		var region: StrataRegionData = regions[xy]
+		var checked := region.validate()
+		if not checked.ok: return _error("Region %s: %s" % [xy, checked.message])
+		if region.region != xy or not _region_matches(region): return _error("Region %s does not match the manifest" % xy)
+		var scanned := scan_region(region, get_spec())
+		if not scanned.ok: return _error("Region %s: %s" % [xy, scanned.message])
+		_scanned_extrema[xy] = Vector2(scanned.min, scanned.max)
+	return {"ok": true}
+
+## Finite and range checks of one region's maps; returns the height extrema over the terrain's
+## own samples. Cell masks must be canonical, channel values finite, coverage in 0..1.
+static func scan_region(region: StrataRegionData, spec: Dictionary) -> Dictionary:
+	var side := StrataRegions.map_size(region.cells, region.description(StrataRegions.MAP_HEIGHT)).x
+	var real := StrataRegions.terrain_samples(spec)
+	var count := Vector2i(mini(region.cells + 1, real.x - region.region.x * region.cells), mini(region.cells + 1, real.y - region.region.y * region.cells))
+	var everything := Image.create_from_data(side, side, false, Image.FORMAT_RF, region.level_bytes(StrataRegions.MAP_HEIGHT))
+	if not _scan_floats(everything.get_data().to_float32_array(), everything.get_size()).ok: return _error("Resident runtime heights must be finite")
+	var heights := everything.get_region(Rect2i(region.apron, region.apron, count.x, count.y))
+	var extent := _scan_floats(heights.get_data().to_float32_array(), heights.get_size())
+	if not extent.ok: return _error("Resident runtime heights must be finite")
+	for name in region.map_names():
+		var description := region.description(name)
+		var format := int(description.format)
+		for level in range(region.level_count(name)):
+			var bytes := region.level_bytes(name, level)
+			if String(description.kind) == StrataRegions.KIND_CELL and format == Image.FORMAT_L8:
+				if not _canonical_mask(bytes): return _error("Cell mask %s must contain only 0 and 255" % name)
+			elif name == StrataRegions.MAP_MACRO:
+				var size := StrataRegions.map_size(region.cells, description, level)
+				var macro := scan_macro_image(Image.create_from_data(size.x, size.y, false, Image.FORMAT_RGBAH, bytes))
+				if not macro.ok: return macro
+			elif format == Image.FORMAT_RF and name != StrataRegions.MAP_HEIGHT:
+				var size := StrataRegions.map_size(region.cells, description, level)
+				var values := _scan_floats(bytes.to_float32_array(), size)
+				if not values.ok: return _error("Map %s contains nonfinite values" % name)
+				if name.ends_with(StrataRegions.COVERAGE_SUFFIX) and (values.min < 0.0 or values.max > 1.0): return _error("Coverage %s must be in 0..1" % name)
+	return {"ok": true, "min": extent.min, "max": extent.max}
 
 static func _scan_floats(values: PackedFloat32Array, size: Vector2i) -> Dictionary:
 	if values.is_empty(): return {"ok": true, "min": 0.0, "max": 0.0}
@@ -296,29 +392,6 @@ static func _scan_floats(values: PackedFloat32Array, size: Vector2i) -> Dictiona
 		minimum = minf(minimum, value); maximum = maxf(maximum, value)
 	return {"ok": true, "min": minimum, "max": maximum}
 
-func _validate_resident_values() -> Dictionary:
-	if _height_scan.is_empty(): _height_scan = _scan_floats(heights, resolution)
-	var checked := _height_scan
-	if not checked.ok: return checked
-	for name in channels:
-		var entry: Dictionary = channels[name]
-		if not _channel_scans.has(name): _channel_scans[name] = {"values": _scan_floats(entry.values, resolution), "coverage": _scan_floats(entry.coverage, resolution)}
-		var values: Dictionary = _channel_scans[name].values
-		if not values.ok: return _error("Channel %s contains nonfinite values" % name)
-		var coverage: Dictionary = _channel_scans[name].coverage
-		if not coverage.ok or coverage.min < 0 or coverage.max > 1: return _error("Channel %s coverage must be finite and in 0..1" % name)
-	if material_ids != null:
-		# Four categorical bytes at once; every byte must have its upper three
-		# bits clear (pool IDs 0..31). No per-texel Image calls are needed.
-		for word in material_ids.get_data().to_int32_array():
-			if word & 0xe0e0e0e0: return _error("Material IDs must be in 0..31")
-		var weights := _scan_floats(material_weights.get_data().to_float32_array(), Vector2i(material_weights.get_width() * 4, material_weights.get_height()))
-		if not weights.ok or weights.min < 0: return _error("Material weights must be finite and nonnegative")
-	if macro_image != null:
-		var macro := scan_macro_image(macro_image)
-		if not macro.ok: return macro
-	return checked
-
 static func _canonical_mask(mask: PackedByteArray) -> bool:
 	return mask.count(0) + mask.count(MASK_SET) == mask.size()
 
@@ -328,15 +401,15 @@ static func _error(message: String) -> Dictionary:
 ## Converts a cell mask Image/PackedByteArray into canonical bytes. Float images
 ## mark value >= 0.5; 8-bit images mark byte >= 128 (the same 0.5 threshold).
 ## Already-canonical bytes are accepted without a per-cell script loop.
-static func canonicalize_cell_mask(source: Variant, cells: Vector2i) -> Dictionary:
+static func canonicalize_cell_mask(source: Variant, cell_size: Vector2i) -> Dictionary:
 	if source == null:
 		return {"ok": true, "mask": PackedByteArray()}
 	var bytes := PackedByteArray()
 	var float_values := PackedFloat32Array()
 	if source is Image:
 		var image: Image = source
-		if image.get_size() != cells or image.is_compressed():
-			return _error("Cell mask must be an uncompressed %dx%d image (one texel per cell)" % [cells.x, cells.y])
+		if image.get_size() != cell_size or image.is_compressed():
+			return _error("Cell mask must be an uncompressed %dx%d image (one texel per cell)" % [cell_size.x, cell_size.y])
 		match image.get_format():
 			Image.FORMAT_L8, Image.FORMAT_R8:
 				bytes = image.get_data()
@@ -348,8 +421,8 @@ static func canonicalize_cell_mask(source: Variant, cells: Vector2i) -> Dictiona
 		bytes = source
 		if bytes.is_empty():
 			return {"ok": true, "mask": bytes, "count": 0}
-		if bytes.size() != cells.x * cells.y:
-			return _error("Cell mask byte count must be %d" % (cells.x * cells.y))
+		if bytes.size() != cell_size.x * cell_size.y:
+			return _error("Cell mask byte count must be %d" % (cell_size.x * cell_size.y))
 	else:
 		return _error("Cell mask must be an Image or PackedByteArray")
 	if not float_values.is_empty():
@@ -367,244 +440,216 @@ static func canonicalize_cell_mask(source: Variant, cells: Vector2i) -> Dictiona
 		bytes = PackedByteArray()
 	return {"ok": true, "mask": bytes, "count": bytes.count(MASK_SET)}
 
-## Byte counts of resident payloads, for budgeting and export reports.
+# Report -------------------------------------------------------------------------
+
+## Sizes and counts for budgeting and export reports. Hole and exclusion counts need the
+## regions and are only given when they are resident (embedded or cached).
 func get_manifest() -> Dictionary:
-	var channel_entries: Array = []
-	var total := heights.size() * 4 + holes.size() + nav_exclusions.size()
-	var profile_entries: Array = [{"name": DEFAULT_NAV_PROFILE, "blocked_cells": nav_exclusions.count(MASK_SET), "bytes": 0, "mask": "nav_exclusions", "rule": get_nav_profile_rule(DEFAULT_NAV_PROFILE)}]
-	var profile_bytes := 0
-	for name in get_nav_profile_names():
-		if name == DEFAULT_NAV_PROFILE: continue
-		var mask: PackedByteArray = nav_profiles[name]
-		profile_entries.append({"name": name, "blocked_cells": mask.count(MASK_SET), "bytes": mask.size(), "mask": "nav_profiles", "rule": get_nav_profile_rule(name)})
-		profile_bytes += mask.size()
-	total += profile_bytes
-	for name in channel_names:
-		var entry: Dictionary = channels.get(name, {})
+	var map_entries := {}
+	var per_region := 0
+	for name in maps:
 		var bytes := 0
-		if not entry.is_empty():
-			bytes = entry.values.size() * 4 + entry.coverage.size() * 4
-		channel_entries.append({"name": name, "resident": not entry.is_empty(), "bytes": bytes})
-		total += bytes
-	var material_bytes := 0
-	if material_ids != null:
-		material_bytes = material_ids.get_data().size() + material_weights.get_data().size()
-	total += material_bytes
-	var macro_bytes := macro_image.get_data().size() if macro_image != null else 0
-	total += macro_bytes
-	return {"format_version": format_version, "bake_revision": bake_revision, "bounds": bounds, "resolution": resolution, "spacing": get_spacing(), "height_bytes": heights.size() * 4, "hole_cells": holes.count(MASK_SET), "nav_excluded_cells": nav_exclusions.count(MASK_SET), "mask_bytes": holes.size() + nav_exclusions.size(), "nav_profiles": profile_entries, "nav_profile_bytes": profile_bytes, "channels": channel_entries, "material_bytes": material_bytes, "macro_bytes": macro_bytes, "macro_resolution": macro_image.get_size() if macro_image != null else Vector2i.ZERO, "macro_bounds": macro_bounds, "total_bytes": total}
+		for level in range(level_count(name)): bytes += StrataRegions.map_bytes(cells, description(name), level)
+		map_entries[name] = bytes
+		per_region += bytes
+	var profile_entries: Array = [{"name": DEFAULT_NAV_PROFILE, "map": StrataRegions.MAP_NAV_EXCLUSION, "rule": get_nav_profile_rule(DEFAULT_NAV_PROFILE)}]
+	for name in get_nav_profile_names():
+		if name != DEFAULT_NAV_PROFILE: profile_entries.append({"name": name, "map": StrataRegions.nav_map_name(name), "rule": get_nav_profile_rule(name)})
+	var channel_entries: Array = []
+	for name in channel_names:
+		channel_entries.append({"name": name, "bytes": int(map_entries.get(name, 0)) + int(map_entries.get(name + StrataRegions.COVERAGE_SUFFIX, 0))})
+	return {"format_version": format_version, "bake_revision": bake_revision, "bounds": bounds, "spacing": spacing, "resolution": resolution, "cells": cells, "apron": apron, "grid": grid, "region_count": grid.x * grid.y, "region_bytes": per_region, "mip_levels": mip_levels, "total_bytes": per_region * grid.x * grid.y, "map_bytes": map_entries, "embedded": not regions.is_empty(), "region_directory": region_directory, "channels": channel_entries, "nav_profiles": profile_entries, "has_macro": has_macro(), "height_min": height_min, "height_max": height_max}
 
-## Frees a retained channel payload while keeping its manifest entry, so later
-## queries report NOT_RESIDENT instead of ABSENT.
-func evict_channel(name: StringName) -> void:
-	if channels.erase(String(name)):
-		emit_changed()
-
-## Independent copy for runtime export.
-func duplicate_runtime() -> StrataRuntimeData:
+## Independent copy. Embedded regions are copied; an external directory is shared (the files
+## are the data). With [param embed] every region is loaded and embedded instead; returns null
+## when one cannot be loaded.
+func duplicate_runtime(embed: bool = false) -> StrataRuntimeData:
 	var copy := StrataRuntimeData.new()
 	copy.bake_revision = bake_revision
 	copy.bounds = bounds
-	copy.resolution = resolution
-	copy.heights = heights.duplicate()
+	copy.spacing = spacing
+	copy.cells = cells
+	copy.apron = apron
+	copy.grid = grid
+	copy.maps = maps.duplicate(true)
+	copy.mip_levels = mip_levels
 	copy.height_min = height_min
 	copy.height_max = height_max
-	copy.holes = holes.duplicate()
-	copy.nav_exclusions = nav_exclusions.duplicate()
-	for name in nav_profiles:
-		copy.nav_profiles[name] = (nav_profiles[name] as PackedByteArray).duplicate()
-	copy.nav_profile_rules = nav_profile_rules.duplicate(true)
-	copy.channels = channels.duplicate(true)
+	copy.region_extrema = region_extrema.duplicate()
 	copy.channel_names = channel_names.duplicate()
-	copy.material_ids = material_ids.duplicate() if material_ids != null else null
-	copy.material_weights = material_weights.duplicate() if material_weights != null else null
-	copy.macro_image = macro_image.duplicate() if macro_image != null else null
-	copy.macro_bounds = macro_bounds
+	copy.nav_profile_rules = nav_profile_rules.duplicate(true)
 	copy.render_settings = render_settings.duplicate(true) if render_settings != null else null
+	if not regions.is_empty() or embed:
+		var source := regions if not regions.is_empty() else load_all_regions()
+		if source.is_empty() and grid.x * grid.y > 0: return null
+		var copied := {}
+		for xy in source: copied[xy] = clone_region(source[xy])
+		copy.regions = copied
+	else:
+		copy.region_directory = region_directory
 	return copy
 
-## Terrain-wide tint/AO. image: uncompressed RGBAH without mipmaps, 2..4097 per
-## axis; RGB tint finite in 0..2, A occlusion in 0..1, neutral (1, 1, 1, 1).
-## bounds: terrain-local XZ of the first/last texel centres. Pass null to clear.
-## A rejected map leaves the previous one untouched.
-func set_macro(image: Image, bounds: Rect2 = Rect2()) -> Dictionary:
-	if image == null:
-		macro_image = null
-		macro_bounds = Rect2()
-		return {"ok": true}
-	var layout := validate_macro_layout(image, bounds)
-	if not layout.ok: return layout
-	var scanned := scan_macro_image(image)
-	if not scanned.ok: return scanned
-	macro_image = image
-	macro_bounds = bounds
-	return {"ok": true, "min": scanned.min, "max": scanned.max}
+static func clone_region(region: StrataRegionData) -> StrataRegionData:
+	var copy := StrataRegionData.new()
+	copy.region = region.region
+	copy.cells = region.cells
+	copy.apron = region.apron
+	copy.spacing = region.spacing
+	copy.origin = region.origin
+	copy.height_min = region.height_min
+	copy.height_max = region.height_max
+	copy.revision = region.revision
+	copy.maps = region.maps.duplicate(true)
+	return copy
 
-func has_macro() -> bool:
-	return macro_image != null
-
-## Shader binding of the stored map ({ok: false} without one); see macro_binding().
-func get_macro_binding() -> Dictionary:
-	if macro_image == null: return {"ok": false, "message": "No terrain-wide tint/AO map"}
-	return macro_binding(macro_image, macro_bounds)
-
-## {status, tint: Color (rgb, a = 1), ao}. Bilinear between texel centres, like
-## a linear-filtered clamp-to-edge texture. ABSENT/OUTSIDE return neutral values.
-func sample_macro(position: Vector2) -> Dictionary:
-	if macro_image == null:
-		return {"status": Status.ABSENT, "tint": MACRO_NEUTRAL, "ao": 1.0}
-	if not position.is_finite() or position.x < macro_bounds.position.x or position.y < macro_bounds.position.y or position.x > macro_bounds.end.x or position.y > macro_bounds.end.y:
-		return {"status": Status.OUTSIDE, "tint": MACRO_NEUTRAL, "ao": 1.0}
-	var value := sample_macro_image(macro_image, macro_bounds, position)
-	return {"status": Status.OK, "tint": Color(value.r, value.g, value.b, 1.0), "ao": value.a}
-
-static func validate_macro_layout(image: Image, bounds: Rect2) -> Dictionary:
-	if image == null: return _error("Macro map is missing")
-	if image.is_compressed() or image.has_mipmaps() or image.get_format() != Image.FORMAT_RGBAH:
-		return _error("Macro map must be an uncompressed RGBAH image without mipmaps")
-	if image.get_width() < 2 or image.get_height() < 2 or image.get_width() > MACRO_MAX_SIDE or image.get_height() > MACRO_MAX_SIDE:
-		return _error("Macro map needs 2..%d texels per axis" % MACRO_MAX_SIDE)
-	if not bounds.position.is_finite() or not bounds.size.is_finite() or not bounds.end.is_finite() or bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
-		return _error("Macro map bounds must be finite and positive")
-	return {"ok": true}
-
-## Per-channel finite/range scan. Each channel is extracted by an engine-side
-## format conversion of the byte payload shifted by whole half-floats, so no
-## per-texel script loop runs when the native validator is present.
-static func scan_macro_image(image: Image) -> Dictionary:
-	var bytes := image.get_data()
-	var minimum := Color(); var maximum := Color()
-	for channel in range(4):
-		var shifted := bytes.slice(channel * 2)
-		shifted.resize(bytes.size())
-		var extracted := Image.create_from_data(image.get_width(), image.get_height(), false, Image.FORMAT_RGBAH, shifted)
-		extracted.convert(Image.FORMAT_RF)
-		var scanned := _scan_floats(extracted.get_data().to_float32_array(), image.get_size())
-		if not scanned.ok: return _error("Macro map values must be finite")
-		minimum[channel] = scanned.min; maximum[channel] = scanned.max
-	if minimum.r < 0.0 or minimum.g < 0.0 or minimum.b < 0.0 or maximum.r > MACRO_TINT_MAX or maximum.g > MACRO_TINT_MAX or maximum.b > MACRO_TINT_MAX:
-		return _error("Macro tint must be in 0..%s" % MACRO_TINT_MAX)
-	if minimum.a < 0.0 or maximum.a > 1.0:
-		return _error("Macro ambient occlusion must be in 0..1")
-	return {"ok": true, "min": minimum, "max": maximum}
-
-## Shader contract: texel (i, j) centre lies at bounds.position + (i, j) *
-## bounds.size / (resolution - 1), endpoints included. With linear filtering
-## and clamp-to-edge, sample uv = local_xz * uv_scale + uv_offset.
-static func macro_binding(image: Image, bounds: Rect2) -> Dictionary:
-	var layout := validate_macro_layout(image, bounds)
-	if not layout.ok: return layout
-	var size := Vector2(image.get_size())
-	var uv_scale := (size - Vector2.ONE) / (bounds.size * size)
-	return {"ok": true, "image": image, "bounds": bounds, "resolution": image.get_size(), "uv_scale": uv_scale, "uv_offset": Vector2(0.5, 0.5) / size - bounds.position * uv_scale}
-
-## CPU reference of the shader lookup (clamped to the bounds).
-static func sample_macro_image(image: Image, bounds: Rect2, position: Vector2) -> Color:
-	var last := image.get_size() - Vector2i.ONE
-	var lattice := ((position - bounds.position) / bounds.size * Vector2(last)).clamp(Vector2.ZERO, Vector2(last))
-	var cell := Vector2i(mini(floori(lattice.x), last.x - 1), mini(floori(lattice.y), last.y - 1))
-	var f := lattice - Vector2(cell)
-	var top := image.get_pixel(cell.x, cell.y).lerp(image.get_pixel(cell.x + 1, cell.y), f.x)
-	var bottom := image.get_pixel(cell.x, cell.y + 1).lerp(image.get_pixel(cell.x + 1, cell.y + 1), f.x)
-	return top.lerp(bottom, f.y)
-
-## Renderer inputs. These copy payload bytes once; no per-pixel loops.
-func create_height_image() -> Image:
-	if not is_resident():
-		return null
-	return Image.create_from_data(resolution.x, resolution.y, false, Image.FORMAT_RF, heights.to_byte_array())
-
-## Same shape as StrataProcedural.compile_heightfield(), for renderers that
-## bind a compiled RF field (StrataRenderer.set_compiled_field()).
-func to_compiled_field() -> Dictionary:
-	if not is_resident():
-		return {"ok": false, "message": "Runtime heights are not resident"}
-	var spacing := get_spacing()
-	return {"ok": true, "image": create_height_image(), "min": height_min, "max": height_max, "bounds": bounds, "resolution": resolution, "sample_origin": Vector3(bounds.position.x, 0.0, bounds.position.y), "sample_step_x": Vector3(spacing, 0.0, 0.0), "sample_step_y": Vector3(0.0, 0.0, spacing), "bake_revision": bake_revision}
-
-## L8 image of size (width - 1, height - 1): 255 marks a hole cell. Sample it with
-## nearest filtering at floor((local - bounds.position) / spacing).
-func get_hole_image() -> Image:
-	return _mask_image(holes)
-
-func get_nav_exclusion_image() -> Image:
-	return _mask_image(nav_exclusions)
+# Navigation profiles -----------------------------------------------------------
 
 ## True for DEFAULT_NAV_PROFILE (always) and every stored profile.
 func has_nav_profile(name: StringName) -> bool:
-	return name == DEFAULT_NAV_PROFILE or nav_profiles.has(name)
+	return name == DEFAULT_NAV_PROFILE or maps.has(StrataRegions.nav_map_name(name)) and nav_profile_rules.has(name)
 
 ## DEFAULT_NAV_PROFILE first, then the stored profiles in name order.
 func get_nav_profile_names() -> Array[StringName]:
 	var names: Array[StringName] = []
-	for name in nav_profiles:
-		names.append(StringName(name))
+	for name in nav_profile_rules:
+		if StringName(name) != DEFAULT_NAV_PROFILE: names.append(StringName(name))
 	names.sort_custom(func(a: StringName, b: StringName) -> bool: return String(a) < String(b))
 	names.push_front(DEFAULT_NAV_PROFILE)
 	return names
-
-## Canonical blocked-cell mask of a profile (255 = blocked, empty = none). The
-## default profile is nav_exclusions. Unknown names return an empty mask; check
-## has_nav_profile() first.
-func get_nav_profile_mask(name: StringName) -> PackedByteArray:
-	if name == DEFAULT_NAV_PROFILE: return nav_exclusions
-	return nav_profiles.get(name, PackedByteArray())
 
 ## The rule a profile was evaluated from ({} for an unknown profile).
 func get_nav_profile_rule(name: StringName) -> Dictionary:
 	if nav_profile_rules.has(name): return nav_profile_rules[name]
 	return {"exclusion": true} if name == DEFAULT_NAV_PROFILE else {}
 
-## L8 image of the profile's blocked cells (255), like get_hole_image(); null
-## for an unknown profile.
+## Name of the cell map holding a profile's blocked cells (255 = blocked; the default profile
+## is nav_exclusion), "" for an unknown profile.
+func nav_profile_map(name: StringName) -> String:
+	return StrataRegions.nav_map_name(name) if has_nav_profile(name) else ""
+
+## Canonical blocked-cell mask of a profile over get_cell_resolution() cells (255 = blocked),
+## empty when nothing is blocked, for an unknown profile or when a region is unavailable.
+## Assembled from the regions.
+func get_nav_profile_mask(name: StringName) -> PackedByteArray:
+	var map := nav_profile_map(name)
+	if map.is_empty() or not maps.has(map): return PackedByteArray()
+	var mask := cell_mask_window(map, Rect2i(Vector2i.ZERO, get_cell_resolution()))
+	return mask if mask.count(MASK_SET) > 0 else PackedByteArray()
+
+## L8 image of the profile's blocked cells (255), like get_hole_image(); null for an unknown
+## profile.
 func get_nav_profile_image(name: StringName) -> Image:
 	if not has_nav_profile(name): return null
-	return _mask_image(get_nav_profile_mask(name))
+	return _mask_image(nav_profile_map(name))
 
-func _mask_image(mask: PackedByteArray) -> Image:
-	var cells := get_cell_resolution()
-	if cells.x < 1 or cells.y < 1:
-		return null
-	if mask.is_empty():
-		return Image.create(cells.x, cells.y, false, Image.FORMAT_L8)
-	return Image.create_from_data(cells.x, cells.y, false, Image.FORMAT_L8, mask)
+func get_nav_exclusion_image() -> Image:
+	return _mask_image(StrataRegions.MAP_NAV_EXCLUSION)
+
+## L8 image of size get_cell_resolution(): 255 marks a hole cell. Transitional whole-image
+## adapter; null above 4097 samples per side or when a region is unavailable.
+func get_hole_image() -> Image:
+	return _mask_image(StrataRegions.MAP_HOLES)
+
+func _mask_image(map: String) -> Image:
+	var size := get_cell_resolution()
+	if size.x < 1 or size.y < 1 or size.x >= ADAPTER_MAX_SIDE or size.y >= ADAPTER_MAX_SIDE or not is_resident(): return null
+	if not maps.has(map): return Image.create(size.x, size.y, false, Image.FORMAT_L8)
+	var bytes := cell_mask_window(map, Rect2i(Vector2i.ZERO, size))
+	if bytes.size() != size.x * size.y: return null
+	return Image.create_from_data(size.x, size.y, false, Image.FORMAT_L8, bytes)
 
 func is_hole_cell(cell: Vector2i) -> bool:
-	return _mask_at(holes, cell)
+	return _mask_at(StrataRegions.MAP_HOLES, cell)
 
 func is_nav_excluded_cell(cell: Vector2i) -> bool:
-	return _mask_at(nav_exclusions, cell)
+	return _mask_at(StrataRegions.MAP_NAV_EXCLUSION, cell)
 
-## Hole, or blocked for the profile (the default profile is nav_exclusions):
-## cells that never carry that profile's navigation source faces. Every cell is
-## blocked for an unknown profile.
+## Hole, or blocked for the profile (the default profile is nav_exclusion): cells that never
+## carry that profile's navigation source faces. Every cell is blocked for an unknown profile.
 func is_nav_blocked_cell(cell: Vector2i, profile: StringName = DEFAULT_NAV_PROFILE) -> bool:
 	if not has_nav_profile(profile): return true
-	return _mask_at(holes, cell) or _mask_at(get_nav_profile_mask(profile), cell)
+	return _mask_at(StrataRegions.MAP_HOLES, cell) or _mask_at(nav_profile_map(profile), cell)
 
-func _mask_at(mask: PackedByteArray, cell: Vector2i) -> bool:
-	if mask.is_empty() or cell.x < 0 or cell.y < 0 or cell.x >= resolution.x - 1 or cell.y >= resolution.y - 1:
-		return false
-	return mask[cell.y * (resolution.x - 1) + cell.x] == MASK_SET
+## One byte of a cell map at a terrain cell (0 when the map or region is absent or the cell
+## lies outside the terrain).
+func _mask_at(map: String, cell: Vector2i) -> bool:
+	var size := get_cell_resolution()
+	if not maps.has(map) or cell.x < 0 or cell.y < 0 or cell.x >= size.x or cell.y >= size.y: return false
+	var region := get_region(cell / cells)
+	if region == null: return false
+	var local_apron := int(maps[map].get("apron", apron))
+	var local := cell % cells
+	return region.level_bytes(map)[(local.y + local_apron) * (cells + 2 * local_apron) + local.x + local_apron] == MASK_SET
 
-func get_height_at(index: Vector2i) -> float:
-	return heights[index.y * resolution.x + index.x]
+# Windows ---------------------------------------------------------------------
+
+## Raw level-0 bytes of a map over [param rect], addressed in the map's own lattice units
+## (cells for a scale-1 map; scaled maps count their coarser texels). A sample map returns
+## (w + 1) x (h + 1) texels using the edge samples the regions share, a cell map w x h; rows are
+## row-major, texels are the map's format. The rectangle must lie inside the region grid
+## (grid * cells / scale); empty array otherwise, or when a region is unavailable.
+@warning_ignore("integer_division")
+func map_window_bytes(map: String, rect: Rect2i) -> PackedByteArray:
+	if not maps.has(map) or grid.x < 1 or grid.y < 1 or rect.size.x < 0 or rect.size.y < 0: return PackedByteArray()
+	var info := description(map)
+	var n: int = cells / int(info.scale)
+	var sample := String(info.kind) == StrataRegions.KIND_SAMPLE
+	var texel := StrataRegions.bytes_per_texel(int(info.format))
+	var columns := rect.size.x + (1 if sample else 0)
+	var rows := rect.size.y + (1 if sample else 0)
+	var extra := 1 if sample else 0
+	if rect.position.x < 0 or rect.position.y < 0 or rect.position.x + columns > grid.x * n + extra or rect.position.y + rows > grid.y * n + extra: return PackedByteArray()
+	var side := n + 2 * int(info.apron) + extra
+	var out := PackedByteArray()
+	for row in range(rows):
+		var gy := rect.position.y + row
+		var ry := mini(gy / n, grid.y - 1)
+		var ly := gy - ry * n
+		var gx := rect.position.x
+		var remaining := columns
+		while remaining > 0:
+			var rx := mini(gx / n, grid.x - 1)
+			var lx := gx - rx * n
+			var owned_end := (rx + 1) * n + (extra if rx == grid.x - 1 else 0)
+			var take := mini(remaining, owned_end - gx)
+			var region := get_region(Vector2i(rx, ry))
+			if region == null: return PackedByteArray()
+			var bytes := region.level_bytes(map)
+			var offset := ((ly + int(info.apron)) * side + lx + int(info.apron)) * texel
+			out.append_array(bytes.slice(offset, offset + take * texel))
+			gx += take
+			remaining -= take
+	return out
+
+## (w + 1) * (h + 1) height samples of the cell rectangle, row-major, assembled across regions
+## with the shared edge samples. Empty when the rectangle leaves cells_resolution().
+func heights_window(cell_rect: Rect2i) -> PackedFloat32Array:
+	return map_window_bytes(StrataRegions.MAP_HEIGHT, cell_rect).to_float32_array()
+
+## w * h bytes (0 or 255) of a cell map ("holes", "nav_exclusion", "nav_<profile>"), row-major.
+## Empty for an unknown map or a rectangle outside cells_resolution().
+func cell_mask_window(map: String, cell_rect: Rect2i) -> PackedByteArray:
+	if not maps.has(map) or String(maps[map].get("kind")) != StrataRegions.KIND_CELL: return PackedByteArray()
+	return map_window_bytes(map, cell_rect)
+
+# Lattice and height queries ------------------------------------------------------
 
 func contains_local(position: Vector2) -> bool:
 	return position.x >= bounds.position.x and position.y >= bounds.position.y and position.x <= bounds.end.x and position.y <= bounds.end.y
 
 ## Continuous lattice coordinates of a terrain-local XZ position.
 func local_to_lattice(position: Vector2) -> Vector2:
-	return (position - bounds.position) / get_spacing()
+	return (position - bounds.position) / spacing
 
 func lattice_to_local(lattice: Vector2) -> Vector2:
-	return bounds.position + lattice * get_spacing()
+	return bounds.position + lattice * spacing
 
 ## Cells whose closed area contains the point (one, two or four).
 func cells_at(position: Vector2) -> Array[Vector2i]:
 	var lattice := local_to_lattice(position)
-	var cells_x := _cell_candidates(lattice.x, resolution.x - 1)
-	var cells_z := _cell_candidates(lattice.y, resolution.y - 1)
+	var size := get_cell_resolution()
+	var cells_x := _cell_candidates(lattice.x, size.x)
+	var cells_z := _cell_candidates(lattice.y, size.y)
 	var result: Array[Vector2i] = []
 	for z in cells_z:
 		for x in cells_x:
@@ -622,10 +667,30 @@ static func _cell_candidates(coordinate: float, count: int) -> PackedInt32Array:
 		result.append(count - 1)
 	return result
 
+## Height of the sample at a terrain lattice index, from its owning region (the higher region
+## for a shared edge, the last one at the far edge). NAN when the region is unavailable.
+@warning_ignore("integer_division")
+func get_height_at(index: Vector2i) -> float:
+	var region := get_region(Vector2i(mini(index.x / cells, grid.x - 1), mini(index.y / cells, grid.y - 1)))
+	if region == null: return NAN
+	var local := index - region.region * cells
+	return region.level_bytes(StrataRegions.MAP_HEIGHT).decode_float(((local.y + apron) * (cells + 1 + 2 * apron) + local.x + apron) * 4)
+
+## Heights a, b, c, d of a cell (empty when its region is unavailable). A cell's four corners
+## always lie in the one region that owns the cell.
+func _cell_corners(cell: Vector2i) -> PackedFloat64Array:
+	var region := get_region(cell / cells)
+	if region == null: return PackedFloat64Array()
+	var local := cell % cells
+	var stride := cells + 1 + 2 * apron
+	var bytes := region.level_bytes(StrataRegions.MAP_HEIGHT)
+	var at := ((local.y + apron) * stride + local.x + apron) * 4
+	return PackedFloat64Array([bytes.decode_float(at), bytes.decode_float(at + 4), bytes.decode_float(at + stride * 4), bytes.decode_float(at + stride * 4 + 4)])
+
 ## A point is in a hole only if every cell touching it is a hole, so the solid
 ## side of a hole edge keeps its surface (matching the omitted triangles).
 func is_hole_at(position: Vector2) -> bool:
-	if holes.is_empty() or not contains_local(position):
+	if not maps.has(StrataRegions.MAP_HOLES) or not contains_local(position):
 		return false
 	for cell in cells_at(position):
 		if not is_hole_cell(cell):
@@ -646,15 +711,16 @@ func sample_height(position: Vector2, interpolation: int = Interpolation.TRIANGL
 			break
 	if cell.x < 0:
 		return {"status": Status.HOLE, "value": NAN}
-	var local := local_to_lattice(position) - Vector2(cell)
-	return {"status": Status.OK, "value": _interpolate(heights, cell, local, interpolation)}
+	var corners := _cell_corners(cell)
+	if corners.is_empty():
+		return {"status": Status.NOT_RESIDENT, "value": NAN}
+	return {"status": Status.OK, "value": _interpolate(corners, local_to_lattice(position) - Vector2(cell), interpolation)}
 
-func _interpolate(values: PackedFloat32Array, cell: Vector2i, local: Vector2, interpolation: int) -> float:
-	var row := cell.y * resolution.x + cell.x
-	var a := values[row]
-	var b := values[row + 1]
-	var c := values[row + resolution.x]
-	var d := values[row + resolution.x + 1]
+func _interpolate(corners: PackedFloat64Array, local: Vector2, interpolation: int) -> float:
+	var a := corners[0]
+	var b := corners[1]
+	var c := corners[2]
+	var d := corners[3]
 	var fx := clampf(local.x, 0.0, 1.0)
 	var fz := clampf(local.y, 0.0, 1.0)
 	if interpolation == Interpolation.BILINEAR:
@@ -699,26 +765,33 @@ func sample_heights_world(world_positions: PackedVector3Array, terrain_transform
 	result.positions = positions
 	return result
 
-## True when the bake retained the channel and its payload is resident (not
-## evicted), so sample_channel() can return OK.
-func has_channel(name: StringName) -> bool:
-	return channel_names.has(String(name)) and channels.has(String(name))
+# Channels ------------------------------------------------------------------------------
 
-## {ok, status, value, coverage} in terrain-local XZ. Coverage-weighted over the
-## defined corners, like native layer sampling; a defined zero is OK, never
-## ABSENT. BILINEAR (default) weights all four corners; TRIANGLE uses the
-## canonical (a, b, c) / (b, d, c) triangle containing the point. Channels are
-## resident float32, so a query reads four samples with no decode step.
+## True when the bake retained the channel, so sample_channel() can return OK.
+func has_channel(name: StringName) -> bool:
+	return channel_names.has(String(name)) and maps.has(String(name))
+
+static func _decode_scalar(bytes: PackedByteArray, format: int, index: int) -> float:
+	match format:
+		Image.FORMAT_RF: return bytes.decode_float(index * 4)
+		Image.FORMAT_RH: return bytes.decode_half(index * 2)
+	return float(bytes[index]) / 255.0
+
+## {ok, status, value, coverage} in terrain-local XZ. Coverage-weighted over the defined
+## corners; a defined zero is OK, never ABSENT. BILINEAR (default) weights all four corners;
+## TRIANGLE uses the canonical (a, b, c) / (b, d, c) triangle containing the point. Channels
+## without a coverage map are defined everywhere.
 func sample_channel(name: StringName, position: Vector2, interpolation: int = Interpolation.BILINEAR) -> Dictionary:
 	if not position.is_finite() or not contains_local(position):
 		return {"ok": false, "status": Status.OUTSIDE, "value": NAN, "coverage": 0.0}
-	if not channel_names.has(String(name)):
+	if not channel_names.has(String(name)) or not maps.has(String(name)):
 		return {"ok": false, "status": Status.ABSENT, "value": NAN, "coverage": 0.0}
-	var entry: Dictionary = channels.get(String(name), {})
-	if entry.is_empty():
-		return {"ok": false, "status": Status.NOT_RESIDENT, "value": NAN, "coverage": 0.0}
 	var lattice := local_to_lattice(position)
-	var cell := Vector2i(clampi(floori(lattice.x), 0, resolution.x - 2), clampi(floori(lattice.y), 0, resolution.y - 2))
+	var size := get_cell_resolution()
+	var cell := Vector2i(clampi(floori(lattice.x), 0, size.x - 1), clampi(floori(lattice.y), 0, size.y - 1))
+	var region := get_region(cell / cells)
+	if region == null:
+		return {"ok": false, "status": Status.NOT_RESIDENT, "value": NAN, "coverage": 0.0}
 	var f := (lattice - Vector2(cell)).clamp(Vector2.ZERO, Vector2.ONE)
 	# Corner weights of a, b, c, d.
 	var wa := (1.0 - f.x) * (1.0 - f.y)
@@ -730,20 +803,27 @@ func sample_channel(name: StringName, position: Vector2, interpolation: int = In
 			wa = 1.0 - f.x - f.y; wb = f.x; wc = f.y; wd = 0.0
 		else:
 			wa = 0.0; wb = 1.0 - f.y; wc = 1.0 - f.x; wd = f.x + f.y - 1.0
-	var values: PackedFloat32Array = entry.values
-	var coverage: PackedFloat32Array = entry.coverage
-	var a := cell.y * resolution.x + cell.x
-	var c := a + resolution.x
+	var key := String(name)
+	var coverage_key := key + StrataRegions.COVERAGE_SUFFIX
+	var values := region.level_bytes(key)
+	var value_format := int(maps[key].format)
+	var coverage := region.level_bytes(coverage_key) if maps.has(coverage_key) else PackedByteArray()
+	var coverage_format := int(maps[coverage_key].format) if maps.has(coverage_key) else 0
+	var stride := cells + 1 + 2 * apron
+	var local := cell % cells
+	var a := (local.y + apron) * stride + local.x + apron
+	var c := a + stride
 	var numerator := 0.0
 	var weight_sum := 0.0
 	var covered := 0.0
 	for corner in [[a, wa], [a + 1, wb], [c, wc], [c + 1, wd]]:
 		var index: int = corner[0]
 		var weight: float = corner[1]
-		if weight > 0.0 and coverage[index] > 0.0:
-			numerator += values[index] * weight
+		var defined := _decode_scalar(coverage, coverage_format, index) if not coverage.is_empty() else 1.0
+		if weight > 0.0 and defined > 0.0:
+			numerator += _decode_scalar(values, value_format, index) * weight
 			weight_sum += weight
-			covered += coverage[index] * weight
+			covered += defined * weight
 	if weight_sum <= 0.0:
 		return {"ok": false, "status": Status.ABSENT, "value": NAN, "coverage": 0.0}
 	return {"ok": true, "status": Status.OK, "value": numerator / weight_sum, "coverage": covered}
@@ -752,3 +832,143 @@ func sample_channel(name: StringName, position: Vector2, interpolation: int = In
 func sample_channel_world(name: StringName, world_position: Vector3, terrain_transform: Transform3D, interpolation: int = Interpolation.BILINEAR) -> Dictionary:
 	var local := terrain_transform.affine_inverse() * world_position
 	return sample_channel(name, Vector2(local.x, local.z), interpolation)
+
+# Macro tint / AO -------------------------------------------------------------------------
+
+func has_macro() -> bool:
+	return maps.has(StrataRegions.MAP_MACRO)
+
+## Metres between macro texels.
+func macro_step() -> float:
+	return spacing * float(int(description(StrataRegions.MAP_MACRO).scale))
+
+## Terrain-local XZ of the first and last macro texel centres of the assembled macro image
+## (see [method get_macro_image]).
+func get_macro_bounds() -> Rect2:
+	var size := _macro_samples()
+	return Rect2(bounds.position, Vector2(size - Vector2i.ONE) * macro_step())
+
+func _macro_samples() -> Vector2i:
+	var step := macro_step()
+	return Vector2i(ceili(bounds.size.x / step - 1e-6), ceili(bounds.size.y / step - 1e-6)).max(Vector2i.ONE) + Vector2i.ONE
+
+## The macro lattice over the terrain as one RGBAH image (transitional adapter; null when
+## there is none, a region is unavailable or a side exceeds MACRO_MAX_SIDE).
+func get_macro_image() -> Image:
+	if not has_macro() or not is_resident(): return null
+	var size := _macro_samples()
+	if size.x > MACRO_MAX_SIDE or size.y > MACRO_MAX_SIDE: return null
+	var bytes := map_window_bytes(StrataRegions.MAP_MACRO, Rect2i(Vector2i.ZERO, size - Vector2i.ONE))
+	if bytes.size() != size.x * size.y * 8: return null
+	return Image.create_from_data(size.x, size.y, false, Image.FORMAT_RGBAH, bytes)
+
+## Shader binding of the assembled map ({ok: false} without one); see macro_binding().
+func get_macro_binding() -> Dictionary:
+	var image := get_macro_image()
+	if image == null: return {"ok": false, "message": "No terrain-wide tint/AO map"}
+	return macro_binding(image, get_macro_bounds())
+
+## {status, tint: Color (rgb, a = 1), ao}. Bilinear between texel centres, like a
+## linear-filtered clamp-to-edge texture. ABSENT/OUTSIDE return neutral values.
+@warning_ignore("integer_division")
+func sample_macro(position: Vector2) -> Dictionary:
+	if not has_macro():
+		return {"status": Status.ABSENT, "tint": MACRO_NEUTRAL, "ao": 1.0}
+	if not position.is_finite() or not contains_local(position):
+		return {"status": Status.OUTSIDE, "tint": MACRO_NEUTRAL, "ao": 1.0}
+	var info := description(StrataRegions.MAP_MACRO)
+	var n: int = cells / int(info.scale)
+	var macro_apron := int(info.apron)
+	var step := macro_step()
+	var lattice := (position - bounds.position) / step
+	var last := _macro_samples() - Vector2i.ONE
+	lattice = lattice.clamp(Vector2.ZERO, Vector2(last))
+	var region_index := Vector2i(mini(floori(lattice.x) / n, grid.x - 1), mini(floori(lattice.y) / n, grid.y - 1))
+	var region := get_region(region_index)
+	if region == null:
+		return {"status": Status.NOT_RESIDENT, "tint": MACRO_NEUTRAL, "ao": 1.0}
+	var local := lattice - Vector2(region_index * n)
+	var texel := Vector2i(mini(floori(local.x), n - 1), mini(floori(local.y), n - 1))
+	var f := local - Vector2(texel)
+	var side := n + 1 + 2 * macro_apron
+	var bytes := region.level_bytes(StrataRegions.MAP_MACRO)
+	var at := func(dx: int, dy: int) -> Color:
+		var offset := ((texel.y + macro_apron + dy) * side + texel.x + macro_apron + dx) * 8
+		return Color(bytes.decode_half(offset), bytes.decode_half(offset + 2), bytes.decode_half(offset + 4), bytes.decode_half(offset + 6))
+	var top: Color = at.call(0, 0).lerp(at.call(1, 0), f.x)
+	var bottom: Color = at.call(0, 1).lerp(at.call(1, 1), f.x)
+	var value := top.lerp(bottom, f.y)
+	return {"status": Status.OK, "tint": Color(value.r, value.g, value.b, 1.0), "ao": value.a}
+
+static func validate_macro_layout(image: Image, macro_bounds: Rect2) -> Dictionary:
+	if image == null: return _error("Macro map is missing")
+	if image.is_compressed() or image.has_mipmaps() or image.get_format() != Image.FORMAT_RGBAH:
+		return _error("Macro map must be an uncompressed RGBAH image without mipmaps")
+	if image.get_width() < 2 or image.get_height() < 2 or image.get_width() > MACRO_MAX_SIDE or image.get_height() > MACRO_MAX_SIDE:
+		return _error("Macro map needs 2..%d texels per axis" % MACRO_MAX_SIDE)
+	if not macro_bounds.position.is_finite() or not macro_bounds.size.is_finite() or not macro_bounds.end.is_finite() or macro_bounds.size.x <= 0.0 or macro_bounds.size.y <= 0.0:
+		return _error("Macro map bounds must be finite and positive")
+	return {"ok": true}
+
+## Per-channel finite/range scan. Each channel is extracted by an engine-side
+## format conversion of the byte payload shifted by whole half-floats, so no
+## per-texel script loop runs when the native validator is present.
+static func scan_macro_image(image: Image) -> Dictionary:
+	var bytes := image.get_data()
+	var minimum := Color(); var maximum := Color()
+	for channel in range(4):
+		var shifted := bytes.slice(channel * 2)
+		shifted.resize(bytes.size())
+		var extracted := Image.create_from_data(image.get_width(), image.get_height(), false, Image.FORMAT_RGBAH, shifted)
+		extracted.convert(Image.FORMAT_RF)
+		var scanned := _scan_floats(extracted.get_data().to_float32_array(), image.get_size())
+		if not scanned.ok: return _error("Macro map values must be finite")
+		minimum[channel] = scanned.min; maximum[channel] = scanned.max
+	if minimum.r < 0.0 or minimum.g < 0.0 or minimum.b < 0.0 or maximum.r > MACRO_TINT_MAX or maximum.g > MACRO_TINT_MAX or maximum.b > MACRO_TINT_MAX:
+		return _error("Macro tint must be in 0..%s" % MACRO_TINT_MAX)
+	if minimum.a < 0.0 or maximum.a > 1.0:
+		return _error("Macro ambient occlusion must be in 0..1")
+	return {"ok": true, "min": minimum, "max": maximum}
+
+## Shader contract: texel (i, j) centre lies at bounds.position + (i, j) *
+## bounds.size / (resolution - 1), endpoints included. With linear filtering
+## and clamp-to-edge, sample uv = local_xz * uv_scale + uv_offset.
+static func macro_binding(image: Image, macro_bounds: Rect2) -> Dictionary:
+	var layout := validate_macro_layout(image, macro_bounds)
+	if not layout.ok: return layout
+	var size := Vector2(image.get_size())
+	var uv_scale := (size - Vector2.ONE) / (macro_bounds.size * size)
+	return {"ok": true, "image": image, "bounds": macro_bounds, "resolution": image.get_size(), "uv_scale": uv_scale, "uv_offset": Vector2(0.5, 0.5) / size - macro_bounds.position * uv_scale}
+
+## CPU reference of the shader lookup (clamped to the bounds).
+static func sample_macro_image(image: Image, macro_bounds: Rect2, position: Vector2) -> Color:
+	var last := image.get_size() - Vector2i.ONE
+	var lattice := ((position - macro_bounds.position) / macro_bounds.size * Vector2(last)).clamp(Vector2.ZERO, Vector2(last))
+	var cell := Vector2i(mini(floori(lattice.x), last.x - 1), mini(floori(lattice.y), last.y - 1))
+	var f := lattice - Vector2(cell)
+	var top := image.get_pixel(cell.x, cell.y).lerp(image.get_pixel(cell.x + 1, cell.y), f.x)
+	var bottom := image.get_pixel(cell.x, cell.y + 1).lerp(image.get_pixel(cell.x + 1, cell.y + 1), f.x)
+	return top.lerp(bottom, f.y)
+
+# Renderer adapters --------------------------------------------------------------------------
+
+## Whole height lattice as one RF image (transitional adapter, see ADAPTER_MAX_SIDE); null
+## above that size or when a region is unavailable.
+func create_height_image() -> Image:
+	return _height_adapter().get("image")
+
+func _height_adapter() -> Dictionary:
+	if not is_resident(): return {"message": "Runtime regions are not resident"}
+	var size := resolution
+	if size.x > ADAPTER_MAX_SIDE or size.y > ADAPTER_MAX_SIDE:
+		return {"message": "The whole-image height adapter handles at most %d samples per side; this terrain has %s (use the region windows)" % [ADAPTER_MAX_SIDE, size]}
+	var bytes := map_window_bytes(StrataRegions.MAP_HEIGHT, Rect2i(Vector2i.ZERO, get_cell_resolution()))
+	if bytes.size() != size.x * size.y * 4: return {"message": "A region of the height lattice is unavailable"}
+	return {"image": Image.create_from_data(size.x, size.y, false, Image.FORMAT_RF, bytes)}
+
+## Same shape as StrataProcedural.compile_heightfield(), for renderers that bind a compiled
+## RF field (StrataRenderer.set_compiled_field()).
+func to_compiled_field() -> Dictionary:
+	var adapted := _height_adapter()
+	if not adapted.has("image"): return {"ok": false, "message": adapted.message}
+	return {"ok": true, "image": adapted.image, "min": height_min, "max": height_max, "bounds": bounds, "resolution": resolution, "sample_origin": Vector3(bounds.position.x, 0.0, bounds.position.y), "sample_step_x": Vector3(spacing, 0.0, 0.0), "sample_step_y": Vector3(0.0, 0.0, spacing), "bake_revision": bake_revision}

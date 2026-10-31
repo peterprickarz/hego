@@ -8,7 +8,8 @@ extends RefCounted
 ## [codeblock]
 ## <directory>/<layer>.res             a manual layer's samples (StrataLayerData)
 ## <directory>/<layer>/<channel>.res   one cooked channel of a procedural layer (StrataFieldData)
-## <directory>/runtime_data.res        the published bake (StrataRuntimeData)
+## <directory>/runtime_data.res        the published bake's manifest (StrataRuntimeData)
+## <directory>/regions/region_<i>_<j>.res  one StrataRegionData per region of the bake
 ## <directory>/material_ids.res        the terrain's editor control maps (Image), when it has any
 ## <directory>/material_weights.res
 ## [/codeblock]
@@ -22,6 +23,7 @@ extends RefCounted
 const RUNTIME_DATA_FILE := "runtime_data.res"
 const CONTROL_IDS_FILE := "material_ids.res"
 const CONTROL_WEIGHTS_FILE := "material_weights.res"
+const REGION_DIRECTORY := "regions"
 const TEMPORARY_SUFFIX := "~.res"
 
 
@@ -54,6 +56,10 @@ static func field_path(terrain: StrataTerrain3D, layer: StrataLayer, channel: St
 
 static func runtime_data_path(terrain: StrataTerrain3D) -> String:
 	return directory(terrain).path_join(RUNTIME_DATA_FILE)
+
+
+static func regions_directory(terrain: StrataTerrain3D) -> String:
+	return directory(terrain).path_join(REGION_DIRECTORY)
 
 
 static func control_ids_path(terrain: StrataTerrain3D) -> String:
@@ -141,7 +147,11 @@ static func save_procedural_fields(terrain: StrataTerrain3D, layer: StrataLayer)
 	return result
 
 
-static func save_runtime_data(terrain: StrataTerrain3D) -> Dictionary:
+## Saves the published bake: its regions to [code]regions/region_<i>_<j>.res[/code] (all or
+## nothing, files of regions the grid no longer has removed afterwards), then the manifest to
+## [code]runtime_data.res[/code]. The bake then loads its regions lazily from that directory;
+## with [param embed_regions] they stay inside the manifest file instead (small terrains).
+static func save_runtime_data(terrain: StrataTerrain3D, embed_regions: bool = false) -> Dictionary:
 	if not has_storage(terrain):
 		return _error("This terrain has no storage directory")
 	if terrain.runtime_data == null:
@@ -149,7 +159,37 @@ static func save_runtime_data(terrain: StrataTerrain3D) -> Dictionary:
 	var made := _ensure_directory(directory(terrain))
 	if not made.ok:
 		return made
-	return _save_resources([{"resource": terrain.runtime_data, "path": runtime_data_path(terrain)}])
+	var data := terrain.runtime_data
+	var saved: Array = []
+	if not data.regions.is_empty() and not embed_regions:
+		var folder := regions_directory(terrain)
+		made = _ensure_directory(folder)
+		if not made.ok:
+			return made
+		var entries: Array = []
+		var keep := {}
+		for xy in data.regions:
+			var path := folder.path_join(StrataRuntimeData.REGION_FILE % [xy.x, xy.y])
+			entries.append({"resource": data.regions[xy], "path": path})
+			keep[path.get_file()] = true
+		var written := _save_resources(entries)
+		if not written.ok:
+			return written
+		saved.append_array(written.saved)
+		for file in DirAccess.get_files_at(folder):
+			if file.begins_with("region_") and file.get_extension() == "res" and not keep.has(file):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(folder.path_join(file)))
+				saved.append("removed " + folder.path_join(file))
+		data.attach_region_directory(folder)
+	elif embed_regions and data.regions.is_empty() and not data.region_directory.is_empty():
+		var all := data.load_all_regions()
+		if all.is_empty(): return _error("Could not load every region to embed it")
+		data.embed_regions(all)
+	var manifest := _save_resources([{"resource": data, "path": runtime_data_path(terrain)}])
+	if not manifest.ok:
+		return manifest
+	saved.append_array(manifest.saved)
+	return {"ok": true, "message": "Saved %d files" % saved.size(), "saved": saved}
 
 
 ## The terrain's editor control maps (material IDs and weights) to their two files.
@@ -223,7 +263,9 @@ static func load_layers(terrain: StrataTerrain3D) -> PackedStringArray:
 	return filled
 
 
-## The bake saved for this terrain, or null when there is none on disk.
+## The bake saved for this terrain, or null when there is none on disk or it is an older
+## format (a warning says to bake again). Its regions load on demand from the storage
+## directory's regions folder unless the manifest embeds them.
 static func load_runtime_data(terrain: StrataTerrain3D) -> StrataRuntimeData:
 	if not has_storage(terrain):
 		return null
@@ -231,7 +273,16 @@ static func load_runtime_data(terrain: StrataTerrain3D) -> StrataRuntimeData:
 	if not FileAccess.file_exists(path):
 		return null
 	# A script class is not a loader type hint, so the cast does the type check.
-	return ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRuntimeData
+	var data := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRuntimeData
+	if data == null:
+		return null
+	if data.format_version != StrataRuntimeData.FORMAT_VERSION:
+		push_warning("Strata: %s is runtime format %d (current %d); it is not migrated, bake the terrain again" % [path, data.format_version, StrataRuntimeData.FORMAT_VERSION])
+		return null
+	# The directory is wherever this terrain's storage is now, not where the bake was saved.
+	if data.regions.is_empty():
+		data.region_directory = regions_directory(terrain)
+	return data
 
 
 # ─────────────────────────────────────────────

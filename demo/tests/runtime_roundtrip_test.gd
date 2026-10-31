@@ -7,21 +7,6 @@ const S := StrataRuntimeData.Status
 func _initialize() -> void:
 	call_deferred("run")
 
-static func payload_hashes(data: StrataRuntimeData) -> Dictionary:
-	var result := {}
-	var payloads := {"heights": data.heights.to_byte_array(), "holes": data.holes, "nav_exclusions": data.nav_exclusions, "lattice": PackedFloat64Array([data.bounds.position.x, data.bounds.position.y, data.bounds.size.x, data.bounds.size.y, data.height_min, data.height_max]).to_byte_array()}
-	for name in data.channels:
-		payloads["channel:" + name] = data.channels[name].values.to_byte_array() + data.channels[name].coverage.to_byte_array()
-	for name in data.nav_profiles:
-		payloads["profile:" + name] = data.nav_profiles[name]
-	payloads["profile_rules"] = var_to_bytes(data.nav_profile_rules)
-	for key in payloads:
-		var context := HashingContext.new()
-		context.start(HashingContext.HASH_SHA256)
-		context.update(payloads[key])
-		result[key] = context.finish().hex_encode()
-	return result
-
 func run() -> void:
 	check(not ClassDB.class_exists("StrataLayerData") and not ClassDB.class_exists("HEGoAPI"), "no native terrain or HEGo classes are loaded")
 	var globals := ProjectSettings.get_global_class_list().map(func(entry: Dictionary) -> String: return entry["class"])
@@ -58,8 +43,14 @@ func run() -> void:
 	var D := StrataRuntimeData.DEFAULT_NAV_PROFILE
 	check(data.get_nav_profile_names().map(func(name: StringName) -> String: return String(name)) == expected.profiles and data.has_nav_profile(&"wet") and data.has_nav_profile(D), "profiles load from the exported data: %s" % [data.get_nav_profile_names()])
 	check(float(data.get_nav_profile_rule(&"flat_dry").all[0].slope_max) == 20.123456789 and data.get_nav_profile_rule(D) == {"exclusion": true}, "rules load with exact thresholds")
-	for name in data.nav_profiles:
-		check(StrataNavProfiles.evaluate(data, data.get_nav_profile_rule(name)) == data.get_nav_profile_mask(name), "profile %s re-evaluates to its stored mask without the extension" % name)
+	for name in data.get_nav_profile_names():
+		if name == D: continue
+		var reevaluated := true
+		for y in range(data.grid.y):
+			for x in range(data.grid.x):
+				var region := data.get_region(Vector2i(x, y))
+				reevaluated = reevaluated and StrataNavProfiles.evaluate_region(region, data.get_nav_profile_rule(name), data.channel_names) == region.level_bytes(StrataRegions.nav_map_name(name))
+		check(reevaluated, "profile %s re-evaluates to its stored mask in every region without the extension" % name)
 	var wet_navigation := StrataNavigation.new()
 	wet_navigation.profile = &"flat_dry"
 	wet_navigation.navigation_layers = 8
@@ -106,12 +97,16 @@ func run() -> void:
 	var baseline := NavigationServer3D.map_get_regions(map).size()
 	var baked := navigation.bake_region(data.bounds)
 	check(baked.ok and baked.regions > 1, "navigation bakes without the extension: %s" % baked)
-	for frame in range(4):
-		await physics_frame
-		await process_frame
 	var nav_from := terrain.global_transform * Vector3(expected.nav_from[0], data.sample_height(Vector2(expected.nav_from[0], expected.nav_from[1])).value, expected.nav_from[1])
 	var nav_to := terrain.global_transform * Vector3(expected.nav_to[0], data.sample_height(Vector2(expected.nav_to[0], expected.nav_to[1])).value, expected.nav_to[1])
-	var path := NavigationServer3D.map_get_path(map, nav_from, nav_to, true)
+	# The server merges the new regions on its own thread; the number of frames that takes
+	# depends on the machine, so wait (bounded) for the map to connect instead of a fixed count.
+	var path := PackedVector3Array()
+	for frame in range(180):
+		await physics_frame
+		await process_frame
+		path = NavigationServer3D.map_get_path(map, nav_from, nav_to, true)
+		if frame >= 3 and path.size() >= 2 and path[-1].distance_to(nav_to) < 0.75: break
 	check(path.size() >= 2 and path[-1].distance_to(nav_to) < 0.75, "navigation path across tiles reaches its goal (%d points)" % path.size())
 
 	# ResourceSaver roundtrip of the loaded data, binary and text.
@@ -119,13 +114,16 @@ func run() -> void:
 		check(ResourceSaver.save(data, path_name) == OK, "resave %s" % path_name)
 		var loaded: StrataRuntimeData = ResourceLoader.load(path_name, "", ResourceLoader.CACHE_MODE_IGNORE)
 		check(loaded != null and payload_hashes(loaded) == expected.hashes, "%s is bit-identical" % path_name)
-		check(loaded != null and loaded.heights == data.heights and loaded.holes == data.holes and loaded.nav_exclusions == data.nav_exclusions and loaded.channels == data.channels and loaded.channel_names == data.channel_names and loaded.bounds == data.bounds, "%s preserves every payload" % path_name)
-		check(loaded != null and loaded.nav_profiles == data.nav_profiles and loaded.nav_profile_rules == data.nav_profile_rules and loaded.nav_profiles.keys()[0] is StringName and loaded.validate().ok, "%s preserves profiles and exact rules" % path_name)
-		check(loaded.material_ids != null and loaded.material_ids.get_data() == data.material_ids.get_data() and loaded.material_weights.get_data() == data.material_weights.get_data(), "%s preserves material controls" % path_name)
+		check(loaded != null and loaded.heights_window(Rect2i(Vector2i.ZERO, data.get_cell_resolution())) == data.heights_window(Rect2i(Vector2i.ZERO, data.get_cell_resolution())) and loaded.cell_mask_window("holes", Rect2i(Vector2i.ZERO, data.get_cell_resolution())) == data.cell_mask_window("holes", Rect2i(Vector2i.ZERO, data.get_cell_resolution())) and loaded.channel_names == data.channel_names and loaded.bounds == data.bounds and loaded.maps == data.maps and loaded.grid == data.grid, "%s preserves every payload" % path_name)
+		check(loaded != null and loaded.nav_profile_rules == data.nav_profile_rules and loaded.nav_profile_rules.keys()[0] is StringName and loaded.validate().ok, "%s preserves profiles and exact rules" % path_name)
+		var material_same := loaded != null
+		for xy in data.regions:
+			material_same = material_same and loaded.get_region(xy).level_bytes("material_ids") == data.regions[xy].level_bytes("material_ids") and loaded.get_region(xy).level_bytes("material_weights") == data.regions[xy].level_bytes("material_weights")
+		check(material_same and data.maps.has("material_weights"), "%s preserves material maps" % path_name)
 	var text: StrataRuntimeData = ResourceLoader.load("res://export/runtime_data_text.tres", "", ResourceLoader.CACHE_MODE_IGNORE)
 	check(text != null and payload_hashes(text) == expected.hashes and text.validate().ok, "text resource written by the authoring project is bit-identical here")
 	var corrupt: StrataRuntimeData = StrataRuntimeData.new()
-	corrupt.set("height_data", PackedByteArray([1, 2, 3]))
+	corrupt.set("lattice_data", PackedByteArray([1, 2, 3]))
 	check(not corrupt.validate().ok, "a malformed stored payload fails validation")
 
 	terrain.queue_free()

@@ -4,36 +4,71 @@ How Strata compiles an authoring `StrataTerrain3D` layer stack into a versioned 
 
 | File | Class | Depends on |
 | --- | --- | --- |
-| `demo/addons/strata/strata_runtime_data.gd` | `StrataRuntimeData` (Resource) | Godot only |
+| `demo/addons/strata/strata_regions.gd` | `StrataRegions` (static geometry, mips) | Godot only |
+| `demo/addons/strata/strata_region_data.gd` | `StrataRegionData` (Resource) | `StrataRegions` |
+| `demo/addons/strata/strata_runtime_data.gd` | `StrataRuntimeData` (Resource, the manifest) | the two above |
+| `demo/addons/strata/strata_nav_profiles.gd` | `StrataNavProfiles` (static) | the above |
 | `demo/addons/strata/strata_collision.gd` | `StrataCollision` (Node3D) | runtime data |
 | `demo/addons/strata/strata_navigation.gd` | `StrataNavigation` (Node3D) | runtime data |
+| `demo/addons/strata/strata_region_compose.gd` | `StrataRegionCompose` (static) | authoring layers, native compiler |
 | `demo/addons/strata/strata_bake.gd` | `StrataBake` (static) | authoring layers, native compiler |
 
-## Compiled data
+The runtime-only project of the test runner holds exactly `strata_regions.gd`, `strata_region_data.gd`, `strata_runtime_data.gd`, `strata_nav_profiles.gd`, `strata_collision.gd`, `strata_navigation.gd` and `strata_render_settings.gd`. `StrataRegions.compose_region()` finds `StrataRegionCompose` by class name at call time, because a runtime-only project cannot parse a script that names `StrataTerrain3D` or the native classes.
 
-`StrataRuntimeData` stores one terrain-local lattice:
+## Compiled data (format 2)
 
-- `bounds` (XZ) and `resolution` (samples, including both endpoints). Spacing must be uniform. Sample `(i, j)` lies at `bounds.position + spacing * (i, j)`. This matches the renderer's height texture.
-- `heights`: signed float32 values, row-major, plus `height_min` and `height_max`.
-- `holes` and `nav_exclusions`: canonical cell masks with `(width - 1) × (height - 1)` bytes. 0 is solid and 255 is masked. An empty array means no masked cells. `get_hole_image()` returns the same mask as an L8 `Image`.
-- Explicitly retained custom channels on the height lattice: signed, unclamped `values` plus `coverage`. A coverage above 0 means the value is defined.
-- Optional material controls (`material_ids` RGBA8, `material_weights` RGBAF), stored as validated.
-- `format_version`, `bake_revision` and `get_manifest()`, which gives byte counts per payload.
+The bake is a grid of regions (see [Strata regions plan](strata_regions_plan.md) for the geometry: `cells` cells per region axis at the terrain `spacing`, a sample map holds `cells + 1 + 2 * apron` samples per axis, a cell map `cells + 2 * apron`, neighbours share their edge samples). `StrataRuntimeData` is the **manifest**:
 
-Heights, channels, bounds and the height range are saved as raw bytes through storage-only properties. Godot 4.4 text resources write floats with about six significant digits. Without byte storage, a bake in a `.tres`/`.tscn` would silently drift from its collision and render data. The runtime suites check that payload SHA-256 hashes are bit-identical across `.res`, `.scn` and `.tres`. Text scenes still encode bytes as decimal lists, so keep large bakes in an external binary `.res`.
+| Property | Meaning |
+| --- | --- |
+| `format_version` | 2. Format 1 (one monolithic resource) is **not migrated**: it fails `validate()` with "bake the terrain again", and `StrataStorage.load_runtime_data()` returns null with a warning. Rebake. |
+| `bake_revision` | increments on every published bake |
+| `bounds`, `spacing` | terrain-local XZ bounds and sample spacing (raw float64 storage, see below) |
+| `cells`, `apron`, `grid` | region size, apron, regions per axis (derived from bounds, spacing, cells) |
+| `maps` | the spec maps, `name -> {format, kind, scale, apron}`; every region file holds exactly these |
+| `mip_levels` | levels per map the bake computed, level 0 included (capped per map by `StrataRegions.max_level`) |
+| `channel_names` | retained custom channels; each has a sample map of that name and optionally `<name>__coverage` |
+| `nav_profile_rules` | `StringName -> rule`, always including `default` (`{"exclusion": true}`); bytes in the file |
+| `render_settings` | the baked `StrataRenderSettings` copy |
+| `height_min`, `height_max`, `region_extrema` | extrema over the terrain's own samples, global and per region (`[min, max]` pairs, row-major over the grid) |
+| `regions` | embedded `Vector2i -> StrataRegionData`, the whole grid or empty |
+| `region_directory` | when no regions are embedded: the folder of `region_<i>_<j>.res` files |
 
-The runtime resource contains no layers, ownership, layer IDs, producer IDs or Houdini state.
+Standard maps: `height` (RF, sample), `material_ids` and `material_weights` (RGBA8, sample, only when the terrain defines `editor_material_channels`), `holes` and `nav_exclusion` (L8, cell, only when the bake asked for cell masks), `macro` (RGBAH, sample, scale 4 apron 1 by default, only when macro channels are owned or requested), `<channel>` and `<channel>__coverage` for retained channels (RF; `rh` or `l8` quantize 0..1), and `nav_<profile>` (L8, cell, 255 = blocked) per navigation profile. Holes are never repeated in the profile maps.
 
-Resident heights and custom values/coverage receive a finite-value scan at
-ingestion/first validation. The native validator is used when available; a
-runtime-only project uses a Godot fallback and still needs no extension. Scans
-are cached, so collision residency requests do not repeatedly scan heights.
-`validate_payload()` explicitly discards the cache and revalidates. Treat a
-published runtime resource as immutable: assigning heights, channel dictionaries
-or material images invalidates validation, while intentional in-place packed
-array, dictionary or Image edits require `validate_payload()` before reuse.
-Stored extrema must match the finite resident samples, and channel coverage
-must stay in 0..1.
+Floats of the manifest (bounds, spacing, extrema) and the profile rules are saved as raw bytes through storage-only properties, because Godot text resources write floats with about six significant digits. Region maps are raw `PackedByteArray` levels, so a bake is byte-identical across `.res`, `.scn` and `.tres`; the runtime suites compare SHA-256 hashes of every region level. (`StrataRegionData` itself stores its own `origin`, `spacing` and `height_min/max` as plain floats, so a `.tres` region rounds those three; nothing reads them for sampling. The manifest's extrema are authoritative.) Keep large bakes in binary `.res` files.
+
+The runtime resources contain no layers, ownership, layer IDs, producer IDs or Houdini state.
+
+### Validation
+
+`validate(deep = false)` checks the manifest (spec, grid, height map, extrema array, channel and profile bookkeeping, render settings) and every **embedded** region: structure (`StrataRegionData.validate()`), match with the manifest's maps and level counts, finite heights (apron included), canonical 0/255 cell masks, finite channel values, coverage in 0..1, macro tint 0..2 and AO 0..1, and extrema equal to the scanned region and global extrema. The scan is cached; `validate_payload()` discards it and also the whole-lattice compatibility caches, after intentional in-place edits of region bytes. External regions are validated when they load (`get_region()` rejects a file whose size, spec or index does not match) and all at once with `validate(true)`. Embedded payloads are capped at 512 MiB; external payloads are not.
+
+### Accessors
+
+Terrain-local XZ everywhere. `Status` is `OK`, `OUTSIDE`, `ABSENT`, `NOT_RESIDENT` or `HOLE`.
+
+| Accessor | Result |
+| --- | --- |
+| `get_region(xy: Vector2i) -> StrataRegionData` | The embedded region, or the external file loaded once and kept (no eviction in Phase A). Null outside the grid, for a missing or malformed file (logged once; `clear_region_cache()` forgets that). |
+| `cells_resolution() -> Vector2i` | `grid * cells`: the cell space windows are addressed in. |
+| `get_cell_resolution() -> Vector2i`, `resolution` | The terrain's own cells (`bounds.size / spacing`) and samples (cells + 1). At most `cells_resolution()`. |
+| `get_spacing() -> float` | `spacing`. |
+| `sample_height(position, interpolation = TRIANGLE, ignore_holes = false)` | `{status, value}` as before: `OUTSIDE` beyond `bounds`, `NOT_RESIDENT` when the data or the cell's region is unavailable, `HOLE` when every cell touching the point is a hole, `NAN` value unless `OK`. A cell's four corners always lie in the one region that owns the cell, so a query reads at most one region. |
+| `sample_heights(PackedVector2Array)`, `sample_height_world`, `sample_heights_world` | as before |
+| `sample_channel(name, position, interpolation = BILINEAR)` | `{ok, status, value, coverage}` as before; coverage comes from the `<name>__coverage` map (absent map = defined everywhere). |
+| `is_hole_at(position)`, `is_hole_cell(cell)`, `is_nav_excluded_cell(cell)`, `is_nav_blocked_cell(cell, profile)` | cell queries on the cell maps; a missing map or region means not masked, an unknown profile blocks everything. |
+| `heights_window(cell_rect: Rect2i) -> PackedFloat32Array` | `(w + 1) * (h + 1)` height samples of the cell rectangle, row-major, assembled across regions with the shared edge samples (the higher region owns a shared edge, the last region owns the far edge). Empty if the rectangle leaves `cells_resolution()` or a region is unavailable. |
+| `cell_mask_window(map: String, cell_rect: Rect2i) -> PackedByteArray` | `w * h` bytes (0 or 255) of a cell map: `holes`, `nav_exclusion` or `nav_<profile>` (`nav_profile_map(profile)` names it). Same emptiness rules. |
+| `map_window_bytes(map, rect)` | The raw level-0 texels of any map over a rectangle in that map's own lattice units; the two above are built on it. |
+| `get_height_at(index: Vector2i) -> float` | One sample by terrain lattice index. |
+| `has_nav_profile`, `get_nav_profile_names`, `get_nav_profile_rule`, `get_nav_profile_mask`, `get_nav_profile_image` | as before; masks are assembled over `get_cell_resolution()`. |
+| `has_macro()`, `sample_macro(position)`, `get_macro_image()`, `get_macro_bounds()`, `get_macro_binding()` | `sample_macro` reads the owning region (bilinear inside its apron); the image forms assemble the macro lattice and fail above 4097 per side. |
+| `get_manifest() -> Dictionary` | byte counts (`region_bytes`, `total_bytes`, per-map `map_bytes`), grid, channels, profiles; `payload_bytes()` is the planned total. |
+
+Renderer adapters keep working by assembling whole images from the regions: `create_height_image()`, `to_compiled_field()` (same shape as `StrataProcedural.compile_heightfield()`), `get_hole_image()`, `get_nav_exclusion_image()`. They return null or `{ok: false, message}` when a side exceeds 4097 samples or a region is unavailable.
+
+`heights` and `holes` are **transitional** whole-lattice properties that assemble from the regions once and cache the result, so `StrataCollision` and `StrataNavigation` keep working on small terrains until they read the windows. Do not use them in new code.
 
 ### Canonical surface
 
@@ -41,66 +76,57 @@ Each cell `(x, z)` has corners `a=(x,z)`, `b=(x+1,z)`, `c=(x,z+1)` and `d=(x+1,z
 
 CPU queries, collision and navigation source triangles all use this split. The native patch mesher uses the same diagonal.
 
-### Queries
+### Region composition
 
-Every query returns `{status, value}`. `Status` is one of:
+`StrataRegions.compose_region(terrain, through_layer, xy, spec, options) -> {ok, message, region}` composes every map of the spec for one region. A region composed alone equals the matching window of a whole-terrain composition bit for bit, because each map is one native windowed composition: `compose_dense` with an index offset for samples (a negative first index is folded into the origin, since the offset must be >= 0; the lattice positions must then be exact doubles, which holds for power-of-two spacings), `compile_cell_mask` on the window's bounds for holes and exclusions, and the macro, material and channel planes through the same descriptors the editor uses. `region_compose_test.gd` proves it for height, ids, weights, holes, exclusions, macro, channels and coverage on a 64 m terrain with 16-cell regions.
 
-- `OK`
-- `OUTSIDE`
-- `ABSENT`: the channel is unknown or has no coverage at that point.
-- `NOT_RESIDENT`: the payload is missing or was evicted.
-- `HOLE`
+- **Materials.** Every `editor_material_channels` plane is composed on the window and packed with `pack_material_weights_sparse`. Weights are quantized here to RGBA8: `round(w * 255)` per slot, the largest slot absorbs the remainder so assigned texels sum to 255, unassigned texels stay 0. A native RGBA8 output (Track N) replaces this later. The pack is capped at 1025 samples per side, which a 256-cell region (261) meets.
+- **Height extrema** come from the samples inside the terrain bounds, apron excluded.
+- **Options.** `channels` (the custom channel maps to compose), `nav_profiles` (evaluated on the composed region), `sources` (whole-lattice height / holes / nav_exclusion overrides, sliced instead of composed), `mask_options` (hole and exclusion channel names, continuous channels, thresholds).
 
-A defined zero is `OK`. Values for every other status are `NAN`. The query methods are:
+### Mips
 
-- `sample_height(local, interpolation = TRIANGLE, ignore_holes = false)`
-- `sample_heights(PackedVector2Array)` returns `values` and `status` arrays.
-- `sample_height_world(world, terrain_transform)` and `sample_heights_world(...)` add the world surface `position`.
-- `sample_channel(name, local)` interpolates coverage-weighted over defined corners only.
-- `is_hole_at(local)`: a point is in a hole only if every cell touching it is a hole, so the solid side of a hole edge keeps its surface.
-- `create_height_image()`, `get_hole_image()` and `to_compiled_field()` are renderer inputs. `to_compiled_field()` has the same shape as `StrataProcedural.compile_heightfield()`.
-
-`StrataTerrain3D.sample_runtime_height()` and `sample_runtime_height_world()` query the published bake. None of these queries composes layers, reads the GPU or blocks on a load.
+`StrataRegions.build_mips(region, levels)` adds levels 1.. to every map, capped per map at `max_level + 1`. Level `l + 1` texel `u` sits where level `l` texel `2u - apron` sits, so the geometry formulas stay exact. Scalar sample maps (height, channels, coverage, macro) use a separable `[1 2 1] / 4` filter at that texel with clamped edges; cell maps take the maximum over the 2 x 2 cells they cover ("any"); `material_ids` keep the up to four heaviest ids over the 2 x 2 block starting at the centre texel and `material_weights` are renormalised from those sums to 255.
 
 ## Bake
 
 ```gdscript
 var result := StrataBake.bake(terrain, {
     "spacing": 1.0,                       # bounds must divide exactly
+    "region_cells": 256, "region_apron": 2,
+    "mip_levels": 3,                      # levels per map, level 0 included
     "cell_masks": true,                   # from layered hole/nav_exclusion channels
     # or explicit: "holes": hole_image, "nav_exclusions": exclusion_image,
     #   (w-1)x(h-1) L8/R8 (>=128) or RF (>=0.5)
     "channels": PackedStringArray(["mask"]),
-    "material_ids": ids, "material_weights": weights,
+    "channel_formats": {"mask": "rf"},    # rf (default), rh or l8 quantize 0..1
+    "nav_profiles": [{"name": &"wet", "rule": {"channel": "mask", "min": 0.5}}],
     "allow_stale_procedural": false,
 })
 if not result.ok: push_warning(result.message)   # previous bake untouched
 ```
 
-`compile()` prepares and validates everything. `bake()` calls `compile()` and publishes with `terrain.publish_runtime_data()` only on success. A failed bake leaves the previous `runtime_data`, revision and stale state unchanged.
+`compile()` prepares and validates everything. `bake()` calls `compile()` and publishes with `terrain.publish_runtime_data()` only on success. A failed bake leaves the previous `runtime_data`, revision and stale state unchanged. `compile()` returns the data with its regions embedded in memory; publishing with a storage directory writes them to files (see [Storage](#storage)).
 
-What the bake reads:
+What the bake does:
 
-- Heights come from `StrataProcedural.compile_heightfield(terrain, null, spacing)`: the complete enabled stack, composed natively.
-- Retained channels use the native `StrataLayerData.compose_dense` descriptor contract.
-- With `cell_masks`, holes and exclusions come from `StrataProcedural.compile_cell_masks(terrain, null, spacing)`. `cell_masks` may be `true`, a compile-options dictionary, or a precompiled result. The result's token must be current and cover the complete stack, the same check as for heights. Explicit `holes`/`nav_exclusions` and `cell_masks` are mutually exclusive.
-- The preview cutoff (`preview_through_layer`) is never used. A precompiled `options.compiled` field must carry a current token for the complete stack, so a preview-cutoff or outdated compile is rejected.
+- Builds the spec (see *Compiled data*) and composes every region of the grid through the final layer with `StrataRegions.compose_region()`, including the requested channels and navigation profiles, then `build_mips()` per region.
+- Navigation profiles are evaluated per region on the region's own height map, channel maps and `nav_exclusion` map (`StrataNavProfiles.apply_region()`); the apron gives every cell of the region its four corners, so a region's masks equal the matching cells of a whole-terrain evaluation. A profile named `exclusion` is rejected (its map would be `nav_exclusion`), as are channel names that start with `nav_`, end with `__coverage` or equal a standard map.
+- `cell_masks` may be `true`, a compile-options dictionary (forwarded as `mask_options`), or a precompiled `compile_cell_masks()` result whose token must be current and cover the complete stack; it is then sliced instead of composed. Explicit `holes`/`nav_exclusions` are sliced the same way and are mutually exclusive with `cell_masks`.
+- A precompiled `options.compiled` height field must carry a current token for the complete stack; its heights are sliced into the regions.
+- The preview cutoff (`preview_through_layer`) is never used.
+- `macro` is `"auto"` (when an enabled layer owns a macro channel), `true`, `false` or an options dictionary whose `spacing` (default 4 m) must be the bake spacing times a power of two. Precompiled macro results are rejected: the map composes per region.
+- `material_ids` / `material_weights` options are no longer accepted as inputs. They are ignored and listed in `report.deprecated`; the material maps come from the stack's `editor_material_channels`.
 
 What the bake rejects:
 
-- Stale or uncooked procedural layers.
-- Outdated or preview-cutoff cell masks. A reloaded scene marks every procedural cache stale until it is recooked. Pass `allow_stale_procedural` to bake cached results; the report lists them.
+- Stale or uncooked procedural layers, outdated or preview-cutoff cell masks or heights. A reloaded scene marks every procedural cache stale until it is recooked. Pass `allow_stale_procedural` to bake cached results; the report lists them.
 - A stack that changes while compiling.
-- Bounds that are not a whole number of `spacing` intervals.
-- Malformed masks or material controls.
-- Aggregate payloads above `max_runtime_bytes` (default and maximum 512 MiB).
-  Custom channel requests are deduplicated, and full-lattice value/coverage
-  storage is budgeted before allocation. The height compiler's per-image sample
-  cap also applies. This retained payload budget does not limit process peak
-  memory during atomic compilation/export.
+- Bounds that are not a whole number of `spacing` intervals, invalid region cells, mip levels, channel names or profiles.
+- Malformed masks.
+- Payloads above `max_runtime_bytes` (default and maximum 512 MiB). The budget is the planned bytes of all regions, all maps and all mips (`region_bytes * regions`), checked before any region is composed. This retained payload budget does not limit process peak memory during atomic compilation/export.
 
-The bake uses actual extrema returned by native RF validation, including when
-an externally supplied compiled dictionary contains incorrect finite min/max.
+The report lists `regions`, `grid`, `hole_cells`, `nav_excluded_cells`, per-profile `blocked_cells` and `terms`, the macro report, `deprecated`, the manifest and `cpu_ms`.
 
 ### Stale tracking
 
@@ -126,9 +152,10 @@ cache therefore remains fresh until new authoring intent or data changes.
 
 - It has the terrain's local transform.
 - An independent copy of the data is in meta `strata_runtime_data`. With `share_data`, the meta references the published resource instead, which avoids a second large payload when the export is saved right away.
+- `embed_regions` (default: true when the planned payload is below 64 MiB) puts clones of every region inside the data resource, so the export is one file. With `false` the copy keeps pointing at the terrain's `region_directory`, which must then ship with it; an in-memory bake without a storage directory cannot do that and the export fails.
 - `Collision` and `Navigation` children are created with the given settings.
 
-The authoring scene is not modified, and a stale bake cannot be exported. `save_runtime_scene(terrain, path, {"data_path": "res://…/terrain.res"})` packs the export and saves the data as an external resource.
+The authoring scene is not modified, and a stale bake cannot be exported. `save_runtime_scene(terrain, path, {"data_path": "res://…/terrain.res"})` packs the export and saves the data as an external resource (regions embedded as sub-resources when embedded).
 
 ## Storage
 
@@ -138,10 +165,11 @@ By default a terrain's data is saved inside its scene. Setting `StrataTerrain3D.
 | --- | --- |
 | `<directory>/<layer>.res` | a hand layer's `StrataLayerData` |
 | `<directory>/<layer>/<channel>.res` | one cooked channel of a procedural layer (`StrataFieldData`) |
-| `<directory>/runtime_data.res` | the published bake |
+| `<directory>/runtime_data.res` | the published bake's manifest |
+| `<directory>/regions/region_<i>_<j>.res` | one `StrataRegionData` per region of the bake |
 | `<directory>/material_ids.res`, `material_weights.res` | the terrain's editor control maps |
 
-Layer names become snake_case file names. `StrataProcedural.commit_fields()` saves a procedural layer's fields there as part of the commit and removes files of channels the new result no longer has; a save failure keeps the publication in memory and marks the layer's status unsaved. `StrataTerrain3D.publish_runtime_data()` saves the bake, and the island's material binding saves the control maps. Hand layers are saved by the terrain's **Save layers to storage** inspector button or `StrataStorage.save_all(terrain)`.
+Layer names become snake_case file names. `StrataProcedural.commit_fields()` saves a procedural layer's fields there as part of the commit and removes files of channels the new result no longer has; a save failure keeps the publication in memory and marks the layer's status unsaved. `StrataTerrain3D.publish_runtime_data()` saves the bake: all region files first (all or nothing, through temporary files; files of regions the grid no longer has are removed), then the manifest, which afterwards loads its regions lazily from `regions/` (the published resource keeps them in memory). `StrataStorage.save_runtime_data(terrain, true)` embeds them in the manifest file instead. At load the manifest's `region_directory` is set to the terrain's current `regions/` folder, so a moved project still finds its files; a format 1 file is refused. The island's material binding saves the control maps. Hand layers are saved by the terrain's **Save layers to storage** inspector button or `StrataStorage.save_all(terrain)`.
 
 At `_ready`, a terrain with a storage directory fills every layer its scene saved nothing for from these files, so a second scene (the island's showcase) can share the same stack by naming the same directory and layers. Layers the scene does reference keep what the scene says. Every write goes to a temporary file (`<name>~.res`) first and is renamed into place, so a failed save leaves the previous file intact. With a storage directory set, `runtime_data`, `editor_control_ids` and `editor_control_weights` are no longer stored in the scene; `_ready` loads them from their files when present. The scene keeps referencing layer files by path, so it still needs saving after a cook; the commit marks it unsaved in the editor.
 
@@ -186,7 +214,7 @@ Residency and replacement:
 
 ## Navigation profiles
 
-A profile mask is stored like `nav_exclusions`: one byte per cell, 255 = blocked, empty = nothing blocked; `default` is the `nav_exclusions` mask itself and holes are never written into profile masks. `StrataBake` evaluates each rule in `strata_nav_profiles.gd` after the channels and masks, over channels retained in the bake only, so every mask can be reproduced from the data. The rules are saved in `nav_profile_rules` as bytes (`var_to_bytes`), because `.tres` rounds floats and would drift the thresholds. `strata_nav_profiles.gd` is needed at runtime only to re-evaluate a rule, not to load or navigate. Each distinct term sets one bit per cell and a 256-entry table maps the bits to the mask; slope is the costly pass. A three-term rule over the full 4097² lattice costs about 1.2 s of GDScript. Each profile adds one byte per cell to the payload budget.
+A profile map is a cell map named `nav_<profile>` in every region: one byte per cell, 255 = blocked; `default` is the `nav_exclusion` map itself and holes are never written into profile maps. `StrataBake` evaluates each rule in `strata_nav_profiles.gd` per region after the channels and masks, over channels retained in the bake only, so every map can be reproduced from the data: `StrataNavProfiles.evaluate_region(region, rule, channel_names)` returns the region's mask (cells + 2 * apron per axis), and the suites assert it equals the stored map bit for bit in every region. The rules are saved in `nav_profile_rules` as bytes (`var_to_bytes`), because `.tres` rounds floats and would drift the thresholds. `strata_nav_profiles.gd` is needed at runtime only to re-evaluate a rule, not to load or navigate. Each distinct term sets one bit per cell and a 256-entry table maps the bits to the mask; slope is the costly pass. A three-term rule over a 4 km terrain (256 regions of 256 cells) evaluated in about 0.8 s in the suite. Each profile adds one L8 cell map (with its mips) per region to the payload budget.
 
 ## Navigation
 

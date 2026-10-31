@@ -76,7 +76,7 @@ func run() -> void:
 	check(plain.ok and not plain.data.has_macro() and plain.report.macro == null, "auto bake without macro channels stores no macro map (backward compatible)")
 	check(plain.ok and plain.data.sample_macro(Vector2.ZERO).status == StrataRuntimeData.Status.ABSENT and plain.data.sample_macro(Vector2.ZERO).tint == Color(1, 1, 1, 1), "absent macro samples neutral")
 	var forced := StrataBake.compile(terrain, {"spacing": 4.0, "macro": true})
-	check(forced.ok and forced.data.has_macro() and all_texels(forced.data.macro_image, Color(1, 1, 1, 1)), "macro=true bakes a neutral map")
+	check(forced.ok and forced.data.has_macro() and all_texels(forced.data.get_macro_image(), Color(1, 1, 1, 1)), "macro=true bakes a neutral map")
 	var snapshot := StrataProcedural.create_snapshot(base, "cumulative", {"channels": ["terrain_ao"]})
 	if snapshot.ok:
 		var ao_field: Dictionary = snapshot.fields[0]; var ao_cover: Dictionary = snapshot.fields[1]
@@ -177,9 +177,8 @@ func run() -> void:
 	near(StrataMacro.sample(gradient, bounds, Vector2(0.0, 15.0)).a, 0.875, 0.00001, "bilinear midpoint z")
 	near(StrataMacro.sample(gradient, bounds, Vector2(1000.0, 1000.0)).r, 1.5, 0.00001, "outside clamps to the edge")
 
-	# 6. Runtime validation; a rejected map keeps the previous one.
-	var data := make_data(Rect2(-8, -8, 16, 16), Vector2i(5, 5))
-	check(data.set_macro(gradient, bounds).ok and data.has_macro() and data.validate().ok, "valid macro map is accepted")
+	# 6. Runtime validation of the macro layout and range, and the region lookup. A baked
+	# map is checked against the shader lattice contract and the image reference.
 	var rejected := 0
 	var bad_rgbaf := gradient.duplicate(); bad_rgbaf.convert(Image.FORMAT_RGBAF)
 	var bad_tint := gradient.duplicate(); bad_tint.set_pixel(1, 1, Color(2.5, 1, 1, 1))
@@ -188,68 +187,69 @@ func run() -> void:
 	var bad_negative := gradient.duplicate(); bad_negative.set_pixel(0, 0, Color(1, 1, -0.5, 1))
 	var tiny := Image.create(1, 4, false, Image.FORMAT_RGBAH)
 	var mipmapped := gradient.duplicate(); mipmapped.generate_mipmaps()
-	for case in [[bad_rgbaf, bounds], [bad_tint, bounds], [bad_ao, bounds], [bad_nan, bounds], [bad_negative, bounds], [tiny, bounds], [mipmapped, bounds], [gradient, Rect2(0, 0, 0, 5)], [gradient, Rect2(INF, 0, 5, 5)]]:
-		if not data.set_macro(case[0], case[1]).ok: rejected += 1
-	check(rejected == 9, "nine invalid maps/bounds are rejected (%d)" % rejected)
-	check(data.macro_image == gradient and data.macro_bounds == bounds, "rejections keep the previous macro map")
-	var sampled := data.sample_macro(Vector2(-10.0, 20.0))
-	check(sampled.status == StrataRuntimeData.Status.OK and is_equal_approx(sampled.tint.r, 0.5) and sampled.tint.a == 1.0 and is_equal_approx(sampled.ao, 0.75), "runtime sample_macro returns tint and ao")
-	check(data.sample_macro(Vector2(-31.0, 20.0)).status == StrataRuntimeData.Status.OUTSIDE, "outside macro bounds is OUTSIDE and neutral")
-	var manifest := data.get_manifest()
-	check(manifest.macro_bytes == 4 * 3 * 8 and manifest.macro_resolution == Vector2i(4, 3), "manifest reports macro bytes and resolution")
-	var copy := data.duplicate_runtime()
-	check(copy.macro_image != data.macro_image and copy.macro_image.get_data() == data.macro_image.get_data() and copy.macro_bounds == data.macro_bounds, "duplicate_runtime copies the macro map independently")
-	data.macro_image = bad_rgbaf
-	check(not data.validate().ok, "validate() rejects a wrong-format map assigned directly")
-	data.set_macro(null)
-	check(not data.has_macro() and data.validate().ok and data.get_macro_binding().ok == false, "set_macro(null) clears the map")
+	for case in [[bad_rgbaf, bounds, false], [bad_tint, bounds, true], [bad_ao, bounds, true], [bad_nan, bounds, true], [bad_negative, bounds, true], [tiny, bounds, false], [mipmapped, bounds, false], [gradient, Rect2(0, 0, 0, 5), false], [gradient, Rect2(INF, 0, 5, 5), false]]:
+		var layout := StrataRuntimeData.validate_macro_layout(case[0], case[1])
+		var scanned := StrataRuntimeData.scan_macro_image(case[0]) if layout.ok else {"ok": true}
+		if not layout.ok or not scanned.ok: rejected += 1
+	check(rejected == 9, "nine invalid maps/bounds are rejected by layout or range checks (%d)" % rejected)
+	check(StrataRuntimeData.validate_macro_layout(gradient, bounds).ok and StrataRuntimeData.scan_macro_image(gradient).ok, "the gradient map is valid")
 
-	# 7. Persistence: binary and text resources, exact bounds, old resources.
-	var odd_bounds := Rect2(-2048.1, 1234.567891, 4096.3, 0.1)
-	data.set_macro(gradient, odd_bounds)
+	# 7. Persistence: binary and text resources keep exact bounds and every macro byte.
+	var baked_macro := StrataBake.compile(terrain, {"spacing": 4.0, "region_cells": 16})
+	var data: StrataRuntimeData = baked_macro.data
 	var settings := StrataRenderSettings.new(); settings.terrain_tint_strength = 0.35; data.render_settings = settings
+	var macro_before := data.get_macro_image()
+	check(baked_macro.ok and data.validate().ok and data.grid == Vector2i(1, 1) and data.maps.macro.scale == 1 and data.maps.macro.apron == 1 and data.get_macro_bounds() == terrain.base_bounds, "macro bake at the lattice spacing is a scale-1 map: %s" % baked_macro.get("message", ""))
+	var sampled := data.sample_macro(terrain.base_bounds.position + Vector2(12.0, 8.0))
+	var reference_color := StrataMacro.sample(macro_before, data.get_macro_bounds(), terrain.base_bounds.position + Vector2(12.0, 8.0))
+	check(sampled.status == StrataRuntimeData.Status.OK and sampled.tint.is_equal_approx(Color(reference_color.r, reference_color.g, reference_color.b, 1.0)) and is_equal_approx(sampled.ao, reference_color.a), "runtime sample_macro matches the image reference lookup")
+	check(data.sample_macro(Vector2(-31.0, 20.0)).status == StrataRuntimeData.Status.OUTSIDE and data.sample_macro(Vector2(-31.0, 20.0)).tint == Color(1, 1, 1, 1), "outside macro bounds is OUTSIDE and neutral")
+	var macro_binding := data.get_macro_binding()
+	check(macro_binding.ok and macro_binding.resolution == Vector2i(11, 7), "the assembled macro map binds to the shader lattice contract")
 	for path in ["user://macro_data.res", "user://macro_data.tres"]:
 		check(ResourceSaver.save(data, path) == OK, "save %s" % path)
 		var loaded := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRuntimeData
 		check(loaded != null and loaded.validate().ok, "%s reloads and validates" % path)
 		if loaded != null:
-			check(loaded.has_macro() and loaded.macro_image.get_format() == Image.FORMAT_RGBAH and loaded.macro_image.get_data() == gradient.get_data(), "%s macro bytes roundtrip exactly" % path)
-			check(loaded.macro_bounds == odd_bounds, "%s macro bounds roundtrip bit-exactly: %s" % [path, loaded.macro_bounds])
-			check(loaded.render_settings != null and is_equal_approx(loaded.render_settings.terrain_tint_strength, 0.35), "%s render settings roundtrip" % path)
-	var old := make_data(Rect2(-8, -8, 16, 16), Vector2i(5, 5))
-	check(ResourceSaver.save(old, "user://macro_old.tres") == OK, "save macro-less data")
-	var old_text := FileAccess.get_file_as_string("user://macro_old.tres")
-	var legacy := old_text.replace("macro_lattice = PackedByteArray()\n", "")
-	var file := FileAccess.open("user://macro_legacy.tres", FileAccess.WRITE); file.store_string(legacy); file.close()
-	var legacy_loaded := ResourceLoader.load("user://macro_legacy.tres", "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRuntimeData
-	check(not legacy.contains("macro") and legacy_loaded != null and legacy_loaded.validate().ok and not legacy_loaded.has_macro(), "a resource without any macro properties (pre-macro format) loads without a map")
+			check(loaded.has_macro() and loaded.get_macro_image().get_format() == Image.FORMAT_RGBAH and loaded.get_macro_image().get_data() == macro_before.get_data(), "%s macro bytes roundtrip exactly" % path)
+			check(loaded.get_macro_bounds() == data.get_macro_bounds() and loaded.render_settings != null and is_equal_approx(loaded.render_settings.terrain_tint_strength, 0.35), "%s bounds and render settings roundtrip" % path)
+	var odd := StrataRuntimeData.new()
+	odd.bounds = Rect2(-2048.1, 1234.567891, 4096.3, 0.1)
+	odd.spacing = 0.123456789
+	odd.height_min = -3.0000001
+	odd.height_max = 7.7777777
+	check(ResourceSaver.save(odd, "user://macro_odd.tres") == OK, "save odd manifest")
+	var odd_loaded := ResourceLoader.load("user://macro_odd.tres", "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRuntimeData
+	check(odd_loaded != null and odd_loaded.bounds == odd.bounds and odd_loaded.spacing == odd.spacing and odd_loaded.height_min == odd.height_min and odd_loaded.height_max == odd.height_max, "bounds, spacing and extrema roundtrip bit-exactly through text: %s" % [odd_loaded.bounds if odd_loaded else null])
+	var plain_data: StrataRuntimeData = StrataBake.compile(terrain, {"spacing": 4.0, "macro": false}).data
+	check(not plain_data.has_macro() and plain_data.sample_macro(Vector2.ZERO).status == StrataRuntimeData.Status.ABSENT and plain_data.get_macro_image() == null and not plain_data.get_macro_binding().ok, "a bake without macro has no map, samples neutral and has no binding")
 
 	# 8. Bake wiring: auto macro, report, settings snapshot, stale tracking, token checks.
 	terrain.render_settings.terrain_ao_strength = 0.6
 	var baked := StrataBake.bake(terrain, {"spacing": 4.0})
-	check(baked.ok and baked.data.has_macro() and baked.data.macro_bounds == terrain.base_bounds and baked.data.macro_image.get_size() == Vector2i(11, 7), "auto bake composes the 4 m macro map: %s" % baked.get("message", ""))
+	check(baked.ok and baked.data.has_macro() and baked.data.get_macro_bounds() == terrain.base_bounds and baked.data.get_macro_image().get_size() == Vector2i(11, 7), "auto bake composes the 4 m macro map: %s" % baked.get("message", ""))
 	check(baked.ok and baked.report.macro != null and Array(baked.report.macro.owned_channels).size() == 4, "bake report lists the macro channels")
 	if baked.ok:
 		var reference_map := StrataMacro.compose(terrain)
-		check(baked.data.macro_image.get_data() == reference_map.image.get_data(), "baked map equals compose()")
+		check(baked.data.get_macro_image().get_data() == reference_map.image.get_data(), "baked map equals compose()")
 		check(baked.data.render_settings != terrain.render_settings and is_equal_approx(baked.data.render_settings.terrain_ao_strength, 0.6), "bake stores a duplicate of the render settings")
 		terrain.render_settings.terrain_ao_strength = 0.1
 		check(is_equal_approx(baked.data.render_settings.terrain_ao_strength, 0.6), "later authoring settings edits do not mutate the baked artifact")
 	var fixed := StrataBake.compile(terrain, {"spacing": 4.0, "macro": {"spacing": 8.0}})
-	check(fixed.ok and fixed.data.macro_image.get_size() == Vector2i(6, 4), "macro compose options select the spacing")
+	check(fixed.ok and fixed.data.get_macro_image().get_size() == Vector2i(6, 4) and fixed.data.maps.macro.scale == 2, "macro compose options select the spacing (a power-of-two multiple of the bake spacing)")
+	check(not StrataBake.compile(terrain, {"spacing": 4.0, "macro": {"spacing": 6.0}}).ok, "a macro spacing that is not a power-of-two multiple is rejected")
 	var off := StrataBake.compile(terrain, {"spacing": 4.0, "macro": false})
 	check(off.ok and not off.data.has_macro(), "macro=false bakes without a map")
 	var precompiled := StrataMacro.compose(terrain, {"through_layer": shade})
-	check(not StrataBake.compile(terrain, {"spacing": 4.0, "macro": precompiled}).ok, "a cutoff compose result is rejected by the bake")
-	var current := StrataMacro.compose(terrain)
+	check(not StrataBake.compile(terrain, {"spacing": 4.0, "macro": precompiled}).ok, "a compose result is not accepted: the macro map composes per region")
 	fine.data.set_sample(&"terrain_ao", Vector2i(0, 0), 0.9)
-	check(not StrataBake.compile(terrain, {"spacing": 4.0, "macro": current}).ok, "a stale precompiled macro map is rejected")
 	check(terrain.is_runtime_bake_stale(), "editing a macro channel stales the published bake")
 	var retained := StrataBake.compile(terrain, {"spacing": 4.0, "channels": ["terrain_ao"], "macro": false})
 	if retained.ok:
-		var values: PackedFloat32Array = retained.data.channels.terrain_ao.values
 		var corner_expected := reference(&"terrain_ao", terrain.base_bounds.end)
-		near(values[values.size() - 1], corner_expected, 0.00001, "a retained terrain_ao channel uses the neutral base")
+		var corner: Dictionary = retained.data.sample_channel(&"terrain_ao", terrain.base_bounds.end)
+		check(corner.ok and corner.coverage == 1.0, "the neutral base covers the retained macro channel completely")
+		near(corner.value, corner_expected, 0.00001, "a retained terrain_ao channel uses the neutral base")
 	else: check(false, "retained macro channel bake: %s" % retained.message)
 	check(not StrataMacro.compose(terrain, {"spacing": 0.005}).ok and not StrataMacro.compose(terrain, {"bounds": Rect2(-30, 0, 10, 10)}).ok, "oversized and out-of-terrain macro requests are rejected")
 
@@ -266,11 +266,11 @@ func run() -> void:
 	var scene := ResourceLoader.load("res://export/macro_level.scn", "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
 	var instance := scene.instantiate() if scene != null else null
 	var exported: StrataRuntimeData = instance.get_meta("strata_runtime_data") if instance != null else null
-	check(exported != null and exported.has_macro() and exported.macro_image.get_data() == terrain.runtime_data.macro_image.get_data() and exported.macro_bounds == terrain.base_bounds, "exported runtime scene includes the macro map")
+	check(exported != null and exported.has_macro() and exported.get_macro_image().get_data() == terrain.runtime_data.get_macro_image().get_data() and exported.get_macro_bounds() == terrain.base_bounds, "exported runtime scene includes the macro map")
 	if instance != null: instance.free()
 	var probe := {"bounds": [terrain.base_bounds.position.x, terrain.base_bounds.position.y, terrain.base_bounds.size.x, terrain.base_bounds.size.y], "samples": []}
 	for p in [Vector2(-8, 0), Vector2(4, 4), Vector2(10, 0), Vector2(0, 0)]:
-		var value := StrataMacro.sample(terrain.runtime_data.macro_image, terrain.base_bounds, p)
+		var value := StrataMacro.sample(terrain.runtime_data.get_macro_image(), terrain.runtime_data.get_macro_bounds(), p)
 		probe.samples.append([p.x, p.y, value.r, value.g, value.b, value.a])
 	var probe_file := FileAccess.open("res://export/macro_probe.json", FileAccess.WRITE); probe_file.store_string(JSON.stringify(probe)); probe_file.close()
 	finish("RUNTIME_MACRO_TEST")
