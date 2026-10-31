@@ -48,6 +48,7 @@ void StrataLayerData::_bind_methods() {
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("validate_dense", "image", "ownership"), &StrataLayerData::validate_dense, DEFVAL(Ref<Image>()));
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("pack_material_weights", "images"), &StrataLayerData::pack_material_weights);
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("pack_material_weights_sparse", "images"), &StrataLayerData::pack_material_weights_sparse);
+    ClassDB::bind_static_method("StrataLayerData", D_METHOD("prepare_control_maps", "ids", "weights", "material_count"), &StrataLayerData::prepare_control_maps);
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("compose_dense", "layers", "channel", "origin", "step_x", "step_y", "resolution", "bounds", "include_coverage", "subtract_datum", "index_offset"), &StrataLayerData::compose_dense, DEFVAL(true), DEFVAL(0.0), DEFVAL(Vector2i()));
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("compile_cell_mask", "layers", "channel", "bounds", "vertex_resolution", "max_work", "max_fragments"), &StrataLayerData::compile_cell_mask, DEFVAL(int64_t(268435456)), DEFVAL(4096));
     // Godot omits properties equal to their class defaults. Serializing a

@@ -867,20 +867,12 @@ func set_control_maps(ids: Image, weights: Image) -> bool:
 	if ids == null or weights == null or ids.get_size() != weights.get_size() or ids.get_width() < 2 or ids.get_height() < 2 or ids.get_width() > 1025 or ids.get_height() > 1025:
 		push_warning("Control maps need matching 2..1025 dimensions; previous maps retained.")
 		return false
-	if not _validate_control_images(ids, weights, _materials.size() if not _materials.is_empty() else 32):
+	var prepared := _prepare_control_weights(ids, weights, _materials.size() if not _materials.is_empty() else 32)
+	if prepared == null:
 		return false
 	_control_ids = ids.duplicate()
-	_control_weights = weights.duplicate()
 	_control_ids.convert(Image.FORMAT_RGBA8)
-	_control_weights.convert(Image.FORMAT_RGBAF)
-	# Normalize in CPU double precision so finite large inputs cannot overflow
-	# the shader's float sum. The shader repeats normalization after gathering.
-	for z in range(_control_weights.get_height()):
-		for x in range(_control_weights.get_width()):
-			var value := _control_weights.get_pixel(x, z)
-			var total := float(value.r) + float(value.g) + float(value.b) + float(value.a)
-			if total > 0.0:
-				_control_weights.set_pixel(x, z, Color(value.r / total, value.g / total, value.b / total, value.a / total))
+	_control_weights = prepared
 	_control_ids_texture = ImageTexture.create_from_image(_control_ids)
 	_control_weights_texture = ImageTexture.create_from_image(_control_weights)
 	_bind_control_maps()
@@ -902,21 +894,41 @@ func update_control_region(ids: Image, weights: Image, origin: Vector2i) -> bool
 	if _control_ids == null or _control_weights == null or _control_ids_texture == null or _control_weights_texture == null: return false
 	if ids == null or weights == null or ids.get_size() != weights.get_size() or ids.get_width() < 1 or ids.get_height() < 1: return false
 	if origin.x < 0 or origin.y < 0 or origin.x + ids.get_width() > _control_ids.get_width() or origin.y + ids.get_height() > _control_ids.get_height(): return false
-	if not _validate_control_images(ids, weights, _materials.size() if not _materials.is_empty() else 32):
+	var region_weights := _prepare_control_weights(ids, weights, _materials.size() if not _materials.is_empty() else 32)
+	if region_weights == null:
 		return false
-	var region_weights: Image = weights.duplicate()
-	region_weights.convert(Image.FORMAT_RGBAF)
-	for z in range(region_weights.get_height()):
-		for x in range(region_weights.get_width()):
-			var value := region_weights.get_pixel(x, z)
-			var total := float(value.r) + float(value.g) + float(value.b) + float(value.a)
-			if total > 0.0:
-				region_weights.set_pixel(x, z, Color(value.r / total, value.g / total, value.b / total, value.a / total))
 	_control_ids.blit_rect(ids, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
 	_control_weights.blit_rect(region_weights, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
 	_control_ids_texture.update(_control_ids)
 	_control_weights_texture.update(_control_weights)
 	return true
+
+## Validates a control-map pair and returns its weights as RGBAF with every texel that has a
+## positive sum divided by that sum (zero-sum texels untouched), or null after a warning.
+## Normalization runs in double precision so finite large inputs cannot overflow the shader's
+## float sum; the shader repeats it after gathering. The native StrataLayerData.prepare_control_maps
+## does this in one pass; builds without it use the equivalent per-texel GDScript below.
+static func _prepare_control_weights(ids: Image, weights: Image, material_count: int) -> Image:
+	if ClassDB.class_has_method(&"StrataLayerData", &"prepare_control_maps"):
+		var result: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, material_count)
+		if not result.get("ok", false):
+			push_warning(String(result.get("message", "Control maps rejected; previous maps retained.")))
+			return null
+		return result.weights
+	return _prepare_control_weights_script(ids, weights, material_count)
+
+static func _prepare_control_weights_script(ids: Image, weights: Image, material_count: int) -> Image:
+	if not _validate_control_images(ids, weights, material_count):
+		return null
+	var result: Image = weights.duplicate()
+	result.convert(Image.FORMAT_RGBAF)
+	for z in range(result.get_height()):
+		for x in range(result.get_width()):
+			var value := result.get_pixel(x, z)
+			var total := float(value.r) + float(value.g) + float(value.b) + float(value.a)
+			if total > 0.0:
+				result.set_pixel(x, z, Color(value.r / total, value.g / total, value.b / total, value.a / total))
+	return result
 
 static func _validate_control_images(ids: Image, weights: Image, material_count: int) -> bool:
 	if ids.get_format() != Image.FORMAT_RGBA8:

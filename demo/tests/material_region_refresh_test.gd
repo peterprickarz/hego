@@ -149,6 +149,57 @@ func run() -> void:
 	renderer.free()
 	bridge.free()
 	terrain.free()
+	control_prepare_checks()
 	await process_frame
 	print("MATERIAL_REGION checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)
+
+## The native control-map preparation must equal the per-texel GDScript fallback bit for bit.
+func control_prepare_checks() -> void:
+	if not ClassDB.class_has_method(&"StrataLayerData", &"prepare_control_maps"):
+		print("MATERIAL_REGION native prepare_control_maps unavailable; skipped")
+		return
+	var size := 1025
+	var ids := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var weights := Image.create(size, size, false, Image.FORMAT_RGBAF)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for y in range(size):
+		for x in range(size):
+			ids.set_pixel(x, y, Color8(rng.randi() % 32, rng.randi() % 32, rng.randi() % 32, rng.randi() % 32))
+			var kind := (x * 7 + y * 3) % 5
+			if kind == 0: weights.set_pixel(x, y, Color(0, 0, 0, 0)) # zero-sum, left alone
+			elif kind == 1: weights.set_pixel(x, y, Color(0.25, 0.25, 0.25, 0.25)) # already normalized
+			else: weights.set_pixel(x, y, Color(rng.randf() * 3.0, rng.randf(), rng.randf() * 1e6, 0.0 if kind == 2 else rng.randf() * 0.01))
+	var start := Time.get_ticks_usec()
+	var native: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32)
+	var native_ms := (Time.get_ticks_usec() - start) / 1000.0
+	start = Time.get_ticks_usec()
+	var script := StrataRenderer._prepare_control_weights_script(ids, weights, 32)
+	var script_ms := (Time.get_ticks_usec() - start) / 1000.0
+	check(native.get("ok", false) and script != null, "an in-range 1025 map is accepted by both paths")
+	if native.get("ok", false) and script != null:
+		check(native.weights.get_format() == Image.FORMAT_RGBAF and native.weights.get_data() == script.get_data(), "native normalized weights equal the GDScript path bit for bit")
+	print("MATERIAL_REGION control maps 1025x1025: native %.1f ms, GDScript %.1f ms" % [native_ms, script_ms])
+	var half := weights.get_region(Rect2i(0, 0, size, size))
+	for x in range(size): half.set_pixel(x, 0, Color(0.3, 0.2, 0.1, 40000.0)) # large but finite in half precision
+	for y in range(size):
+		for x in range(size):
+			var c := half.get_pixel(x, y)
+			half.set_pixel(x, y, Color(minf(c.r, 60000.0), minf(c.g, 60000.0), minf(c.b, 60000.0), minf(c.a, 60000.0)))
+	half.convert(Image.FORMAT_RGBAH)
+	var native_half: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, half, 32)
+	var script_half := StrataRenderer._prepare_control_weights_script(ids, half, 32)
+	check(native_half.get("ok", false) and script_half != null and native_half.weights.get_data() == script_half.get_data(), "half-float weights match too")
+	# Rejections: out-of-range ID, negative weight, non-RGBA8 IDs.
+	ids.set_pixel(1024, 1024, Color8(0, 0, 32, 0))
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32).ok and StrataRenderer._prepare_control_weights_script(ids, weights, 32) == null, "an ID at the pool size is rejected by both paths")
+	ids.set_pixel(1024, 1024, Color8(0, 0, 31, 0))
+	check(ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32).ok, "the highest valid ID is accepted")
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 31).ok and StrataRenderer._prepare_control_weights_script(ids, weights, 31) == null, "a smaller material pool rejects it in both paths")
+	weights.set_pixel(3, 4, Color(-0.1, 0.5, 0.5, 0.5))
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32).ok and StrataRenderer._prepare_control_weights_script(ids, weights, 32) == null, "a negative weight is rejected by both paths")
+	weights.set_pixel(3, 4, Color(INF, 0, 0, 0))
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32).ok and StrataRenderer._prepare_control_weights_script(ids, weights, 32) == null, "an infinite weight is rejected by both paths")
+	var wrong := Image.create(size, size, false, Image.FORMAT_RGBAF)
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", wrong, weights, 32).ok and StrataRenderer._prepare_control_weights_script(wrong, weights, 32) == null, "RGBAF IDs are rejected by both paths")

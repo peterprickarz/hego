@@ -63,6 +63,40 @@ Dictionary StrataLayerData::pack_material_weights_sparse(const Array &images) {
     return pack_material_weights_impl(images, true);
 }
 
+Dictionary StrataLayerData::prepare_control_maps(const Ref<Image> &p_ids, const Ref<Image> &p_weights, int64_t p_material_count) {
+    if (p_ids.is_null() || p_weights.is_null() || p_ids->is_compressed() || p_weights->is_compressed() || p_ids->get_size() != p_weights->get_size() || p_ids->get_width() < 1 || p_ids->get_height() < 1)
+        return failure("Control maps need matching uncompressed images; previous maps retained.");
+    if (p_ids->get_format() != Image::FORMAT_RGBA8) return failure("Control IDs must use categorical RGBA8 bytes; previous maps retained.");
+    Ref<Image> weights = p_weights->duplicate();
+    weights->convert(Image::FORMAT_RGBAF);
+    const int64_t count = int64_t(weights->get_width()) * weights->get_height();
+    const PackedByteArray id_bytes = p_ids->get_data();
+    PackedByteArray weight_bytes = weights->get_data();
+    if (id_bytes.size() < count * 4 || weight_bytes.size() < count * 16) return failure("Control map payload has an invalid byte count; previous maps retained.");
+    const uint8_t *ids = id_bytes.ptr();
+    uint8_t *out = weight_bytes.ptrw();
+    // Validate every texel first so a rejected map is never partially normalized.
+    for (int64_t pixel = 0; pixel < count; ++pixel) {
+        for (int slot = 0; slot < 4; ++slot) {
+            const float weight = load_float(out, pixel * 4 + slot);
+            if (int64_t(ids[pixel * 4 + slot]) >= p_material_count || !std::isfinite(weight) || weight < 0.0f)
+                return failure("Control maps require valid pool IDs and finite nonnegative weights; previous maps retained.");
+        }
+    }
+    for (int64_t pixel = 0; pixel < count; ++pixel) {
+        float v[4];
+        double total = 0.0;
+        for (int slot = 0; slot < 4; ++slot) { v[slot] = load_float(out, pixel * 4 + slot); total += double(v[slot]); }
+        if (!(total > 0.0)) continue;
+        for (int slot = 0; slot < 4; ++slot) store_float(out, pixel * 4 + slot, float(double(v[slot]) / total));
+    }
+    Dictionary result;
+    result["ok"] = true;
+    result["message"] = String();
+    result["weights"] = Image::create_from_data(weights->get_width(), weights->get_height(), false, Image::FORMAT_RGBAF, weight_bytes);
+    return result;
+}
+
 Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool allow_unassigned) {
     const int count_ids = int(images.size());
     if (count_ids < 1 || count_ids > 32) return failure("Material packing requires 1 to 32 registry-order scalar images.");

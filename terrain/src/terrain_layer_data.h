@@ -81,6 +81,11 @@ public:
     // Adds "unassigned" (texel count) and "empty"; with unassigned texels the coverage
     // and discarded-weight diagnostics describe the assigned texels only.
     static godot::Dictionary pack_material_weights_sparse(const godot::Array &p_images);
+    // Validates a categorical-ID/weight image pair for the renderer's control textures and returns
+    // {ok, message, weights}: weights as RGBAF with every texel whose four weights sum above zero
+    // divided by that sum (double precision, rounded once to float); zero-sum texels are kept as
+    // they are. IDs must be RGBA8 bytes below p_material_count; weights finite and nonnegative.
+    static godot::Dictionary prepare_control_maps(const godot::Ref<godot::Image> &p_ids, const godot::Ref<godot::Image> &p_weights, int64_t p_material_count);
     // Captured descriptors: data, origin/step_x/step_y (physical Vector3),
     // mode (0 replace/1 add), height_offset (scalar, normally plane Y).
     static godot::Dictionary compose_dense(const godot::Array &p_layers, godot::StringName p_channel,
