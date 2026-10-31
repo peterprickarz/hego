@@ -3,9 +3,10 @@ class_name StrataProcedural
 extends RefCounted
 ## Standalone snapshot/transaction API. No HEGo or Houdini dependency.
 
-## Bounds apply before native allocation. Value/coverage transport images share
-## this aggregate budget; each individual image also has a 20M-sample cap.
-const MAX_SAMPLES := 128 * 1024 * 1024
+## Bounds apply before native allocation. Value/coverage transport images share this
+## aggregate budget (64 Mi by default, at most 512 Mi: nine 4097² channels with their
+## companions); each individual image also has a 20 Mi sample cap.
+const MAX_SAMPLES := 512 * 1024 * 1024
 const MAX_FIELD_SAMPLES := 20 * 1024 * 1024
 const DEFAULT_SAMPLES := 64 * 1024 * 1024
 const OWNERSHIP_SUFFIX := "__ownership"

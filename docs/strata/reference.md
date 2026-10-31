@@ -102,7 +102,7 @@ The input row settings, as stored in a `HEGoNode3D`'s `input_stash`:
 | `terrain_channels` | `height` | channel names, as a comma-separated string or a `PackedStringArray`; empty sends all |
 | `terrain_spacing` | 0 | cumulative resampling spacing in metres; 0 keeps the layer's grid |
 | `terrain_channel_spacings` | none | per-channel cumulative spacings, `{channel: metres}` |
-| `terrain_max_samples` | 64 Mi | the input's sample budget, at most 128 Mi |
+| `terrain_max_samples` | 64 Mi | the input's sample budget, at most 512 Mi |
 | `terrain_compact_empty` | false | send an unpainted raw channel as a single empty sample instead of a full-size empty grid |
 
 ## Bake options
@@ -234,8 +234,9 @@ All are binary `.res` resources, written through a temporary `<name>~.res` file.
 | Baked tint and AO map | at most 4097 texels per side: the default 4 m spacing covers terrains up to 16 km, a larger terrain needs a coarser `macro` spacing |
 | Bake | 512 MiB in total for all regions and their detail levels |
 | Heightfield exchanged with Houdini | 20 Mi samples per volume |
-| One input row | 64 Mi samples including companions; `terrain_max_samples` raises it to 128 Mi |
-| One cook's result | 128 Mi samples including ownership companions |
+| One input row | 64 Mi samples including companions; `terrain_max_samples` raises it to 512 Mi |
+| One cook's result | 512 Mi samples including ownership companions |
+| One Houdini exchange | 512 Mi samples and 64 volumes in total (the island's 1 m material pass moves 18 volumes of 4097² in and 8 out) |
 
 Volumes from Houdini must be dense, scalar, single-slice heightfields with finite values on
 a horizontal grid with perpendicular axes; sheared, tapered or multi-slice volumes are

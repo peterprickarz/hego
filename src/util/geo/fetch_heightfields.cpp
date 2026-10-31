@@ -391,8 +391,8 @@ bool fetch_heightfield_fields(HEGoSessionManager *session_mgr, HAPI_NodeId node_
 		}
 		const int64_t count = int64_t(grid.width) * grid.height;
 		total_samples += count;
-		if (complete.size() >= 64 || total_samples > 67108864) {
-			error = "Heightfield output exceeds the 64-field or 64-million-sample transport limit.";
+		if (complete.size() >= 64 || total_samples > 536870912) {
+			error = "Heightfield output exceeds the 64-field or 512 Mi sample transport limit.";
 			return false;
 		}
 		std::vector<float> values(count);

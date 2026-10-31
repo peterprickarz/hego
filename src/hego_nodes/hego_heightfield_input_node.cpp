@@ -104,8 +104,8 @@ bool snapshot_fields(const godot::Array &source, std::vector<FieldSnapshot> &fie
 		}
 		const int64_t count = int64_t(field.grid.width) * field.grid.height;
 		total_samples += count;
-		if (total_samples > 67108864) {
-			error = "Explicit heightfield upload exceeds the 64 million total-sample limit.";
+		if (total_samples > 536870912) {
+			error = "Explicit heightfield upload exceeds the 512 Mi total-sample limit.";
 			return false;
 		}
 		const godot::PackedByteArray bytes = image->get_data();
