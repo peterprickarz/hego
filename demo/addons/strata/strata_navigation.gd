@@ -28,6 +28,10 @@ extends Node3D
 ## settings on one map duplicate every edge; give identical populations one node.
 
 signal bake_finished(result: Dictionary)
+## A tracked tile was published, replaced or released (never emitted by bake_region()).
+signal tiles_changed
+
+const _NO_TILE := Vector2i(-2147483648, -2147483648)
 
 @export var data: StrataRuntimeData:
 	set(value):
@@ -99,18 +103,202 @@ signal bake_finished(result: Dictionary)
 @export var use_async := true
 ## Predict Godot's map edge merge after each publication (see the class note).
 @export var check_merge_conflicts := false
+## Optional gameplay focus (player, vehicle, agent hub); not the camera. While set, the
+## node keeps the tiles within `track_radius` of the target's TILE (so every point of
+## the target's tile has the full radius around it) resident, baking tiles that enter
+## and releasing tiles beyond `track_radius * 1.25`. It re-plans once per tile change
+## in _physics_process; standing still costs one lookup per tick. Tracked tiles are
+## baked per tile (asynchronously when use_async) and published as each arrives; a
+## result for a tile that left the keep range or was evicted is dropped. When more
+## than `max_tiles` would be needed, the tiles farthest from the target are never
+## baked or are released first; the tile under the target is never evicted.
+@export var track_target: NodePath:
+	set(value):
+		track_target = value
+		_tracked_tile = _NO_TILE
+		set_physics_process(not value.is_empty())
+@export var track_radius := 96.0:
+	set(value):
+		if not is_finite(value) or value < 0: return
+		track_radius = value
+		_tracked_tile = _NO_TILE
 
 var _tiles: Dictionary = {}
 ## Bake settings of the published tiles (see _bake_config()).
 var _tiles_config: Dictionary = {}
 var _generation := 0
 var _pending: Dictionary = {}
-var _stats := {"bakes": 0, "tiles_baked": 0, "last_bake_ms": 0.0, "last_source_faces": 0, "discarded_results": 0}
+var _stats := {"bakes": 0, "tiles_baked": 0, "last_bake_ms": 0.0, "last_source_faces": 0, "discarded_results": 0, "evictions": 0, "releases": 0, "replans": 0, "last_track_ms": 0.0}
+## Tracking state: the tile the last re-plan was made for, in-flight tile bakes
+## (key -> {epoch, mesh, config}), tiles known to have no walkable polygons, and the
+## epoch that invalidates every in-flight tracked result (clear, settings change).
+var _tracked_tile := _NO_TILE
+var _track_pending: Dictionary = {}
+var _track_empty: Dictionary = {}
+var _track_epoch := 0
+var _track_warned := false
+
+func _ready() -> void:
+	set_physics_process(not track_target.is_empty())
 
 func _exit_tree() -> void:
 	# Results of in-flight async bakes are discarded by generation.
 	_generation += 1
 	_pending.clear()
+	_track_epoch += 1
+	_track_pending.clear()
+	_tracked_tile = _NO_TILE
+
+func _physics_process(_delta: float) -> void:
+	tick()
+
+## Terrain-local XZ; this node is expected at identity under the terrain root.
+func _world_to_local_xz(world_position: Vector3) -> Vector2:
+	var local := global_transform.affine_inverse() * world_position
+	return Vector2(local.x, local.z)
+
+func tile_at_local(position: Vector2) -> Vector2i:
+	if not position.is_finite() or data == null or get_tile_grid() == Vector2i.ZERO: return Vector2i(-1, -1)
+	var lattice := data.local_to_lattice(position)
+	var grid := get_tile_grid()
+	return Vector2i(clampi(floori(lattice.x / tile_cells), 0, grid.x - 1), clampi(floori(lattice.y / tile_cells), 0, grid.y - 1))
+
+## One tracking step (called every physics frame; public so tests can drive it). Does
+## nothing but a lookup unless the target's tile changed since the last re-plan.
+func tick() -> void:
+	if track_target.is_empty() or data == null or not data.is_resident() or not is_inside_tree():
+		return
+	var target := get_node_or_null(track_target) as Node3D
+	if target == null:
+		return
+	var local := _world_to_local_xz(target.global_position)
+	var tile := tile_at_local(local)
+	if tile == _tracked_tile or tile == Vector2i(-1, -1):
+		return
+	_replan_tracked(tile, local)
+
+func _tile_center(key: Vector2i) -> Vector2:
+	var cells := get_tile_cells(key)
+	return data.lattice_to_local(Vector2(cells.position) + Vector2(cells.size) * 0.5)
+
+func _replan_tracked(tile: Vector2i, local: Vector2) -> void:
+	var started := Time.get_ticks_usec()
+	var params := _bake_params()
+	if not params.ok:
+		if not _track_warned:
+			push_warning("Terrain navigation tracking: " + params.message)
+			_track_warned = true
+		return
+	_track_warned = false
+	_tracked_tile = tile
+	_stats.replans += 1
+	var config: Dictionary = params.config
+	if not _tiles.is_empty() and _tiles_config != config:
+		# One map never mixes bake settings: tiles of older settings are rebaked.
+		for key in _tiles.keys():
+			_release_tile(key)
+	var tile_cells_rect := get_tile_cells(tile)
+	var core := Rect2(data.lattice_to_local(Vector2(tile_cells_rect.position)), Vector2(tile_cells_rect.size) * float(params.spacing))
+	var keep_keys: Dictionary = {}
+	for key in tiles_in_local_rect(core.grow(track_radius * 1.25)):
+		keep_keys[key] = true
+	for key in _tiles.keys():
+		if not keep_keys.has(key):
+			_release_tile(key)
+	for key in _track_pending.keys():
+		if not keep_keys.has(key):
+			_track_pending.erase(key)
+	for key in _track_empty.keys():
+		if not keep_keys.has(key):
+			_track_empty.erase(key)
+	var missing: Array[Vector2i] = []
+	for key in tiles_in_local_rect(core.grow(track_radius)):
+		if not _tiles.has(key) and not _track_pending.has(key) and not _track_empty.has(key):
+			missing.append(key)
+	missing.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return _tile_distance(a, tile, local) < _tile_distance(b, tile, local))
+	for key in missing:
+		if _tiles.size() + _track_pending.size() >= max_tiles and not _evict_farther_than(_tile_distance(key, tile, local), tile, local):
+			break
+		var job := _make_job(key, params)
+		if job.is_empty():
+			_track_empty[key] = true
+		elif use_async:
+			_track_pending[key] = {"epoch": _track_epoch, "mesh": job.mesh, "config": config}
+			NavigationServer3D.bake_from_source_geometry_data_async(job.mesh, job.source, _track_completion(weakref(self), _track_epoch, key, job.mesh))
+		else:
+			NavigationServer3D.bake_from_source_geometry_data(job.mesh, job.source)
+			_publish_tile(key, job.mesh, config)
+	_stats.last_track_ms = (Time.get_ticks_usec() - started) / 1000.0
+
+## Distance used for eviction order; the target's own tile sorts before everything.
+func _tile_distance(key: Vector2i, target_tile: Vector2i, local: Vector2) -> float:
+	return -1.0 if key == target_tile else _tile_center(key).distance_to(local)
+
+## Evicts the farthest resident or pending tile when it is farther than `limit`;
+## false when nothing qualifies (the target's tile never does).
+func _evict_farther_than(limit: float, target_tile: Vector2i, local: Vector2) -> bool:
+	var worst := _NO_TILE
+	var worst_distance := limit
+	for key in _tiles:
+		var distance := _tile_distance(key, target_tile, local)
+		if distance > worst_distance:
+			worst = key
+			worst_distance = distance
+	for key in _track_pending:
+		var distance := _tile_distance(key, target_tile, local)
+		if distance > worst_distance:
+			worst = key
+			worst_distance = distance
+	if worst == _NO_TILE:
+		return false
+	_stats.evictions += 1
+	if _tiles.has(worst):
+		_release_tile(worst, false)
+	else:
+		_track_pending.erase(worst)
+	return true
+
+func _release_tile(key: Vector2i, count := true) -> void:
+	var region: NavigationRegion3D = _tiles.get(key)
+	_tiles.erase(key)
+	if region != null and is_instance_valid(region):
+		region.free()
+	if count:
+		_stats.releases += 1
+	tiles_changed.emit()
+
+func _publish_tile(key: Vector2i, mesh: NavigationMesh, config: Dictionary) -> void:
+	if _tiles.has(key):
+		_tiles[key].free()
+		_tiles.erase(key)
+	_stats.tiles_baked += 1
+	if mesh.get_polygon_count() == 0:
+		_track_empty[key] = true
+		tiles_changed.emit()
+		return
+	var region := NavigationRegion3D.new()
+	region.name = "Tile_%d_%d" % [key.x, key.y]
+	region.navigation_layers = navigation_layers
+	region.navigation_mesh = mesh
+	add_child(region)
+	_tiles[key] = region
+	_tiles_config = config
+	tiles_changed.emit()
+
+## Static so the callback never keeps a freed navigation node alive or calls it.
+static func _track_completion(owner: WeakRef, epoch: int, key: Vector2i, mesh: NavigationMesh) -> Callable:
+	return func() -> void:
+		var node: Object = owner.get_ref()
+		if node != null:
+			node.call_deferred("_on_track_tile_baked", epoch, key, mesh)
+
+func _on_track_tile_baked(epoch: int, key: Vector2i, mesh: NavigationMesh) -> void:
+	var entry: Variant = _track_pending.get(key)
+	if epoch != _track_epoch or entry == null or entry.mesh != mesh:
+		_stats.discarded_results += 1
+		return
+	_track_pending.erase(key)
+	_publish_tile(key, mesh, entry.config)
 
 func is_transform_valid() -> bool:
 	var basis := global_transform.basis
@@ -277,6 +465,10 @@ func is_config_current() -> bool:
 
 func _settings_changed() -> void:
 	_generation += 1
+	_track_epoch += 1
+	_track_pending.clear()
+	_track_empty.clear()
+	_tracked_tile = _NO_TILE
 	if _pending.is_empty(): return
 	var cancelled := int(_pending.generation)
 	_pending = {}
@@ -287,6 +479,10 @@ func is_baking() -> bool:
 
 func clear() -> void:
 	_generation += 1
+	_track_epoch += 1
+	_track_pending.clear()
+	_track_empty.clear()
+	_tracked_tile = _NO_TILE
 	var cancelled := int(_pending.get("generation", -1))
 	_pending = {}
 	for region in _tiles.values():
@@ -306,6 +502,9 @@ func get_regions() -> Array[NavigationRegion3D]:
 func get_stats() -> Dictionary:
 	var stats := _stats.duplicate()
 	stats.regions = _tiles.size()
+	stats.resident_tiles = _tiles.size()
+	stats.pending_tiles = _track_pending.size() + int(_pending.get("remaining", 0))
+	stats.tracked = not track_target.is_empty() and is_inside_tree() and get_node_or_null(track_target) is Node3D
 	stats.profile = profile
 	return stats
 
@@ -320,7 +519,9 @@ func _bake_config() -> Dictionary:
 	var cells := _resolved_cell_size()
 	return {"profile": profile, "tile_cells": tile_cells, "agent_radius": agent_radius, "agent_height": agent_height, "agent_max_climb": agent_max_climb, "agent_max_slope": agent_max_slope, "edge_max_error": edge_max_error, "cell_size": cells.x, "cell_height": cells.y}
 
-func _plan(local_rect: Rect2, keep_existing: bool) -> Dictionary:
+## Validates the settings and derives the voxel-rounded agent values shared by every
+## tile of one bake; `ok` false carries the message.
+func _bake_params() -> Dictionary:
 	if data == null or not data.validate().ok or not data.is_resident():
 		return _error("Navigation needs valid resident runtime terrain data")
 	if not data.has_nav_profile(profile):
@@ -345,12 +546,56 @@ func _plan(local_rect: Rect2, keep_existing: bool) -> Dictionary:
 	var tile_span := tile_cells * spacing / cells.x
 	if absf(tile_span - roundf(tile_span)) > 0.0001:
 		return _error("tile_cells * spacing (%s) must be a multiple of the navigation cell size %s" % [tile_cells * spacing, cells.x])
+	# Agent sizes in whole voxels, rounded as Recast does (height and radius up,
+	# climb down), so the effective values are explicit instead of warnings.
+	var radius := ceilf(agent_radius / cells.x - 0.0001) * cells.x
+	var height := ceilf(agent_height / cells.y - 0.0001) * cells.y
+	var climb := floorf(agent_max_climb / cells.y + 0.0001) * cells.y
+	# Recast recommends erosion radius + 3 voxels of border.
+	var border := radius + 3.0 * cells.x
+	return {"ok": true, "cells": cells, "spacing": spacing, "config": _bake_config(), "pad": ceili(border / spacing) + 1, "border": border,
+		"agent": {"radius": radius, "height": height, "max_climb": climb, "max_slope": agent_max_slope, "edge_max_error": edge_max_error, "cell_size": cells.x, "cell_height": cells.y, "border": border}}
+
+## One tile's bake job ({key, mesh, source, faces}); empty when the tile has no faces.
+func _make_job(key: Vector2i, params: Dictionary) -> Dictionary:
+	var cells: Vector2 = params.cells
+	var spacing: float = params.spacing
+	var border: float = params.border
+	var agent: Dictionary = params.agent
+	var tile := get_tile_cells(key)
+	var source_cells := tile.grow(int(params.pad)).intersection(Rect2i(Vector2i.ZERO, data.get_cell_resolution()))
+	var faces := build_source_faces(source_cells)
+	if faces.is_empty():
+		return {}
+	var source := NavigationMeshSourceGeometryData3D.new()
+	source.add_faces(faces, Transform3D.IDENTITY)
+	var mesh := NavigationMesh.new()
+	mesh.cell_size = cells.x
+	mesh.cell_height = cells.y
+	mesh.agent_radius = agent.radius
+	mesh.agent_height = agent.height
+	mesh.agent_max_climb = agent.max_climb
+	mesh.agent_max_slope = agent_max_slope
+	mesh.edge_max_error = edge_max_error
+	# Godot (4.4 through 4.7) trims border_size inward from the baking bounds, so the
+	# bounds are the tile grown by the border: the padded geometry is
+	# rasterized and the result is clipped exactly at the tile edge.
+	mesh.border_size = border
+	var start := data.lattice_to_local(Vector2(tile.position)) - Vector2.ONE * border
+	var size := Vector2(tile.size) * spacing + Vector2.ONE * border * 2.0
+	mesh.filter_baking_aabb = AABB(Vector3(start.x, data.height_min - float(agent.height) - 1.0, start.y), Vector3(size.x, data.height_max - data.height_min + float(agent.height) * 2.0 + 2.0, size.y))
+	return {"key": key, "mesh": mesh, "source": source, "faces": faces.size() / 3}
+
+func _plan(local_rect: Rect2, keep_existing: bool) -> Dictionary:
+	var params := _bake_params()
+	if not params.ok:
+		return params
 	var keys: Dictionary = {}
 	for key in tiles_in_local_rect(local_rect):
 		keys[key] = true
 	if keys.is_empty():
 		return _error("Requested navigation area does not overlap the terrain")
-	var config := _bake_config()
+	var config: Dictionary = params.config
 	var total := keys.duplicate()
 	if keep_existing:
 		for key in _tiles:
@@ -361,46 +606,19 @@ func _plan(local_rect: Rect2, keep_existing: bool) -> Dictionary:
 	var replace_all := keep_existing and not _tiles.is_empty() and _tiles_config != config
 	if replace_all:
 		keys = total
-	# Agent sizes in whole voxels, rounded as Recast does (height and radius up,
-	# climb down), so the effective values are explicit instead of warnings.
-	var radius := ceilf(agent_radius / cells.x - 0.0001) * cells.x
-	var height := ceilf(agent_height / cells.y - 0.0001) * cells.y
-	var climb := floorf(agent_max_climb / cells.y + 0.0001) * cells.y
-	# Recast recommends erosion radius + 3 voxels of border.
-	var border := radius + 3.0 * cells.x
-	var pad := ceili(border / spacing) + 1
 	var jobs: Array = []
 	var faces_total := 0
 	for key in keys:
-		var tile := get_tile_cells(key)
-		var source_cells := tile.grow(pad).intersection(Rect2i(Vector2i.ZERO, data.get_cell_resolution()))
-		var faces := build_source_faces(source_cells)
-		if faces.is_empty():
+		var job := _make_job(key, params)
+		if job.is_empty():
 			continue
-		faces_total += faces.size() / 3
-		var source := NavigationMeshSourceGeometryData3D.new()
-		source.add_faces(faces, Transform3D.IDENTITY)
-		var mesh := NavigationMesh.new()
-		mesh.cell_size = cells.x
-		mesh.cell_height = cells.y
-		mesh.agent_radius = radius
-		mesh.agent_height = height
-		mesh.agent_max_climb = climb
-		mesh.agent_max_slope = agent_max_slope
-		mesh.edge_max_error = edge_max_error
-		# Godot (4.4 through 4.7) trims border_size inward from the baking bounds, so the
-		# bounds are the tile grown by the border: the padded geometry is
-		# rasterized and the result is clipped exactly at the tile edge.
-		mesh.border_size = border
-		var start := data.lattice_to_local(Vector2(tile.position)) - Vector2.ONE * border
-		var size := Vector2(tile.size) * spacing + Vector2.ONE * border * 2.0
-		mesh.filter_baking_aabb = AABB(Vector3(start.x, data.height_min - height - 1.0, start.y), Vector3(size.x, data.height_max - data.height_min + height * 2.0 + 2.0, size.y))
-		jobs.append({"key": key, "mesh": mesh, "source": source})
+		faces_total += int(job.faces)
+		jobs.append(job)
 	var keep_keys := keys.duplicate()
 	if keep_existing:
 		for key in _tiles:
 			keep_keys[key] = true
-	return {"ok": true, "jobs": jobs, "keys": keep_keys, "faces": faces_total, "config": config, "replace_all": replace_all, "agent": {"radius": radius, "height": height, "max_climb": climb, "max_slope": agent_max_slope, "edge_max_error": edge_max_error, "cell_size": cells.x, "cell_height": cells.y, "border": border}}
+	return {"ok": true, "jobs": jobs, "keys": keep_keys, "faces": faces_total, "config": config, "replace_all": replace_all, "agent": params.agent}
 
 ## Terrain-local triangles for the cells in `cells` that are neither holes nor
 ## blocked for `profile`: two canonical final cell masks, checked per cell. No

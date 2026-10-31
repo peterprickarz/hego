@@ -47,8 +47,13 @@ enum ChunkKind { HEIGHTMAP, CONCAVE, EMPTY }
 	set(value):
 		if value < 1 or value > 4096: return
 		max_resident_chunks = value
+		_tracked_chunk = Vector2i(-2147483648, -2147483648)
 ## Optional gameplay focus (player, vehicle); not the camera. Its chunk change
-## triggers one prepare_around() call; standing still costs one lookup per tick.
+## triggers one re-plan: the chunks within `track_radius` of the target become the
+## resident set (replacing it), built synchronously on that physics tick; standing
+## still costs one lookup per tick. When the radius needs more than
+## `max_resident_chunks`, the chunks farthest from the target are left out (and the
+## farthest resident ones released); the chunk under the target is always resident.
 @export var track_target: NodePath:
 	set(value):
 		track_target = value
@@ -63,23 +68,46 @@ enum ChunkKind { HEIGHTMAP, CONCAVE, EMPTY }
 var _chunks: Dictionary = {}
 var _suppress_clear := false
 var _tracked_chunk := Vector2i(-2147483648, -2147483648)
-var _stats := {"builds": 0, "heightmap_builds": 0, "concave_builds": 0, "last_build_ms": 0.0, "rejections": 0}
+var _track_warned := false
+var _stats := {"builds": 0, "heightmap_builds": 0, "concave_builds": 0, "last_build_ms": 0.0, "last_prepare_ms": 0.0, "rejections": 0, "evictions": 0}
 
 func _ready() -> void:
 	set_physics_process(not track_target.is_empty())
 
 func _physics_process(_delta: float) -> void:
+	tick()
+
+## One tracking step (called every physics frame; public so tests can drive it).
+func tick() -> void:
+	if track_target.is_empty() or data == null or not data.is_resident():
+		return
 	var target := get_node_or_null(track_target) as Node3D
-	if target == null or data == null or not data.is_resident():
+	if target == null:
 		return
-	var chunk := chunk_at_local(_world_to_local_xz(target.global_position))
-	if chunk == _tracked_chunk:
+	var local := _world_to_local_xz(target.global_position)
+	var chunk := chunk_at_local(local)
+	if chunk == _tracked_chunk or chunk == Vector2i(-1, -1):
 		return
-	var result := prepare_around(target.global_position, track_radius)
+	# A target off the terrain is tracked at the nearest terrain point.
+	var focus := Vector2(clampf(local.x, data.bounds.position.x, data.bounds.end.x), clampf(local.y, data.bounds.position.y, data.bounds.end.y))
+	var wanted := chunks_in_local_rect(Rect2(focus - Vector2.ONE * track_radius, Vector2.ONE * track_radius * 2.0))
+	if wanted.size() > max_resident_chunks:
+		wanted.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return _chunk_distance(a, chunk, focus) < _chunk_distance(b, chunk, focus))
+		wanted.resize(max_resident_chunks)
+	var result := _prepare_keys(wanted, false)
 	if result.ok:
 		_tracked_chunk = chunk
-	else:
+		_track_warned = false
+	elif not _track_warned:
+		_track_warned = true
 		push_warning("Terrain collision tracking: " + result.message)
+
+## Eviction order: the target's own chunk sorts before everything, then by centre distance.
+func _chunk_distance(key: Vector2i, target_chunk: Vector2i, focus: Vector2) -> float:
+	if key == target_chunk:
+		return -1.0
+	var cells := get_chunk_cells(key)
+	return data.lattice_to_local(Vector2(cells.position) + Vector2(cells.size) * 0.5).distance_to(focus)
 
 ## Terrain-local XZ; this node is expected at identity under the terrain root.
 func _world_to_local_xz(world_position: Vector3) -> Vector2:
@@ -141,7 +169,13 @@ func prepare_region(local_rect: Rect2, keep_existing := false) -> Dictionary:
 		return _reject("Collision needs valid resident runtime terrain data")
 	if not is_transform_valid():
 		return _reject("Terrain collision supports translation and yaw with unit scale only")
-	var wanted := chunks_in_local_rect(local_rect)
+	return _prepare_keys(chunks_in_local_rect(local_rect), keep_existing)
+
+func _prepare_keys(wanted: Array[Vector2i], keep_existing: bool) -> Dictionary:
+	if data == null or not data.validate().ok or not data.is_resident():
+		return _reject("Collision needs valid resident runtime terrain data")
+	if not is_transform_valid():
+		return _reject("Terrain collision supports translation and yaw with unit scale only")
 	if wanted.is_empty(): return _reject("Collision region does not overlap the terrain; previous residency retained")
 	var keys: Dictionary = {}
 	for key in wanted:
@@ -163,6 +197,7 @@ func prepare_region(local_rect: Rect2, keep_existing := false) -> Dictionary:
 			built[key] = chunk
 	_publish(keys, built)
 	_stats.last_build_ms = (Time.get_ticks_usec() - started) / 1000.0
+	_stats.last_prepare_ms = _stats.last_build_ms
 	return {"ok": true, "built": built.size(), "resident": _chunks.size()}
 
 ## Square gameplay area around a world position (player, spawn point, NPC).
@@ -240,6 +275,7 @@ func _publish(keys: Dictionary, built: Dictionary) -> void:
 			var chunk: Dictionary = _chunks[key]
 			if chunk.body != null: chunk.body.free()
 			_chunks.erase(key)
+			_stats.evictions += 1
 	for key in built:
 		var chunk: Dictionary = built[key]
 		if chunk.body != null:
@@ -376,4 +412,7 @@ func collision_status_at(position: Vector2) -> int:
 func get_stats() -> Dictionary:
 	var stats := _stats.duplicate()
 	stats.resident = _chunks.size()
+	stats.resident_chunks = _chunks.size()
+	stats.pending = 0
+	stats.tracked = not track_target.is_empty() and is_inside_tree() and get_node_or_null(track_target) is Node3D
 	return stats

@@ -1,10 +1,12 @@
 class_name HEGoIslandPlayer
 extends CharacterBody3D
 ## Small runtime player for exercising the compiled island's chunked collision.
-## Collision residency follows this body, never the free-fly/showcase camera.
+## Collision and navigation residency follow this body, never the free-fly/showcase camera.
 
 @export var terrain: StrataTerrain3D
 @export var collision: StrataCollision
+## Optional; when set, its tiles follow the player like the collision chunks do.
+@export var navigation: StrataNavigation
 @export var player_camera: Camera3D
 @export var spawn_local_xz := Vector2.ZERO
 @export var spawn_height := 2.0
@@ -13,6 +15,7 @@ extends CharacterBody3D
 @export var jump_speed := 8.5
 @export var mouse_sensitivity := 0.0025
 @export var follow_collision_radius := 96.0
+@export var follow_navigation_radius := 96.0
 
 var _enabled := false
 var _saved_camera_parent: Node
@@ -25,6 +28,9 @@ var _saved_camera_unhandled_input := false
 var _camera_pitch := 0.0
 var _gravity := 9.8
 var _saved_collision_track_target := NodePath()
+var _saved_collision_track_radius := 96.0
+var _saved_navigation_track_target := NodePath()
+var _saved_navigation_track_radius := 96.0
 
 func _ready() -> void:
 	add_to_group("hego_island_player")
@@ -73,9 +79,15 @@ func _prepare_spawn_and_camera() -> bool:
 	if not prepared.get("ok", false):
 		push_warning("Could not prepare nearby island collision: %s" % prepared.get("message", "unknown error"))
 		return false
-	collision.track_radius = follow_collision_radius
 	_saved_collision_track_target = collision.track_target
+	_saved_collision_track_radius = collision.track_radius
+	collision.track_radius = follow_collision_radius
 	collision.track_target = collision.get_path_to(self)
+	if navigation != null:
+		_saved_navigation_track_target = navigation.track_target
+		_saved_navigation_track_radius = navigation.track_radius
+		navigation.track_radius = follow_navigation_radius
+		navigation.track_target = navigation.get_path_to(self)
 	_attach_camera()
 	return true
 
@@ -120,8 +132,14 @@ func _disable_player() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if collision != null:
 		collision.track_target = _saved_collision_track_target
+		collision.track_radius = _saved_collision_track_radius
 		if _saved_collision_track_target.is_empty():
 			collision.clear()
+	if navigation != null:
+		# The tiles stay resident (the level's fixed navigation survives the player);
+		# only the tracking settings return to what they were.
+		navigation.track_target = _saved_navigation_track_target
+		navigation.track_radius = _saved_navigation_track_radius
 
 func _physics_process(delta: float) -> void:
 	var input_x := float(Input.is_key_pressed(KEY_D)) - float(Input.is_key_pressed(KEY_A))

@@ -252,10 +252,10 @@ func run() -> void:
 	player.position = Vector3(data.lattice_to_local(Vector2(20, 12)).x, 0, data.lattice_to_local(Vector2(20, 12)).y)
 	collision.track_target = collision.get_path_to(player)
 	await physics_frame
-	check(collision.get_resident_chunks().is_empty(), "temporarily over-budget tracked area does not publish partial chunks")
+	check(collision.get_resident_chunks() == [collision.chunk_at_local(Vector2(player.position.x, player.position.z))], "an over-budget tracked area keeps only the chunk under the target")
 	collision.max_resident_chunks = 64
 	for frame in range(3): await physics_frame
-	check(collision.get_resident_chunks().size() == 6, "tracking retries the unchanged target after transient failure")
+	check(collision.get_resident_chunks().size() == 6, "raising the budget re-plans the unchanged target")
 	collision.track_target = NodePath()
 	collision.chunk_cells = 8
 	check(collision.get_resident_chunks().is_empty() and collision.get_chunk_grid() == Vector2i(5, 3), "valid chunk configuration change invalidates old shape indexing")
