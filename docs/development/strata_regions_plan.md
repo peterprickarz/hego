@@ -1,6 +1,6 @@
 # Strata regions: plan
 
-Status: approved 2026-10-31. Phase A tracks F, N, R, D, C, E, H1 and X landed on 2026-10-31; H2 (island) in progress. This is the engineering plan for moving
+Status: approved 2026-10-31. Phase A (tracks F, N, R, D, C, E, H and X) landed on 2026-10-31; the island is recooked at 1 m. Phase B (residency) is next. This is the engineering plan for moving
 Strata from whole-terrain maps to fixed-size regions. User-facing behaviour is described in
 `docs/strata/` once each phase lands; this page is the contract the implementation tracks
 build against.

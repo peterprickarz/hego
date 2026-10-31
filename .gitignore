@@ -23,10 +23,9 @@ terrain/integration_bin/
 /scripts/tests/__pycache__/
 
 # The island terrain lives at fixed paths under demo/island/terrain (see StrataStorage).
-# Layers and cooked channels are committed; the bake and control maps are rebuilt on open.
+# Layers and cooked channels are committed; the region bake (manifest + regions/) is rebuilt on open.
 /demo/island/terrain/runtime_data.res
-/demo/island/terrain/material_ids.res
-/demo/island/terrain/material_weights.res
+/demo/island/terrain/regions/
 /demo/island/terrain/*~.res
 /demo/island/terrain/*/*~.res
 
