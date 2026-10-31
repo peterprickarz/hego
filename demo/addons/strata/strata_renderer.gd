@@ -893,6 +893,31 @@ func _bind_control_maps() -> void:
 		_shader_material.set_shader_parameter("control_ids", _control_ids_texture)
 		_shader_material.set_shader_parameter("control_weights", _control_weights_texture)
 
+## Replaces the texel rectangle at [param origin] of the maps [method set_control_maps]
+## accepted with [param ids]/[param weights], a region of complete maps in the same
+## formats. Only the region is validated and normalized, as set_control_maps does for every
+## texel, so a brush dab costs its rectangle rather than the whole lattice. The textures are
+## updated in place. False (previous maps retained) for an invalid or out-of-range region.
+func update_control_region(ids: Image, weights: Image, origin: Vector2i) -> bool:
+	if _control_ids == null or _control_weights == null or _control_ids_texture == null or _control_weights_texture == null: return false
+	if ids == null or weights == null or ids.get_size() != weights.get_size() or ids.get_width() < 1 or ids.get_height() < 1: return false
+	if origin.x < 0 or origin.y < 0 or origin.x + ids.get_width() > _control_ids.get_width() or origin.y + ids.get_height() > _control_ids.get_height(): return false
+	if not _validate_control_images(ids, weights, _materials.size() if not _materials.is_empty() else 32):
+		return false
+	var region_weights: Image = weights.duplicate()
+	region_weights.convert(Image.FORMAT_RGBAF)
+	for z in range(region_weights.get_height()):
+		for x in range(region_weights.get_width()):
+			var value := region_weights.get_pixel(x, z)
+			var total := float(value.r) + float(value.g) + float(value.b) + float(value.a)
+			if total > 0.0:
+				region_weights.set_pixel(x, z, Color(value.r / total, value.g / total, value.b / total, value.a / total))
+	_control_ids.blit_rect(ids, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
+	_control_weights.blit_rect(region_weights, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
+	_control_ids_texture.update(_control_ids)
+	_control_weights_texture.update(_control_weights)
+	return true
+
 static func _validate_control_images(ids: Image, weights: Image, material_count: int) -> bool:
 	if ids.get_format() != Image.FORMAT_RGBA8:
 		push_warning("Control IDs must use categorical RGBA8 bytes; previous maps retained.")

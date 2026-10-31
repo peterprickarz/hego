@@ -38,6 +38,7 @@ void StrataLayerData::_bind_methods() {
     ClassDB::bind_method(D_METHOD("snapshot"), &StrataLayerData::snapshot);
     ClassDB::bind_method(D_METHOD("restore", "snapshot"), &StrataLayerData::restore);
     ClassDB::bind_method(D_METHOD("get_revision"), &StrataLayerData::get_revision);
+    ClassDB::bind_method(D_METHOD("get_channel_revision", "channel"), &StrataLayerData::get_channel_revision);
     ClassDB::bind_method(D_METHOD("replace_dense", "channel", "index_origin", "image", "ownership"), &StrataLayerData::replace_dense, DEFVAL(Ref<Image>()));
     ClassDB::bind_method(D_METHOD("read_dense", "channel", "index_origin", "resolution"), &StrataLayerData::read_dense);
     ClassDB::bind_method(D_METHOD("patch_dense", "channel", "index_origin", "image", "mask"), &StrataLayerData::patch_dense, DEFVAL(Ref<Image>()));
@@ -46,7 +47,8 @@ void StrataLayerData::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_owned_rect", "channel"), &StrataLayerData::get_owned_rect);
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("validate_dense", "image", "ownership"), &StrataLayerData::validate_dense, DEFVAL(Ref<Image>()));
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("pack_material_weights", "images"), &StrataLayerData::pack_material_weights);
-    ClassDB::bind_static_method("StrataLayerData", D_METHOD("compose_dense", "layers", "channel", "origin", "step_x", "step_y", "resolution", "bounds", "include_coverage", "subtract_datum"), &StrataLayerData::compose_dense, DEFVAL(true), DEFVAL(0.0));
+    ClassDB::bind_static_method("StrataLayerData", D_METHOD("pack_material_weights_sparse", "images"), &StrataLayerData::pack_material_weights_sparse);
+    ClassDB::bind_static_method("StrataLayerData", D_METHOD("compose_dense", "layers", "channel", "origin", "step_x", "step_y", "resolution", "bounds", "include_coverage", "subtract_datum", "index_offset"), &StrataLayerData::compose_dense, DEFVAL(true), DEFVAL(0.0), DEFVAL(Vector2i()));
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("compile_cell_mask", "layers", "channel", "bounds", "vertex_resolution", "max_work", "max_fragments"), &StrataLayerData::compile_cell_mask, DEFVAL(int64_t(268435456)), DEFVAL(4096));
     // Godot omits properties equal to their class defaults. Serializing a
     // standalone version=1 property would therefore lose the declaration.
@@ -92,6 +94,15 @@ void StrataLayerData::mark_changed() {
     if (revision < std::numeric_limits<int64_t>::max()) {
         ++revision;
     }
+    layout_revision = revision;
+    emit_changed();
+}
+
+void StrataLayerData::mark_channel_changed(const String &p_channel) {
+    if (revision < std::numeric_limits<int64_t>::max()) {
+        ++revision;
+    }
+    channel_revisions[p_channel] = revision;
     emit_changed();
 }
 
@@ -152,7 +163,7 @@ void StrataLayerData::set_sample(StringName p_channel, Vector2i p_index, double 
         ++tile.owned_count;
     }
     tile.values[offset] = value;
-    mark_changed();
+    mark_channel_changed(name);
 }
 
 void StrataLayerData::erase_sample(StringName p_channel, Vector2i p_index) {
@@ -177,7 +188,7 @@ void StrataLayerData::erase_sample(StringName p_channel, Vector2i p_index) {
             channels.erase(channel_it);
         }
     }
-    mark_changed();
+    mark_channel_changed(String(p_channel));
 }
 
 bool StrataLayerData::has_sample(StringName p_channel, Vector2i p_index) const {
@@ -276,7 +287,7 @@ Dictionary StrataLayerData::sample_channel(StringName p_channel, Vector2 p_posit
 
 void StrataLayerData::clear_channel(StringName p_channel) {
     if (channels.erase(String(p_channel)) != 0) {
-        mark_changed();
+        mark_channel_changed(String(p_channel));
     }
 }
 
@@ -411,5 +422,10 @@ void StrataLayerData::restore(const Dictionary &p_snapshot) {
 }
 
 int64_t StrataLayerData::get_revision() const { return revision; }
+
+int64_t StrataLayerData::get_channel_revision(StringName p_channel) const {
+    const auto found = channel_revisions.find(String(p_channel));
+    return std::max(layout_revision, found == channel_revisions.end() ? int64_t(0) : found->second);
+}
 
 } // namespace Strata

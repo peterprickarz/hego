@@ -53,6 +53,11 @@ public:
     godot::Dictionary snapshot() const;
     void restore(const godot::Dictionary &p_snapshot);
     int64_t get_revision() const;
+    // Revision at which this channel last changed: a dab on one channel leaves every other
+    // channel's value unchanged, so caches keyed on one channel survive edits to the rest.
+    // Grid changes and whole-resource loads/restores advance every channel. Comparable only
+    // with values from the same resource; get_revision() still advances on every change.
+    int64_t get_channel_revision(godot::StringName p_channel) const;
     // Dense imports bound retained tile storage to 512 MiB, including other
     // channels. Legacy sparse edits/restore have no such cap. Atomic replacement
     // temporarily retains both old and new channels plus transport images.
@@ -71,11 +76,17 @@ public:
     // Registry-order scalar fields (1 to 32), one lattice <=1025². Mechanical top4
     // selection only; all habitat/placement rules remain in the producer.
     static godot::Dictionary pack_material_weights(const godot::Array &p_images);
+    // Same packing for editor views of a partially assigned stack: a texel whose weights
+    // are all zero becomes four zero weights with ID 0 instead of failing the pack.
+    // Adds "unassigned" (texel count) and "empty"; with unassigned texels the coverage
+    // and discarded-weight diagnostics describe the assigned texels only.
+    static godot::Dictionary pack_material_weights_sparse(const godot::Array &p_images);
     // Captured descriptors: data, origin/step_x/step_y (physical Vector3),
     // mode (0 replace/1 add), height_offset (scalar, normally plane Y).
     static godot::Dictionary compose_dense(const godot::Array &p_layers, godot::StringName p_channel,
             godot::Vector3 p_origin, godot::Vector3 p_step_x, godot::Vector3 p_step_y, godot::Vector2i p_resolution,
-            godot::Rect2 p_bounds, bool p_include_coverage = true, double p_subtract_datum = 0.0);
+            godot::Rect2 p_bounds, bool p_include_coverage = true, double p_subtract_datum = 0.0,
+            godot::Vector2i p_index_offset = godot::Vector2i());
     static godot::Dictionary compile_cell_mask(const godot::Array &p_layers, godot::StringName p_channel,
             godot::Rect2 p_bounds, godot::Vector2i p_vertex_resolution, int64_t p_max_work = 268435456, int p_max_fragments = 4096);
 
@@ -94,11 +105,15 @@ private:
     using Channels = std::map<godot::String, Channel>;
     struct GridSampler;
     struct MaskSampler;
+    static godot::Dictionary pack_material_weights_impl(const godot::Array &p_images, bool p_allow_unassigned);
 
     double sample_spacing = 1.0;
     godot::Vector2 grid_origin;
     Channels channels;
     int64_t revision = 0;
+    // See get_channel_revision(): per-channel last change, and the last change of all.
+    std::map<godot::String, int64_t> channel_revisions;
+    int64_t layout_revision = 0;
     // Canonical Resource storage is one versioned serialized_data snapshot.
     // This guard also rejects later payload setters after an unsupported manual
     // format declaration; restore() validates its own version atomically.
@@ -113,6 +128,7 @@ private:
     const Tile *find_tile(const godot::String &p_channel, godot::Vector2i p_index) const;
     bool edit_dense(const godot::String &p_channel, godot::Vector2i p_index_origin, godot::Vector2i p_size, const godot::Ref<godot::Image> &p_image, const godot::Ref<godot::Image> &p_mask, bool p_write_selected, bool p_erase_unselected);
     void mark_changed();
+    void mark_channel_changed(const godot::String &p_channel);
 };
 
 } // namespace Strata

@@ -86,6 +86,17 @@ distant terrain patches.
 - Static `compose_dense` accepts captured source descriptors containing `data`,
   physical `origin/step_x/step_y`, `mode` (0 Replace/1 Add) and `height_offset`.
   The GDScript compiler supplies these descriptors; native code performs sampling.
+  A trailing `index_offset:Vector2i` composes a window of a larger lattice: output
+  texel (x, y) is lattice point (x + offset.x, y + offset.y), computed with the same
+  expression as the whole lattice, so the window is bit-identical to that rectangle of
+  a complete composition. The editor preview uses it to recompose only a brush dab's
+  rectangle of the 4 m material controls and the scalar channel view.
+- `get_channel_revision(channel)->int` is the resource revision at which that channel
+  last changed. Sample, region, replace and clear edits advance only their channel;
+  grid changes and whole-resource loads or restores advance every channel.
+  `get_revision()` still advances on every change. Caches keyed on a few channels,
+  such as the editor's material controls (`StrataMaterialControls.signature`), use it
+  so a height or mask dab on a layer that also holds material samples keeps them.
 
 Raw procedural snapshots preserve each channel's physical basis and native
 resolution, with separate binary `__ownership` images. `compact_empty:true`

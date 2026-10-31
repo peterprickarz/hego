@@ -56,6 +56,14 @@ bool image_bytes(const Ref<Image> &image, PackedByteArray &bytes) {
 } // namespace
 
 Dictionary StrataLayerData::pack_material_weights(const Array &images) {
+    return pack_material_weights_impl(images, false);
+}
+
+Dictionary StrataLayerData::pack_material_weights_sparse(const Array &images) {
+    return pack_material_weights_impl(images, true);
+}
+
+Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool allow_unassigned) {
     const int count_ids = int(images.size());
     if (count_ids < 1 || count_ids > 32) return failure("Material packing requires 1 to 32 registry-order scalar images.");
     PackedByteArray fields[32];
@@ -84,6 +92,7 @@ Dictionary StrataLayerData::pack_material_weights(const Array &images) {
     int64_t positive[32] = {}, dominant[32] = {}, retained[32] = {};
     double input_mass[32] = {}, retained_mass[32] = {};
     double discarded_sum = 0.0, discarded_max = 0.0;
+    int64_t unassigned = 0;
     for (int64_t pixel = 0; pixel < count; ++pixel) {
         double values[32], total = 0.0;
         int top_ids[4] = {0, 0, 0, 0};
@@ -101,6 +110,12 @@ Dictionary StrataLayerData::pack_material_weights(const Array &images) {
                     top[slot] = value; top_ids[slot] = id; break;
                 }
             }
+        }
+        if (allow_unassigned && total == 0.0) {
+            // Unassigned editor texel: exact zero weights, ID 0, outside every diagnostic.
+            for (int slot = 0; slot < 4; ++slot) { out_ids[pixel * 4 + slot] = 0; store_float(out_weights, pixel * 4 + slot, 0.0f); }
+            ++unassigned;
+            continue;
         }
         if (!(total > 0.0) || !std::isfinite(total)) return failure("Every material texel needs positive total weight; the HDA must provide complete coverage, including underwater.");
         double kept = 0.0;
@@ -130,6 +145,7 @@ Dictionary StrataLayerData::pack_material_weights(const Array &images) {
     result["weights"] = Image::create_from_data(size.x, size.y, false, Image::FORMAT_RGBAF, weights);
     result["coverage"] = coverage; result["samples"] = count;
     result["discarded_weight_max"] = discarded_max; result["discarded_weight_mean"] = discarded_sum / count;
+    if (allow_unassigned) { result["unassigned"] = unassigned; result["empty"] = unassigned == count; }
     return result;
 }
 
@@ -216,7 +232,7 @@ bool StrataLayerData::replace_dense(StringName channel_name, Vector2i origin, co
         if (old == channels.end()) return true;
         channels.erase(old);
     } else channels[name] = std::move(replacement);
-    mark_changed();
+    mark_channel_changed(name);
     return true;
 }
 
@@ -282,7 +298,7 @@ bool StrataLayerData::edit_dense(const String &name, Vector2i origin, Vector2i s
         }
     }
     if (channel.empty()) channels.erase(name);
-    if (changed) mark_changed();
+    if (changed) mark_channel_changed(name);
     return true;
 }
 
@@ -411,9 +427,14 @@ struct StrataLayerData::GridSampler {
     }
 };
 
-Dictionary StrataLayerData::compose_dense(const Array &layers, StringName channel_name, Vector3 origin, Vector3 sx, Vector3 sy, Vector2i size, Rect2 bounds, bool include_coverage, double subtract_datum) {
+// index_offset composes a window of a larger lattice: output texel (x, y) is lattice point
+// (x + offset.x, y + offset.y), computed with the same expression as the whole lattice, so
+// a window is bit-identical to the matching rectangle of a full composition.
+Dictionary StrataLayerData::compose_dense(const Array &layers, StringName channel_name, Vector3 origin, Vector3 sx, Vector3 sy, Vector2i size, Rect2 bounds, bool include_coverage, double subtract_datum, Vector2i index_offset) {
     if (!valid_size(size) || !valid_grid(origin, sx, sy) || !bounds.position.is_finite() || !bounds.size.is_finite() || bounds.size.x < 0 || bounds.size.y < 0 || !std::isfinite(subtract_datum) || layers.size() > 64) return failure("Invalid or oversized dense composition grid/layer count.");
-    if (!finite_vector(origin + sx * (size.x - 1)) || !finite_vector(origin + sy * (size.y - 1)) || !finite_vector(origin + sx * (size.x - 1) + sy * (size.y - 1)) || !(bounds.position + bounds.size).is_finite()) return failure("Composed grid corners exceed coordinate range.");
+    if (index_offset.x < 0 || index_offset.y < 0 || int64_t(index_offset.x) + size.x > MAX_DENSE_SAMPLES || int64_t(index_offset.y) + size.y > MAX_DENSE_SAMPLES) return failure("Dense composition window offset must be nonnegative and bounded.");
+    const int last_x = index_offset.x + size.x - 1, last_y = index_offset.y + size.y - 1;
+    if (!finite_vector(origin + sx * last_x) || !finite_vector(origin + sy * last_y) || !finite_vector(origin + sx * last_x + sy * last_y) || !(bounds.position + bounds.size).is_finite()) return failure("Composed grid corners exceed coordinate range.");
     std::vector<GridSampler> samplers;
     for (int i = 0; i < layers.size(); ++i) {
         if (Variant(layers[i]).get_type() != Variant::DICTIONARY) return failure("Composition layers must be captured descriptor Dictionaries.");
@@ -439,7 +460,7 @@ Dictionary StrataLayerData::compose_dense(const Array &layers, StringName channe
     double minimum = std::numeric_limits<double>::infinity(), maximum = -minimum;
     const bool height_channel = channel_name == StringName("height");
     for (int y = 0; y < size.y; ++y) for (int x = 0; x < size.x; ++x) {
-        const Vector3 point = origin + sx * x + sy * y;
+        const Vector3 point = origin + sx * (x + index_offset.x) + sy * (y + index_offset.y);
         if (!finite_vector(point)) return failure("Composed sample positions exceed Vector3 range.");
         double value = 0, coverage = 0;
         if (point.x >= bounds.position.x && point.z >= bounds.position.y && point.x <= bounds.position.x + bounds.size.x && point.z <= bounds.position.y + bounds.size.y) {

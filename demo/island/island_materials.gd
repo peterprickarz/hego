@@ -120,8 +120,7 @@ static func above_state(terrain: StrataTerrain3D, target: StrataLayer) -> Array:
 		var owned := layer.get_channel_names()
 		for channel in names:
 			if not owned.has(channel): continue
-			var field: StrataFieldData = layer.procedural_fields.get(channel)
-			entries.append([channel, layer.get_composition(StringName(channel)), field.signature() if field != null else [layer.data.get_instance_id(), layer.data.get_revision()]])
+			entries.append([channel, layer.get_composition(StringName(channel)), StrataMaterialControls.channel_signature(layer, channel)])
 		state.append([layer.get_instance_id(), entries])
 	return state
 
