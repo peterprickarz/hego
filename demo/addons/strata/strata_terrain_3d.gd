@@ -123,8 +123,14 @@ var override_channel: StringName = &"height":
 ## stored in the scene.
 signal runtime_data_changed
 signal runtime_bake_stale_changed(stale: bool)
+@export_group("Runtime")
 @export var runtime_data: StrataRuntimeData
 @export var runtime_bake_stale := true
+## Bakes the complete enabled stack at the region spacing with holes and navigation
+## exclusions, publishes it (and saves it to the storage directory when there is one). Saved
+## procedural results are baked as they are, so a reopened scene needs no recook first.
+@export_tool_button("Bake runtime data", "Bake") var bake_runtime_button = bake_runtime
+@export_group("")
 var _runtime_signature: Variant = null
 ## Seconds between checks of the procedural layers' [member StrataLayer.source_tokens].
 const SOURCE_POLL_INTERVAL := 0.25
@@ -148,6 +154,20 @@ func save_to_storage() -> void:
 		print("Strata: ", result.message)
 	else:
 		push_error("Strata: " + String(result.message))
+
+## The inspector's bake: [method StrataBake.bake] with cell masks and the saved procedural
+## results, reported to the output. Returns the bake result ({ok, message, data, report}).
+func bake_runtime(options: Dictionary = {}) -> Dictionary:
+	var merged := {"cell_masks": true, "allow_stale_procedural": true}
+	merged.merge(options, true)
+	var started := Time.get_ticks_msec()
+	var result := StrataBake.bake(self, merged)
+	if result.get("ok", false):
+		var report: Dictionary = result.report
+		print("Strata: baked %s regions of %d cells at %s m in %.1f s%s" % [report.grid, int(report.cells), str(report.spacing), (Time.get_ticks_msec() - started) / 1000.0, " to " + String(report.region_directory) if not String(report.get("region_directory", "")).is_empty() else ""])
+	else:
+		push_error("Strata: bake failed: " + String(result.get("message", "")))
+	return result
 
 func _children_changed() -> void:
 	_sanitize_preview_layer()

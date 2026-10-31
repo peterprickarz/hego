@@ -60,6 +60,7 @@ A cook sets the composition of each channel it publishes from `hegostrata_compos
 | `enabled` | `StrataLayer` | whether the layer takes part in the stack |
 | `runtime_data` | `StrataTerrain3D` | the published bake |
 | `runtime_bake_stale` | `StrataTerrain3D` | the stack changed since the bake; also `is_runtime_bake_stale()` and the `runtime_bake_stale_changed(stale)` signal |
+| **Bake runtime data** | `StrataTerrain3D` | inspector button, Runtime group: `bake_runtime()`, a `StrataBake.bake` with cell masks that accepts saved cooks and publishes the result |
 
 ## Regions
 

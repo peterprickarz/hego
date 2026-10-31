@@ -288,6 +288,9 @@ func run() -> void:
 	check(terrain.is_runtime_bake_stale(), "procedural stale intent invalidates an otherwise unchanged bake")
 	var accepted_options := options.duplicate(); accepted_options.allow_stale_procedural = true
 	check(StrataBake.bake(terrain, accepted_options).ok and not terrain.is_runtime_bake_stale(), "explicitly accepted cached stale state can be freshly baked")
+	# The inspector's Bake runtime data button: cell masks on, saved cooks accepted, published.
+	var inspector_bake := terrain.bake_runtime()
+	check(inspector_bake.get("ok", false) and terrain.runtime_data == inspector_bake.data and not terrain.is_runtime_bake_stale() and terrain.runtime_data.has_map("holes") and inspector_bake.report.mask_source == "layers", "the inspector bake publishes the stack with layer-derived cell masks")
 	detail.mark_producer_intent()
 	check(terrain.is_runtime_bake_stale(), "a new intent revision invalidates a deliberately accepted cache even while already procedural-stale")
 	detail.procedural_stale = false

@@ -216,8 +216,11 @@ a copy of them for the runtime renderer.
 ## Bake
 
 Collision, navigation and runtime queries read the bake, so bake whenever you want them to
-see your changes. There is no bake button; run it from a script. An `EditorScript` you run
-with **File → Run** in the script editor works well:
+see your changes. Select the terrain and press **Bake runtime data** in the inspector's
+Runtime group: it bakes the whole enabled stack at the region spacing, with holes and
+navigation exclusions, and publishes the result (saving it to the storage directory when the
+terrain has one). The same bake from a script, for example an EditorScript you run with
+File → Run, or a build step:
 
 ```gdscript
 @tool
@@ -225,30 +228,24 @@ extends EditorScript
 
 func _run() -> void:
     var terrain := get_scene().get_node("Terrain") as StrataTerrain3D
-    var options := {
-        "spacing": 1.0,        # metres between baked samples
-        "cell_masks": true,    # bake the hole and nav_exclusion channels
-    }
-    var controls := StrataMaterialControls.compose(terrain, terrain.editor_material_channels)
-    if controls.get("ok", false):
-        options.material_ids = controls.ids
-        options.material_weights = controls.weights
-    var result := StrataBake.bake(terrain, options)
+    var result := terrain.bake_runtime()   # StrataBake.bake with cell_masks and saved cooks
     if result.ok:
-        print("Baked ", result.report.resolution)
-    else:
-        push_warning(result.message)
+        print("Baked ", result.report.grid, " regions")
 ```
+
+`StrataBake.bake(terrain, options)` takes the full option set (spacing, region size, retained
+channels, navigation profiles, mip levels); `bake_runtime(options)` passes extra options
+through.
 
 Things to know:
 
 - `base_bounds` must be a whole number of `spacing` intervals.
-- Holes and navigation exclusions are only baked with `cell_masks`.
+- Holes and navigation exclusions are only baked with `cell_masks` (the button sets it).
 - A failed bake leaves the previous bake in place.
-- The bake refuses procedural layers that are stale or have never been cooked. A layer
-  loaded from disk counts as stale until its producer cooks again, so after reopening a
-  scene either recook, or pass `"allow_stale_procedural": true` to bake the saved results
-  as they are.
+- `StrataBake.bake` refuses procedural layers that are stale or have never been cooked. A
+  layer loaded from disk counts as stale until its producer cooks again, so after reopening
+  a scene either recook, or pass `"allow_stale_procedural": true` to bake the saved results
+  as they are; the button and `bake_runtime()` do that.
 - With a storage directory, the bake is written there: `runtime_data.res` and a `regions/`
   folder with two files per region, `region_<i>_<j>.res` (full detail) and
   `region_<i>_<j>.lod.res` (reduced detail for distant regions). Without a storage directory
