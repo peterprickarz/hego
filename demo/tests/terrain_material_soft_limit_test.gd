@@ -115,6 +115,14 @@ uniform vec2 field_origin = vec2(0.0);
 uniform vec2 field_size = vec2(1.0);
 uniform vec2 probes[32];
 uniform bool height_blend_enabled = true;
+void terrain_control_corner(vec2 position, ivec2 offset, out ivec4 ids, out vec4 weights, out vec2 fraction) {
+ ivec2 dimensions = textureSize(control_ids, 0);
+ vec2 grid = clamp((position - field_origin) / field_size, vec2(0.0), vec2(1.0)) * vec2(dimensions - ivec2(1));
+ fraction = fract(grid);
+ ivec2 texel = min(ivec2(floor(grid)) + offset, dimensions - ivec2(1));
+ ids = ivec4(round(texelFetch(control_ids, texel, 0) * 255.0));
+ weights = texelFetch(control_weights, texel, 0);
+}
 """ + FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_controls.gdshaderinc") + FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_height_blend.gdshaderinc") + """
 float alpha_for(int id) { return id == 0 ? 0.2 : id == 1 ? 0.35 : id == 2 ? 0.5 : id == 3 ? 0.8 : 0.65; }
 float red_for(int id) { return id == 0 || id == 3 ? 1.0 : 0.0; }

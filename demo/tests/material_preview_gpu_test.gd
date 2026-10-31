@@ -13,7 +13,7 @@ func draw() -> void:
 	await RenderingServer.frame_post_draw
 func probe_shader(tail: String) -> Shader:
 	var code := FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_surface.gdshader")
-	for name in ["terrain_controls.gdshaderinc", "terrain_texture_dispatch.gdshaderinc", "terrain_normals.gdshaderinc", "terrain_height_blend.gdshaderinc", "terrain_triplanar.gdshaderinc"]:
+	for name in ["terrain_regions.gdshaderinc", "terrain_controls.gdshaderinc", "terrain_texture_dispatch.gdshaderinc", "terrain_normals.gdshaderinc", "terrain_height_blend.gdshaderinc", "terrain_triplanar.gdshaderinc"]:
 		code = code.replace('#include "' + name + '"', FileAccess.get_file_as_string("res://addons/strata/shaders/" + name))
 	var last := code.rfind("}")
 	var shader := Shader.new(); shader.code = code.substr(0, last) + tail + code.substr(last)

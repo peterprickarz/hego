@@ -38,6 +38,10 @@ uniform vec2 field_origin;
 uniform vec2 field_size;
 uniform vec2 probes[64];
 uniform float crease_cosine=-1.0;
+vec2 terrain_lattice_step(){return field_size/vec2(textureSize(height_field,0)-ivec2(1));}
+ivec2 terrain_lattice_max(){return textureSize(height_field,0)-ivec2(1);}
+float terrain_texel_height(ivec2 index){return texelFetch(height_field,index,0).r;}
+float terrain_linear_height(vec2 position){vec2 d=vec2(textureSize(height_field,0));vec2 l=clamp((position-field_origin)/field_size,vec2(0.0),vec2(1.0));return textureLod(height_field,(l*(d-vec2(1.0))+vec2(0.5))/d,0.0).r;}
 """+FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_normals.gdshaderinc")+"""
 void fragment(){vec2 p=probes[int(FRAGCOORD.x)];vec2 g=terrain_smooth_gradient(p);vec3 n=crease_cosine>-0.999999?terrain_crease_normal(p,crease_cosine):normalize(vec3(-g.x,1.0,-g.y));COLOR=vec4(n*0.5+0.5,1.0);}
 """
@@ -104,7 +108,7 @@ func field(bounds:Rect2,plane:bool=false)->Dictionary:
 
 func expanded_shader()->String:
 	var code:=FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_surface.gdshader")
-	for name in ["terrain_controls.gdshaderinc","terrain_texture_dispatch.gdshaderinc","terrain_normals.gdshaderinc","terrain_height_blend.gdshaderinc", "terrain_triplanar.gdshaderinc"]:code=code.replace('#include "'+name+'"',FileAccess.get_file_as_string("res://addons/strata/shaders/"+name))
+	for name in ["terrain_regions.gdshaderinc", "terrain_controls.gdshaderinc","terrain_texture_dispatch.gdshaderinc","terrain_normals.gdshaderinc","terrain_height_blend.gdshaderinc", "terrain_triplanar.gdshaderinc"]:code=code.replace('#include "'+name+'"',FileAccess.get_file_as_string("res://addons/strata/shaders/"+name))
 	return code
 
 func test_spatial():
@@ -121,11 +125,11 @@ func test_spatial():
 	var sun:=DirectionalLight3D.new();sun.rotation_degrees=Vector3(-35,-40,0);sun.light_energy=1.0;sun.shadow_enabled=false;world.add_child(sun)
 	var default_shader:=renderer._shader_material.shader
 	var saved_bindings:Dictionary={}
-	for name in ["height_field","control_ids","control_weights","normal_maps","color_maps","ormh_maps"]:saved_bindings[name]=renderer._shader_material.get_shader_parameter(name)
+	for name in ["height_regions","material_ids_regions","material_weights_regions","region_table","normal_maps","color_maps","ormh_maps"]:saved_bindings[name]=renderer._shader_material.get_shader_parameter(name)
 	renderer.crease_angle_degrees=30.0
 	var crease_shader:=renderer._shader_material.shader
 	check(crease_shader!=default_shader and crease_shader.code.begins_with("#define HEGO_TERRAIN_CREASES"),"Crease code uses a separate compile-time shader variant")
-	check(renderer._shader_material.get_shader_parameter("height_field")==saved_bindings.height_field,"Variant switch preserves field texture binding")
+	check(renderer._shader_material.get_shader_parameter("height_regions")==saved_bindings.height_regions,"Variant switch preserves field texture binding")
 	renderer.smooth_shading=false;check(renderer._shader_material.shader==default_shader,"Compatibility mode does not carry crease shader code")
 	renderer.smooth_shading=true;check(renderer._shader_material.shader==crease_shader,"Explicit variant toggle reuses the cached crease shader")
 	renderer.crease_angle_degrees=180.0;check(renderer._shader_material.shader==default_shader,"180 degree default restores the fast shader resource")

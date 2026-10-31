@@ -76,7 +76,7 @@ func texture(color:Color)->ImageTexture:
 	var image:=Image.create(2,2,false,Image.FORMAT_RGBAF);image.fill(color);return ImageTexture.create_from_image(image)
 func shader_override(tail:String)->Shader:
 	var code:=(load("res://addons/strata/shaders/terrain_surface.gdshader") as Shader).code
-	for name in ["terrain_controls.gdshaderinc","terrain_texture_dispatch.gdshaderinc","terrain_normals.gdshaderinc","terrain_height_blend.gdshaderinc", "terrain_triplanar.gdshaderinc"]:code=code.replace('#include "'+name+'"',FileAccess.get_file_as_string("res://addons/strata/shaders/"+name))
+	for name in ["terrain_regions.gdshaderinc", "terrain_controls.gdshaderinc","terrain_texture_dispatch.gdshaderinc","terrain_normals.gdshaderinc","terrain_height_blend.gdshaderinc", "terrain_triplanar.gdshaderinc"]:code=code.replace('#include "'+name+'"',FileAccess.get_file_as_string("res://addons/strata/shaders/"+name))
 	var end:=code.rfind("}");var shader:=Shader.new();shader.code=code.substr(0,end)+tail+code.substr(end);return shader
 func linear_pixel()->Vector3:
 	var c:=root.get_texture().get_image().get_pixelv(root.size/2).srgb_to_linear();return Vector3(c.r,c.g,c.b)

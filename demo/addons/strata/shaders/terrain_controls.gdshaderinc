@@ -1,22 +1,22 @@
+// The host shader defines terrain_control_corner(position, offset, ids, weights, fraction)
+// before including this file: the raw IDs and weights of one corner of the 2x2 control cell
+// around the position, and the fractional position inside that cell.
 // Categorical IDs are fetched exactly, never bilinearly interpolated.
 // Bilinear interpolation applies to contribution weights. Up to 16 distinct
 // IDs are merged before top-four selection. Subtracting the fifth weight from
 // the retained four fades an ordinary fourth/fifth exchange to zero instead of
 // dropping a nonzero contribution. With <=4 inputs the threshold is zero.
 void terrain_blend(vec2 position, out ivec4 result_ids, out vec4 result_weights, out float discarded) {
-	ivec2 dimensions = textureSize(control_ids, 0);
-	vec2 grid = clamp((position - field_origin) / field_size, vec2(0.0), vec2(1.0)) * vec2(dimensions - ivec2(1));
-	ivec2 base = ivec2(floor(grid));
-	vec2 fraction = fract(grid);
+	vec2 fraction = vec2(0.0);
 	int ids[16];
 	float weights[16];
 	for (int i = 0; i < 16; i++) { ids[i] = -1; weights[i] = 0.0; }
 	int count = 0;
 	for (int corner = 0; corner < 4; corner++) {
 		ivec2 offset = ivec2(corner % 2, corner / 2);
-		ivec2 texel = min(base + offset, dimensions - ivec2(1));
-		ivec4 incoming_ids = ivec4(round(texelFetch(control_ids, texel, 0) * 255.0));
-		vec4 incoming_weights = max(texelFetch(control_weights, texel, 0), vec4(0.0));
+		ivec4 incoming_ids; vec4 incoming_weights;
+		terrain_control_corner(position, offset, incoming_ids, incoming_weights, fraction);
+		incoming_weights = max(incoming_weights, vec4(0.0));
 		float incoming_total = dot(incoming_weights, vec4(1.0));
 		if (incoming_total > 0.0) { incoming_weights /= incoming_total; }
 		float bilinear = (offset.x == 0 ? 1.0 - fraction.x : fraction.x) * (offset.y == 0 ? 1.0 - fraction.y : fraction.y);

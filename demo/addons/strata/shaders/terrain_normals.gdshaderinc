@@ -2,18 +2,16 @@
 // interpolation. Integer sample-spacing offsets make this equivalent in the
 // interior to bilinearly interpolating central gradients at the sample vertices.
 // The same terrain-local positions are used across every patch and LOD.
-vec2 terrain_height_uv(vec2 position) {
-	vec2 dimensions = vec2(textureSize(height_field, 0));
-	vec2 logical = clamp((position - field_origin) / field_size, vec2(0.0), vec2(1.0));
-	return (logical * (dimensions - vec2(1.0)) + vec2(0.5)) / dimensions;
-}
-
-float terrain_linear_height(vec2 position) {
-	return textureLod(height_field, terrain_height_uv(position), 0.0).r;
-}
+//
+// The host shader defines, before including this file: field_origin, field_size,
+//   vec2 terrain_lattice_step()       metres between height samples
+//   ivec2 terrain_lattice_max()       last height sample index per axis
+//   float terrain_linear_height(vec2) bilinear height at a terrain position
+//   float terrain_texel_height(ivec2) height of one sample by lattice index
+// (terrain_regions.gdshaderinc implements them over the region texture arrays.)
 
 vec2 terrain_smooth_gradient(vec2 position) {
-	vec2 spacing = field_size / vec2(textureSize(height_field, 0) - ivec2(1));
+	vec2 spacing = terrain_lattice_step();
 	vec2 point = clamp(position, field_origin, field_origin + field_size);
 	vec2 low = max(point - spacing, field_origin);
 	vec2 high = min(point + spacing, field_origin + field_size);
@@ -29,19 +27,19 @@ vec2 terrain_smooth_gradient(vec2 position) {
 // Join only adjacent faces whose shared-edge dihedral is within the angle.
 // Each triangle gets the area-weighted corner normal of its connected group.
 vec3 terrain_corner_normal(ivec2 vertex, int face_index, float threshold_cosine) {
-	ivec2 dimensions = textureSize(height_field, 0);
-	vec2 spacing = field_size / vec2(dimensions - ivec2(1));
+	ivec2 dimensions = terrain_lattice_max() + ivec2(1);
+	vec2 spacing = terrain_lattice_step();
 	ivec2 ring[6];
 	ring[0] = ivec2(1, 0); ring[1] = ivec2(0, 1);
 	ring[2] = ivec2(-1, 1); ring[3] = ivec2(-1, 0);
 	ring[4] = ivec2(0, -1); ring[5] = ivec2(1, -1);
 	vec3 edges[6]; bool neighbor_valid[6];
-	float center = texelFetch(height_field, vertex, 0).r;
+	float center = terrain_texel_height(vertex);
 	for (int i = 0; i < 6; i++) {
 		ivec2 neighbor = vertex + ring[i];
 		neighbor_valid[i] = all(greaterThanEqual(neighbor, ivec2(0))) && all(lessThan(neighbor, dimensions));
 		float height = center;
-		if (neighbor_valid[i]) { height = texelFetch(height_field, neighbor, 0).r; }
+		if (neighbor_valid[i]) { height = terrain_texel_height(neighbor); }
 		edges[i] = vec3(float(ring[i].x) * spacing.x, height - center, float(ring[i].y) * spacing.y);
 	}
 	vec3 areas[6]; vec3 normals[6]; bool face_valid[6];
@@ -72,8 +70,8 @@ vec3 terrain_corner_normal(ivec2 vertex, int face_index, float threshold_cosine)
 }
 
 vec3 terrain_crease_normal(vec2 position, float threshold_cosine) {
-	ivec2 dimensions = textureSize(height_field, 0);
-	vec2 grid = clamp((position - field_origin) / field_size, vec2(0.0), vec2(1.0)) * vec2(dimensions - ivec2(1));
+	ivec2 dimensions = terrain_lattice_max() + ivec2(1);
+	vec2 grid = clamp((position - field_origin) / terrain_lattice_step(), vec2(0.0), vec2(dimensions - ivec2(1)));
 	ivec2 first = min(ivec2(floor(grid)), dimensions - ivec2(2));
 	vec2 f = grid - vec2(first);
 	if (f.x + f.y <= 1.0) {

@@ -82,7 +82,7 @@ func configure(bounds: Rect2, height: Callable, relief: Texture2D) -> bool:
 
 func override(tail: String, creases := false, replacements := {}) -> void:
 	var code := FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_surface.gdshader")
-	for name in ["terrain_controls.gdshaderinc", "terrain_texture_dispatch.gdshaderinc", "terrain_normals.gdshaderinc", "terrain_height_blend.gdshaderinc", "terrain_triplanar.gdshaderinc"]:
+	for name in ["terrain_regions.gdshaderinc", "terrain_controls.gdshaderinc", "terrain_texture_dispatch.gdshaderinc", "terrain_normals.gdshaderinc", "terrain_height_blend.gdshaderinc", "terrain_triplanar.gdshaderinc"]:
 		code = code.replace('#include "' + name + '"', FileAccess.get_file_as_string("res://addons/strata/shaders/" + name))
 	code = code.replace("render_mode cull_back,", "render_mode unshaded, cull_back,")
 	for key in replacements:

@@ -13,23 +13,41 @@ uniform float height_blend_biases[32];
 uniform float material_roughness_scales[32];
 uniform float material_roughness_biases[32];
 uniform bool height_blend_enabled = true;
-uniform sampler2D height_field : filter_linear, repeat_disable;
-uniform sampler2D control_ids : filter_nearest, repeat_disable;
-uniform sampler2D control_weights : filter_nearest, repeat_disable;
+// Region addressing: one Texture2DArray per map (a layer per resident region), a table
+// from region index to layer, and the geometry to split a position into region and texel.
+uniform vec2 region_origin = vec2(-128.0);
+uniform float region_extent = 256.0;
+uniform float region_spacing = 1.0;
+uniform int region_cells = 256;
+uniform ivec2 region_grid = ivec2(1);
+// Height sample intervals along each axis at scale 1: the terrain's last lattice index.
+uniform ivec2 region_lattice = ivec2(256);
+uniform sampler2D region_table : filter_nearest, repeat_disable;
+uniform sampler2DArray height_regions : filter_linear, repeat_disable;
+uniform int height_scale = 1;
+uniform int height_apron = 2;
+uniform sampler2DArray material_ids_regions : filter_nearest, repeat_disable;
+uniform int material_ids_scale = 1;
+uniform int material_ids_apron = 2;
+// Weights share the IDs' scale and apron.
+uniform sampler2DArray material_weights_regions : filter_nearest, repeat_disable;
+uniform bool has_material_maps = false;
+uniform sampler2DArray holes_regions : filter_nearest, repeat_disable;
+uniform int holes_scale = 1;
+uniform int holes_apron = 2;
+uniform bool has_holes = false;
+uniform sampler2DArray macro_regions : filter_linear, repeat_disable;
+uniform int macro_scale = 4;
+uniform int macro_apron = 1;
+uniform bool has_terrain_macro_map = false;
 uniform sampler2D ownership_field : filter_linear, repeat_disable;
 uniform bool show_ownership = false;
-uniform sampler2D terrain_macro_map : filter_linear, repeat_disable;
-uniform bool has_terrain_macro_map = false;
-uniform vec2 terrain_macro_origin = vec2(0.0);
-uniform vec2 terrain_macro_size = vec2(1.0);
 uniform float terrain_tint_strength = 1.0;
 uniform float terrain_ao_strength = 1.0;
 uniform sampler2D channel_preview_field : filter_linear, repeat_disable;
 uniform bool show_channel_preview = false;
 uniform vec2 channel_preview_origin = vec2(0.0);
 uniform vec2 channel_preview_size = vec2(1.0);
-uniform sampler2D cell_holes : filter_nearest, repeat_disable;
-uniform bool has_holes = false;
 uniform bool triangle_height_sampling = false;
 uniform bool smooth_shading = true;
 uniform float crease_cosine = -1.0;
@@ -54,26 +72,23 @@ instance uniform float patch_uv_scale = 1.0;
 instance uniform float patch_level = 0.0;
 varying vec2 terrain_position;
 
+#include "terrain_regions.gdshaderinc"
 #include "terrain_controls.gdshaderinc"
 #include "terrain_texture_dispatch.gdshaderinc"
 #include "terrain_normals.gdshaderinc"
 #include "terrain_height_blend.gdshaderinc"
 #include "terrain_triplanar.gdshaderinc"
 
-vec2 field_uv(vec2 position) {
-	return terrain_height_uv(position);
-}
-
 float base_height(vec2 position) {
-	if (!triangle_height_sampling) { return textureLod(height_field, field_uv(position), 0.0).r; }
-	ivec2 dimensions = textureSize(height_field, 0);
-	vec2 grid = clamp((position - field_origin) / field_size, vec2(0.0), vec2(1.0)) * vec2(dimensions - ivec2(1));
-	ivec2 first = min(ivec2(floor(grid)), dimensions - ivec2(2));
+	if (!triangle_height_sampling) { return terrain_linear_height(position); }
+	ivec2 lattice_max = terrain_lattice_max();
+	vec2 grid = clamp((position - field_origin) / terrain_lattice_step(), vec2(0.0), vec2(lattice_max));
+	ivec2 first = min(ivec2(floor(grid)), lattice_max - ivec2(1));
 	vec2 f = grid - vec2(first);
-	float a = texelFetch(height_field, first, 0).r;
-	float b = texelFetch(height_field, first + ivec2(1, 0), 0).r;
-	float c = texelFetch(height_field, first + ivec2(0, 1), 0).r;
-	float d = texelFetch(height_field, first + ivec2(1, 1), 0).r;
+	float a = terrain_texel_height(first);
+	float b = terrain_texel_height(first + ivec2(1, 0));
+	float c = terrain_texel_height(first + ivec2(0, 1));
+	float d = terrain_texel_height(first + ivec2(1, 1));
 	return f.x + f.y <= 1.0 ? a + (b - a) * f.x + (c - a) * f.y : d + (c - d) * (1.0 - f.x) + (b - d) * (1.0 - f.y);
 }
 
@@ -103,11 +118,6 @@ float uv_blend(vec3 base_point) {
 vec2 endpoint_field_uv(vec2 position, vec2 origin, vec2 size, ivec2 dimensions) {
 	vec2 logical = clamp((position - origin) / size, vec2(0.0), vec2(1.0));
 	return (logical * vec2(dimensions - ivec2(1)) + vec2(0.5)) / vec2(dimensions);
-}
-
-vec4 terrain_macro_sample(vec2 position) {
-	if (!has_terrain_macro_map) { return vec4(1.0); }
-	return texture(terrain_macro_map, endpoint_field_uv(position, terrain_macro_origin, terrain_macro_size, textureSize(terrain_macro_map, 0)));
 }
 
 // Signed material relief in metres along the terrain normal. The fade uses the
@@ -189,11 +199,7 @@ void fragment() {
 	vec3 point_dy = dFdy(base_point);
 	vec2 smooth_gradient = terrain_smooth_gradient(terrain_position);
 	vec3 projection_normal = normalize(vec3(-smooth_gradient.x, 1.0, -smooth_gradient.y));
-	if (has_holes) {
-		ivec2 dimensions = textureSize(cell_holes, 0);
-		ivec2 cell = clamp(ivec2(floor((terrain_position - field_origin) / field_size * vec2(dimensions))), ivec2(0), dimensions - ivec2(1));
-		if (texelFetch(cell_holes, cell, 0).r >= 0.5) { discard; }
-	}
+	if (has_holes && terrain_cell_hole(terrain_position)) { discard; }
 	ivec4 ids; vec4 weights; float discarded;
 	terrain_blend(terrain_position, ids, weights, discarded);
 	vec3 color = vec3(0.0); vec3 orm = vec3(0.0);

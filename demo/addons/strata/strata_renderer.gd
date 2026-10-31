@@ -162,19 +162,36 @@ var _mesh_cache: Dictionary = {}
 var _mesh_triangles: Dictionary = {}
 var _patch_state: Dictionary = {}
 var _patch_pool: Array[MeshInstance3D] = []
+# Region state: the spec in effect, the CPU region of every grid index, one Texture2DArray
+# per map (a layer per grid index) and the table texel per region. See set_regions().
+var _region_spec: Dictionary = {}
+var _regions: Dictionary = {}
+var _region_layers: Dictionary = {}
+var _region_arrays: Dictionary = {}
+var _region_table_image: Image
+var _region_table_texture: ImageTexture
+var _window_cache: Dictionary = {}
+# Aliases of the region arrays, kept for tests and tools that compare texture identity.
+var _height_texture: Texture2DArray
+var _control_ids_texture: Texture2DArray
+var _control_weights_texture: Texture2DArray
+var _hole_texture: Texture2DArray
+var _macro_texture: Texture2DArray
+# Transitional whole-terrain inputs of the image adapters (set_compiled_field, set_control_maps,
+# set_hole_image, set_macro_map); regions are sliced from them. Null after set_regions().
 var _height_image: Image
-var _height_texture: ImageTexture
 var _compiled_input: Dictionary = {}
-var _ownership_texture: ImageTexture
-var _hole_texture: ImageTexture
 var _hole_image: Image
-var _macro_texture: ImageTexture
-var _channel_preview_texture: ImageTexture
-var _triangle_height_sampling := false
 var _control_ids: Image
 var _control_weights: Image
-var _control_ids_texture: ImageTexture
-var _control_weights_texture: ImageTexture
+var _macro_image: Image
+var _macro_bounds := Rect2()
+var _controls_resampled := false
+var _holes_enabled := false
+var _macro_enabled := false
+var _ownership_texture: ImageTexture
+var _channel_preview_texture: ImageTexture
+var _triangle_height_sampling := false
 var _height_spacing := 1.0
 var _render_bounds := Rect2()
 var _height_min := 0.0
@@ -252,7 +269,7 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 		_stats.refinement_status = "Native refinement unavailable: rebuild the terrain extension or disable Displacement Refinement Enabled."
 		push_error(_stats.refinement_status)
 		return false
-	var previous := {"active_crease_variant": _active_crease_variant, "active_shader_key": _active_shader_key, "hook_spec_applied": _hook_spec_applied, "hook_key_applied": _hook_key_applied, "hook_spec_bound": _hook_spec_bound, "source": _source, "runtime_mode": _runtime_mode, "runtime_bounds": _runtime_bounds, "spacing": _height_spacing, "materials": _materials, "mesher": _mesher, "shader": _shader_material, "bound_multiplier": _bound_displacement_multiplier, "compiled": _compiled_input, "stats": _stats.duplicate(true)}
+	var previous := {"active_crease_variant": _active_crease_variant, "active_shader_key": _active_shader_key, "hook_spec_applied": _hook_spec_applied, "hook_key_applied": _hook_key_applied, "hook_spec_bound": _hook_spec_bound, "source": _source, "runtime_mode": _runtime_mode, "runtime_bounds": _runtime_bounds, "spacing": _height_spacing, "materials": _materials, "mesher": _mesher, "shader": _shader_material, "bound_multiplier": _bound_displacement_multiplier, "compiled": _compiled_input, "stats": _stats.duplicate(true), "hole_image": _hole_image, "macro_image": _macro_image, "macro_bounds": _macro_bounds, "holes_enabled": _holes_enabled, "macro_enabled": _macro_enabled, "control_ids": _control_ids, "control_weights": _control_weights}
 	_source = source
 	_runtime_mode = runtime_mode
 	_runtime_bounds = bounds
@@ -267,6 +284,9 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 	_hook_spec_bound = []
 	_shader_material.set_shader_parameter("field_origin", bounds.position)
 	_shader_material.set_shader_parameter("field_size", bounds.size)
+	# A new material starts without holes or terrain macro; the maps are set again after it.
+	_hole_image = null; _macro_image = null; _holes_enabled = false; _macro_enabled = false
+	_bind_region_uniforms()
 	_bind_material_pool()
 	_apply_hook_spec()
 	_update_material_settings()
@@ -276,10 +296,8 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 	_shader_material.set_shader_parameter("show_ownership", false)
 	_triangle_height_sampling = not compiled.is_empty()
 	_shader_material.set_shader_parameter("triangle_height_sampling", _triangle_height_sampling)
-	var no_holes := Image.create(1, 1, false, Image.FORMAT_L8)
-	_hole_texture = ImageTexture.create_from_image(no_holes)
-	_shader_material.set_shader_parameter("cell_holes", _hole_texture)
-	_shader_material.set_shader_parameter("has_holes", false)
+	if _control_ids == null:
+		_make_control_fixture()
 	if not refresh_heightfield():
 		_source = previous.source
 		_runtime_mode = previous.runtime_mode
@@ -296,12 +314,12 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 		_bound_displacement_multiplier = previous.bound_multiplier
 		_compiled_input = previous.compiled
 		_stats = previous.stats
+		_hole_image = previous.hole_image; _macro_image = previous.macro_image; _macro_bounds = previous.macro_bounds
+		_holes_enabled = previous.holes_enabled; _macro_enabled = previous.macro_enabled
+		_control_ids = previous.control_ids; _control_weights = previous.control_weights
+		_bind_region_uniforms()
 		_update_material_settings()
 		return false
-	if _control_ids == null:
-		_create_control_fixture()
-	else:
-		_bind_control_maps()
 	if not _runtime_mode:
 		_owns_preview_disable = _owns_preview_disable or (_source as StrataTerrain3D).is_preview_enabled()
 		(_source as StrataTerrain3D).set_preview_enabled(false)
@@ -678,20 +696,14 @@ func refresh_heightfield() -> bool:
 			image.set_pixel(x, z, Color(stored_height, 0.0, 0.0, 1.0))
 	var plan := _select_patch_plan(bounds, Vector2(camera_position.x, camera_position.z), Vector2(minimum, maximum))
 	if plan.is_empty() or not _prepare_patch_meshes(plan): return false
-	_height_image = image
-	_height_min = minimum
-	_height_max = maximum
-	_render_bounds = bounds
-	_height_texture = ImageTexture.create_from_image(_height_image)
-	_shader_material.set_shader_parameter("field_origin", bounds.position)
-	_shader_material.set_shader_parameter("field_size", bounds.size)
-	_shader_material.set_shader_parameter("height_field", _height_texture)
+	if not _install_height_image(image, bounds, _compiled_input): return false
 	_shader_material.set_shader_parameter("camera_position", camera_position)
 	_apply_patch_plan(plan, true)
-	_stats.height_resolution = dimensions
 	_stats.height_refresh_cpu_ms = (Time.get_ticks_usec() - started) / 1000.0
 	return true
 
+## Transitional adapter: binds a whole-terrain RF image by slicing it into regions. The
+## image is kept as the CPU reference of the adapters (update_compiled_region, tests).
 func set_compiled_field(compiled: Dictionary) -> bool:
 	if _shader_material == null or not is_instance_valid(_source): return false
 	var started := Time.get_ticks_usec()
@@ -708,28 +720,34 @@ func set_compiled_field(compiled: Dictionary) -> bool:
 	var camera_position := _source.to_local(_camera.global_position) if is_instance_valid(_camera) else Vector3.ZERO
 	var plan := _select_patch_plan(bounds, Vector2(camera_position.x, camera_position.z), Vector2(minimum, maximum))
 	if plan.is_empty() or not _prepare_patch_meshes(plan): return false
-	_height_image = image
-	_height_min = minimum
-	_height_max = maximum
-	_render_bounds = bounds
-	_compiled_input = compiled
-	if _height_texture != null and _height_texture.get_width() == image.get_width() and _height_texture.get_height() == image.get_height():
-		_height_texture.update(image)
-	else:
-		_height_texture = ImageTexture.create_from_image(image)
-	_shader_material.set_shader_parameter("field_origin", bounds.position)
-	_shader_material.set_shader_parameter("field_size", bounds.size)
-	_shader_material.set_shader_parameter("height_field", _height_texture)
+	if not _install_height_image(image, bounds, compiled): return false
 	_shader_material.set_shader_parameter("camera_position", camera_position)
 	_apply_patch_plan(plan, true)
-	_stats.height_resolution = image.get_size()
 	_stats.height_refresh_cpu_ms = (Time.get_ticks_usec() - started) / 1000.0
 	return true
 
-## A brush can compile only its affected 1 m rectangle. The RF CPU image is
-## patched natively; ImageTexture (Godot 4.4 through 4.7) still uploads the whole texture.
+## Swaps in a whole-terrain height image: restores the previous image, bounds and input when
+## the region build fails, so a rejected field changes nothing.
+func _install_height_image(image: Image, bounds: Rect2, compiled: Dictionary) -> bool:
+	var previous_image := _height_image
+	var previous_bounds := _render_bounds
+	var previous_input := _compiled_input
+	_height_image = image
+	_render_bounds = bounds
+	_compiled_input = compiled
+	if not _sync_regions(["height"]):
+		_height_image = previous_image
+		_render_bounds = previous_bounds
+		_compiled_input = previous_input
+		return false
+	_shader_material.set_shader_parameter("field_origin", bounds.position)
+	_shader_material.set_shader_parameter("field_size", bounds.size)
+	return true
+
+## A brush can compile only its affected rectangle. The RF CPU image is patched natively and
+## only the regions the rectangle touches (their aprons included) are uploaded, layer by layer.
 func update_compiled_region(compiled: Dictionary) -> bool:
-	if _height_image == null or not compiled.get("ok", false): return false
+	if _height_image == null or not compiled.get("ok", false) or _region_spec.is_empty(): return false
 	var patch: Image = compiled.get("image")
 	if patch == null or patch.get_format() != Image.FORMAT_RF: return false
 	var bounds: Rect2 = compiled.get("bounds", Rect2())
@@ -741,15 +759,27 @@ func update_compiled_region(compiled: Dictionary) -> bool:
 	if not bounds.size.is_equal_approx(expected): return false
 	var validation: Dictionary = StrataLayerData.validate_dense(patch)
 	if not validation.get("ok", false): return false
+	var height_description: Dictionary = _region_spec.maps.get(StrataRegions.MAP_HEIGHT, {})
+	var scale := int(height_description.get("scale", 1))
+	if scale != 1: return _sync_regions_after_height_patch(patch, destination)
+	if not _blit_lattice_patch(StrataRegions.MAP_HEIGHT, patch, destination): return false
 	var was_active := _refinement_zone_active()
 	_height_image.blit_rect(patch, Rect2i(Vector2i.ZERO, patch.get_size()), destination)
-	_height_min = minf(_height_min, float(validation.min))
-	_height_max = maxf(_height_max, float(validation.max))
-	_compiled_input.min = _height_min; _compiled_input.max = _height_max
-	_height_texture.update(_height_image)
+	_after_height_change(was_active)
+	return true
+
+func _sync_regions_after_height_patch(patch: Image, destination: Vector2i) -> bool:
+	var was_active := _refinement_zone_active()
+	_height_image.blit_rect(patch, Rect2i(Vector2i.ZERO, patch.get_size()), destination)
+	if not _sync_regions(["height"]): return false
+	_after_height_change(was_active)
+	return true
+
+func _after_height_change(was_active: bool) -> void:
+	_refresh_height_extrema()
+	if not _compiled_input.is_empty(): _compiled_input.min = _height_min; _compiled_input.max = _height_max
 	if was_active != _refinement_zone_active(): _invalidate_geometry_lod()
 	for instance in _patches.values(): _update_patch_bounds(instance)
-	return true
 
 func set_ownership_overlay(layer: StrataLayer, channel: StringName = &"height", enabled: bool = true) -> bool:
 	if _shader_material == null: return false
@@ -772,20 +802,25 @@ func set_ownership_overlay(layer: StrataLayer, channel: StringName = &"height", 
 	_shader_material.set_shader_parameter("ownership_step_y", Vector2(value.sample_step_y.x, value.sample_step_y.z))
 	return true
 
-## Endpoint-aligned independent terrain-local XZ texture. Input is validated
-## by the macro compiler/cache loader before reaching this binding operation.
+## Transitional adapter: an independent endpoint-aligned terrain-local XZ image. It is
+## resampled onto the region macro lattice (a straight copy when it already matches), so
+## the shader addresses it through the regions like every other map.
 func set_macro_map(image: Image, bounds: Rect2) -> bool:
 	if _shader_material == null: return false
 	if image == null:
+		_macro_image = null
 		_shader_material.set_shader_parameter("has_terrain_macro_map", false)
 		return true
 	if image.get_format() != Image.FORMAT_RGBAH or image.get_width() < 2 or image.get_height() < 2 or image.get_width() > 4097 or image.get_height() > 4097 or not bounds.position.is_finite() or not bounds.size.is_finite() or bounds.size.x <= 0.0 or bounds.size.y <= 0.0: return false
-	if _macro_texture != null and _macro_texture.get_width() == image.get_width() and _macro_texture.get_height() == image.get_height(): _macro_texture.update(image)
-	else: _macro_texture = ImageTexture.create_from_image(image)
-	_shader_material.set_shader_parameter("terrain_macro_map", _macro_texture)
-	_shader_material.set_shader_parameter("terrain_macro_origin", bounds.position)
-	_shader_material.set_shader_parameter("terrain_macro_size", bounds.size)
-	_shader_material.set_shader_parameter("has_terrain_macro_map", true)
+	var previous_image := _macro_image
+	var previous_bounds := _macro_bounds
+	_macro_image = image
+	_macro_bounds = bounds
+	if not _sync_regions(["macro"]):
+		_macro_image = previous_image
+		_macro_bounds = previous_bounds
+		return false
+	_bind_region_flags()
 	return true
 
 func set_channel_preview(image: Image, bounds: Rect2, enabled: bool) -> bool:
@@ -799,35 +834,41 @@ func set_channel_preview(image: Image, bounds: Rect2, enabled: bool) -> bool:
 	_shader_material.set_shader_parameter("show_channel_preview", enabled)
 	return true
 
+## Transitional adapter: one L8 texel per cell of the height lattice.
 func set_hole_image(image: Image) -> bool:
 	if _shader_material == null: return false
 	if image == null:
-		_shader_material.set_shader_parameter("has_holes", false)
 		_hole_image = null
+		_bind_region_flags()
 		return true
 	if _height_image == null or image.get_format() != Image.FORMAT_L8 or image.get_size() != _height_image.get_size() - Vector2i.ONE: return false
+	var previous := _hole_image
 	_hole_image = image
-	_hole_texture = ImageTexture.create_from_image(image)
-	_shader_material.set_shader_parameter("cell_holes", _hole_texture)
-	_shader_material.set_shader_parameter("has_holes", true)
+	if not _sync_regions(["holes"]):
+		_hole_image = previous
+		return false
+	_bind_region_flags()
 	return true
 
 func sample_render_height(position: Vector2) -> float:
-	if _height_image == null or position.x < _render_bounds.position.x or position.y < _render_bounds.position.y or position.x > _render_bounds.end.x or position.y > _render_bounds.end.y: return 0.0
-	var grid := (position - _render_bounds.position) / _render_bounds.size * Vector2(_height_image.get_size() - Vector2i.ONE)
+	if _region_spec.is_empty() or position.x < _render_bounds.position.x or position.y < _render_bounds.position.y or position.x > _render_bounds.end.x or position.y > _render_bounds.end.y: return 0.0
+	var description: Dictionary = _region_spec.maps[StrataRegions.MAP_HEIGHT]
+	var step := StrataRegions.texel_step(_region_spec, description, 0)
+	var lattice_max := _lattice_max(StrataRegions.MAP_HEIGHT)
+	var grid := ((position - _render_bounds.position) / step).clamp(Vector2.ZERO, Vector2(lattice_max))
 	var first := Vector2i(floor(grid.x), floor(grid.y))
-	var last := (first + Vector2i.ONE).min(_height_image.get_size() - Vector2i.ONE)
+	var last := (first + Vector2i.ONE).min(lattice_max)
 	var fraction := grid - Vector2(first)
 	if _triangle_height_sampling:
-		var a := _height_image.get_pixel(first.x, first.y).r
-		var b := _height_image.get_pixel(last.x, first.y).r
-		var c := _height_image.get_pixel(first.x, last.y).r
-		var d := _height_image.get_pixel(last.x, last.y).r
+		var a := _lattice_height(first)
+		var b := _lattice_height(Vector2i(last.x, first.y))
+		var c := _lattice_height(Vector2i(first.x, last.y))
+		var d := _lattice_height(last)
 		return a + (b - a) * fraction.x + (c - a) * fraction.y if fraction.x + fraction.y <= 1.0 else d + (c - d) * (1.0 - fraction.x) + (b - d) * (1.0 - fraction.y)
-	return lerpf(lerpf(_height_image.get_pixel(first.x, first.y).r, _height_image.get_pixel(last.x, first.y).r, fraction.x), lerpf(_height_image.get_pixel(first.x, last.y).r, _height_image.get_pixel(last.x, last.y).r, fraction.x), fraction.y)
+	return lerpf(lerpf(_lattice_height(first), _lattice_height(Vector2i(last.x, first.y)), fraction.x), lerpf(_lattice_height(Vector2i(first.x, last.y)), _lattice_height(last), fraction.x), fraction.y)
 
 func raycast_heightfield(origin: Vector3, direction: Vector3, max_distance: float = 8000.0) -> Dictionary:
-	if _height_image == null or not is_instance_valid(_source): return {}
+	if _region_spec.is_empty() or not is_instance_valid(_source): return {}
 	var local_origin := _source.to_local(origin)
 	var local_direction := (_source.global_basis.inverse() * direction).normalized()
 	var box := AABB(Vector3(_render_bounds.position.x, _height_min - 1.0, _render_bounds.position.y), Vector3(_render_bounds.size.x, _height_max - _height_min + 2.0, _render_bounds.size.y))
@@ -847,9 +888,7 @@ func raycast_heightfield(origin: Vector3, direction: Vector3, max_distance: floa
 				if probe.y > sample_render_height(Vector2(probe.x, probe.z)): low = middle
 				else: high = middle
 			var hit := local_origin + local_direction * high
-			if _hole_image != null:
-				var cell := Vector2i(((Vector2(hit.x, hit.z) - _render_bounds.position) / _render_bounds.size * Vector2(_hole_image.get_size())).floor()).clamp(Vector2i.ZERO, _hole_image.get_size() - Vector2i.ONE)
-				if _hole_image.get_pixelv(cell).r >= 0.5: return {}
+			if _holes_enabled and _cell_is_hole(Vector2(hit.x, hit.z)): return {}
 			return {"position": _source.to_global(hit), "local_position": Vector2(hit.x, hit.z), "distance": high}
 		previous = distance
 		distance += 2.0
@@ -862,8 +901,21 @@ static func _height_dimensions(bounds: Rect2, spacing: float) -> Vector2i:
 	return Vector2i(ceili(bounds.size.x / spacing) + 1, ceili(bounds.size.y / spacing) + 1)
 
 ## IDs: RGBA8, one byte per categorical ID 0..31. Weights: RGBAF/RGBAH.
-## The lattice covers the complete source bounds including both endpoints.
+## Transitional adapter: the lattice covers the complete source bounds including both
+## endpoints. When its step is the region spacing times a power of two it becomes a region
+## map of that scale (a straight slice); otherwise it is resampled, see [method _adapter_plan].
 func set_control_maps(ids: Image, weights: Image) -> bool:
+	var previous_ids := _control_ids
+	var previous_weights := _control_weights
+	if not _store_control_maps(ids, weights): return false
+	if not _sync_regions(["material_ids", "material_weights"]):
+		_control_ids = previous_ids
+		_control_weights = previous_weights
+		return false
+	_update_discarded_diagnostic()
+	return true
+
+func _store_control_maps(ids: Image, weights: Image) -> bool:
 	if ids == null or weights == null or ids.get_size() != weights.get_size() or ids.get_width() < 2 or ids.get_height() < 2 or ids.get_width() > 1025 or ids.get_height() > 1025:
 		push_warning("Control maps need matching 2..1025 dimensions; previous maps retained.")
 		return false
@@ -873,34 +925,38 @@ func set_control_maps(ids: Image, weights: Image) -> bool:
 	_control_ids = ids.duplicate()
 	_control_ids.convert(Image.FORMAT_RGBA8)
 	_control_weights = prepared
-	_control_ids_texture = ImageTexture.create_from_image(_control_ids)
-	_control_weights_texture = ImageTexture.create_from_image(_control_weights)
-	_bind_control_maps()
-	_stats.control_resolution = ids.get_size()
-	_update_discarded_diagnostic()
 	return true
-
-func _bind_control_maps() -> void:
-	if _shader_material != null:
-		_shader_material.set_shader_parameter("control_ids", _control_ids_texture)
-		_shader_material.set_shader_parameter("control_weights", _control_weights_texture)
 
 ## Replaces the texel rectangle at [param origin] of the maps [method set_control_maps]
 ## accepted with [param ids]/[param weights], a region of complete maps in the same
 ## formats. Only the region is validated and normalized, as set_control_maps does for every
-## texel, so a brush dab costs its rectangle rather than the whole lattice. The textures are
-## updated in place. False (previous maps retained) for an invalid or out-of-range region.
+## texel, so a brush dab costs its rectangle rather than the whole lattice. Only the region
+## layers it touches are updated. False (previous maps retained) for an invalid or
+## out-of-range region.
 func update_control_region(ids: Image, weights: Image, origin: Vector2i) -> bool:
-	if _control_ids == null or _control_weights == null or _control_ids_texture == null or _control_weights_texture == null: return false
+	if _control_ids == null or _control_weights == null: return false
 	if ids == null or weights == null or ids.get_size() != weights.get_size() or ids.get_width() < 1 or ids.get_height() < 1: return false
 	if origin.x < 0 or origin.y < 0 or origin.x + ids.get_width() > _control_ids.get_width() or origin.y + ids.get_height() > _control_ids.get_height(): return false
 	var region_weights := _prepare_control_weights(ids, weights, _materials.size() if not _materials.is_empty() else 32)
 	if region_weights == null:
 		return false
-	_control_ids.blit_rect(ids, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
+	var region_ids := ids.duplicate()
+	region_ids.convert(Image.FORMAT_RGBA8)
+	# Before the first region build (an unconfigured renderer) only the images exist.
+	if not _region_spec.get("maps", {}).has(StrataRegions.MAP_MATERIAL_IDS):
+		_control_ids.blit_rect(region_ids, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
+		_control_weights.blit_rect(region_weights, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
+		return true
+	# The adapter lattice of the stored images may differ from the region lattice (resampled
+	# controls); those fall back to a whole-map refresh.
+	if _controls_resampled:
+		_control_ids.blit_rect(region_ids, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
+		_control_weights.blit_rect(region_weights, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
+		return _sync_regions(["material_ids", "material_weights"])
+	if not _blit_lattice_patch(StrataRegions.MAP_MATERIAL_IDS, region_ids, origin): return false
+	_blit_lattice_patch(StrataRegions.MAP_MATERIAL_WEIGHTS, region_weights, origin)
+	_control_ids.blit_rect(region_ids, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
 	_control_weights.blit_rect(region_weights, Rect2i(Vector2i.ZERO, ids.get_size()), origin)
-	_control_ids_texture.update(_control_ids)
-	_control_weights_texture.update(_control_weights)
 	return true
 
 ## Validates a control-map pair and returns its weights as RGBAF with every texel that has a
@@ -945,9 +1001,10 @@ static func _validate_control_images(ids: Image, weights: Image, material_count:
 					return false
 	return true
 
-func _create_control_fixture() -> void:
-	# Synthetic palette fixture only; authoring layers do not yet store these maps.
-	# Each texel owns one categorical ID, so ordinary cell interpolation has <=4.
+## Synthetic palette fixture only (a renderer configured without control maps); authoring
+## layers do not yet store these maps. Each texel owns one categorical ID, so ordinary cell
+## interpolation has <=4. Stored before the first region build, which slices it.
+func _make_control_fixture() -> void:
 	var ids := Image.create(65, 65, false, Image.FORMAT_RGBA8)
 	var weights := Image.create(65, 65, false, Image.FORMAT_RGBAF)
 	weights.fill(Color(1.0, 0.0, 0.0, 0.0))
@@ -955,7 +1012,7 @@ func _create_control_fixture() -> void:
 		for x in range(65):
 			var id := (mini(7, x / 8) + mini(3, z / 16) * 8) % _materials.size()
 			ids.set_pixel(x, z, Color(float(id) / 255.0, 0.0, 0.0, 0.0))
-	set_control_maps(ids, weights)
+	_store_control_maps(ids, weights)
 
 func _validate_lod_parameters(bounds: Rect2) -> bool:
 	if not bounds.position.is_finite() or not bounds.size.is_finite() or not bounds.end.is_finite() or bounds.size.x <= 0.0 or bounds.size.x != bounds.size.y:
@@ -1029,7 +1086,7 @@ func _refinement_zone_active(height_range: Vector2 = Vector2(NAN, NAN)) -> bool:
 	if not _refinement_requested() or displacement_refinement_radius <= 0.0: return false
 	# Conservative cheap height cull: no base surface point can enter the shader
 	# sphere outside the complete heightfield extrema. No local-slope assumption.
-	if (height_range.is_finite() or _height_image != null) and is_instance_valid(_source) and is_instance_valid(_camera):
+	if (height_range.is_finite() or _height_image != null or not _regions.is_empty()) and is_instance_valid(_source) and is_instance_valid(_camera):
 		var minimum := float(height_range.x) if height_range.is_finite() else _height_min
 		var maximum := float(height_range.y) if height_range.is_finite() else _height_max
 		var camera_y := _source.to_local(_camera.global_position).y
@@ -1246,10 +1303,678 @@ func _update_patch_bounds(patch: MeshInstance3D) -> void:
 	var reach := maxf(displacement_strength, 0.0) * _bound_displacement_multiplier * 0.5
 	var lateral := reach + 0.01
 	var padding := reach + 0.1
-	patch.custom_aabb = AABB(Vector3(bounds.position.x - lateral, _height_min - padding, bounds.position.y - lateral), Vector3(bounds.size.x + lateral * 2.0, _height_max - _height_min + padding * 2.0, bounds.size.y + lateral * 2.0))
+	var range := _patch_height_range(bounds)
+	patch.custom_aabb = AABB(Vector3(bounds.position.x - lateral, range.x - padding, bounds.position.y - lateral), Vector3(bounds.size.x + lateral * 2.0, range.y - range.x + padding * 2.0, bounds.size.y + lateral * 2.0))
+
+## Height extrema of the resident regions a patch overlaps; the global range when no region
+## data exists yet. Patches overlapping only low regions keep a tight bound when another
+## region is edited.
+func _patch_height_range(bounds: Rect2) -> Vector2:
+	if _region_spec.is_empty() or _regions.is_empty(): return Vector2(_height_min, _height_max)
+	var minimum := INF; var maximum := -INF
+	for xy in StrataRegions.regions_touching(_region_spec, bounds):
+		var data: StrataRegionData = _regions.get(xy)
+		if data == null: continue
+		minimum = minf(minimum, data.height_min); maximum = maxf(maximum, data.height_max)
+	return Vector2(minimum, maximum) if is_finite(minimum) else Vector2(_height_min, _height_max)
 
 func get_stats() -> Dictionary:
 	return _stats.duplicate(true)
+
+# ---------------------------------------------------------------------------------------
+# Regions (docs/development/terrain_renderer_regions.md)
+# ---------------------------------------------------------------------------------------
+
+const _SAMPLER_UNIFORMS := {
+	StrataRegions.MAP_HEIGHT: "height",
+	StrataRegions.MAP_MATERIAL_IDS: "material_ids",
+	StrataRegions.MAP_MATERIAL_WEIGHTS: "material_weights",
+	StrataRegions.MAP_HOLES: "holes",
+	StrataRegions.MAP_MACRO: "macro",
+}
+## Maps the shader reads: format and kind each must have.
+const _SHADER_MAPS := {
+	StrataRegions.MAP_HEIGHT: [[Image.FORMAT_RF], StrataRegions.KIND_SAMPLE],
+	StrataRegions.MAP_MATERIAL_IDS: [[Image.FORMAT_RGBA8], StrataRegions.KIND_SAMPLE],
+	StrataRegions.MAP_MATERIAL_WEIGHTS: [[Image.FORMAT_RGBA8, Image.FORMAT_RGBAF], StrataRegions.KIND_SAMPLE],
+	StrataRegions.MAP_HOLES: [[Image.FORMAT_L8], StrataRegions.KIND_CELL],
+	StrataRegions.MAP_MACRO: [[Image.FORMAT_RGBAH], StrataRegions.KIND_SAMPLE],
+}
+## Region apron per adapter map, in that map's own texels. Height needs one texel for the
+## hardware filter (two keep the plan's default); the point-sampled maps read no apron.
+const _ADAPTER_APRON := {
+	StrataRegions.MAP_HEIGHT: 2, StrataRegions.MAP_MATERIAL_IDS: 1, StrataRegions.MAP_MATERIAL_WEIGHTS: 1,
+	StrataRegions.MAP_HOLES: 1, StrataRegions.MAP_MACRO: 1,
+}
+const _ADAPTER_MAX_CONTROL_SCALE := 32
+const _ADAPTER_MAX_MACRO_SCALE := 4
+const _ADAPTER_MAX_RESAMPLE_TEXELS := 4 * 1024 * 1024
+static var _placeholder_arrays := {}
+static var _placeholder_table: ImageTexture
+
+## The region spec in effect (a copy); empty before any regions exist.
+func region_spec() -> Dictionary:
+	return _region_spec.duplicate(true)
+
+## The CPU region at a grid index, or null.
+func get_region(xy: Vector2i) -> StrataRegionData:
+	return _regions.get(xy)
+
+## Replaces every region at once. [param spec] is a StrataRegions spec whose bounds are the
+## terrain's, [param regions] maps Vector2i -> StrataRegionData for the resident regions (a
+## missing one is left non-resident and renders as height 0, no holes, no material). The
+## shader reads height (RF), material_ids (RGBA8), material_weights (RGBA8 or RGBAF, same
+## scale and apron as the ids), holes (L8 cell map) and macro (RGBAH); other maps are
+## ignored. Everything is validated and built before anything is swapped, so a rejected
+## call changes nothing. Whole-image adapters (set_compiled_field and friends) replace
+## regions set here, and the other way round.
+func set_regions(spec: Dictionary, regions: Dictionary) -> bool:
+	if _shader_material == null or not is_instance_valid(_source):
+		push_warning("set_regions needs a configured renderer; nothing changed.")
+		return false
+	var problem := _regions_problem(spec, regions)
+	if not problem.is_empty():
+		push_warning("Region set rejected, previous regions retained: " + problem)
+		return false
+	if spec.bounds != _bounds_for_source():
+		push_warning("Region set rejected, previous regions retained: spec bounds differ from the terrain bounds.")
+		return false
+	var state := _build_region_state(spec, regions)
+	if state.is_empty(): return false
+	var camera_position := _source.to_local(_camera.global_position) if is_instance_valid(_camera) else Vector3.ZERO
+	var plan := _select_patch_plan(spec.bounds, Vector2(camera_position.x, camera_position.z), Vector2(state.minimum, state.maximum))
+	if plan.is_empty() or not _prepare_patch_meshes(plan): return false
+	_height_image = null
+	_control_ids = null; _control_weights = null; _hole_image = null; _macro_image = null
+	_compiled_input = {}
+	_controls_resampled = false
+	_render_bounds = spec.bounds
+	_commit_region_state(state)
+	_holes_enabled = spec.maps.has(StrataRegions.MAP_HOLES)
+	_macro_enabled = spec.maps.has(StrataRegions.MAP_MACRO)
+	_bind_region_flags()
+	_shader_material.set_shader_parameter("field_origin", spec.bounds.position)
+	_shader_material.set_shader_parameter("field_size", spec.bounds.size)
+	_shader_material.set_shader_parameter("camera_position", camera_position)
+	_apply_patch_plan(plan, true)
+	return true
+
+## Replaces one region's data (all of its maps) in place: layers are rewritten, the table and
+## texture arrays keep their identity. False and no change for an unknown region or data that
+## does not match the spec.
+func update_region(xy: Vector2i, data: StrataRegionData) -> bool:
+	if _region_spec.is_empty() or data == null or not _regions.has(xy) and not StrataRegions.contains_region(_region_spec, xy): return false
+	var problem := _region_problem(_region_spec, xy, data)
+	if not problem.is_empty():
+		push_warning("Region update rejected, previous region retained: " + problem)
+		return false
+	var images := {}
+	for name in _region_spec.maps:
+		images[name] = data.get_image(name, 0)
+	var layer := int(_region_layers[xy])
+	var was_active := _refinement_zone_active()
+	for name in images:
+		(_region_arrays[name] as Texture2DArray).update_layer(images[name], layer)
+	_regions[xy] = data
+	if not _region_resident(xy): _set_region_resident(xy, true)
+	_region_changed(xy, was_active)
+	return true
+
+## Writes [param patch] into texels of one region's map starting at [param texel_origin]
+## (apron included): the CPU region and the GPU layer are patched in place. The patch must
+## have the map's format and lie inside the region's map; heights must be finite.
+func update_region_window(xy: Vector2i, map: String, patch: Image, texel_origin: Vector2i) -> bool:
+	if not _regions.has(xy) or not _region_spec.get("maps", {}).has(map) or patch == null: return false
+	var description: Dictionary = _region_spec.maps[map]
+	if patch.get_format() != int(description.format) or patch.is_compressed() or patch.has_mipmaps(): return false
+	var size := StrataRegions.map_size(_region_spec.cells, description, 0)
+	if texel_origin.x < 0 or texel_origin.y < 0 or texel_origin.x + patch.get_width() > size.x or texel_origin.y + patch.get_height() > size.y or patch.get_width() < 1 or patch.get_height() < 1: return false
+	if map == StrataRegions.MAP_HEIGHT and not bool(StrataLayerData.validate_dense(patch).get("ok", false)): return false
+	return _write_region_window(xy, map, patch, texel_origin)
+
+func _write_region_window(xy: Vector2i, map: String, patch: Image, texel_origin: Vector2i) -> bool:
+	var data: StrataRegionData = _regions[xy]
+	var image := data.get_image(map, 0)
+	if image == null: return false
+	image.blit_rect(patch, Rect2i(Vector2i.ZERO, patch.get_size()), texel_origin)
+	if not data.set_image(map, image, 0): return false
+	var was_active := _refinement_zone_active()
+	(_region_arrays[map] as Texture2DArray).update_layer(image, int(_region_layers[xy]))
+	if map == StrataRegions.MAP_HEIGHT: _recompute_region_extrema(data)
+	_region_changed(xy, was_active)
+	return true
+
+func _recompute_region_extrema(data: StrataRegionData) -> void:
+	var description := data.description(StrataRegions.MAP_HEIGHT)
+	var apron := int(description.apron)
+	var side := StrataRegions.texels_per_axis(data.cells, description, 0) + 1
+	var core := data.get_image(StrataRegions.MAP_HEIGHT, 0).get_region(Rect2i(apron, apron, side, side))
+	var extrema: Dictionary = StrataLayerData.validate_dense(core)
+	if extrema.get("ok", false):
+		data.height_min = float(extrema.min); data.height_max = float(extrema.max)
+
+func _region_changed(xy: Vector2i, was_active: bool) -> void:
+	_refresh_height_extrema()
+	if was_active != _refinement_zone_active(): _invalidate_geometry_lod()
+	var area := StrataRegions.region_bounds(_region_spec, xy).grow(0.001)
+	for instance: MeshInstance3D in _patches.values():
+		if (instance.get_meta("terrain_patch_bounds", Rect2()) as Rect2).intersects(area): _update_patch_bounds(instance)
+
+func _region_resident(xy: Vector2i) -> bool:
+	return _region_table_image != null and _region_table_image.get_pixelv(xy).a > 0.0
+
+func _set_region_resident(xy: Vector2i, resident: bool) -> void:
+	var layer := int(_region_layers[xy])
+	_region_table_image.set_pixelv(xy, Color8(layer & 255, layer >> 8, 0, 255 if resident else 0))
+	_region_table_texture.update(_region_table_image)
+
+## Height extrema of the resident regions (the global range that drives refinement culling).
+func _refresh_height_extrema() -> void:
+	var minimum := INF; var maximum := -INF
+	for data: StrataRegionData in _regions.values():
+		minimum = minf(minimum, data.height_min); maximum = maxf(maximum, data.height_max)
+	_height_min = minimum if is_finite(minimum) else 0.0
+	_height_max = maximum if is_finite(maximum) else 0.0
+
+## Why a region set cannot be bound, or "" when it can.
+func _regions_problem(spec: Dictionary, regions: Dictionary) -> String:
+	var checked := StrataRegions.validate_spec(spec)
+	if not checked.ok: return String(checked.message)
+	var maps: Dictionary = spec.maps
+	if not maps.has(StrataRegions.MAP_HEIGHT): return "the spec has no height map"
+	for name in maps:
+		if not _SHADER_MAPS.has(name): continue
+		var rule: Array = _SHADER_MAPS[name]
+		var description: Dictionary = maps[name]
+		if int(description.format) not in rule[0] or String(description.kind) != rule[1]: return "%s has an unsupported format or kind" % name
+	if maps.has(StrataRegions.MAP_MATERIAL_IDS) != maps.has(StrataRegions.MAP_MATERIAL_WEIGHTS): return "material ids and weights must come together"
+	if maps.has(StrataRegions.MAP_MATERIAL_IDS) and (int(maps.material_ids.get("scale", 1)) != int(maps.material_weights.get("scale", 1)) or int(maps.material_ids.get("apron", spec.apron)) != int(maps.material_weights.get("apron", spec.apron))): return "material ids and weights must share scale and apron"
+	var device := RenderingServer.get_rendering_device()
+	var grid := StrataRegions.grid_size(spec)
+	if device != null and grid.x * grid.y > device.limit_get(RenderingDevice.LIMIT_MAX_TEXTURE_ARRAY_LAYERS): return "%d regions exceed the device's %d array layers" % [grid.x * grid.y, device.limit_get(RenderingDevice.LIMIT_MAX_TEXTURE_ARRAY_LAYERS)]
+	for key in regions:
+		if typeof(key) != TYPE_VECTOR2I or not StrataRegions.contains_region(spec, key): return "region %s lies outside the grid" % str(key)
+		if not regions[key] is StrataRegionData: return "region %s is not a StrataRegionData" % str(key)
+		var problem := _region_problem(spec, key, regions[key])
+		if not problem.is_empty(): return problem
+	return ""
+
+func _region_problem(spec: Dictionary, xy: Vector2i, data: StrataRegionData) -> String:
+	var label := "region %s" % str(xy)
+	var checked := data.validate()
+	if not checked.ok: return "%s: %s" % [label, checked.message]
+	if data.region != xy or data.cells != int(spec.cells) or data.apron != int(spec.apron) or not is_equal_approx(data.spacing, float(spec.spacing)) or not data.origin.is_equal_approx(StrataRegions.region_origin(spec, xy)):
+		return "%s does not match the spec geometry" % label
+	for name in spec.maps:
+		if not data.has_map(name) or data.level_count(name) < 1: return "%s lacks map %s" % [label, name]
+		var description: Dictionary = spec.maps[name]
+		var held := data.description(name)
+		if int(held.format) != int(description.format) or String(held.kind) != String(description.kind) or int(held.scale) != int(description.get("scale", 1)) or int(held.apron) != int(description.get("apron", spec.apron)):
+			return "%s map %s differs from the spec" % [label, name]
+	return ""
+
+## Creates the texture arrays and table for a region set without touching renderer state.
+func _build_region_state(spec: Dictionary, regions: Dictionary) -> Dictionary:
+	var grid := StrataRegions.grid_size(spec)
+	var table := Image.create(grid.x, grid.y, false, Image.FORMAT_RGBA8)
+	var layers := {}
+	var minimum := INF; var maximum := -INF
+	for y in range(grid.y):
+		for x in range(grid.x):
+			var xy := Vector2i(x, y)
+			var layer := y * grid.x + x
+			layers[xy] = layer
+			var resident := regions.has(xy)
+			table.set_pixel(x, y, Color8(layer & 255, layer >> 8, 0, 255 if resident else 0))
+			if resident:
+				minimum = minf(minimum, (regions[xy] as StrataRegionData).height_min)
+				maximum = maxf(maximum, (regions[xy] as StrataRegionData).height_max)
+	var arrays := {}
+	for name in spec.maps:
+		if not _SHADER_MAPS.has(name): continue
+		var description: Dictionary = spec.maps[name]
+		var size := StrataRegions.map_size(spec.cells, description, 0)
+		var images: Array[Image] = []
+		for y in range(grid.y):
+			for x in range(grid.x):
+				var data: StrataRegionData = regions.get(Vector2i(x, y))
+				var image: Image = data.get_image(name, 0) if data != null else null
+				if image == null: image = Image.create(size.x, size.y, false, int(description.format))
+				images.append(image)
+		var array := Texture2DArray.new()
+		var error := array.create_from_images(images)
+		if error != OK:
+			push_warning("Region texture array for %s could not be created (error %d); previous regions retained." % [name, error])
+			return {}
+		arrays[name] = array
+	return {"spec": spec.duplicate(true), "regions": regions.duplicate(), "layers": layers, "arrays": arrays, "table_image": table, "table_texture": ImageTexture.create_from_image(table), "minimum": minimum if is_finite(minimum) else 0.0, "maximum": maximum if is_finite(maximum) else 0.0}
+
+func _commit_region_state(state: Dictionary) -> void:
+	_region_spec = state.spec
+	_regions = state.regions
+	_region_layers = state.layers
+	_region_arrays = state.arrays
+	_region_table_image = state.table_image
+	_region_table_texture = state.table_texture
+	_window_cache.clear()
+	_height_min = state.minimum
+	_height_max = state.maximum
+	_height_texture = _region_arrays.get(StrataRegions.MAP_HEIGHT)
+	_control_ids_texture = _region_arrays.get(StrataRegions.MAP_MATERIAL_IDS)
+	_control_weights_texture = _region_arrays.get(StrataRegions.MAP_MATERIAL_WEIGHTS)
+	_hole_texture = _region_arrays.get(StrataRegions.MAP_HOLES)
+	_macro_texture = _region_arrays.get(StrataRegions.MAP_MACRO)
+	_bind_region_uniforms()
+	var grid := StrataRegions.grid_size(_region_spec)
+	var per_region := 0
+	for name in _region_spec.maps:
+		if _SHADER_MAPS.has(name): per_region += StrataRegions.map_bytes(_region_spec.cells, _region_spec.maps[name], 0)
+	_stats.regions = _regions.size()
+	_stats.region_grid = grid
+	_stats.region_cells = int(_region_spec.cells)
+	_stats.region_bytes = per_region
+	_stats.height_resolution = _map_resolution(StrataRegions.MAP_HEIGHT)
+	_stats.control_resolution = _map_resolution(StrataRegions.MAP_MATERIAL_IDS)
+
+## Samples per axis the regions imply for a sample map (the lattice over the terrain bounds).
+func _map_resolution(map: String) -> Vector2i:
+	if not _region_spec.get("maps", {}).has(map): return Vector2i.ZERO
+	return _lattice_max(map) + (Vector2i.ONE if String(_region_spec.maps[map].kind) == StrataRegions.KIND_SAMPLE else Vector2i.ZERO)
+
+func _lattice_count(extent: float, step: float) -> int:
+	var count := extent / step
+	return roundi(count) if absf(count - roundf(count)) < 0.001 else ceili(count)
+
+## Last sample index per axis of a map's lattice over the terrain bounds (cell maps: the
+## number of cells).
+func _lattice_max(map: String) -> Vector2i:
+	var step := StrataRegions.texel_step(_region_spec, _region_spec.maps[map], 0)
+	return Vector2i(_lattice_count(_render_bounds.size.x, step), _lattice_count(_render_bounds.size.y, step))
+
+func _bind_region_uniforms() -> void:
+	if _shader_material == null: return
+	var material := _shader_material
+	var spec := _region_spec
+	if spec.is_empty():
+		material.set_shader_parameter("region_table", _table_placeholder())
+	else:
+		var extent := StrataRegions.extent(spec)
+		material.set_shader_parameter("region_origin", (spec.bounds as Rect2).position)
+		material.set_shader_parameter("region_extent", extent)
+		material.set_shader_parameter("region_spacing", float(spec.spacing))
+		material.set_shader_parameter("region_cells", int(spec.cells))
+		material.set_shader_parameter("region_grid", StrataRegions.grid_size(spec))
+		var lattice := Vector2i(_lattice_count(_render_bounds.size.x, float(spec.spacing)), _lattice_count(_render_bounds.size.y, float(spec.spacing)))
+		material.set_shader_parameter("region_lattice", lattice)
+		material.set_shader_parameter("region_table", _region_table_texture)
+	var layouts := [StrataRegions.MAP_HEIGHT, StrataRegions.MAP_MATERIAL_IDS, StrataRegions.MAP_HOLES, StrataRegions.MAP_MACRO]
+	for name in _SAMPLER_UNIFORMS:
+		var prefix: String = _SAMPLER_UNIFORMS[name]
+		var array: Texture2DArray = _region_arrays.get(name)
+		material.set_shader_parameter(prefix + "_regions", array if array != null else _array_placeholder(name))
+		if name in layouts and spec.get("maps", {}).has(name):
+			material.set_shader_parameter(prefix + "_scale", int(spec.maps[name].get("scale", 1)))
+			material.set_shader_parameter(prefix + "_apron", int(spec.maps[name].get("apron", spec.apron)))
+	_bind_region_flags()
+
+## Which optional maps the shader reads. The adapters clear a flag without dropping the map.
+func _bind_region_flags() -> void:
+	if _shader_material == null: return
+	var maps: Dictionary = _region_spec.get("maps", {})
+	_shader_material.set_shader_parameter("has_material_maps", maps.has(StrataRegions.MAP_MATERIAL_IDS))
+	_shader_material.set_shader_parameter("has_holes", _holes_enabled and maps.has(StrataRegions.MAP_HOLES))
+	_shader_material.set_shader_parameter("has_terrain_macro_map", _macro_enabled and maps.has(StrataRegions.MAP_MACRO))
+
+static func _array_placeholder(map: String) -> Texture2DArray:
+	if not _placeholder_arrays.has(map):
+		var image := Image.create(1, 1, false, int((_SHADER_MAPS[map] as Array)[0][0]))
+		var array := Texture2DArray.new()
+		array.create_from_images([image] as Array[Image])
+		_placeholder_arrays[map] = array
+	return _placeholder_arrays[map]
+
+static func _table_placeholder() -> ImageTexture:
+	if _placeholder_table == null: _placeholder_table = ImageTexture.create_from_image(Image.create(1, 1, false, Image.FORMAT_RGBA8))
+	return _placeholder_table
+
+# ---- CPU sampling over the regions ----
+
+func _texel_bytes(map: String, xy: Vector2i) -> PackedByteArray:
+	var data: StrataRegionData = _regions.get(xy)
+	return data.level_bytes(map, 0) if data != null else PackedByteArray()
+
+## Region and texel inside it for a lattice index of a sample map.
+func _lattice_texel(map: String, index: Vector2i) -> Array:
+	var description: Dictionary = _region_spec.maps[map]
+	var per_region := StrataRegions.texels_per_axis(_region_spec.cells, description, 0)
+	var grid := StrataRegions.grid_size(_region_spec)
+	var xy := Vector2i(index / per_region).clamp(Vector2i.ZERO, grid - Vector2i.ONE)
+	var first: Vector2i = _region_window(map, xy).first
+	return [xy, index - first]
+
+func _region_window(map: String, xy: Vector2i) -> Dictionary:
+	var key := [map, xy]
+	if not _window_cache.has(key): _window_cache[key] = StrataRegions.map_window(_region_spec, xy, _region_spec.maps[map], 0)
+	return _window_cache[key]
+
+func _lattice_height(index: Vector2i) -> float:
+	var located := _lattice_texel(StrataRegions.MAP_HEIGHT, index)
+	var bytes := _texel_bytes(StrataRegions.MAP_HEIGHT, located[0])
+	if bytes.is_empty(): return 0.0
+	var size: Vector2i = _region_window(StrataRegions.MAP_HEIGHT, located[0]).size
+	var texel: Vector2i = located[1]
+	return bytes.decode_float((texel.y * size.x + texel.x) * 4)
+
+func _texel_color(map: String, xy: Vector2i, texel: Vector2i) -> Color:
+	var bytes := _texel_bytes(map, xy)
+	if bytes.is_empty(): return Color(0, 0, 0, 0)
+	var size: Vector2i = _region_window(map, xy).size
+	var offset := texel.y * size.x + texel.x
+	match int(_region_spec.maps[map].format):
+		Image.FORMAT_L8, Image.FORMAT_R8: return Color(bytes[offset] / 255.0, 0, 0, 1)
+		Image.FORMAT_RGBA8: return Color(bytes[offset * 4] / 255.0, bytes[offset * 4 + 1] / 255.0, bytes[offset * 4 + 2] / 255.0, bytes[offset * 4 + 3] / 255.0)
+		Image.FORMAT_RF: return Color(bytes.decode_float(offset * 4), 0, 0, 1)
+		Image.FORMAT_RGBAF: return Color(bytes.decode_float(offset * 16), bytes.decode_float(offset * 16 + 4), bytes.decode_float(offset * 16 + 8), bytes.decode_float(offset * 16 + 12))
+	return Color(0, 0, 0, 0)
+
+func _cell_is_hole(position: Vector2) -> bool:
+	if not _region_spec.get("maps", {}).has(StrataRegions.MAP_HOLES): return false
+	var description: Dictionary = _region_spec.maps[StrataRegions.MAP_HOLES]
+	var step := StrataRegions.texel_step(_region_spec, description, 0)
+	var cells := _lattice_max(StrataRegions.MAP_HOLES)
+	var cell := Vector2i(((position - _render_bounds.position) / step).floor()).clamp(Vector2i.ZERO, cells - Vector2i.ONE)
+	var per_region := StrataRegions.texels_per_axis(_region_spec.cells, description, 0)
+	var xy := Vector2i(cell / per_region).clamp(Vector2i.ZERO, StrataRegions.grid_size(_region_spec) - Vector2i.ONE)
+	var first: Vector2i = _region_window(StrataRegions.MAP_HOLES, xy).first
+	return _texel_color(StrataRegions.MAP_HOLES, xy, cell - first).r >= 0.5
+
+## The shader's control blend at a terrain position, read from the regions: the CPU reference
+## for what the terrain draws (IDs, normalized soft-limit weights, discarded mass).
+func sample_control_blend(position: Vector2) -> Dictionary:
+	var maps: Dictionary = _region_spec.get("maps", {})
+	if not maps.has(StrataRegions.MAP_MATERIAL_IDS): return {"ids": PackedInt32Array([0, 0, 0, 0]), "weights": PackedFloat32Array([0, 0, 0, 0]), "discarded_weight": 0.0}
+	var step := StrataRegions.texel_step(_region_spec, maps.material_ids, 0)
+	var lattice_max := _lattice_max(StrataRegions.MAP_MATERIAL_IDS)
+	var grid := ((position - _render_bounds.position) / step).clamp(Vector2.ZERO, Vector2(lattice_max))
+	var base := Vector2i(floor(grid.x), floor(grid.y))
+	var corner_ids: Array[Color] = []; var corner_weights: Array[Color] = []
+	for corner in range(4):
+		var located_ids := _lattice_texel(StrataRegions.MAP_MATERIAL_IDS, (base + Vector2i(corner % 2, corner / 2)).min(lattice_max))
+		corner_ids.append(_texel_color(StrataRegions.MAP_MATERIAL_IDS, located_ids[0], located_ids[1]))
+		corner_weights.append(_texel_color(StrataRegions.MAP_MATERIAL_WEIGHTS, located_ids[0], located_ids[1]))
+	return _blend_corners(corner_ids, corner_weights, grid - Vector2(base))
+
+# ---- Whole-image adapters: slicing into regions ----
+
+## The region layout implied by the whole-terrain images, and the image each map slices
+## from, or {} (after a warning) when it cannot be represented. The finest lattice among the
+## height and control images becomes the region spacing; every other map is a power-of-two
+## multiple of it. Controls whose step is no such multiple are resampled (bilinear weights,
+## nearest IDs) and macro images that do not already match the lattice are resampled bilinearly
+## (a transitional cost; the planned region producers write the maps directly).
+func _adapter_plan() -> Dictionary:
+	if _height_image == null or not _render_bounds.size.is_finite(): return {}
+	var bounds := _render_bounds
+	var dimensions := _height_image.get_size()
+	var height_step := bounds.size.x / float(dimensions.x - 1)
+	if absf(bounds.size.y / float(dimensions.y - 1) - height_step) > height_step * 0.0001:
+		push_warning("Height lattice steps differ per axis; regions need a square lattice. Previous maps retained.")
+		return {}
+	var sources := {StrataRegions.MAP_HEIGHT: _height_image}
+	var steps := {StrataRegions.MAP_HEIGHT: height_step}
+	var spacing := height_step
+	_controls_resampled = false
+	if _control_ids != null:
+		var ids := _control_ids
+		var weights := _control_weights
+		var control_step := bounds.size.x / float(ids.get_width() - 1)
+		var aligned := absf(bounds.size.y / float(ids.get_height() - 1) - control_step) <= control_step * 0.0001
+		var ratio := control_step / height_step
+		if not aligned or not _is_power_of_two_ratio(ratio, 1.0 / 1024.0, float(_ADAPTER_MAX_CONTROL_SCALE)):
+			# Resample onto a power-of-two multiple of the height lattice with about 1025 texels.
+			var scale := 1
+			while bounds.size.x / (height_step * scale) > 1025.0: scale *= 2
+			control_step = height_step * scale
+			var resampled := _resample_controls(ids, weights, Vector2i(Vector2(bounds.size / control_step).round()) + Vector2i.ONE)
+			ids = resampled[0]; weights = resampled[1]
+			_controls_resampled = true
+		sources[StrataRegions.MAP_MATERIAL_IDS] = ids
+		sources[StrataRegions.MAP_MATERIAL_WEIGHTS] = weights
+		steps[StrataRegions.MAP_MATERIAL_IDS] = control_step
+		steps[StrataRegions.MAP_MATERIAL_WEIGHTS] = control_step
+		spacing = minf(spacing, control_step)
+	if _hole_image != null and _hole_image.get_size() == dimensions - Vector2i.ONE:
+		sources[StrataRegions.MAP_HOLES] = _hole_image
+		steps[StrataRegions.MAP_HOLES] = height_step
+	var scales := {}
+	for name in steps: scales[name] = maxi(1, roundi(float(steps[name]) / spacing))
+	var macro_scale := 1
+	if _macro_image != null:
+		if _macro_bounds == bounds:
+			var macro_ratio := _macro_bounds.size.x / float(_macro_image.get_width() - 1) / spacing
+			macro_scale = clampi(1 << maxi(0, roundi(log(maxf(macro_ratio, 1.0)) / log(2.0))), 1, _ADAPTER_MAX_MACRO_SCALE)
+		else:
+			# A macro map with its own extent never lies on the region lattice: resample it as
+			# finely as the lattice stays near 1025 texels so its corners stay close to exact.
+			while bounds.size.x / (spacing * macro_scale) > 1025.0 and macro_scale < _ADAPTER_MAX_MACRO_SCALE: macro_scale *= 2
+		scales[StrataRegions.MAP_MACRO] = macro_scale
+		steps[StrataRegions.MAP_MACRO] = spacing * macro_scale
+	var lattice := maxi(_lattice_count(bounds.size.x, spacing), _lattice_count(bounds.size.y, spacing))
+	var cells := clampi(_next_power_of_two(lattice), StrataRegions.MIN_CELLS, StrataRegions.DEFAULT_CELLS)
+	var maps := {}
+	for name in scales:
+		var apron: int = _ADAPTER_APRON[name]
+		cells = maxi(cells, _next_power_of_two(2 * int(scales[name]) * apron))
+	if cells > StrataRegions.MAX_CELLS:
+		push_warning("The control and height lattices differ too much to share a region size. Previous maps retained.")
+		return {}
+	var formats := {
+		StrataRegions.MAP_HEIGHT: Image.FORMAT_RF, StrataRegions.MAP_MATERIAL_IDS: Image.FORMAT_RGBA8, StrataRegions.MAP_MATERIAL_WEIGHTS: Image.FORMAT_RGBAF,
+		StrataRegions.MAP_HOLES: Image.FORMAT_L8, StrataRegions.MAP_MACRO: Image.FORMAT_RGBAH,
+	}
+	for name in scales:
+		var kind := StrataRegions.KIND_CELL if name == StrataRegions.MAP_HOLES else StrataRegions.KIND_SAMPLE
+		maps[name] = StrataRegions.map(formats[name], kind, int(scales[name]), int(_ADAPTER_APRON[name]))
+	var spec := {"bounds": bounds, "spacing": spacing, "cells": cells, "apron": int(_ADAPTER_APRON[StrataRegions.MAP_HEIGHT]), "maps": maps}
+	var checked := StrataRegions.validate_spec(spec)
+	if not checked.ok:
+		push_warning("Region layout rejected: %s. Previous maps retained." % checked.message)
+		return {}
+	if _macro_image != null:
+		var macro := _macro_for_lattice(spec, maps[StrataRegions.MAP_MACRO])
+		if macro == null: return {}
+		sources[StrataRegions.MAP_MACRO] = macro
+	return {"spec": spec, "sources": sources}
+
+static func _is_power_of_two_ratio(ratio: float, minimum: float, maximum: float) -> bool:
+	if not is_finite(ratio) or ratio < minimum * 0.999 or ratio > maximum * 1.001: return false
+	var exponent := log(ratio) / log(2.0)
+	return absf(exponent - roundf(exponent)) < 0.001
+
+static func _next_power_of_two(value: int) -> int:
+	var result := 1
+	while result < value: result <<= 1
+	return result
+
+## Resamples a control pair onto a coarser or finer endpoint-aligned lattice: nearest IDs and
+## bilinear weights of the source's four surrounding texels.
+func _resample_controls(ids: Image, weights: Image, size: Vector2i) -> Array:
+	var out_ids := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
+	var out_weights := Image.create(size.x, size.y, false, Image.FORMAT_RGBAF)
+	var source := ids.get_size() - Vector2i.ONE
+	for z in range(size.y):
+		for x in range(size.x):
+			var grid := Vector2(float(x) / float(maxi(size.x - 1, 1)), float(z) / float(maxi(size.y - 1, 1))) * Vector2(source)
+			var base := Vector2i(floor(grid.x), floor(grid.y)).min(source - Vector2i.ONE).max(Vector2i.ZERO)
+			var f := grid - Vector2(base)
+			var nearest := Vector2i(grid.round()).clamp(Vector2i.ZERO, source)
+			out_ids.set_pixelv(Vector2i(x, z), ids.get_pixelv(nearest))
+			# Bilinear weights follow the nearest texel's ID layout only where the layouts agree.
+			var nearest_ids := ids.get_pixelv(nearest)
+			var accumulated := Color(0, 0, 0, 0)
+			for corner in range(4):
+				var texel := (base + Vector2i(corner % 2, corner / 2)).min(source)
+				var corner_ids := ids.get_pixelv(texel)
+				var corner_weights := weights.get_pixelv(texel)
+				var bilinear := (1.0 - f.x if corner % 2 == 0 else f.x) * (1.0 - f.y if corner / 2 == 0 else f.y)
+				for slot in range(4):
+					for target in range(4):
+						if roundi(corner_ids[slot] * 255.0) == roundi(nearest_ids[target] * 255.0):
+							accumulated[target] += corner_weights[slot] * bilinear
+							break
+			out_weights.set_pixelv(Vector2i(x, z), accumulated)
+	return [out_ids, out_weights]
+
+## The macro image on the region lattice of its map: the image itself when it already is,
+## otherwise a bilinear resample clamped to the macro bounds. Null (after a warning) when the
+## resample would be too large.
+func _macro_for_lattice(spec: Dictionary, description: Dictionary) -> Image:
+	var step := StrataRegions.texel_step(spec, description, 0)
+	var size := Vector2i(_lattice_count(spec.bounds.size.x, step), _lattice_count(spec.bounds.size.y, step)) + Vector2i.ONE
+	var macro_step := _macro_bounds.size / Vector2(_macro_image.get_size() - Vector2i.ONE)
+	if _macro_image.get_size() == size and _macro_bounds == spec.bounds and absf(macro_step.x - step) <= step * 0.0001 and absf(macro_step.y - step) <= step * 0.0001: return _macro_image
+	if size.x * size.y > _ADAPTER_MAX_RESAMPLE_TEXELS:
+		push_warning("The macro map does not match the region lattice and is too large to resample. Previous maps retained.")
+		return null
+	var result := Image.create(size.x, size.y, false, Image.FORMAT_RGBAH)
+	var last := _macro_image.get_size() - Vector2i.ONE
+	var origin: Vector2 = spec.bounds.position
+	for z in range(size.y):
+		for x in range(size.x):
+			var grid: Vector2 = ((origin + Vector2(x, z) * step - _macro_bounds.position) / macro_step).clamp(Vector2.ZERO, Vector2(last))
+			var base := Vector2i(floor(grid.x), floor(grid.y)).min(last - Vector2i.ONE).max(Vector2i.ZERO)
+			var f: Vector2 = grid - Vector2(base)
+			var low := _macro_image.get_pixelv(base).lerp(_macro_image.get_pixelv(base + Vector2i(1, 0)), f.x)
+			var high := _macro_image.get_pixelv(base + Vector2i(0, 1)).lerp(_macro_image.get_pixelv(base + Vector2i.ONE), f.x)
+			result.set_pixel(x, z, low.lerp(high, f.y))
+	return result
+
+## A window of a whole-lattice image, with texels outside the image replicating its nearest
+## edge texel.
+static func _slice_clamped(source: Image, first: Vector2i, size: Vector2i) -> Image:
+	var result := Image.create(size.x, size.y, false, source.get_format())
+	var image_rect := Rect2i(Vector2i.ZERO, source.get_size())
+	var clipped := Rect2i(first, size).intersection(image_rect)
+	if clipped.size.x <= 0 or clipped.size.y <= 0: return result
+	var offset := clipped.position - first
+	result.blit_rect(source, clipped, offset)
+	# Columns first (over the clipped rows), then whole rows, so corners replicate too.
+	for column in range(0, offset.x):
+		result.blit_rect(result, Rect2i(offset.x, offset.y, 1, clipped.size.y), Vector2i(column, offset.y))
+	for column in range(offset.x + clipped.size.x, size.x):
+		result.blit_rect(result, Rect2i(offset.x + clipped.size.x - 1, offset.y, 1, clipped.size.y), Vector2i(column, offset.y))
+	for row in range(0, offset.y):
+		result.blit_rect(result, Rect2i(0, offset.y, size.x, 1), Vector2i(0, row))
+	for row in range(offset.y + clipped.size.y, size.y):
+		result.blit_rect(result, Rect2i(0, offset.y + clipped.size.y - 1, size.x, 1), Vector2i(0, row))
+	return result
+
+## Makes the regions match the whole-terrain images. [param changed] names the maps whose
+## content changed: when the layout in effect already covers the new one they are rewritten
+## layer by layer in place (array and table keep their identity), otherwise every region is
+## rebuilt and swapped in one step. False, with nothing changed, if it cannot be built.
+func _sync_regions(changed: Array) -> bool:
+	if _height_image == null or _shader_material == null: return true
+	var plan := _adapter_plan()
+	if plan.is_empty(): return false
+	var spec: Dictionary = plan.spec
+	var sources: Dictionary = plan.sources
+	if _layout_covers(spec):
+		for name in changed:
+			if not sources.has(name) or not _region_spec.maps.has(name): continue
+			if not _refresh_map(name, sources[name]): return false
+		_regions_refreshed(changed)
+		return true
+	var regions := {}
+	var grid := StrataRegions.grid_size(spec)
+	for y in range(grid.y):
+		for x in range(grid.x):
+			var data := _slice_region(spec, Vector2i(x, y), sources)
+			if data == null: return false
+			regions[Vector2i(x, y)] = data
+	var state := _build_region_state(spec, regions)
+	if state.is_empty(): return false
+	_commit_region_state(state)
+	_regions_refreshed(changed)
+	return true
+
+func _layout_covers(spec: Dictionary) -> bool:
+	if _region_spec.is_empty(): return false
+	for key in ["bounds", "spacing", "cells", "apron"]:
+		if _region_spec[key] != spec[key]: return false
+	for name in spec.maps:
+		if not _region_spec.maps.has(name) or _region_spec.maps[name] != spec.maps[name]: return false
+	return true
+
+func _slice_region(spec: Dictionary, xy: Vector2i, sources: Dictionary) -> StrataRegionData:
+	var data := StrataRegionData.new()
+	data.region = xy
+	data.cells = int(spec.cells)
+	data.apron = int(spec.apron)
+	data.spacing = float(spec.spacing)
+	data.origin = StrataRegions.region_origin(spec, xy)
+	for name in spec.maps:
+		var description: Dictionary = spec.maps[name]
+		var window := StrataRegions.map_window(spec, xy, description, 0)
+		if not data.set_image(name, _slice_clamped(sources[name], window.first, window.size), 0, description):
+			push_warning("Region %s could not hold map %s. Previous maps retained." % [str(xy), name])
+			return null
+	_recompute_region_extrema(data)
+	return data
+
+func _refresh_map(name: String, source: Image) -> bool:
+	var description: Dictionary = _region_spec.maps[name]
+	var array: Texture2DArray = _region_arrays.get(name)
+	if array == null: return false
+	for xy in _regions:
+		var window := StrataRegions.map_window(_region_spec, xy, description, 0)
+		var image := _slice_clamped(source, window.first, window.size)
+		var data: StrataRegionData = _regions[xy]
+		if not data.set_image(name, image, 0): return false
+		array.update_layer(image, int(_region_layers[xy]))
+		if name == StrataRegions.MAP_HEIGHT: _recompute_region_extrema(data)
+	return true
+
+func _regions_refreshed(changed: Array) -> void:
+	_refresh_height_extrema()
+	if changed.has(StrataRegions.MAP_HOLES): _holes_enabled = _hole_image != null
+	if changed.has(StrataRegions.MAP_MACRO): _macro_enabled = _macro_image != null
+	_bind_region_flags()
+	if changed.has(StrataRegions.MAP_MATERIAL_IDS): _update_discarded_diagnostic()
+
+## Writes a patch of a map's lattice into every region whose window (apron included)
+## overlaps it. Patches reaching the terrain edge are extended by edge replication over the
+## rest of the last region and its apron, as the initial slicing does. [param origin] is in
+## the map's lattice indices. Validates the patch first; false changes nothing.
+func _blit_lattice_patch(map: String, patch: Image, origin: Vector2i) -> bool:
+	var maps: Dictionary = _region_spec.get("maps", {})
+	if not maps.has(map) or patch == null or patch.get_format() != int(maps[map].format): return false
+	if map == StrataRegions.MAP_HEIGHT and not bool(StrataLayerData.validate_dense(patch).get("ok", false)): return false
+	var description: Dictionary = maps[map]
+	var sample := String(description.kind) == StrataRegions.KIND_SAMPLE
+	var apron := int(description.get("apron", _region_spec.apron))
+	var per_region := StrataRegions.texels_per_axis(_region_spec.cells, description, 0)
+	var grid := StrataRegions.grid_size(_region_spec)
+	var edge := _lattice_max(map) - (Vector2i.ZERO if sample else Vector2i.ONE)
+	var reach := grid * per_region + Vector2i.ONE * apron - (Vector2i.ZERO if sample else Vector2i.ONE)
+	var before := Vector2i(apron if origin.x == 0 else 0, apron if origin.y == 0 else 0)
+	var last := origin + patch.get_size() - Vector2i.ONE
+	var after := Vector2i(reach.x - edge.x if last.x == edge.x else 0, reach.y - edge.y if last.y == edge.y else 0)
+	var extended := patch
+	if before != Vector2i.ZERO or after != Vector2i.ZERO:
+		extended = _slice_clamped(patch, -before, patch.get_size() + before + after)
+	var start := origin - before
+	var step := StrataRegions.texel_step(_region_spec, description, 0)
+	var area := Rect2(_render_bounds.position + Vector2(start) * step, Vector2(extended.get_size()) * step)
+	for xy in StrataRegions.regions_touching(_region_spec, area, description):
+		if not _regions.has(xy): continue
+		var window := StrataRegions.map_window(_region_spec, xy, description, 0)
+		var destination := start - Vector2i(window.first)
+		var clipped := Rect2i(destination, extended.get_size()).intersection(Rect2i(Vector2i.ZERO, window.size))
+		if clipped.size.x <= 0 or clipped.size.y <= 0: continue
+		var piece := extended.get_region(Rect2i(clipped.position - destination, clipped.size))
+		if not _write_region_window(xy, map, piece, clipped.position): return false
+	return true
 
 ## CPU reference for the GLSL by-ID merge and fifth-weight soft top-four rule. CPU accumulation
 ## uses doubles, GPU uses floats: rankings can differ for near-tied weights.
@@ -1258,20 +1983,26 @@ static func blend_control_samples(ids: Image, weights: Image, position: Vector2,
 	var normalized := ((position - bounds.position) / bounds.size).clamp(Vector2.ZERO, Vector2.ONE)
 	var grid := normalized * Vector2(dimensions - Vector2i.ONE)
 	var base := Vector2i(floor(grid.x), floor(grid.y))
-	var fraction := grid - Vector2(base)
+	var corner_ids: Array[Color] = []; var corner_weights: Array[Color] = []
+	for corner in range(4):
+		var texel := (base + Vector2i(corner % 2, corner / 2)).min(dimensions - Vector2i.ONE)
+		corner_ids.append(ids.get_pixelv(texel))
+		corner_weights.append(weights.get_pixelv(texel))
+	return _blend_corners(corner_ids, corner_weights, grid - Vector2(base))
+
+## The blend of the four corners (order x fastest) of a control cell at a fractional position.
+static func _blend_corners(corner_ids: Array[Color], corner_weights: Array[Color], fraction: Vector2) -> Dictionary:
 	var accumulated: Dictionary = {}
-	for z in range(2):
-		for x in range(2):
-			var texel := (base + Vector2i(x, z)).min(dimensions - Vector2i.ONE)
-			var incoming_ids := ids.get_pixelv(texel)
-			var incoming_weights := weights.get_pixelv(texel)
-			var total := maxf(incoming_weights.r, 0.0) + maxf(incoming_weights.g, 0.0) + maxf(incoming_weights.b, 0.0) + maxf(incoming_weights.a, 0.0)
-			var bilinear := (1.0 - fraction.x if x == 0 else fraction.x) * (1.0 - fraction.y if z == 0 else fraction.y)
-			for slot in range(4):
-				var contribution := maxf(incoming_weights[slot], 0.0) * bilinear / total if total > 0.0 else 0.0
-				if contribution > 0.0:
-					var id := clampi(roundi(incoming_ids[slot] * 255.0), 0, 31)
-					accumulated[id] = float(accumulated.get(id, 0.0)) + contribution
+	for corner in range(4):
+		var incoming_ids := corner_ids[corner]
+		var incoming_weights := corner_weights[corner]
+		var total := maxf(incoming_weights.r, 0.0) + maxf(incoming_weights.g, 0.0) + maxf(incoming_weights.b, 0.0) + maxf(incoming_weights.a, 0.0)
+		var bilinear := (1.0 - fraction.x if corner % 2 == 0 else fraction.x) * (1.0 - fraction.y if corner / 2 == 0 else fraction.y)
+		for slot in range(4):
+			var contribution := maxf(incoming_weights[slot], 0.0) * bilinear / total if total > 0.0 else 0.0
+			if contribution > 0.0:
+				var id := clampi(roundi(incoming_ids[slot] * 255.0), 0, 31)
+				accumulated[id] = float(accumulated.get(id, 0.0)) + contribution
 	var sorted: Array = accumulated.keys()
 	sorted.sort_custom(func(a: int, b: int): return a < b if accumulated[a] == accumulated[b] else accumulated[a] > accumulated[b])
 	var result_ids := PackedInt32Array([0, 0, 0, 0])
@@ -1295,17 +2026,16 @@ static func blend_control_samples(ids: Image, weights: Image, position: Vector2,
 	return {"ids": result_ids, "weights": result_weights, "discarded_weight": maxf(0.0, total - retained) / total if total > 0.0 else 0.0}
 
 func _update_discarded_diagnostic() -> void:
-	if _control_ids == null or not is_instance_valid(_source):
+	if not _region_spec.get("maps", {}).has(StrataRegions.MAP_MATERIAL_IDS):
 		return
 	var maximum := 0.0
-	var dimensions := _control_ids.get_size()
+	var dimensions := _map_resolution(StrataRegions.MAP_MATERIAL_IDS)
 	# Midpoint diagnostic is sampled, not a mathematical bound over every point.
 	var stride := maxi(1, ceili(float(maxi(dimensions.x, dimensions.y)) / 65.0))
 	for z in range(0, dimensions.y - 1, stride):
 		for x in range(0, dimensions.x - 1, stride):
-			var point := _bounds_for_source().position + _bounds_for_source().size * Vector2((x + 0.5) / (dimensions.x - 1), (z + 0.5) / (dimensions.y - 1))
-			var result := blend_control_samples(_control_ids, _control_weights, point, _bounds_for_source())
-			maximum = maxf(maximum, result.discarded_weight)
+			var point := _render_bounds.position + _render_bounds.size * Vector2((x + 0.5) / (dimensions.x - 1), (z + 0.5) / (dimensions.y - 1))
+			maximum = maxf(maximum, float(sample_control_blend(point).discarded_weight))
 	_stats.max_discarded_weight = maximum
 
 ## Pure reference for valid normalized painted weights and validated parameters.
