@@ -199,7 +199,12 @@ func check_region_scale_windows() -> void:
 		check(full_single.ok and window_single.ok and same_window(full_single.image, window_single.image, Vector2i(3700, 3650)), "single-mode window with datum equals the full composition")
 	var inside := StrataLayerData.compose_dense(layers, &"height", Vector3.ZERO, Vector3.RIGHT, Vector3.BACK, Vector2i(261, 261), bounds, false, 0.0, Vector2i(3700, 3650))
 	check(inside.ok and inside.max > inside.min, "the checked window actually contains data")
-	check(not StrataLayerData.compose_dense(layers, &"height", Vector3.ZERO, Vector3.RIGHT, Vector3.BACK, Vector2i(261, 261), bounds, false, 0.0, Vector2i(-1, 0)).ok, "negative window offsets are rejected")
+	# A negative offset addresses lattice points before the origin (a region's apron) and must
+	# equal the full lattice composed from a shifted origin.
+	var shifted: Dictionary = StrataLayerData.compose_dense(layers, &"height", Vector3(-2, 0, -2), Vector3.RIGHT, Vector3.BACK, Vector2i(261, 261), bounds, false, 0.0)
+	var negative: Dictionary = StrataLayerData.compose_dense(layers, &"height", Vector3.ZERO, Vector3.RIGHT, Vector3.BACK, Vector2i(261, 261), bounds, false, 0.0, Vector2i(-2, -2))
+	check(negative.ok and shifted.ok and negative.image.get_data() == shifted.image.get_data(), "a negative window offset composes the apron before the origin bit-identically")
+	check(not StrataLayerData.compose_dense(layers, &"height", Vector3.ZERO, Vector3.RIGHT, Vector3.BACK, Vector2i(261, 261), bounds, false, 0.0, Vector2i(-30000000, 0)).ok, "window offsets beyond the dense budget are rejected")
 
 func mask_source(data: StrataLayerData) -> Dictionary:
 	return {"data": data, "origin": Vector3.ZERO, "step_x": Vector3.RIGHT, "step_y": Vector3.BACK, "mode": 0}

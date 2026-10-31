@@ -117,16 +117,17 @@ static func compose(terrain: StrataTerrain3D, through_layer: StrataLayer, xy: Ve
 
 # Plane composition -----------------------------------------------------
 
-## compose_dense over a map window. [param window] comes from StrataRegions.map_window; a
-## negative first index is folded into the origin because the native index offset is >= 0.
+## compose_dense over a map window. [param window] comes from StrataRegions.map_window. The
+## window's first index is passed as the native index offset (negative for the apron before the
+## terrain origin), so every texel is computed with the whole lattice's expression and the
+## window is bit-identical to the matching rectangle of a full composition for any spacing.
 static func _compose_plane(terrain: StrataTerrain3D, channel: StringName, through_layer: StrataLayer, window: Dictionary, spec: Dictionary, include_coverage: bool, descriptors: Array = []) -> Dictionary:
 	if descriptors.is_empty(): descriptors = StrataProcedural._capture_layers(terrain, channel, through_layer)
 	var first: Vector2i = window.first
-	var offset := first.max(Vector2i.ZERO)
 	var step: float = window.step
 	var bounds: Rect2 = spec.bounds
-	var origin := Vector3(bounds.position.x + float(first.x - offset.x) * step, 0.0, bounds.position.y + float(first.y - offset.y) * step)
-	var composed: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"compose_dense", descriptors, channel, origin, Vector3(step, 0.0, 0.0), Vector3(0.0, 0.0, step), window.size, terrain.base_bounds, include_coverage, 0.0, offset)
+	var origin := Vector3(bounds.position.x, 0.0, bounds.position.y)
+	var composed: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"compose_dense", descriptors, channel, origin, Vector3(step, 0.0, 0.0), Vector3(0.0, 0.0, step), window.size, terrain.base_bounds, include_coverage, 0.0, first)
 	if not composed.get("ok", false): return _error(String(composed.get("message", "composition failed")))
 	return {"ok": true, "message": "", "image": composed.image, "coverage": composed.get("coverage")}
 

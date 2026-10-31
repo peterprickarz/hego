@@ -524,7 +524,9 @@ struct StrataLayerData::GridSampler {
 // a window is bit-identical to the matching rectangle of a full composition.
 Dictionary StrataLayerData::compose_dense(const Array &layers, StringName channel_name, Vector3 origin, Vector3 sx, Vector3 sy, Vector2i size, Rect2 bounds, bool include_coverage, double subtract_datum, Vector2i index_offset) {
     if (!valid_size(size) || !valid_grid(origin, sx, sy) || !bounds.position.is_finite() || !bounds.size.is_finite() || bounds.size.x < 0 || bounds.size.y < 0 || !std::isfinite(subtract_datum) || layers.size() > 64) return failure("Invalid or oversized dense composition grid/layer count.");
-    if (index_offset.x < 0 || index_offset.y < 0 || int64_t(index_offset.x) + size.x > MAX_DENSE_SAMPLES || int64_t(index_offset.y) + size.y > MAX_DENSE_SAMPLES) return failure("Dense composition window offset must be nonnegative and bounded.");
+    // Negative offsets address lattice points before the origin (a region's apron); the
+    // magnitude stays within the dense sample budget either way.
+    if (std::abs(int64_t(index_offset.x)) > MAX_DENSE_SAMPLES || std::abs(int64_t(index_offset.y)) > MAX_DENSE_SAMPLES || int64_t(index_offset.x) + size.x > MAX_DENSE_SAMPLES || int64_t(index_offset.y) + size.y > MAX_DENSE_SAMPLES) return failure("Dense composition window offset must be bounded.");
     const int last_x = index_offset.x + size.x - 1, last_y = index_offset.y + size.y - 1;
     if (!finite_vector(origin + sx * last_x) || !finite_vector(origin + sy * last_y) || !finite_vector(origin + sx * last_x + sy * last_y) || !(bounds.position + bounds.size).is_finite()) return failure("Composed grid corners exceed coordinate range.");
     std::vector<GridSampler> samplers;

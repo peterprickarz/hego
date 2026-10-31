@@ -161,8 +161,8 @@ kept. RGBAF/RGBAH input is normalized and returned as RGBAF as before.
 ## Windowed composition at region scale
 
 `compose_dense(..., index_offset)` composes a window of a lattice of any size up to the 20 Mi
-sample cap per window; offsets are nonnegative and `offset + size` is bounded by 20 Mi, so a
-4097 lattice (offset up to 4096) works. A 261 x 261 window equals the matching rectangle of the
+sample cap per window; offsets may be negative (a region's apron before the terrain origin)
+and `offset + size` is bounded by 20 Mi, so a 4097 lattice (offset up to 4096) works. A 261 x 261 window equals the matching rectangle of the
 4097 x 4097 composition bit for bit for Replace and Add layers, values and coverage.
 
 `compile_cell_mask` needs no window argument: pass the window's `bounds` (its first and last
