@@ -45,6 +45,7 @@ Houdini, see :doc:`strata/index`.
 
    development/testing
    development/packaging
+   development/godot_mcp
    development/terrain_runtime
    development/terrain_bulk
    development/strata_integration_tests

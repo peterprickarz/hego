@@ -1,0 +1,101 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/godot_mcp/ui/status_panel.gd" id="1"]
+
+[node name="StatusPanel" type="Control"]
+clip_contents = true
+script = ExtResource("1")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StatusRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="MarginContainer/VBoxContainer/StatusRow"]
+layout_mode = 2
+text = "MCP Server:"
+
+[node name="StatusIcon" type="ColorRect" parent="MarginContainer/VBoxContainer/StatusRow"]
+custom_minimum_size = Vector2(12, 12)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(0.5, 0.5, 0.5, 1)
+
+[node name="StatusLabel" type="Label" parent="MarginContainer/VBoxContainer/StatusRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Initializing..."
+
+[node name="VersionLabel" type="Label" parent="MarginContainer/VBoxContainer/StatusRow"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+text = ""
+
+[node name="HSeparator" type="HSeparator" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="SettingsGrid" type="GridContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+columns = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 8
+
+[node name="BindLabel" type="Label" parent="MarginContainer/VBoxContainer/SettingsGrid"]
+layout_mode = 2
+text = "Bind mode"
+
+[node name="BindModeOption" type="OptionButton" parent="MarginContainer/VBoxContainer/SettingsGrid"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+
+[node name="CustomIpLabel" type="Label" parent="MarginContainer/VBoxContainer/SettingsGrid"]
+layout_mode = 2
+text = "Custom bind IP"
+
+[node name="CustomIpEdit" type="LineEdit" parent="MarginContainer/VBoxContainer/SettingsGrid"]
+custom_minimum_size = Vector2(180, 0)
+layout_mode = 2
+placeholder_text = "e.g. 127.0.0.1"
+
+[node name="PortOverrideLabel" type="Label" parent="MarginContainer/VBoxContainer/SettingsGrid"]
+layout_mode = 2
+text = "Port override"
+
+[node name="PortOverrideControls" type="HBoxContainer" parent="MarginContainer/VBoxContainer/SettingsGrid"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PortOverrideEnabled" type="CheckBox" parent="MarginContainer/VBoxContainer/SettingsGrid/PortOverrideControls"]
+layout_mode = 2
+text = "Enable"
+
+[node name="PortOverrideSpin" type="SpinBox" parent="MarginContainer/VBoxContainer/SettingsGrid/PortOverrideControls"]
+layout_mode = 2
+min_value = 1.0
+max_value = 65535.0
+step = 1.0
+value = 6550.0
+allow_greater = false
+allow_lesser = false
+rounded = true
+
+[node name="Spacer" type="Control" parent="MarginContainer/VBoxContainer/SettingsGrid/PortOverrideControls"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ApplyButton" type="Button" parent="MarginContainer/VBoxContainer/SettingsGrid/PortOverrideControls"]
+layout_mode = 2
+text = "Apply"

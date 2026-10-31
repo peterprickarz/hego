@@ -29,3 +29,6 @@ terrain/integration_bin/
 /demo/island/terrain/material_weights.res
 /demo/island/terrain/*~.res
 /demo/island/terrain/*/*~.res
+
+# Workstation-specific Godot MCP server entry (see docs/development/godot_mcp.md)
+/.mcp.json
