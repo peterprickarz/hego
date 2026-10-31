@@ -42,6 +42,8 @@ var _tint_contract: Dictionary = {}
 var _material_contract: Dictionary = {}
 var _materials: Array[StrataMaterial] = []
 var _busy := false
+## Tiled material cook options from the command line.
+var _tile_options := {}
 var _owned_session := false
 var _message := "Loading saved island…"
 var _status: Label
@@ -75,6 +77,7 @@ func _ready() -> void:
 	_contract = _read_json("res://island/hda/contract.json")
 	_tint_contract = _read_json("res://island/hda/tint_contract.json")
 	_material_contract = _read_json(HEGoIslandMaterials.CONTRACT)
+	if not Engine.is_editor_hint() and not _apply_scratch_options(): get_tree().quit(2); return
 	if not _material_contract.is_empty():
 		var attached := HEGoIslandMaterials.attach(self, _material_contract)
 		if not attached.ok: push_error(attached.message); return
@@ -298,6 +301,42 @@ func _cook_tint(changes: Dictionary = {}) -> bool:
 	return ok
 
 
+## Command-line options of the headless material cook (scripts/run_terrain_island.py):
+## [code]--storage=DIR[/code] redirects every save to a scratch copy of the island's storage
+## (the layers already loaded stay as loaded; nothing is ever written to the shipped
+## demo/island/terrain), [code]--material-spacing=M[/code] cooks the material pass at M metres
+## instead of the terrain's region spacing (SCRATCH EXPERIMENT: the terrain's spacing and the
+## MaterialCook input row are changed in memory only, never saved to the scene),
+## [code]--tile-samples=N[/code] and [code]--tile-overlap=N|exact[/code] set the tiled cook,
+## [code]--material-storage=unorm8|float[/code] its value storage.
+func _apply_scratch_options() -> bool:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--storage="):
+			var directory := argument.trim_prefix("--storage=").rstrip("/")
+			var shipped := ProjectSettings.globalize_path("res://island/terrain").simplify_path()
+			var given := ProjectSettings.globalize_path(directory).simplify_path() if directory.begins_with("res://") else directory.simplify_path()
+			if given == shipped or given.begins_with(shipped + "/") or not DirAccess.dir_exists_absolute(directory):
+				push_error("--storage must name an existing scratch copy, never demo/island/terrain: " + directory); return false
+			terrain.storage_directory = directory
+			# The shipped bake would keep loading its regions from the old directory.
+			terrain.runtime_data = null
+			terrain.runtime_bake_stale = true
+		elif argument.begins_with("--material-spacing="):
+			var spacing := float(argument.trim_prefix("--material-spacing="))
+			if not is_finite(spacing) or spacing <= 0.0: push_error("--material-spacing must be positive metres"); return false
+			terrain.region_spacing = spacing
+			if material_host != null and material_host.input_stash.size() == 1:
+				var rows := material_host.input_stash.duplicate(true)
+				rows[0].settings.terrain_spacing = spacing
+				material_host.input_stash = rows
+		elif argument.begins_with("--tile-samples="): _tile_options.tile_samples = int(argument.trim_prefix("--tile-samples="))
+		elif argument.begins_with("--tile-overlap="):
+			var value := argument.trim_prefix("--tile-overlap=")
+			_tile_options.tile_overlap = value if value == "exact" else int(value)
+		elif argument.begins_with("--material-storage="): _tile_options.storage = argument.trim_prefix("--material-storage=")
+	return true
+
+
 ## Cooks only the material distribution at the terrain's region spacing. Nothing is packed:
 ## the editor preview and the bake compose the material maps from the committed fields (with
 ## any manual layers above them). A result that is not on the terrain lattice is marked stale.
@@ -309,7 +348,10 @@ func _cook_materials() -> bool:
 	_configure_hosts()
 	var started := Time.get_ticks_usec()
 	_set_message("Cooking material distribution in Houdini at %s m…" % String.num(terrain.region_spacing))
-	var result := await HEGoIslandMaterials.cook_explicit(self, material_host, target, _material_contract)
+	# Above 4097 samples per axis (the island at 0.5 m) the cook runs in tiles and publishes once.
+	var options := _tile_options.duplicate()
+	options.progress = _set_message
+	var result := await HEGoIslandMaterials.cook(self, material_host, target, _material_contract, options)
 	var ok: bool = result.get("ok", false) and not target.procedural_stale
 	if ok:
 		var checked := HEGoIslandMaterials.validate(target)
@@ -385,6 +427,12 @@ func _five_stage_check() -> void:
 ## Cooks only the materials against the saved layers, then rebakes and saves the regions.
 func _cook_materials_headless() -> void:
 	if not await _cook_materials(): _finish_headless(false); return
+	# A lattice above one image's 20 Mi samples (the island at 0.5 m) has no whole-terrain height
+	# image to bake from here; the tiled cook's commit has already saved the material fields.
+	var lattice := HEGoIslandMaterials.material_lattice(terrain, terrain.region_spacing)
+	if lattice.ok and lattice.resolution.x * lattice.resolution.y > StrataProcedural.MAX_FIELD_SAMPLES:
+		print("ISLAND_MATERIALS_COOKED_LARGE %s samples; material fields saved, no bake from this script" % lattice.resolution)
+		_finish_headless(true); return
 	_full_compiled = StrataProcedural.compile_heightfield(terrain, null, terrain.region_spacing)
 	if not _full_compiled.get("ok", false): _finish_headless(false); return
 	if not await _install_runtime(): _finish_headless(false); return
@@ -488,7 +536,11 @@ func _bind_renderer() -> bool:
 	return true
 
 
-## Collision, navigation and the player, from the published manifest.
+## Collision, navigation and the player, from the published manifest. The fixed areas
+## around PAD below make the level ready before the player exists; once the player is
+## enabled it tracks BOTH collision and navigation (follow radius 96 m each), so chunks
+## and tiles stream with it, are evicted beyond their budgets, and the fixed areas are
+## only the starting residency (they are released as the player walks away).
 func _install_physics() -> bool:
 	if collision == null:
 		collision = StrataCollision.new(); collision.name = "IslandCollision"; terrain.add_child(collision)
@@ -507,7 +559,7 @@ func _install_physics() -> bool:
 		push_error("Island runtime region preparation failed: collision %s, navigation %s" % [prepared, nav_result])
 		return false
 	if player == null and DisplayServer.get_name() != "headless":
-		player = HEGoIslandPlayer.new(); player.name = "Player"; player.terrain = terrain; player.collision = collision; player.player_camera = camera; player.spawn_local_xz = PAD; add_child(player)
+		player = HEGoIslandPlayer.new(); player.name = "Player"; player.terrain = terrain; player.collision = collision; player.navigation = navigation; player.player_camera = camera; player.spawn_local_xz = PAD; add_child(player)
 	await get_tree().process_frame
 	return true
 

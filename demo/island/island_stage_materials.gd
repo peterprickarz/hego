@@ -29,6 +29,8 @@ static func input_settings(mask_spacing: float, previous: Dictionary = {}, final
 	settings.terrain_mode = "cumulative"
 	settings.terrain_channels = input_channels()
 	settings.terrain_max_samples = previous.get("terrain_max_samples", StrataProcedural.MAX_SAMPLES)
+	# A tiled cook sets terrain_bounds per tile and restores the row; a stray one never persists.
+	settings.erase("terrain_bounds")
 	if final_pass:
 		settings.terrain_spacing = final_spacing
 		settings.erase("terrain_channel_spacings")

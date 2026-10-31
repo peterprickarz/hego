@@ -17,6 +17,21 @@ headless modes below cook into those files:
   --five-stage-check  ARTIFICIAL FIXTURE: scripted strokes stand in for hand edits to check the
                       five-stage preservation contract; cooks in memory, saves nothing
   --verify            reopen the saved island headlessly without starting Houdini
+
+Material cook options (--prepare and --cook-materials). A material lattice above 4097 samples per
+axis is cooked in tiles and published in one transaction (docs/development/island_material_distribution.md):
+
+  --storage DIR            write every save to DIR, a scratch copy of demo/island/terrain made
+                           beforehand (cp -r); the script refuses the shipped directory itself and
+                           reaches DIR through a symlink in demo/.godot/scratch (ignored by git)
+  --material-spacing M     SCRATCH EXPERIMENT: cook the material pass at M metres instead of the terrain's
+                           region spacing (the terrain's spacing and the MaterialCook input row are changed
+                           in memory only); at 0.5 m only the material fields are cooked and saved, there is
+                           no whole-terrain height image to bake from the cook script
+  --tile-samples N         largest tile, per axis (default 4097, the HDA limit; smaller only for tests)
+  --tile-overlap N|exact   samples two tiles share (default 32); "exact" is the overlap at which tiles
+                           equal a whole cook (900 at 0.5 m)
+  --material-storage S     unorm8 (default) or float value storage of a tiled result
 """
 from pathlib import Path
 import argparse
@@ -41,6 +56,11 @@ def main():
     modes.add_argument("--verify", action="store_true", help="reopen the saved island headlessly without starting Houdini")
     modes.add_argument("--editor", action="store_true", help="open scenes/terrain_island.tscn in the main demo editor")
     modes.add_argument("--stage-only", action="store_true", help="validate the installed main-demo addons without launching")
+    parser.add_argument("--storage", type=Path, help="scratch copy of the island storage directory that receives every save")
+    parser.add_argument("--material-spacing", type=float, help="scratch experiment: material pass spacing in metres")
+    parser.add_argument("--tile-samples", type=int, help="largest material tile per axis (default 4097)")
+    parser.add_argument("--tile-overlap", help="samples shared by neighbouring material tiles, or 'exact' (default 32)")
+    parser.add_argument("--material-storage", choices=("unorm8", "float"), help="value storage of a tiled material result (default unorm8)")
     parser.add_argument("--capture", type=Path)
     parser.add_argument("--capture-view", choices=("overview", "platform", "ground"), default="overview")
     parser.add_argument("--show-ownership", action="store_true")
@@ -54,6 +74,23 @@ def main():
     terrain_library = ROOT / "demo/addons/strata/bin/libstrata.linux.template_debug.x86_64.so"
     if not terrain_library.is_file(): parser.error("Build the Strata library first: scripts/build-terrain.sh")
     if args.quit_after_frames is not None and args.quit_after_frames < 1: parser.error("--quit-after-frames must be positive")
+    cook_options = (args.storage, args.material_spacing, args.tile_samples, args.tile_overlap, args.material_storage)
+    if any(option is not None for option in cook_options) and not (args.prepare or args.cook_materials):
+        parser.error("--storage, --material-spacing, --tile-samples, --tile-overlap and --material-storage apply to --prepare and --cook-materials only")
+    if args.storage is not None:
+        storage = args.storage.expanduser().resolve()
+        shipped = (PROJECT / "island/terrain").resolve()
+        if storage == shipped or shipped in storage.parents: parser.error("--storage must be a scratch copy, never demo/island/terrain")
+        if not storage.is_dir(): parser.error("--storage must be an existing directory (copy demo/island/terrain there first)")
+        # Strata saves only to res:// or user:// paths, so the scratch copy is reached through a symlink
+        # in the project's ignored .godot folder.
+        link = PROJECT / ".godot/scratch" / storage.name
+        link.parent.mkdir(parents=True, exist_ok=True)
+        if link.is_symlink() and link.resolve() != storage: link.unlink()
+        if not link.exists(): link.symlink_to(storage, target_is_directory=True)
+        args.storage = "res://.godot/scratch/" + storage.name
+    if args.tile_overlap is not None and args.tile_overlap != "exact" and not args.tile_overlap.isdigit(): parser.error("--tile-overlap must be a number of samples or 'exact'")
+    if args.material_spacing is not None and args.material_spacing <= 0: parser.error("--material-spacing must be positive")
     headless = args.prepare or args.cook_materials or args.five_stage_check or args.verify
     diagnostic_view = args.capture_view != "overview" or args.show_ownership
     diagnostic_run = bool(args.capture or diagnostic_view or args.quit_after_frames is not None)
@@ -81,6 +118,11 @@ def main():
     if args.prepare: extra.append("--prepare-island")
     if args.cook_materials: extra.append("--cook-materials")
     if args.five_stage_check: extra.append("--five-stage-check")
+    if args.storage is not None: extra.append("--storage=" + args.storage)
+    if args.material_spacing is not None: extra.append("--material-spacing=" + repr(args.material_spacing))
+    if args.tile_samples is not None: extra.append("--tile-samples=" + str(args.tile_samples))
+    if args.tile_overlap is not None: extra.append("--tile-overlap=" + args.tile_overlap)
+    if args.material_storage is not None: extra.append("--material-storage=" + args.material_storage)
     if args.verify: extra.append("--verify")
     if args.capture:
         args.capture.parent.mkdir(parents=True, exist_ok=True)

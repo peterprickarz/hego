@@ -371,6 +371,21 @@ static func validate_field(field: Dictionary) -> Dictionary:
 	if owned != null and (owned.get_format() != Image.FORMAT_RF or owned.get_size() != image.get_size()): return _error("Ownership must be an independent matching RF image")
 	return StrataLayerData.validate_dense(image, owned)
 
+## Checks a result field that carries a finished [StrataFieldData] as [code]field_data[/code]
+## (see [method commit_fields]): a named scalar channel on a finite orthogonal horizontal
+## lattice, whose native samples own exactly its resolution rectangle. The caller guarantees
+## that every sample inside is owned; the rectangle check is the cheap part of that.
+static func validate_prebuilt(field: Dictionary) -> Dictionary:
+	var prebuilt: StrataFieldData = field.get("field_data")
+	if prebuilt == null or prebuilt.data == null or not field.get("name") is String or String(field.name).strip_edges().is_empty() or String(field.name).ends_with(OWNERSHIP_SUFFIX): return _error("Invalid prebuilt field or reserved result channel name")
+	if prebuilt.channel != StringName(field.name) or prebuilt.resolution.x < 1 or prebuilt.resolution.y < 1 or prebuilt.resolution.x * prebuilt.resolution.y > MAX_SAMPLES: return _error("A prebuilt field needs its channel name and a bounded, nonempty resolution")
+	var x := prebuilt.sample_step_x; var y := prebuilt.sample_step_y
+	if not prebuilt.sample_origin.is_finite() or not x.is_finite() or not y.is_finite() or absf(x.y) > 0.000001 or absf(y.y) > 0.000001 or x.length_squared() <= 0.0 or y.length_squared() <= 0.0 or absf(x.dot(y)) > x.length() * y.length() * 0.00001: return _error("Terrain fields require nonzero horizontal orthogonal sample steps")
+	if field.get("composition", "replace") not in ["replace", "add"]: return _error("Unknown field composition; expected replace/add")
+	if prebuilt.attrs.get("role", "value") != "value": return _error("Ownership/coverage metadata volumes cannot become ordinary scalar channels")
+	if prebuilt.data.get_owned_rect(prebuilt.channel) != Rect2i(Vector2i.ZERO, prebuilt.resolution): return _error("A prebuilt field must own exactly its resolution rectangle")
+	return {"ok": true, "message": "Prebuilt field accepted"}
+
 static func commit_fields(ticket: Dictionary, results: Array) -> Dictionary:
 	var state: Dictionary = _tickets.get(ticket.get("id", -1), {})
 	if state.is_empty(): return _error("Unknown or completed terrain transaction")
@@ -384,15 +399,19 @@ static func commit_fields(ticket: Dictionary, results: Array) -> Dictionary:
 		if fields.is_empty() and not result.get("explicit_empty", false): return reject(ticket, "Empty results require an explicit-empty marker")
 		var candidate: Dictionary = {}; var modes := {}; var sample_count := 0
 		for field in fields:
-			var validation := validate_field(field)
+			# A field above MAX_FIELD_SAMPLES cannot be one Image. A producer that assembled it
+			# natively (tiled cooks) hands over the finished StrataFieldData as field_data.
+			var prebuilt: StrataFieldData = field.get("field_data")
+			var validation := validate_prebuilt(field) if prebuilt != null else validate_field(field)
 			if not validation.ok: return reject(ticket, validation.message)
 			var name := String(field.name)
 			var permitted: PackedStringArray = state.targets[identity].channels
 			if candidate.has(name) or not permitted.is_empty() and not permitted.has(name): return reject(ticket, "Unexpected or duplicate result channel")
-			sample_count += field.image.get_width() * field.image.get_height()
-			complete_samples += field.image.get_width() * field.image.get_height() * (2 if field.get("ownership") != null else 1)
+			var field_samples: int = prebuilt.resolution.x * prebuilt.resolution.y if prebuilt != null else field.image.get_width() * field.image.get_height()
+			sample_count += field_samples
+			complete_samples += field_samples * (2 if prebuilt == null and field.get("ownership") != null else 1)
 			if sample_count > MAX_SAMPLES or complete_samples > MAX_SAMPLES: return reject(ticket, "Complete result exceeds sample budget")
-			candidate[name] = StrataFieldData.from_field(field)
+			candidate[name] = prebuilt if prebuilt != null else StrataFieldData.from_field(field)
 			if candidate[name] == null: return reject(ticket, "Native dense import rejected the field allocation or data")
 			modes[name] = StrataLayer.Composition.ADD if field.get("composition", "replace") == "add" else StrataLayer.Composition.REPLACE
 		if not fields.is_empty():

@@ -47,11 +47,11 @@ GODOT_TESTS=(
     hego_graph_input_test hego_input_children_test hego_input_ui_test hego_log_test
     hego_mesh_copy_lod_test hego_mesh_output_test hego_output_skip_test hego_panel_async_test
     hego_panel_contract_test hego_point_util_test hego_terrain3d_bridge_test
-    island_transition_test material_binding_test material_brush_test material_distribution_test
+    island_transition_test material_binding_test material_brush_test material_distribution_test material_tiling_test
     material_preview_cutoff_test material_region_refresh_test material_resource_test native_data_test
     procedural_transaction_test region_geometry_test region_streamer_test stage_material_persistence_test stage_material_transport_test
     terrain_bulk_test terrain_cell_mask_test terrain_material_soft_limit_test terrain_mesher_test terrain_refinement_test
-    terrain_runtime_intent_test terrain_transport_lifetime_test
+    large_world_test physics_tracking_test terrain_runtime_intent_test terrain_transport_lifetime_test
 )
 # These read the saved island under demo/island/terrain (Git LFS).
 ISLAND_DATA_TESTS=(island_storage_test terrain_demo_scene_test)
@@ -61,7 +61,7 @@ HOUDINI_GODOT_TESTS=(
     editor_hda_package_test hego_graph_native_test hego_heightfield_fields_native_test
     hego_input_children_native_test hego_parameter_native_test hego_surface_preload_test
 )
-HYTHON_TESTS=(test_hda_package_graphs test_island_stage_materials test_material_distribution test_terrain_tint test_island_transition)
+HYTHON_TESTS=(test_hda_package_graphs test_island_stage_materials test_material_distribution test_material_tiling test_terrain_tint test_island_transition)
 # Forward+ on a real display.
 GPU_TESTS=(
     island_showcase_test material_preview_gpu_test render_material_test render_state_test terrain_height_blend_test

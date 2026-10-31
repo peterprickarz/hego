@@ -203,7 +203,7 @@ mips), the same 48 MB resident plus a 1025² coarse set; CPU cache around 300 re
 
 ## Phase C: large worlds
 
-Status: approved 2026-10-31, tracks running. Goal: an 8–16 km terrain bakes, streams and plays
+Status: approved 2026-10-31; tracks D3, P3, L3 and H3 landed on 2026-10-31. Open: the island's shipped spacing (see the results below). Goal: an 8–16 km terrain bakes, streams and plays
 within the same memory as the island, and the island's material pass can run at 0.5 m.
 What Phase B left: the bake composes every region in memory and embeds them (a 512 MiB cap
 that 8 km at 1 m exceeds); a far region loads its whole file; navigation bakes a fixed
@@ -259,13 +259,30 @@ rectangle; the material HDA takes one lattice of at most 4097² samples.
 Order: all four in parallel; L3 scales to 8 km once D3's directory bake lands; the lead
 integrates, runs the suite and decides the island's spacing with the user.
 
-### Budgets
+### Budgets and results
 
-8 km at 1 m: 1024 regions, about 1.3 GB on disk with lod files, bake under 60 s, resident GPU
-under 64 MB, CPU region cache under 300 regions, no frame over 100 ms after the first second
-of a flight. 16 km at 2 m: the same region count and budgets. Island at 0.5 m: 1024 regions,
-material fields 4 × 67 M samples (270 MB as 8-bit), four material tiles of about 4129²
-cooked one at a time (about 12 GB each in hython).
+Budgets: 8 km at 1 m, 1024 regions, bake under 60 s, resident GPU under 64 MB, CPU region
+cache under 300 regions, no frame over 100 ms after the first second of a flight; 16 km at
+2 m the same.
+
+Measured 2026-10-31 (ARTIFICIAL fixture, `large_world_benchmark`): 8 km at 1 m bakes in
+7.7 s to 355 MB (full + lod files), streams at 51 MiB GPU (22 near, 16 far, 13.5 coarse),
+CPU cache peak 253 regions, frame times 11.9 / 16.4 / 24.0 ms (p50 / p95 / max); 16 km at
+2 m: 9.2 s, 399 MB, 57 MiB GPU, max frame 31.6 ms.
+
+Tiled material cook, as built: the HDA has no global statistic, but its shelter term reaches
+about 450 m, so tile seams are exact only with an overlap of twice that radius
+(`HEGoIslandMaterials.exact_overlap(spacing)`: 226 samples at 4 m, 904 at 1 m, 1804 at
+0.5 m). The default overlap of 32 is a speed choice: on the real island at 1 m, tiles differ
+from the whole cook by at most one 8-bit step because the final pass inherits the detail
+stage's materials. With the HDA's 4097-sample limit an 8193² lattice cooks as 3 × 3 tiles of
+2753² (7.5 GB each in Houdini, about 31 s per tile).
+
+Island at 0.5 m, measured on a scratch copy (not shipped): material cook 5 min 07 s, fields
+33 MB on disk as UNORM8 (312 MB as float; the shipped 1 m float fields are 79 MB), 1024
+regions baked in 17 s to about 398 MB of region files. Shipping it would add roughly 430 MB
+to Git LFS per cook and the other `--prepare` stages (height compile, cell masks) do not run
+at 0.5 m yet; the island stays at 1 m until that is decided.
 
 ## Budgets
 

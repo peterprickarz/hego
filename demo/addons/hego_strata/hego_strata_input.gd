@@ -7,7 +7,9 @@ extends HEGoInputHandler
 ## terrain addon names the other. A layer is sent either cumulatively (the composed terrain
 ## through that layer) or raw (its own values plus separate binary ownership), with the
 ## channels and spacing set in the input's settings: terrain_mode, terrain_channels,
-## terrain_spacing, terrain_channel_spacings, terrain_max_samples and terrain_compact_empty.
+## terrain_spacing, terrain_channel_spacings, terrain_max_samples, terrain_compact_empty and
+## terrain_bounds (a Rect2 in terrain-local metres: the lattice covers it instead of the
+## terrain's bounds, as a tiled cook sends one tile at a time).
 ## A host with a terrain input cooks only on request, and strictly: an input that cannot be
 ## sent fails the cook.
 
@@ -59,6 +61,9 @@ static func snapshot(layer: StrataLayer, settings: Dictionary) -> Dictionary:
 	var options := {"channels": channels, "compact_empty": bool(settings.get("terrain_compact_empty", false))}
 	if settings.has("terrain_max_samples"): options.max_samples = int(settings.terrain_max_samples)
 	if settings.has("terrain_channel_spacings"): options.channel_spacings = settings.terrain_channel_spacings
+	if settings.has("terrain_bounds"):
+		if not settings.terrain_bounds is Rect2: return {"ok": false, "message": "terrain_bounds must be a Rect2 in terrain-local metres"}
+		options.bounds = settings.terrain_bounds
 	var mode := String(settings.get("terrain_mode", "cumulative"))
 	# Optional cumulative resample lattice in metres (e.g. a coarse view through
 	# a fine manual layer); 0 keeps the selected layer's native lattice.
