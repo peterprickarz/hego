@@ -1,12 +1,17 @@
 @tool
 extends EditorPlugin
 
+const CANONICAL_MASKS: PackedStringArray = ["hole", "nav_exclusion"]
+
 var _layer: StrataLayer
 var _toolbar: HBoxContainer
 var _radius: SpinBox
 var _strength: SpinBox
 var _operation: OptionButton
 var _channel: LineEdit
+var _channel_menu: MenuButton
+# Channel name per popup item id; rebuilt every time the menu opens.
+var _channel_items := PackedStringArray()
 var _overrides: CheckButton
 var _channel_view: CheckButton
 # One entry per dab that changed something; see StrataBrush.begin_record().
@@ -19,6 +24,9 @@ var _bridges: Array[StrataEditorPreview] = []
 var _scan_elapsed := 0.0
 var _status: Label
 var _editor_camera: Camera3D
+var _cursor: StrataBrushCursor
+# Terrain-local point under the pointer, so a radius change redraws the cursor in place.
+var _hover_point := Vector2(INF, INF)
 
 func _enter_tree() -> void:
 	_toolbar = HBoxContainer.new()
@@ -34,15 +42,23 @@ func _enter_tree() -> void:
 	_radius.suffix = "m"
 	_radius.custom_minimum_size.x = 112.0
 	_radius.tooltip_text = "Type a radius up to 4096 m. Dabs keep the 65,536-sample budget; select a coarse manual layer or add a new one for broad mountains. Existing layer spacing must not be changed to resize a brush."
+	_radius.value_changed.connect(func(_value: float): _update_cursor())
 	_strength = _number("Strength", 0.01, 10.0, 0.6)
 	_channel = LineEdit.new()
 	_channel.text = "height"
 	_channel.placeholder_text = "Channel"
-	_channel.tooltip_text = "Named scalar channel. Show channel displays values. hole/nav_exclusion: Raise=1, Lower=0, Erase=reveal."
+	_channel.custom_minimum_size.x = 160.0
+	_channel.tooltip_text = "Named scalar channel. Type a new name or pick an existing one from the list. Show channel displays values. hole/nav_exclusion: Raise=1, Lower=0, Erase=reveal."
 	_toolbar.add_child(_channel)
-	_channel.text_changed.connect(func(value: String):
-		if is_instance_valid(_layer) and _layer.get_parent() is StrataTerrain3D:
-			_layer.get_parent().override_channel = StringName(value))
+	_channel.text_changed.connect(_apply_channel)
+	_channel_menu = MenuButton.new()
+	_channel_menu.text = "▾"
+	_channel_menu.flat = false
+	_channel_menu.tooltip_text = "Channels already in this terrain: height, the material weight channels, the canonical masks and whatever the layers hold."
+	_channel_menu.about_to_popup.connect(_fill_channel_menu)
+	_channel_menu.get_popup().id_pressed.connect(func(id: int):
+		if id >= 0 and id < _channel_items.size(): set_channel(_channel_items[id]))
+	_toolbar.add_child(_channel_menu)
 	_overrides = CheckButton.new()
 	_overrides.text = "Show overrides"
 	_overrides.tooltip_text = "Orange tint interpolates the selected channel's explicit owned samples, including unchanged values."
@@ -77,6 +93,59 @@ func _number(label_text: String, minimum: float, maximum: float, initial: float)
 	_toolbar.add_child(spin)
 	return spin
 
+func _terrain() -> StrataTerrain3D:
+	return _layer.get_parent() as StrataTerrain3D if is_instance_valid(_layer) else null
+
+## Sets the brush channel as if it had been typed into the toolbar.
+func set_channel(channel: String) -> void:
+	_channel.text = channel
+	_apply_channel(channel)
+
+func _apply_channel(value: String) -> void:
+	var terrain := _terrain()
+	if terrain != null: terrain.override_channel = StringName(value)
+	_update_cursor()
+
+## Lists the channels that already exist for the selected terrain, grouped: height, the
+## material weight channels (with their material's file name), the canonical masks and
+## every other channel some layer holds or cooks. Typing in the field still names a new one.
+func _fill_channel_menu() -> void:
+	var popup := _channel_menu.get_popup()
+	popup.clear()
+	_channel_items = PackedStringArray()
+	var current := _channel.text.strip_edges()
+	var listed := {}
+	_add_channel_item(popup, "height", "height", current, listed)
+	var terrain := _terrain()
+	if terrain == null: return
+	if not terrain.editor_material_channels.is_empty():
+		popup.add_separator("Materials")
+		for index in range(terrain.editor_material_channels.size()):
+			var channel: String = terrain.editor_material_channels[index]
+			var label := channel
+			var material: StrataMaterial = terrain.editor_materials[index] if index < terrain.editor_materials.size() else null
+			if is_instance_valid(material) and not material.resource_path.is_empty():
+				label += "  (%s)" % material.resource_path.get_file().get_basename()
+			_add_channel_item(popup, channel, label, current, listed)
+	popup.add_separator("Masks")
+	for mask in CANONICAL_MASKS: _add_channel_item(popup, mask, mask, current, listed)
+	var others: Array[String] = []
+	for layer in terrain.get_layers():
+		for channel in layer.get_channel_names():
+			if not listed.has(channel) and not others.has(channel): others.append(channel)
+	if others.is_empty(): return
+	others.sort()
+	popup.add_separator("Other channels in the stack")
+	for channel in others: _add_channel_item(popup, channel, channel, current, listed)
+
+func _add_channel_item(popup: PopupMenu, channel: String, label: String, current: String, listed: Dictionary) -> void:
+	if listed.has(channel): return
+	listed[channel] = true
+	var id := _channel_items.size()
+	_channel_items.append(channel)
+	popup.add_radio_check_item(label, id)
+	popup.set_item_checked(popup.get_item_index(id), channel == current)
+
 func _process(delta: float) -> void:
 	_scan_elapsed += delta
 	if _scan_elapsed < 0.2: return
@@ -108,6 +177,7 @@ func _discover_terrains(node: Node) -> void:
 
 func _exit_tree() -> void:
 	_finish_stroke()
+	_free_cursor()
 	for bridge in _bridges:
 		if is_instance_valid(bridge): bridge.queue_free()
 	remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, _toolbar)
@@ -118,6 +188,7 @@ func _handles(object: Object) -> bool:
 
 func _edit(object: Object) -> void:
 	_finish_stroke()
+	_hide_cursor()
 	if is_instance_valid(_layer) and _layer.get_parent() is StrataTerrain3D:
 		_layer.get_parent().preview_through_layer = null
 	_layer = object as StrataLayer
@@ -130,6 +201,7 @@ func _make_visible(visible: bool) -> void:
 	_toolbar.visible = visible
 	if not visible:
 		_finish_stroke()
+		_hide_cursor()
 		if is_instance_valid(_layer) and _layer.get_parent() is StrataTerrain3D:
 			_layer.get_parent().preview_through_layer = null
 		_layer = null
@@ -156,18 +228,49 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 		_last_point = Vector2(INF, INF)
 		_dab(hit.local_position)
 		return AFTER_GUI_INPUT_STOP
-	if event is InputEventMouseMotion and _stroke_layer != null:
-		if event.button_mask & MOUSE_BUTTON_MASK_LEFT == 0:
-			_finish_stroke()
-			return AFTER_GUI_INPUT_PASS
-		var hit := _pick(camera, event.position)
-		if not hit.is_empty():
-			_dab(hit.local_position)
-		return AFTER_GUI_INPUT_STOP
+	if event is InputEventMouseMotion:
+		# The cursor follows the pointer whether or not a stroke is in progress.
+		if event.alt_pressed:
+			_hide_cursor()
+		else:
+			var hover := _pick(camera, event.position)
+			_hover_point = hover.local_position if not hover.is_empty() else Vector2(INF, INF)
+			_update_cursor()
+		if _stroke_layer != null:
+			if event.button_mask & MOUSE_BUTTON_MASK_LEFT == 0:
+				_finish_stroke()
+				return AFTER_GUI_INPUT_PASS
+			if _hover_point.is_finite():
+				_dab(_hover_point)
+			return AFTER_GUI_INPUT_STOP
 	return AFTER_GUI_INPUT_PASS
 
 func _pick(camera: Camera3D, point: Vector2) -> Dictionary:
 	return (_layer.get_parent() as StrataTerrain3D).raycast_surface(camera.project_ray_origin(point), camera.project_ray_normal(point))
+
+## Redraws the brush footprint at the last hover point, red when the dab would be refused.
+func _update_cursor() -> void:
+	var terrain := _terrain()
+	if terrain == null or not _hover_point.is_finite() or not _toolbar.visible:
+		_hide_cursor()
+		return
+	if not is_instance_valid(_cursor) or _cursor.get_parent() != terrain:
+		_free_cursor()
+		_cursor = StrataBrushCursor.new()
+		terrain.add_child(_cursor, false, Node.INTERNAL_MODE_BACK)
+	var blocked := _layer.procedural or not StrataBrush.sample_limit_message(_layer, _hover_point, _radius.value).is_empty()
+	var band := 0.25
+	if is_instance_valid(_editor_camera):
+		var world := terrain.to_global(Vector3(_hover_point.x, terrain.sample_height(_hover_point, _layer), _hover_point.y))
+		band = clampf(_editor_camera.global_position.distance_to(world) * 0.003, 0.02, 4.0)
+	_cursor.show_at(terrain, _layer, _hover_point, _radius.value, blocked, band)
+
+func _hide_cursor() -> void:
+	if is_instance_valid(_cursor): _cursor.hide_cursor()
+
+func _free_cursor() -> void:
+	if is_instance_valid(_cursor): _cursor.queue_free()
+	_cursor = null
 
 func _dab(point: Vector2) -> void:
 	if _last_point.is_finite() and _last_point.distance_to(point) < _radius.value * 0.1:

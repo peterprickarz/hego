@@ -51,7 +51,11 @@ disabled.
    (default 1 m) before you paint. The spacing is locked once the layer holds samples. Use a
    coarse spacing for broad landforms and a fine one for detail; each layer has its own.
 3. Select the layer. A **Terrain brush** toolbar appears at the top of the 3D viewport.
-4. Paint with the left mouse button. Hold **Alt** to use the mouse for viewport navigation
+4. Move the pointer over the terrain. A yellow ring shows the brush radius on the surface,
+   with a fainter inner ring where the falloff reaches half strength. The ring turns red
+   where a dab would be refused (a procedural layer, or a radius too dense for the layer's
+   grid).
+5. Paint with the left mouse button. Hold **Alt** to use the mouse for viewport navigation
    instead. Each stroke is one undo step (**Ctrl+Z**).
 
 The toolbar:
@@ -61,7 +65,7 @@ The toolbar:
 | Operation | **Raise** and **Lower** add or subtract `strength` metres at the centre, falling off smoothly to the edge. **Flatten** pulls toward the value under the point where the stroke started. **Smooth** pulls toward the average of neighbouring samples. **Erase** releases the samples, so this layer stops overriding and the layers below show through. |
 | Radius | In metres, up to 4096. One dab touches at most 65,536 samples of the layer's grid; if a radius is too large for the layer's spacing, the toolbar says so and suggests a radius, or a new, coarser layer. |
 | Strength | How much each dab changes. |
-| Channel | The channel to paint, `height` by default. Type any name to paint a mask or a material weight. |
+| Channel | The channel to paint, `height` by default. The **▾** menu next to the field lists the channels this terrain already has: `height`, the material weight channels (with their material names), the `hole` and `nav_exclusion` masks, and anything the layers hold or cook. Type a name to paint a channel that does not exist yet. |
 | Show overrides | Tints in orange every sample the selected layer owns in that channel, including samples whose value happens to equal the ground below. |
 | Show channel | Shows the channel's values in greyscale. The geometry is always the height. |
 
@@ -120,9 +124,9 @@ you paint or cook like any other.
 3. **Name a weight channel for each material.** Fill `editor_material_channels` with one
    channel name per material, in the same order, for example
    `material_sand`, `material_grass`, `material_rock`.
-4. **Paint the weights.** Select a manual layer, type a material channel into the brush's
-   **Channel** field and **Raise** it where that material should appear. Weights must stay
-   zero or positive.
+4. **Paint the weights.** Select a manual layer, pick the material from the brush's
+   **Channel ▾** menu (it lists every material channel with its material name) and
+   **Raise** it where that material should appear. Weights must stay zero or positive.
 
 The editor composes the material channels through the stack on a 4 m grid, keeps the four
 strongest materials at each point and normalizes their weights; the renderer then blends
