@@ -65,6 +65,16 @@ enum ChunkKind { HEIGHTMAP, CONCAVE, EMPTY }
 		track_radius = value
 		_tracked_chunk = Vector2i(-2147483648, -2147483648)
 
+## With a StrataTerrain3D parent and no [member data] of its own, the node uses the parent's
+## bake and follows it: every new bake rebuilds the resident chunks in place. The terrain's
+## "Add collision" button relies on this.
+@export var follow_terrain := true
+## Without a track target, prepare the whole terrain on ready when it fits
+## [member max_resident_chunks]; a larger terrain warns once and waits for a target or an
+## explicit prepare_region().
+@export var auto_prepare := true
+var _terrain: Node3D
+var _auto_warned := false
 var _chunks: Dictionary = {}
 var _suppress_clear := false
 var _tracked_chunk := Vector2i(-2147483648, -2147483648)
@@ -72,7 +82,38 @@ var _track_warned := false
 var _stats := {"builds": 0, "heightmap_builds": 0, "concave_builds": 0, "last_build_ms": 0.0, "last_prepare_ms": 0.0, "rejections": 0, "evictions": 0}
 
 func _ready() -> void:
+	_bind_terrain()
 	set_physics_process(not track_target.is_empty())
+	# Deferred, so a script that prepares regions or sets a target right after adding the node wins.
+	_auto_prepare.call_deferred()
+
+func _bind_terrain() -> void:
+	var parent := get_parent() as Node3D
+	if not follow_terrain or parent == null or not parent.has_signal(&"runtime_data_changed"): return
+	_terrain = parent
+	if data == null: data = parent.get("runtime_data")
+	if not parent.is_connected(&"runtime_data_changed", _on_terrain_bake): parent.connect(&"runtime_data_changed", _on_terrain_bake)
+
+func _on_terrain_bake() -> void:
+	if not is_instance_valid(_terrain) or _terrain.get("runtime_data") == null: return
+	if data == null or _chunks.is_empty():
+		data = _terrain.get("runtime_data")
+	else:
+		var swapped := replace_data(_terrain.get("runtime_data"))
+		if not swapped.get("ok", false): push_warning("StrataCollision: the new bake could not replace the resident chunks: " + String(swapped.get("message", "")))
+	_tracked_chunk = Vector2i(-2147483648, -2147483648)
+	_auto_prepare.call_deferred()
+
+func _auto_prepare() -> void:
+	if not auto_prepare or not is_inside_tree() or not track_target.is_empty() or data == null or not data.is_resident() or not _chunks.is_empty(): return
+	var grid := get_chunk_grid()
+	if grid.x * grid.y > max_resident_chunks:
+		if not _auto_warned:
+			_auto_warned = true
+			push_warning("StrataCollision: the terrain needs %d chunks but max_resident_chunks is %d; set track_target (the player) or call prepare_region() for the areas you need." % [grid.x * grid.y, max_resident_chunks])
+		return
+	var prepared := prepare_region(data.bounds)
+	if not prepared.get("ok", false): push_warning("StrataCollision: automatic preparation failed: " + String(prepared.get("message", "")))
 
 func _physics_process(_delta: float) -> void:
 	tick()

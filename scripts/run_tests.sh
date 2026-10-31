@@ -51,7 +51,7 @@ GODOT_TESTS=(
     material_preview_cutoff_test material_region_refresh_test material_resource_test native_data_test
     procedural_transaction_test region_geometry_test region_streamer_test stage_material_persistence_test stage_material_transport_test
     terrain_bulk_test terrain_cell_mask_test terrain_material_soft_limit_test terrain_mesher_test terrain_refinement_test
-    large_world_test physics_tracking_test terrain_runtime_intent_test terrain_transport_lifetime_test
+    large_world_test physics_tracking_test terrain_runtime_intent_test terrain_setup_test terrain_transport_lifetime_test
 )
 # These read the saved island under demo/island/terrain (Git LFS).
 ISLAND_DATA_TESTS=(island_storage_test terrain_demo_scene_test)

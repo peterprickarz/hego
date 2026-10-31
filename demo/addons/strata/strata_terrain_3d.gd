@@ -130,6 +130,15 @@ signal runtime_bake_stale_changed(stale: bool)
 ## exclusions, publishes it (and saves it to the storage directory when there is one). Saved
 ## procedural results are baked as they are, so a reopened scene needs no recook first.
 @export_tool_button("Bake runtime data", "Bake") var bake_runtime_button = bake_runtime
+## Adds a [StrataCollision] child named Collision that follows this terrain's bake. Without a
+## track target it prepares the whole terrain when that fits its chunk budget.
+@export_tool_button("Add collision", "CollisionShape3D") var add_collision_button = add_collision
+## Adds a [StrataNavigation] child named Navigation that follows this terrain's bake. Without a
+## track target it bakes the whole terrain when that fits its tile budget.
+@export_tool_button("Add navigation", "NavigationRegion3D") var add_navigation_button = add_navigation
+## Adds a [StrataRenderer] child named Renderer and a [StrataRegionStreamer] named Streamer that
+## draw the bake in the running game around the current camera. Nothing changes in the editor.
+@export_tool_button("Add runtime renderer", "MeshInstance3D") var add_runtime_renderer_button = add_runtime_renderer
 @export_group("")
 var _runtime_signature: Variant = null
 ## Seconds between checks of the procedural layers' [member StrataLayer.source_tokens].
@@ -154,6 +163,49 @@ func save_to_storage() -> void:
 		print("Strata: ", result.message)
 	else:
 		push_error("Strata: " + String(result.message))
+
+## The inspector's "Add collision": the existing Collision child, or a new [StrataCollision]
+## owned by the edited scene.
+func add_collision() -> StrataCollision:
+	var existing := get_node_or_null("Collision") as StrataCollision
+	if existing != null: return existing
+	var collision := StrataCollision.new()
+	collision.name = "Collision"
+	_adopt_runtime_child(collision)
+	return collision
+
+## The inspector's "Add navigation": the existing Navigation child, or a new [StrataNavigation].
+func add_navigation() -> StrataNavigation:
+	var existing := get_node_or_null("Navigation") as StrataNavigation
+	if existing != null: return existing
+	var navigation := StrataNavigation.new()
+	navigation.name = "Navigation"
+	_adopt_runtime_child(navigation)
+	return navigation
+
+## The inspector's "Add runtime renderer": a Renderer ([StrataRenderer]) and a Streamer
+## ([StrataRegionStreamer] pointing at it) as children; existing ones are kept.
+func add_runtime_renderer() -> StrataRenderer:
+	var renderer := get_node_or_null("Renderer") as StrataRenderer
+	if renderer == null:
+		renderer = StrataRenderer.new()
+		renderer.name = "Renderer"
+		_adopt_runtime_child(renderer)
+	if get_node_or_null("Streamer") == null:
+		var streamer := StrataRegionStreamer.new()
+		streamer.name = "Streamer"
+		_adopt_runtime_child(streamer)
+		streamer.renderer = renderer
+	return renderer
+
+## Adds a node as a child that the edited scene owns (so it is saved with it) and marks the
+## scene unsaved in the editor.
+func _adopt_runtime_child(node: Node) -> void:
+	add_child(node)
+	var root: Node = get_tree().edited_scene_root if Engine.is_editor_hint() and is_inside_tree() else null
+	if root == null: root = owner if owner != null else self
+	node.owner = root
+	StrataStorage._mark_scene_unsaved(self)
 
 ## The inspector's bake: [method StrataBake.bake] with cell masks and the saved procedural
 ## results, reported to the output. Returns the bake result ({ok, message, data, report}).

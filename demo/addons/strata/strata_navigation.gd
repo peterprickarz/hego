@@ -103,6 +103,40 @@ const _NO_TILE := Vector2i(-2147483648, -2147483648)
 @export var use_async := true
 ## Predict Godot's map edge merge after each publication (see the class note).
 @export var check_merge_conflicts := false
+## With a StrataTerrain3D parent and no [member data] of its own, the node uses the parent's
+## bake and follows it: a new bake replaces the data, tracked tiles rebake around the target
+## and an automatic whole-terrain bake runs again. The terrain's "Add navigation" button
+## relies on this.
+@export var follow_terrain := true
+## Without a track target, bake the whole terrain on ready when it fits [member max_tiles];
+## a larger terrain warns once and waits for a target or an explicit bake_region().
+@export var auto_bake := true
+var _terrain: Node3D
+var _auto_warned := false
+
+func _bind_terrain() -> void:
+	var parent := get_parent() as Node3D
+	if not follow_terrain or parent == null or not parent.has_signal(&"runtime_data_changed"): return
+	_terrain = parent
+	if data == null: data = parent.get("runtime_data")
+	if not parent.is_connected(&"runtime_data_changed", _on_terrain_bake): parent.connect(&"runtime_data_changed", _on_terrain_bake)
+
+func _on_terrain_bake() -> void:
+	if not is_instance_valid(_terrain) or _terrain.get("runtime_data") == null: return
+	data = _terrain.get("runtime_data")
+	_tracked_tile = _NO_TILE
+	_auto_bake.call_deferred()
+
+func _auto_bake() -> void:
+	if not auto_bake or not is_inside_tree() or not track_target.is_empty() or data == null or not data.is_resident() or is_baking() or int(get_stats().resident_tiles) > 0: return
+	var grid := get_tile_grid()
+	if grid.x * grid.y > max_tiles:
+		if not _auto_warned:
+			_auto_warned = true
+			push_warning("StrataNavigation: the terrain needs %d tiles but max_tiles is %d; set track_target (the player) or call bake_region() for the areas you need." % [grid.x * grid.y, max_tiles])
+		return
+	var baked := bake_region(data.bounds)
+	if not baked.get("ok", false) and not baked.get("pending", false): push_warning("StrataNavigation: automatic bake failed: " + String(baked.get("message", "")))
 ## Optional gameplay focus (player, vehicle, agent hub); not the camera. While set, the
 ## node keeps the tiles within `track_radius` of the target's TILE (so every point of
 ## the target's tile has the full radius around it) resident, baking tiles that enter
@@ -139,7 +173,10 @@ var _track_epoch := 0
 var _track_warned := false
 
 func _ready() -> void:
+	_bind_terrain()
 	set_physics_process(not track_target.is_empty())
+	# Deferred, so a script that bakes a region or sets a target right after adding the node wins.
+	_auto_bake.call_deferred()
 
 func _exit_tree() -> void:
 	# Results of in-flight async bakes are discarded by generation.

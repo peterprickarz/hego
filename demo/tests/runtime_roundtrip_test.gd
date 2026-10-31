@@ -24,6 +24,10 @@ func run() -> void:
 	var collision: StrataCollision = terrain.get_node("Collision")
 	var navigation: StrataNavigation = terrain.get_node("Navigation")
 	check(collision.data == data and navigation.data == data, "children share the one compiled resource")
+	# This test drives every bake itself; the nodes' whole-terrain automatics would add regions
+	# before the baseline below is taken.
+	collision.auto_prepare = false
+	navigation.auto_bake = false
 	check(collision.chunk_cells == 16 and collision.collision_layer == 4 and navigation.tile_cells == 16, "exported settings persisted")
 
 	var holes := 0

@@ -41,6 +41,15 @@ extends Node
 ## 0 = a quarter of a region extent.
 @export var camera_step := 0.0
 
+## Start on ready without a script: with a StrataTerrain3D parent (or a renderer whose parent is
+## one) the terrain's bake and materials are used, every new bake restarts the stream, a
+## missing [member renderer] is a StrataRenderer sibling and a missing [member camera] is the
+## viewport's current camera. The terrain's "Add runtime renderer" button relies on this.
+## Nothing starts in the editor or headless.
+@export var auto_start := true
+var _terrain: Node3D
+var _materials: Array[StrataMaterial] = []
+
 ## Threaded loads in flight are capped at this many times loads_per_frame.
 const IN_FLIGHT_FACTOR := 4
 
@@ -63,7 +72,9 @@ func start(source: Node3D, materials: Array[StrataMaterial]) -> bool:
 	_source = source
 	_started = true
 	_busy = true
-	if is_instance_valid(camera): update(_camera_point())
+	if is_instance_valid(camera):
+		if renderer.has_method("set_camera"): renderer.set_camera(camera)
+		update(_camera_point())
 	return true
 
 ## Forgets every binding and stops updating. The renderer keeps its coarse tier.
@@ -97,8 +108,52 @@ func stats() -> Dictionary:
 func bound_level(xy: Vector2i) -> int:
 	return _bound.get(xy, -1)
 
+func _ready() -> void:
+	if not auto_start or Engine.is_editor_hint() or DisplayServer.get_name() == "headless": return
+	# Deferred, so a script that wires and starts the streamer right after adding it wins.
+	_auto_start.call_deferred()
+
+func _auto_start() -> void:
+	if _started or not is_inside_tree(): return
+	var source := _find_source()
+	if source == null: return
+	if _terrain != null:
+		if data == null: data = _terrain.get("runtime_data")
+		_materials.assign(_terrain.get("editor_materials"))
+		if not _terrain.is_connected(&"runtime_data_changed", _on_terrain_bake): _terrain.connect(&"runtime_data_changed", _on_terrain_bake)
+	if renderer == null:
+		for child in source.get_children():
+			if child is StrataRenderer: renderer = child; break
+	if renderer == null or data == null: return
+	if start(source, _materials):
+		if _terrain != null: _terrain.call("set_preview_enabled", false)
+	else:
+		push_warning("StrataRegionStreamer: the renderer rejected the terrain's bake; nothing is drawn.")
+
+## The node whose local space is the terrain's: a StrataTerrain3D parent, the renderer's
+## StrataTerrain3D parent, or the renderer's Node3D parent.
+func _find_source() -> Node3D:
+	var parent := get_parent()
+	if parent is Node3D and parent.has_signal(&"runtime_data_changed"):
+		_terrain = parent
+		return parent
+	if renderer != null and renderer.get_parent() is Node3D:
+		if renderer.get_parent().has_signal(&"runtime_data_changed"): _terrain = renderer.get_parent()
+		return renderer.get_parent()
+	return parent as Node3D
+
+func _on_terrain_bake() -> void:
+	if not is_instance_valid(_terrain) or renderer == null: return
+	data = _terrain.get("runtime_data")
+	var source: Node3D = _source if is_instance_valid(_source) else _terrain
+	if data != null and not start(source, _materials): push_warning("StrataRegionStreamer: the renderer rejected the new bake.")
+
 func _process(_delta: float) -> void:
-	if not _started or not is_instance_valid(camera): return
+	if not _started: return
+	if not is_instance_valid(camera):
+		camera = get_viewport().get_camera_3d()
+		if camera == null: return
+		if renderer.has_method("set_camera"): renderer.set_camera(camera)
 	var point := _camera_point()
 	var step := camera_step if camera_step > 0.0 else StrataRegions.extent(data.get_spec()) * 0.25
 	if _busy or data.pending_count() > 0 or point.distance_to(_last_point) >= step: update(point)

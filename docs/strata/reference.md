@@ -61,6 +61,10 @@ A cook sets the composition of each channel it publishes from `hegostrata_compos
 | `runtime_data` | `StrataTerrain3D` | the published bake |
 | `runtime_bake_stale` | `StrataTerrain3D` | the stack changed since the bake; also `is_runtime_bake_stale()` and the `runtime_bake_stale_changed(stale)` signal |
 | **Bake runtime data** | `StrataTerrain3D` | inspector button, Runtime group: `bake_runtime()`, a `StrataBake.bake` with cell masks that accepts saved cooks and publishes the result |
+| **Add collision** / **Add navigation** / **Add runtime renderer** | `StrataTerrain3D` | inspector buttons, Runtime group: `add_collision()`, `add_navigation()`, `add_runtime_renderer()` add child nodes that follow the terrain's bake |
+| `follow_terrain` | `StrataCollision`, `StrataNavigation` | use and follow the parent terrain's bake when `data` is empty (default on) |
+| `auto_prepare` / `auto_bake` | `StrataCollision` / `StrataNavigation` | without a `track_target`, cover the whole terrain when it fits the chunk or tile budget, otherwise warn once (default on) |
+| `auto_start` | `StrataRegionStreamer` | start on ready from the parent terrain's bake and materials, with a sibling `StrataRenderer` and the viewport camera when unset (default on; never in the editor or headless) |
 
 ## Regions
 

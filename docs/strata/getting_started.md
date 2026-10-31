@@ -259,8 +259,12 @@ The full list of options is in the [reference](reference.md#bake-options).
 ## Collision and navigation
 
 `StrataCollision` and `StrataNavigation` build physics and navigation from a bake, only for
-the areas you ask for. Add them as direct children of the terrain, at the identity
-transform, and give them the bake:
+the areas you ask for. The quick way: select the terrain and press **Add collision** and
+**Add navigation** in the inspector's Runtime group. Each adds a child node that follows the
+terrain's bake (a rebake replaces what it built) and, with no target to follow, covers the
+whole terrain when that fits its budget (64 chunks or tiles, about 1 km² at 1 m). For a
+bigger terrain, point the node's `track_target` at your player in the inspector and it
+builds only around the player. The same from a script, with the nodes made by hand:
 
 ```gdscript
 extends Node3D
@@ -281,8 +285,9 @@ func _ready() -> void:
     navigation.track_target = navigation.get_path_to(player)   # tiles follow the player too
 ```
 
-Both are ordinary nodes, so you can also add them in the editor and assign the bake file
-(`runtime_data.res` in the storage directory) to their `data` property.
+Both are ordinary nodes. A node with its own `data` (for example the bake file,
+`runtime_data.res` in the storage directory) keeps it and ignores the terrain; `follow_terrain`
+turns the automatic binding off, `auto_prepare` and `auto_bake` the whole-terrain default.
 
 ### Collision
 
@@ -406,7 +411,11 @@ them with `terrain.sample_runtime_channel(&"footpath", world_position)`. It retu
 ## Draw the terrain in your game
 
 The textured view in the editor is an editor tool. In a running game, the terrain shows its
-simple preview mesh until you add a renderer for the bake:
+simple preview mesh until it has a renderer for the bake. Press **Add runtime renderer** in
+the terrain's Runtime group: it adds a `StrataRenderer` and a `StrataRegionStreamer` that,
+when the game runs, draw the bake with the terrain's materials around the current camera
+(the whole terrain from the coarse maps at once, full detail near the camera) and follow
+every rebake. Nothing changes in the editor. The same by hand:
 
 ```gdscript
 var renderer := StrataRenderer.new()
