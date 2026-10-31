@@ -46,6 +46,10 @@ _host_platform = {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get
 _target_platform = ARGUMENTS.get("platform", ARGUMENTS.get("p", _host_platform))
 SConsignFile(f".sconsign-{_target_platform}.dblite")
 
+# godot-cpp v10 is versioned independently of Godot and bundles several API dumps;
+# build against the 4.7 API, the minimum Godot version HEGo and Strata support.
+ARGUMENTS.setdefault("api_version", "4.7")
+
 if _target_platform == "macos":
     # macOS 11 is the first release with Apple Silicon support. Apply the same
     # target to godot-cpp and HEGo, including builds made with OSXCross on Linux.

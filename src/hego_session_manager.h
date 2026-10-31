@@ -5,6 +5,7 @@
 #include "hego_nodes/hego_trackable_node.h"
 #include <mutex>
 #include <string>
+#include <vector>
 
 #define DEFAULT_NAMED_PIPE "hapi"
 #define DEFAULT_HOST_NAME "127.0.0.1"

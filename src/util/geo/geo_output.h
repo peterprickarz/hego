@@ -4,6 +4,7 @@
 #include "hego_task.h"
 #include "util/geo/geo_cache.h"
 
+#include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/dictionary.hpp>

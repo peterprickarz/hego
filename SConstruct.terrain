@@ -27,6 +27,10 @@ if _platform == "macos":
 _sconsign_profile = "-linux-compat" if _terrain_profile == "linux-compat" else ""
 SConsignFile(f".sconsign-terrain-{_platform}{_sconsign_profile}.dblite")
 
+# godot-cpp v10 is versioned independently of Godot and bundles several API dumps;
+# build against the 4.7 API, the minimum Godot version HEGo and Strata support.
+ARGUMENTS.setdefault("api_version", "4.7")
+
 # Keep the existing host object tree for incremental development. Container and
 # cross-platform builds get independent godot-cpp object trees so switching
 # compiler/libc profiles cannot overwrite objects used by the host build.
