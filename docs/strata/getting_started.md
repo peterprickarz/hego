@@ -249,8 +249,13 @@ Things to know:
   loaded from disk counts as stale until its producer cooks again, so after reopening a
   scene either recook, or pass `"allow_stale_procedural": true` to bake the saved results
   as they are.
-- With a storage directory, the bake is written to `runtime_data.res` there; otherwise it
-  is saved with the scene. A bake stays current across a save and reload.
+- With a storage directory, the bake is written there: `runtime_data.res` and a `regions/`
+  folder with two files per region, `region_<i>_<j>.res` (full detail) and
+  `region_<i>_<j>.lod.res` (reduced detail for distant regions). Without a storage directory
+  it is saved with the scene. A bake stays current across a save and reload.
+- Big terrains bake straight to disk, a batch of regions at a time (`bake_batch`, default
+  32), so memory use does not grow with the terrain size. A bake that is rejected leaves the
+  previous files in place. The storage directory must be a `res://` or `user://` path.
 
 The full list of options is in the [reference](reference.md#bake-options).
 
@@ -276,9 +281,7 @@ func _ready() -> void:
     navigation.data = terrain.runtime_data
     navigation.agent_radius = 0.5
     terrain.add_child(navigation)
-    var result := navigation.bake_region(Rect2(-64, -64, 128, 128))   # terrain-local XZ
-    if result.get("pending", false):
-        result = await navigation.bake_finished
+    navigation.track_target = navigation.get_path_to(player)   # tiles follow the player too
 ```
 
 Both are ordinary nodes, so you can also add them in the editor and assign the bake file
@@ -291,8 +294,12 @@ Collision is built in square chunks (`chunk_cells`, default 128 cells) and only 
 - `prepare_region(local_rect)` makes the chunks overlapping a terrain-local rectangle
   resident; `prepare_around(world_position, radius)` does the same around a point.
 - `track_target` follows a node, such as the player or a vehicle, and loads the chunks
-  within `track_radius` (default 96 m) whenever it enters a new chunk.
-- `max_resident_chunks` (default 64) caps how many chunks exist at once.
+  within `track_radius` (default 96 m) whenever it enters a new chunk. The chunks it left
+  behind are released, so collision exists only around the target however large the terrain.
+- `max_resident_chunks` (default 64) caps how many chunks exist at once. If the radius
+  needs more, the chunks farthest from the target are left out; the chunk the target
+  stands on is always built. The cost of entering a chunk is a few milliseconds, paid on
+  that physics frame.
 - `collision_layer`, `collision_mask` and `physics_material` apply to every chunk.
 - After a new bake, `replace_data(terrain.runtime_data)` rebuilds the resident chunks
   and swaps them in together.
@@ -309,6 +316,26 @@ With `use_async` (the default) the result arrives through the `bake_finished` si
 all tiles of a request appear together. Set the agent with `agent_radius`, `agent_height`,
 `agent_max_climb` and `agent_max_slope`, and the regions' `navigation_layers` as usual. The
 navigation cell size defaults to the map's and must be at most half the bake spacing.
+
+To make navigation follow the player instead of baking a fixed area, set `track_target`
+(a NodePath) and, if you want a different range, `track_radius` (default 96 m):
+
+```gdscript
+navigation.track_radius = 128.0
+navigation.track_target = navigation.get_path_to(player)
+```
+
+- Whenever the target enters a new tile, the tiles within `track_radius` of that tile are
+  baked, each in the background, and each appears as soon as it is ready. Tiles that
+  fall more than `track_radius * 1.25` behind are removed. Standing still costs nothing.
+- `max_tiles` (default 64) is the budget for tiles that exist or are being baked. When the
+  radius needs more, the tiles farthest from the target are skipped or removed first; the
+  tile under the target is never removed. A target that outruns the baking just gets the
+  tiles around where it is now: results for tiles it already left are dropped.
+- `get_stats()` reports `tracked`, `resident_tiles`, `pending_tiles` and `evictions`.
+- `bake_region()` and `clear()` still work; use `bake_region()` for areas that should exist
+  without a target, such as a level start. A tracked target replaces tiles it does not need
+  once it moves away.
 
 ```{important}
 Godot merges navigation regions on a grid that is too coarse for terrain tiles and

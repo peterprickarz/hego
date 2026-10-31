@@ -38,6 +38,8 @@ const MACRO_NEUTRAL := Color(1.0, 1.0, 1.0, 1.0)
 ## Navigation profile that is always present: the nav_exclusion map itself.
 const DEFAULT_NAV_PROFILE := &"default"
 const REGION_FILE := "region_%d_%d.res"
+## The partial file next to each region file: levels lod_level.. only.
+const LOD_REGION_FILE := "region_%d_%d.lod.res"
 
 @export var format_version := FORMAT_VERSION
 ## Increments on every published bake of the owning terrain.
@@ -60,6 +62,10 @@ const REGION_FILE := "region_%d_%d.res"
 		_payload_checked = false
 ## Directory of region_<i>_<j>.res files, loaded on demand when no regions are embedded.
 @export var region_directory := ""
+## First level of the partial region files (region_<i>_<j>.lod.res) saved next to the full
+## ones, 0..15 (the bake keeps it below mip_levels; the lod files are ignored otherwise). A request for min_level >= lod_level
+## loads the partial file when it exists.
+@export var lod_level := 2
 ## Coarse maps (Phase B): the terrain-wide image of a map at mip level [member coarse_level],
 ## no apron, in the map's own format, stitched by the bake from the regions' level cores. Maps
 ## are optional (v2 data without them is valid). Name -> PackedByteArray of
@@ -204,58 +210,83 @@ func description(name: String) -> Dictionary:
 func level_count(name: String) -> int:
 	return StrataRegions.level_count(cells, description(name), mip_levels) if maps.has(name) else 0
 
-func region_path(xy: Vector2i) -> String:
+## File of the full region (all levels).
+func full_region_path(xy: Vector2i) -> String:
 	return region_directory.path_join(REGION_FILE % [xy.x, xy.y])
 
-## The region at grid index [param xy]: the embedded one, or one loaded from
-## [member region_directory] and kept in the cache until evict_region(). Synchronous: a threaded
-## load in flight for [param xy] is completed. Null outside the grid, when the region is not
-## available, or when its file is malformed.
-func get_region(xy: Vector2i) -> StrataRegionData:
+## File of the partial region (levels lod_level..).
+func lod_region_path(xy: Vector2i) -> String:
+	return region_directory.path_join(LOD_REGION_FILE % [xy.x, xy.y])
+
+## The file a load with [param min_level] reads: the lod file when min_level >= lod_level and
+## that file exists, otherwise the full file.
+func region_path(xy: Vector2i, min_level: int = 0) -> String:
+	if min_level >= lod_level and lod_level < mip_levels and not region_directory.is_empty() and ResourceLoader.exists(lod_region_path(xy)): return lod_region_path(xy)
+	return full_region_path(xy)
+
+func _is_lod_path(path: String) -> bool:
+	return path.ends_with(".lod.res")
+
+## The region at grid index [param xy] holding at least [param min_level]: the embedded one, or
+## one loaded from [member region_directory] and kept in the cache until evict_region(). A
+## cached region satisfies the request when its first_level is at most [param min_level]; a
+## partial (lod) region does not satisfy a request below lod_level, which then loads the full
+## file and replaces it. Synchronous: a threaded load in flight for [param xy] is completed.
+## Null outside the grid, when the region is not available, or when its file is malformed.
+func get_region(xy: Vector2i, min_level: int = 0) -> StrataRegionData:
 	if regions.has(xy): return regions[xy]
-	if _region_cache.has(xy): return _region_cache[xy]
+	if _region_cache.has(xy) and (_region_cache[xy] as StrataRegionData).first_level <= min_level: return _region_cache[xy]
 	if region_directory.is_empty() or _missing.has(xy) or not _in_grid(xy): return null
-	var path := region_path(xy)
-	var loaded: StrataRegionData = null
 	if _pending.has(xy):
-		loaded = ResourceLoader.load_threaded_get(path) as StrataRegionData
+		var pending_path: String = _pending[xy]
 		_pending.erase(xy)
-	elif ResourceLoader.exists(path):
+		var finished := _accept_loaded(xy, ResourceLoader.load_threaded_get(pending_path) as StrataRegionData, pending_path)
+		if finished == null: return null
+		if finished.first_level <= min_level: return finished
+	var path := region_path(xy, min_level)
+	var loaded: StrataRegionData = null
+	if ResourceLoader.exists(path):
 		loaded = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRegionData
-	return _accept_loaded(xy, loaded)
+	return _accept_loaded(xy, loaded, path)
 
 func _in_grid(xy: Vector2i) -> bool:
 	return xy.x >= 0 and xy.y >= 0 and xy.x < grid.x and xy.y < grid.y
 
-## Validates a loaded external region and caches it; a failure is reported once and remembered.
-func _accept_loaded(xy: Vector2i, loaded: StrataRegionData) -> StrataRegionData:
-	if loaded == null or loaded.region != xy or not loaded.validate().ok or not _region_matches(loaded):
-		_fail_region(xy)
+## Validates a loaded external region and caches it unless the cache already holds at least as
+## much of it; a failure is reported once and remembered. Returns the region now cached.
+func _accept_loaded(xy: Vector2i, loaded: StrataRegionData, path: String) -> StrataRegionData:
+	var expected_first := lod_level if _is_lod_path(path) else 0
+	if loaded == null or loaded.region != xy or loaded.first_level != expected_first or not loaded.validate().ok or not _region_matches(loaded):
+		_fail_region(xy, path)
 		return null
+	if _region_cache.has(xy) and (_region_cache[xy] as StrataRegionData).first_level <= loaded.first_level: return _region_cache[xy]
 	_region_cache[xy] = loaded
 	return loaded
 
-func _fail_region(xy: Vector2i) -> void:
-	push_error("Strata: region file %s is missing or malformed" % region_path(xy))
+func _fail_region(xy: Vector2i, path: String = "") -> void:
+	push_error("Strata: region file %s is missing or malformed" % (path if not path.is_empty() else full_region_path(xy)))
 	_missing[xy] = true
 
-## Starts a threaded load of external region [param xy]. False (and nothing started) when the
-## region is embedded, cached, already pending, known missing, outside the grid, or has no file
-## (reported once). Finished loads arrive through poll_regions().
-func request_region(xy: Vector2i) -> bool:
-	if regions.has(xy) or _region_cache.has(xy) or _pending.has(xy) or _missing.has(xy): return false
+## Starts a threaded load of external region [param xy] holding at least [param min_level]
+## (the lod file for min_level >= lod_level, otherwise the full file). False (and nothing
+## started) when the region is embedded, already cached with enough levels, pending (either
+## kind: ask again after it arrives), known missing, outside the grid, or has no file (reported
+## once). Finished loads arrive through poll_regions().
+func request_region(xy: Vector2i, min_level: int = 0) -> bool:
+	if regions.has(xy) or _pending.has(xy) or _missing.has(xy): return false
+	if _region_cache.has(xy) and (_region_cache[xy] as StrataRegionData).first_level <= min_level: return false
 	if region_directory.is_empty() or not _in_grid(xy): return false
-	var path := region_path(xy)
+	var path := region_path(xy, min_level)
 	# The type hint stays empty: the loaders do not resolve script class names as hints.
 	if not ResourceLoader.exists(path) or ResourceLoader.load_threaded_request(path, "", false, ResourceLoader.CACHE_MODE_IGNORE) != OK:
-		_fail_region(xy)
+		_fail_region(xy, path)
 		return false
 	_pending[xy] = path
 	return true
 
 ## Moves finished threaded loads into the cache (through the validation get_region applies; a
-## failed or malformed one is reported once and marked missing). Returns the newly cached
-## indices. Never blocks.
+## failed or malformed one is reported once and marked missing). Returns the indices whose
+## cached region is new or was replaced by fuller data. Never blocks.
 func poll_regions() -> Array[Vector2i]:
 	var arrived: Array[Vector2i] = []
 	for xy: Vector2i in _pending.keys():
@@ -265,13 +296,14 @@ func poll_regions() -> Array[Vector2i]:
 				continue
 			ResourceLoader.THREAD_LOAD_LOADED:
 				_pending.erase(xy)
-				if regions.has(xy) or _region_cache.has(xy):
-					ResourceLoader.load_threaded_get(path)
-				elif _accept_loaded(xy, ResourceLoader.load_threaded_get(path) as StrataRegionData) != null:
-					arrived.append(xy)
+				var loaded := ResourceLoader.load_threaded_get(path) as StrataRegionData
+				if regions.has(xy): continue
+				var before: StrataRegionData = _region_cache.get(xy)
+				var after := _accept_loaded(xy, loaded, path)
+				if after != null and after != before: arrived.append(xy)
 			_:
 				_pending.erase(xy)
-				_fail_region(xy)
+				_fail_region(xy, path)
 	return arrived
 
 func is_region_pending(xy: Vector2i) -> bool:
@@ -284,15 +316,20 @@ func is_region_missing(xy: Vector2i) -> bool:
 func pending_count() -> int:
 	return _pending.size()
 
-## True when [method get_region] would answer without I/O: embedded or cached.
-func has_cached_region(xy: Vector2i) -> bool:
-	return regions.has(xy) or _region_cache.has(xy)
+## True when [method get_region] with [param min_level] would answer without I/O: embedded, or
+## cached with first_level at most [param min_level].
+func has_cached_region(xy: Vector2i, min_level: int = 0) -> bool:
+	return regions.has(xy) or _region_cache.has(xy) and (_region_cache[xy] as StrataRegionData).first_level <= min_level
 
 ## Drops a loaded external region from the cache; embedded regions stay. False when nothing
 ## was dropped. The next get_region() or request_region() reads the file again.
 func evict_region(xy: Vector2i) -> bool:
 	if regions.has(xy): return false
 	return _region_cache.erase(xy)
+
+## first_level of the cached external region (0 full, lod_level partial), -1 when not cached.
+func cached_first_level(xy: Vector2i) -> int:
+	return (_region_cache[xy] as StrataRegionData).first_level if _region_cache.has(xy) else -1
 
 ## Indices of the external regions currently held in the cache (embedded ones excluded).
 func cached_region_keys() -> Array[Vector2i]:
@@ -326,12 +363,12 @@ func embed_regions(embedded: Dictionary) -> void:
 	_region_cache = {}
 	_missing = {}
 
-## Loads every region (external ones included) and embeds them, for exports.
+## Loads every region (external ones included, always the full files) for embedding in exports.
 func load_all_regions() -> Dictionary:
 	var all := {}
 	for y in range(grid.y):
 		for x in range(grid.x):
-			var region := get_region(Vector2i(x, y))
+			var region := get_region(Vector2i(x, y), 0)
 			if region == null: return {}
 			all[Vector2i(x, y)] = region
 	return all
@@ -401,6 +438,7 @@ func validate(deep: bool = false) -> Dictionary:
 	if int(height.format) != Image.FORMAT_RF or height.kind != StrataRegions.KIND_SAMPLE or int(height.scale) != 1:
 		return _error("The height map must be an RF sample map at scale 1")
 	if mip_levels < 1 or mip_levels > 16: return _error("mip_levels must be 1..16")
+	if lod_level < 0 or lod_level > 15: return _error("lod_level must be 0..15")
 	if not is_finite(height_min) or not is_finite(height_max) or height_min > height_max:
 		return _error("Height range must be finite")
 	if region_extrema.size() != grid.x * grid.y * 2: return _error("Per-region height extrema do not match the grid")
@@ -461,6 +499,7 @@ func _validate_embedded() -> Dictionary:
 	for xy in regions:
 		if not xy is Vector2i or not StrataRegions.contains_region(get_spec(), xy) or not regions[xy] is StrataRegionData: return _error("Embedded regions must be keyed by their grid index")
 		var region: StrataRegionData = regions[xy]
+		if region.first_level != 0: return _error("Embedded regions must hold every level")
 		var checked := region.validate()
 		if not checked.ok: return _error("Region %s: %s" % [xy, checked.message])
 		if region.region != xy or not _region_matches(region): return _error("Region %s does not match the manifest" % xy)
@@ -483,7 +522,7 @@ static func scan_region(region: StrataRegionData, spec: Dictionary) -> Dictionar
 	for name in region.map_names():
 		var description := region.description(name)
 		var format := int(description.format)
-		for level in range(region.level_count(name)):
+		for level in range(region.first_level, region.level_count(name)):
 			var bytes := region.level_bytes(name, level)
 			if String(description.kind) == StrataRegions.KIND_CELL and format == Image.FORMAT_L8:
 				if not _canonical_mask(bytes): return _error("Cell mask %s must contain only 0 and 255" % name)
@@ -580,7 +619,7 @@ func get_manifest() -> Dictionary:
 	var channel_entries: Array = []
 	for name in channel_names:
 		channel_entries.append({"name": name, "bytes": int(map_entries.get(name, 0)) + int(map_entries.get(name + StrataRegions.COVERAGE_SUFFIX, 0))})
-	return {"format_version": format_version, "bake_revision": bake_revision, "bounds": bounds, "spacing": spacing, "resolution": resolution, "cells": cells, "apron": apron, "grid": grid, "region_count": grid.x * grid.y, "region_bytes": per_region, "mip_levels": mip_levels, "total_bytes": per_region * grid.x * grid.y, "map_bytes": map_entries, "embedded": not regions.is_empty(), "coarse_level": coarse_level, "coarse_bytes": coarse_bytes(), "coarse_maps": coarse_entries, "region_directory": region_directory, "channels": channel_entries, "nav_profiles": profile_entries, "has_macro": has_macro(), "height_min": height_min, "height_max": height_max}
+	return {"format_version": format_version, "bake_revision": bake_revision, "bounds": bounds, "spacing": spacing, "resolution": resolution, "cells": cells, "apron": apron, "grid": grid, "region_count": grid.x * grid.y, "region_bytes": per_region, "mip_levels": mip_levels, "total_bytes": per_region * grid.x * grid.y, "map_bytes": map_entries, "embedded": not regions.is_empty(), "coarse_level": coarse_level, "coarse_bytes": coarse_bytes(), "coarse_maps": coarse_entries, "region_directory": region_directory, "lod_level": lod_level, "channels": channel_entries, "nav_profiles": profile_entries, "has_macro": has_macro(), "height_min": height_min, "height_max": height_max}
 
 ## Independent copy. Embedded regions are copied; an external directory is shared (the files
 ## are the data). With [param embed] every region is loaded and embedded instead; returns null
@@ -595,6 +634,7 @@ func duplicate_runtime(embed: bool = false) -> StrataRuntimeData:
 	copy.grid = grid
 	copy.maps = maps.duplicate(true)
 	copy.mip_levels = mip_levels
+	copy.lod_level = lod_level
 	copy.coarse_level = coarse_level
 	copy.coarse_maps = coarse_maps.duplicate()
 	copy.height_min = height_min
@@ -620,6 +660,7 @@ static func clone_region(region: StrataRegionData) -> StrataRegionData:
 	copy.apron = region.apron
 	copy.spacing = region.spacing
 	copy.origin = region.origin
+	copy.first_level = region.first_level
 	copy.height_min = region.height_min
 	copy.height_max = region.height_max
 	copy.revision = region.revision

@@ -9,7 +9,9 @@ extends RefCounted
 ## <directory>/<layer>.res             a manual layer's samples (StrataLayerData)
 ## <directory>/<layer>/<channel>.res   one cooked channel of a procedural layer (StrataFieldData)
 ## <directory>/runtime_data.res        the published bake's manifest (StrataRuntimeData)
-## <directory>/regions/region_<i>_<j>.res  one StrataRegionData per region of the bake
+## <directory>/regions/region_<i>_<j>.res      one StrataRegionData per region of the bake (all levels)
+## <directory>/regions/region_<i>_<j>.lod.res  the same region from the manifest's lod_level up (see
+##                                             StrataRegionData.first_level), for distant tiers
 ## [/codeblock]
 ## Layer names become snake_case file names. A procedural commit saves its fields here on its
 ## own (see [method StrataProcedural.commit_fields]); manual layers are saved with
@@ -140,10 +142,12 @@ static func save_procedural_fields(terrain: StrataTerrain3D, layer: StrataLayer)
 	return result
 
 
-## Saves the published bake: its regions to [code]regions/region_<i>_<j>.res[/code] (all or
-## nothing, files of regions the grid no longer has removed afterwards), then the manifest to
-## [code]runtime_data.res[/code]. The bake then loads its regions lazily from that directory;
-## with [param embed_regions] they stay inside the manifest file instead (small terrains).
+## Saves the published bake: its regions to [code]regions/region_<i>_<j>.res[/code] and their
+## partial [code].lod.res[/code] files (all or nothing, files of regions the grid no longer has
+## removed afterwards), then the manifest to [code]runtime_data.res[/code]. The bake then
+## loads its regions lazily from that directory; with [param embed_regions] they stay inside
+## the manifest file instead (small terrains). A bake that already wrote its regions to the
+## directory (StrataBake option region_directory) holds none embedded: only the manifest is written.
 static func save_runtime_data(terrain: StrataTerrain3D, embed_regions: bool = false) -> Dictionary:
 	if not has_storage(terrain):
 		return _error("This terrain has no storage directory")
@@ -165,6 +169,11 @@ static func save_runtime_data(terrain: StrataTerrain3D, embed_regions: bool = fa
 			var path := folder.path_join(StrataRuntimeData.REGION_FILE % [xy.x, xy.y])
 			entries.append({"resource": data.regions[xy], "path": path})
 			keep[path.get_file()] = true
+			var lod: StrataRegionData = (data.regions[xy] as StrataRegionData).partial_copy(data.lod_level) if data.lod_level > 0 and data.lod_level < data.mip_levels else null
+			if lod != null:
+				var lod_path := folder.path_join(StrataRuntimeData.LOD_REGION_FILE % [xy.x, xy.y])
+				entries.append({"resource": lod, "path": lod_path})
+				keep[lod_path.get_file()] = true
 		var written := _save_resources(entries)
 		if not written.ok:
 			return written

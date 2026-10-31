@@ -6,6 +6,11 @@ extends Node
 ## their files on threads and frees what the camera has left. Everything else is drawn from the
 ## coarse maps, so the whole terrain stays visible while GPU and CPU memory follow the camera.
 ##
+## Loads follow the tier: the far tier requests [code]request_region(xy, far_level)[/code] (the
+## partial lod file when the bake wrote one), the near tier level 0. A region promoted from far
+## to near keeps its far binding until the full file arrives; a demoted one keeps its cached
+## full data and is rebound at the far level without a reload. Leaving both tiers evicts it.
+##
 ## The streamer never blocks the frame on I/O: bound data is only ever what
 ## [method StrataRuntimeData.poll_regions] has delivered (or an embedded region).
 ##
@@ -72,14 +77,21 @@ func stop() -> void:
 func is_started() -> bool:
 	return _started
 
-## {near, far, pending, cached, near_slots, far_slots, loads, evictions}: regions bound per tier,
-## threaded loads in flight, external regions held in the data cache, slot budgets and the
-## totals of requested loads and evicted regions.
+## {near, far, pending, cached, lod_loaded, full_loaded, near_slots, far_slots, loads, evictions}:
+## regions bound per tier, threaded loads in flight, external regions held in the data cache
+## (of which lod_loaded hold only the partial lod data and full_loaded every level), slot
+## budgets and the totals of requested loads and evicted regions.
 func stats() -> Dictionary:
 	var near := 0
 	for xy: Vector2i in _bound:
 		if _bound[xy] == 0: near += 1
-	return {"near": near, "far": _bound.size() - near, "pending": data.pending_count() if data != null else 0, "cached": data.cached_region_keys().size() if data != null else 0, "near_slots": near_slots, "far_slots": far_slots if _far_available() else 0, "loads": _loads, "evictions": _evictions}
+	var lod_loaded := 0
+	var full_loaded := 0
+	if data != null:
+		for xy: Vector2i in data.cached_region_keys():
+			if data.cached_first_level(xy) > 0: lod_loaded += 1
+			else: full_loaded += 1
+	return {"near": near, "far": _bound.size() - near, "pending": data.pending_count() if data != null else 0, "cached": lod_loaded + full_loaded, "lod_loaded": lod_loaded, "full_loaded": full_loaded, "near_slots": near_slots, "far_slots": far_slots if _far_available() else 0, "loads": _loads, "evictions": _evictions}
 
 ## Level a region is bound at (0 near, far_level far), -1 when it is in the coarse tier only.
 func bound_level(xy: Vector2i) -> int:
@@ -158,14 +170,17 @@ func update(point: Vector2) -> void:
 			if current == level: continue
 			if pass_index == 0 and not (current == 0 and level > 0): continue
 			if pass_index == 1 and current == 0 and level > 0: continue
-			if data.has_cached_region(xy):
-				if renderer.free_slots(level) > 0 and renderer.set_region_level(xy, data.get_region(xy), level):
+			# A cached region binds when it holds the level: lod data serves the far tier, a full
+			# region (kept from the near tier or loaded) serves both. A promotion to near with
+			# only lod data cached requests the full file and keeps the far binding meanwhile.
+			if data.has_cached_region(xy, level):
+				if renderer.free_slots(level) > 0 and renderer.set_region_level(xy, data.get_region(xy, level), level):
 					_bound[xy] = level
 				else:
 					_busy = true
 			else:
 				_busy = true
-				if requests < loads_per_frame and data.pending_count() < loads_per_frame * IN_FLIGHT_FACTOR and not data.is_region_missing(xy) and data.request_region(xy):
+				if requests < loads_per_frame and data.pending_count() < loads_per_frame * IN_FLIGHT_FACTOR and not data.is_region_missing(xy) and data.request_region(xy, level):
 					requests += 1
 					_loads += 1
 

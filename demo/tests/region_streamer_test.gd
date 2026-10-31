@@ -14,6 +14,8 @@ class StubRenderer:
 	var far_slots := 0
 	var far_level := 0
 	var levels: Dictionary = {}
+	## xy -> the StrataRegionData last bound there.
+	var held: Dictionary = {}
 	var calls: Array = []
 	var residency: Dictionary = {}
 	func configure_runtime(_source: Node3D, _data: StrataRuntimeData, _materials: Array, policy: Dictionary = {}) -> bool:
@@ -36,10 +38,12 @@ class StubRenderer:
 		if region == null or region.region != xy: return false
 		if levels.get(xy, -1) != level and free_slots(level) <= 0: return false
 		levels[xy] = level
+		held[xy] = region
 		calls.append(["bind", xy, level])
 		return true
 	func release_region(xy: Vector2i) -> bool:
 		calls.append(["release", xy, -1])
+		held.erase(xy)
 		return levels.erase(xy)
 	func region_level(xy: Vector2i) -> int:
 		return levels.get(xy, -1)
@@ -200,7 +204,9 @@ func run() -> void:
 	var folder := scratch()
 	DirAccess.make_dir_recursive_absolute(folder)
 	for file in DirAccess.get_files_at(folder): DirAccess.remove_absolute(folder.path_join(file))
-	for xy in data.regions: ResourceSaver.save(data.regions[xy], folder.path_join(StrataRuntimeData.REGION_FILE % [xy.x, xy.y]))
+	for xy in data.regions:
+		ResourceSaver.save(data.regions[xy], folder.path_join(StrataRuntimeData.REGION_FILE % [xy.x, xy.y]))
+		ResourceSaver.save((data.regions[xy] as StrataRegionData).partial_copy(data.lod_level), folder.path_join(StrataRuntimeData.LOD_REGION_FILE % [xy.x, xy.y]))
 	var manifest := data.duplicate_runtime(false)
 	manifest.regions = {}
 	manifest.region_directory = folder
@@ -230,11 +236,46 @@ func run() -> void:
 		if current.loads - last_loads > 2: overshoot = true
 		last_loads = current.loads
 		for xy in stub.levels:
-			if not external.has_cached_region(xy): bound_without_cache = true
+			if not external.has_cached_region(xy, stub.levels[xy]): bound_without_cache = true
 	check(stub.levels.size() == wanted and stub.level_count(0) == near_set.size() and stub.level_count(2) == far_set.size(), "external regions arrive and bind (%d of %d after %d frames)" % [stub.levels.size(), wanted, frames])
 	check(not overshoot, "never more than loads_per_frame new loads per update")
 	check(not bound_without_cache, "bound regions are always cached ones")
 	check(streamer.stats().loads == wanted and external.cached_region_keys().size() == wanted, "every region loaded exactly once and cached (loads %d, cached %d)" % [streamer.stats().loads, external.cached_region_keys().size()])
+	var tier_stats: Dictionary = streamer.stats()
+	var near_full := true
+	var far_lod := true
+	for xy in stub.levels:
+		var region: StrataRegionData = stub.held[xy]
+		if stub.levels[xy] == 0 and region.first_level != 0: near_full = false
+		if stub.levels[xy] == 2 and region.first_level != 2: far_lod = false
+	check(near_full and far_lod, "the near tier is bound to full regions and the far tier to lod regions")
+	check(tier_stats.lod_loaded == far_set.size() and tier_stats.full_loaded == near_set.size() and tier_stats.cached == wanted, "stats count lod and full regions: %s" % [tier_stats])
+	# Promotion keeps the far binding until the full file arrives; demotion keeps the full data.
+	var border := far_set[0]
+	for xy in far_set:
+		if distance(edge_point, xy) < distance(edge_point, border): border = xy
+	check(stub.levels[border] == 2 and external.cached_first_level(border) == 2, "fixture: the border region is far with lod data")
+	var centre := (Vector2(border) + Vector2(0.5, 0.5)) * EXTENT
+	camera.position = Vector3(centre.x, 50.0, centre.y)
+	var unbound := false
+	var promoted_loads: int = streamer.stats().loads
+	for frame in range(900):
+		await process_frame
+		streamer.update(centre)
+		if not stub.levels.has(border): unbound = true
+		if stub.levels.get(border, -1) == 0 and external.cached_first_level(border) == 0: break
+	check(stub.levels.get(border, -1) == 0 and not unbound, "a promoted region stays bound (far) until the full data arrives, then moves to near")
+	check(stub.held[border].first_level == 0 and streamer.stats().loads > promoted_loads and external.get_region(border, 0) == stub.held[border], "the near binding holds the full region")
+	camera.position = Vector3(edge_point.x, 50.0, edge_point.y)
+	for frame in range(900):
+		await process_frame
+		streamer.update(edge_point)
+		if stub.levels.get(border, -1) == 2: break
+	check(stub.levels.get(border, -1) == 2 and stub.held[border].first_level == 0 and external.cached_first_level(border) == 0, "a demoted region keeps its full data bound at the far level (no reload)")
+	check(not external.is_region_pending(border) and streamer.stats().full_loaded >= 1, "no load is pending for the demoted region and stats still count it")
+	for frame in range(300):
+		await process_frame
+		streamer.update(edge_point)
 	# Move away: regions leave and are evicted from the cache.
 	var before_evictions: int = streamer.stats().evictions
 	camera.position = Vector3(250.0, 50.0, 250.0)
@@ -246,6 +287,7 @@ func run() -> void:
 	check(streamer.stats().evictions > before_evictions, "regions that left both tiers are evicted (%d)" % streamer.stats().evictions)
 	check(stub.levels.get(Vector2i(15, 15), -1) == 0 and stub.levels.get(Vector2i(8, 8), -1) == -1 and stub.level_count(0) == far_near.size(), "the residency followed the camera")
 	check(external.cached_region_keys().size() == stub.levels.size(), "the cache holds exactly the bound regions (%d vs %d)" % [external.cached_region_keys().size(), stub.levels.size()])
+	check(streamer.stats().lod_loaded + streamer.stats().full_loaded == stub.levels.size(), "lod and full counts cover the cache")
 	check(external.cache_bytes() > 0 and streamer.stats().cached == stub.levels.size(), "cache bytes and stats agree")
 	# Without far mips there is no far tier.
 	var flat := external.duplicate_runtime(false)

@@ -120,7 +120,10 @@ Options of `StrataBake.bake(terrain, options)` and `StrataBake.compile()`:
 | `channels` | none | extra channels to keep in the bake for `StrataRuntimeData.sample_channel()` and for navigation profile rules |
 | `nav_profiles` | none | an array of `{"name": StringName, "rule": Dictionary}`; one walkability mask per name, one byte per cell. `default` is reserved: it is always the `nav_exclusion` mask. A rule that is invalid, or reads a channel the bake does not keep, fails the bake |
 | `allow_stale_procedural` | false | bake stale or loaded procedural results as they are; the report lists them |
-| `max_runtime_bytes` | 512 MiB | the bake's size budget, at most 512 MiB |
+| `max_runtime_bytes` | 512 MiB | the size budget of a bake saved inside the scene, at most 512 MiB |
+| `bake_batch` | 32 | regions baked and written together when the terrain has a storage directory |
+| `lod_level` | 2 | first detail level kept in the reduced-detail region files |
+| `max_directory_bytes` | 64 GiB | upper bound for the files of a bake saved to the storage directory |
 | `mip_levels` | 3 | levels per map in every region; raised so the far level and the coarse maps exist |
 | `far_level` | 2 | the level `StrataRegionStreamer` draws distant regions at |
 | `coarse_max_side` | 1024 | longest side, in cells, of the terrain-wide coarse maps every bake stores for the streamer |

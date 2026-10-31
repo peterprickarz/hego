@@ -21,6 +21,11 @@ static func stack_signature(terrain: StrataTerrain3D) -> Array:
 		signature.append([layer.get_instance_id(), layer.enabled, layer.composition_modes.duplicate(true), layer.data.get_instance_id(), layer.data.get_revision(), layer.procedural, layer.procedural_revision, layer.procedural_stale if layer.procedural else false, layer.producer_id, layer.producer_intent_revision, fields])
 	return signature
 
+const DEFAULT_BATCH := 32
+const DEFAULT_MAX_DIRECTORY_BYTES := 64 * 1024 * 1024 * 1024
+## The staging directory of a directory bake sits next to its target.
+const STAGING_SUFFIX := ".baking"
+
 static func _error(message: String) -> Dictionary:
 	return {"ok": false, "message": message}
 
@@ -51,7 +56,22 @@ static func _error(message: String) -> Dictionary:
 ##     data.nav_profile_rules. Rules may only reference channels retained by
 ##     this bake, so every mask is reproducible from the data. The "default"
 ##     profile is reserved and always the nav_exclusion mask, "exclusion" is reserved too.
-##   max_runtime_bytes: aggregate payload budget over all regions and mips, default/max 512 MiB.
+##   lod_level (2): first level of the partial region files (region_<i>_<j>.lod.res) saved next
+##     to the full ones and recorded in the manifest; 0..15 and below mip_levels. 0 writes no lod
+##     files. Left out, it is clamped to the deepest level every map has and to mip_levels - 1.
+##   max_runtime_bytes: aggregate payload budget over all regions and mips of an embedded bake,
+##     default/max 512 MiB. A directory bake is not bound by it.
+##   region_directory: a directory (res://, user:// or absolute) to write the region files to, in
+##     batches, instead of embedding them (see "Directory bakes" below). StrataBake.bake() sets it
+##     to the terrain's regions directory when the terrain has a storage directory; pass "" to
+##     embed anyway.
+##   bake_batch (32): regions composed, written and released together in a directory bake. Memory
+##     is bounded by the batch: about 1.3 MB per 256-cell region with the island's maps (a
+##     batch of 32 is roughly 45 MB, plus the composition scratch of the worker threads), never
+##     by the grid.
+##   max_directory_bytes (64 GiB): sanity cap on the planned size of a directory bake; the free
+##     space of the target drive is checked too.
+##   progress: optional Callable(done_regions: int, total_regions: int) called after each batch.
 ##   allow_stale_procedural (false): accept cached procedural results that need
 ##     a recook (for example after a scene reload); listed in the report.
 ##   compiled: an existing compile_heightfield() result with a current token; its heights are
@@ -66,8 +86,16 @@ static func _error(message: String) -> Dictionary:
 ##     report.deprecated.
 ##   The terrain's render_settings are copied (deep duplicate) into the data.
 ## The regions are composed through the final layer, so the preview cutoff never matters.
-## The result holds the regions embedded; publishing saves them to files when the terrain
-## has a storage directory.
+## Without region_directory the result holds the regions embedded. Directory bakes: the
+## regions are composed bake_batch at a time (concurrently on the worker pool), their mips
+## built, their coarse cores stitched into the terrain-wide coarse maps, their extrema and
+## navigation counts recorded, and their files (region_<i>_<j>.res and .lod.res) written into a
+## staging directory next to the target; the batch is then dropped. When the whole stack is
+## still the one that was captured, the staged files replace the target's region files (files
+## of regions the grid no longer has are removed). A rejected bake therefore leaves the
+## previous files and manifest untouched and removes its staging directory. The result's data
+## holds no embedded regions, region_directory set, and report.written_files, disk_bytes,
+## batches and peak_regions_in_memory.
 static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dictionary:
 	var started := Time.get_ticks_usec()
 	if not is_instance_valid(terrain) or not terrain.is_inside_tree():
@@ -101,6 +129,13 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 		if not requested_channels.has(name): requested_channels.append(name)
 	var payload_limit := int(options.get("max_runtime_bytes", StrataRuntimeData.MAX_PAYLOAD_BYTES))
 	if payload_limit < 1 or payload_limit > StrataRuntimeData.MAX_PAYLOAD_BYTES: return _error("max_runtime_bytes must be positive and at most 512 MiB")
+	var directory := String(options.get("region_directory", "")).strip_edges().rstrip("/")
+	var batch_size := int(options.get("bake_batch", DEFAULT_BATCH))
+	if batch_size < 1: return _error("bake_batch must be positive")
+	var directory_limit := int(options.get("max_directory_bytes", DEFAULT_MAX_DIRECTORY_BYTES))
+	if directory_limit < 1: return _error("max_directory_bytes must be positive")
+	if not directory.is_empty() and not (directory.begins_with("res://") or directory.begins_with("user://") or directory.is_absolute_path()):
+		return _error("region_directory must be a res://, user:// or absolute path, not %s" % directory)
 	var profiles: Variant = options.get("nav_profiles", [])
 	var profile_check: Dictionary = NavProfiles.validate_profiles(profiles, requested_channels)
 	if not profile_check.ok: return profile_check
@@ -111,11 +146,30 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	if not spec.ok: return spec
 	var region_spec: Dictionary = spec.spec
 	var grid := StrataRegions.grid_size(region_spec)
-	var coarse_level := StrataRegions.coarse_level(region_spec, coarse_max_side)
-	mip_levels = maxi(mip_levels, maxi(far_level, coarse_level) + 1)
+	var coarse_level_planned := StrataRegions.coarse_level(region_spec, coarse_max_side)
+	mip_levels = maxi(mip_levels, maxi(far_level, coarse_level_planned) + 1)
 	if mip_levels > 16: return _error("The far and coarse levels need %d mip levels (at most 16)" % mip_levels)
+	var deepest := 15
+	for name in region_spec.maps: deepest = mini(deepest, StrataRegions.max_level(region_cells, region_spec.maps[name]))
+	var lod_level: int
+	if options.has("lod_level"):
+		lod_level = int(options.lod_level)
+		if lod_level < 0 or lod_level > 15 or lod_level >= mip_levels: return _error("lod_level must be 0..15 and below the %d mip levels" % mip_levels)
+		if lod_level > deepest: return _error("lod_level %d is deeper than the deepest level every map has (%d)" % [lod_level, deepest])
+	else:
+		lod_level = mini(2, mini(mip_levels - 1, deepest))
 	var planned_bytes := StrataRegions.region_bytes(region_spec, mip_levels) * grid.x * grid.y
-	if planned_bytes > payload_limit: return _error("Requested runtime regions (%d bytes for %d regions) exceed the aggregate payload budget" % [planned_bytes, grid.x * grid.y])
+	if directory.is_empty():
+		if planned_bytes > payload_limit: return _error("Requested runtime regions (%d bytes for %d regions) exceed the aggregate payload budget" % [planned_bytes, grid.x * grid.y])
+	else:
+		var lod_bytes := 0
+		if lod_level > 0:
+			for name in region_spec.maps:
+				for level in range(lod_level, StrataRegions.level_count(region_cells, region_spec.maps[name], mip_levels)): lod_bytes += StrataRegions.map_bytes(region_cells, region_spec.maps[name], level)
+		var planned_disk := planned_bytes + lod_bytes * grid.x * grid.y
+		if planned_disk > directory_limit: return _error("Requested region files (%d bytes for %d regions) exceed max_directory_bytes (%d)" % [planned_disk, grid.x * grid.y, directory_limit])
+		var space := _free_space(directory)
+		if space >= 0 and planned_disk > space: return _error("Requested region files (%d bytes) exceed the free space of the target drive (%d bytes)" % [planned_disk, space])
 	var stale: PackedStringArray = []
 	for layer in terrain.get_layers():
 		if layer.enabled and layer.procedural and (layer.procedural_stale or layer.procedural_fields.is_empty()):
@@ -164,42 +218,82 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	data.grid = grid
 	data.maps = region_spec.maps
 	data.mip_levels = mip_levels
+	data.lod_level = lod_level
 	data.channel_names = requested_channels
 	var embedded := {}
 	var extrema := PackedFloat64Array()
 	var nav_report := {}
+	var cell_size := data.get_cell_resolution()
+	var hole_cells := 0
+	var exclusion_cells := 0
 	var compose_options := {"channels": requested_channels, "nav_profiles": profiles, "sources": sources, "mask_options": mask_options}
+	var composer := StrataRegions._compose_class()
+	if composer == null: return _error("Region composition needs the Strata editor-side addon")
+	var captured: Dictionary = composer.call("capture", terrain, null, region_spec, compose_options)
+	if not captured.get("ok", false): return _error(String(captured.get("message", "Could not capture the terrain stack")))
+	compose_options["capture"] = captured
 	var global_min := INF
 	var global_max := -INF
-	# Every region composes concurrently on the worker pool (nothing edits the layers while a
-	# bake runs; the stack signature is checked again below), then the mips build the same way.
+	var coarse_level := coarse_level_planned
+	var coarse_images := _new_coarse(region_spec, coarse_level)
 	var order: Array[Vector2i] = []
 	for y in range(grid.y):
 		for x in range(grid.x): order.append(Vector2i(x, y))
-	var composed := StrataRegions.compose_regions(terrain, null, region_spec, order, compose_options)
-	if not composed.ok: return _error(String(composed.message))
-	embedded = composed.regions
-	if mip_levels > 1:
-		var mip_task := func(index: int) -> void: StrataRegions.build_mips(embedded[order[index]], mip_levels)
-		if OS.has_feature("threads") and order.size() > 1:
-			var group := WorkerThreadPool.add_group_task(mip_task, order.size(), -1, true, "StrataBake mips")
-			WorkerThreadPool.wait_for_group_task_completion(group)
+	var stage := ""
+	var stats := {"written_files": 0, "disk_bytes": 0, "batches": 0, "peak_regions_in_memory": 0}
+	if not directory.is_empty():
+		stage = directory + STAGING_SUFFIX
+		var prepared := _prepare_stage(stage)
+		if not prepared.ok: return prepared
+	var progress: Callable = options.get("progress", Callable())
+	var step := order.size() if directory.is_empty() else batch_size
+	# Regions compose concurrently on the worker pool (nothing edits the layers while a bake
+	# runs; the stack signature is checked again below), then their mips build the same way.
+	for start in range(0, order.size(), step):
+		var xys: Array[Vector2i] = []
+		for index in range(start, mini(start + step, order.size())): xys.append(order[index])
+		var composed := StrataRegions.compose_regions(terrain, null, region_spec, xys, compose_options)
+		if not composed.ok:
+			_discard_stage(stage)
+			return _error(String(composed.message))
+		var batch: Dictionary = composed.regions
+		if mip_levels > 1:
+			var mip_task := func(index: int) -> void: StrataRegions.build_mips(batch[xys[index]], mip_levels)
+			if OS.has_feature("threads") and xys.size() > 1:
+				var group := WorkerThreadPool.add_group_task(mip_task, xys.size(), -1, true, "StrataBake mips")
+				WorkerThreadPool.wait_for_group_task_completion(group)
+			else:
+				for index in range(xys.size()): mip_task.call(index)
+		for xy in xys:
+			var region: StrataRegionData = batch[xy]
+			extrema.append(region.height_min)
+			extrema.append(region.height_max)
+			global_min = minf(global_min, region.height_min)
+			global_max = maxf(global_max, region.height_max)
+			hole_cells += _clipped_count(region, StrataRegions.MAP_HOLES, cell_size)
+			exclusion_cells += _clipped_count(region, StrataRegions.MAP_NAV_EXCLUSION, cell_size)
+			for entry in profiles:
+				var map := StrataRegions.nav_map_name(StringName(entry.name))
+				var blocked := NavProfiles._interior_count(region.level_bytes(map), region)
+				if not nav_report.has(entry.name): nav_report[entry.name] = {"blocked_cells": 0, "terms": NavProfiles.validate(entry.rule, requested_channels).terms}
+				nav_report[entry.name].blocked_cells += blocked
+			_blit_coarse(region_spec, coarse_images, region, coarse_level)
+		stats.batches += 1
+		stats.peak_regions_in_memory = maxi(stats.peak_regions_in_memory, xys.size())
+		if directory.is_empty():
+			embedded = batch
 		else:
-			for index in range(order.size()): mip_task.call(index)
-	for xy in order:
-		var region: StrataRegionData = embedded[xy]
-		extrema.append(region.height_min)
-		extrema.append(region.height_max)
-		global_min = minf(global_min, region.height_min)
-		global_max = maxf(global_max, region.height_max)
-		for entry in profiles:
-			var map := StrataRegions.nav_map_name(StringName(entry.name))
-			var blocked := NavProfiles._interior_count(region.level_bytes(map), region)
-			if not nav_report.has(entry.name): nav_report[entry.name] = {"blocked_cells": 0, "terms": NavProfiles.validate(entry.rule, requested_channels).terms}
-			nav_report[entry.name].blocked_cells += blocked
+			var written := _write_batch(stage, batch, xys, lod_level, mip_levels)
+			if not written.ok:
+				_discard_stage(stage)
+				return written
+			stats.written_files += int(written.files)
+			stats.disk_bytes += int(written.bytes)
+		if progress.is_valid(): progress.call(mini(start + step, order.size()), order.size())
 	data.regions = embedded
 	data.coarse_level = coarse_level
-	data.coarse_maps = stitch_coarse(region_spec, embedded, coarse_level)
+	data.coarse_maps = {}
+	for name in coarse_images: data.coarse_maps[name] = (coarse_images[name] as Image).get_data()
 	data.region_extrema = extrema
 	data.height_min = global_min
 	data.height_max = global_max
@@ -208,20 +302,25 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	data.nav_profile_rules = rules
 	if terrain.render_settings != null:
 		data.render_settings = terrain.render_settings.duplicate(true)
+	if not directory.is_empty(): data.region_directory = directory
 	var validation := data.validate()
 	if not validation.ok:
+		_discard_stage(stage)
 		return validation
-	# Nothing above awaits, but the tokens are checked again so an externally supplied
-	# result can never describe an older stack.
+	# Nothing above awaits (a progress callback might), but the tokens are checked again so an
+	# externally supplied result can never describe an older stack.
 	if stack_signature(terrain) != signature or not compiled.is_empty() and not StrataProcedural.token_is_current(compiled.token) or masks.has("token") and not StrataProcedural.token_is_current(masks.token):
+		_discard_stage(stage)
 		return _error("Terrain stack changed while compiling; bake rejected")
+	if not directory.is_empty():
+		var swapped := _commit_stage(stage, directory)
+		if not swapped.ok: return swapped
 	var deprecated := PackedStringArray()
 	for key in ["material_ids", "material_weights"]:
 		if options.has(key): deprecated.append("%s is ignored: material maps are composed from the stack's editor_material_channels" % key)
-	var cell_size := data.get_cell_resolution()
 	var coarse_sizes := {}
 	for name in data.coarse_maps: coarse_sizes[name] = StrataRegions.coarse_map_size(region_spec, data.description(name), coarse_level)
-	var report := {"resolution": resolution, "spacing": spacing, "regions": grid.x * grid.y, "grid": grid, "cells": region_cells, "mip_levels": mip_levels, "coarse_level": coarse_level, "coarse_sizes": coarse_sizes, "stale_procedural_used": stale, "mask_source": "layers" if not masks.is_empty() else ("explicit" if sources.has("holes") else "none"), "mask_report": masks.get("report", {}), "hole_cells": data.cell_mask_window(StrataRegions.MAP_HOLES, Rect2i(Vector2i.ZERO, cell_size)).count(StrataRuntimeData.MASK_SET), "nav_excluded_cells": data.cell_mask_window(StrataRegions.MAP_NAV_EXCLUSION, Rect2i(Vector2i.ZERO, cell_size)).count(StrataRuntimeData.MASK_SET), "nav_profiles": nav_report, "macro": spec.macro_report, "deprecated": deprecated, "manifest": data.get_manifest(), "cpu_ms": (Time.get_ticks_usec() - started) / 1000.0}
+	var report := {"resolution": resolution, "spacing": spacing, "regions": grid.x * grid.y, "grid": grid, "cells": region_cells, "mip_levels": mip_levels, "coarse_level": coarse_level, "coarse_sizes": coarse_sizes, "stale_procedural_used": stale, "mask_source": "layers" if not masks.is_empty() else ("explicit" if sources.has("holes") else "none"), "mask_report": masks.get("report", {}), "hole_cells": hole_cells, "nav_excluded_cells": exclusion_cells, "region_directory": directory, "lod_level": lod_level, "written_files": stats.written_files, "disk_bytes": stats.disk_bytes, "batches": stats.batches, "peak_regions_in_memory": stats.peak_regions_in_memory, "nav_profiles": nav_report, "macro": spec.macro_report, "deprecated": deprecated, "manifest": data.get_manifest(), "cpu_ms": (Time.get_ticks_usec() - started) / 1000.0}
 	return {"ok": true, "data": data, "signature": signature, "report": report}
 
 ## One terrain-wide image per map of [param spec] at [param level], stitched from the regions'
@@ -229,20 +328,114 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 ## sample a region shares with its east and south neighbours ends up with the region that owns
 ## it; the last column and row come from the last regions. Returns name -> PackedByteArray.
 static func stitch_coarse(spec: Dictionary, regions: Dictionary, level: int) -> Dictionary:
+	var images := _new_coarse(spec, level)
 	var grid := StrataRegions.grid_size(spec)
+	for y in range(grid.y):
+		for x in range(grid.x): _blit_coarse(spec, images, regions[Vector2i(x, y)], level)
 	var result := {}
+	for name in images: result[name] = (images[name] as Image).get_data()
+	return result
+
+static func _new_coarse(spec: Dictionary, level: int) -> Dictionary:
+	var images := {}
 	for name in spec.maps:
 		var description: Dictionary = spec.maps[name]
 		var size := StrataRegions.coarse_map_size(spec, description, level)
-		var image := Image.create_empty(size.x, size.y, false, int(description.format))
-		for y in range(grid.y):
-			for x in range(grid.x):
-				var xy := Vector2i(x, y)
-				var placed := StrataRegions.coarse_placement(spec, xy, description, level)
-				var source: Image = (regions[xy] as StrataRegionData).get_image(name, level)
-				image.blit_rect(source, placed.source, placed.destination)
-		result[name] = image.get_data()
-	return result
+		images[name] = Image.create_empty(size.x, size.y, false, int(description.format))
+	return images
+
+## Places one region's level core into the coarse images (see stitch_coarse).
+static func _blit_coarse(spec: Dictionary, images: Dictionary, region: StrataRegionData, level: int) -> void:
+	for name in spec.maps:
+		var description: Dictionary = spec.maps[name]
+		var placed := StrataRegions.coarse_placement(spec, region.region, description, level)
+		(images[name] as Image).blit_rect(region.get_image(name, level), placed.source, placed.destination)
+
+## Set cells of a cell map among the region's own cells that lie inside the terrain's cells
+## (the part of the last row and column of regions beyond the lattice is not counted).
+static func _clipped_count(region: StrataRegionData, map: String, cell_size: Vector2i) -> int:
+	if not region.has_map(map): return 0
+	var bytes := region.level_bytes(map)
+	var side := region.cells + 2 * region.apron
+	var width := mini(region.cells, cell_size.x - region.region.x * region.cells)
+	var height := mini(region.cells, cell_size.y - region.region.y * region.cells)
+	var total := 0
+	for row in range(height):
+		var start := (region.apron + row) * side + region.apron
+		total += bytes.slice(start, start + width).count(StrataRuntimeData.MASK_SET)
+	return total
+
+# Directory bakes ---------------------------------------------------------------
+
+## Free bytes of the drive holding [param directory] (its nearest existing parent), -1 if unknown.
+static func _free_space(directory: String) -> int:
+	var path := ProjectSettings.globalize_path(directory)
+	while not path.is_empty() and not DirAccess.dir_exists_absolute(path):
+		var parent := path.get_base_dir()
+		if parent == path: break
+		path = parent
+	var access := DirAccess.open(path)
+	return access.get_space_left() if access != null else -1
+
+## Empties (or creates) the staging directory.
+static func _prepare_stage(stage: String) -> Dictionary:
+	_discard_stage(stage)
+	var error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(stage))
+	if error != OK: return _error("Could not create %s (%s)" % [stage, error_string(error)])
+	return {"ok": true}
+
+static func _discard_stage(stage: String) -> void:
+	if stage.is_empty(): return
+	var folder := ProjectSettings.globalize_path(stage)
+	if not DirAccess.dir_exists_absolute(folder): return
+	for file in DirAccess.get_files_at(folder): DirAccess.remove_absolute(folder.path_join(file))
+	DirAccess.remove_absolute(folder)
+
+## Writes one batch's full and lod files into [param stage], concurrently. Files are written
+## compressed like StrataStorage's. {ok, files, bytes}.
+static func _write_batch(stage: String, batch: Dictionary, xys: Array[Vector2i], lod_level: int, mip_levels: int) -> Dictionary:
+	var jobs: Array = []
+	for xy in xys:
+		var region: StrataRegionData = batch[xy]
+		jobs.append([region, stage.path_join(StrataRuntimeData.REGION_FILE % [xy.x, xy.y])])
+		var lod: StrataRegionData = region.partial_copy(lod_level) if lod_level > 0 and lod_level < mip_levels else null
+		if lod != null: jobs.append([lod, stage.path_join(StrataRuntimeData.LOD_REGION_FILE % [xy.x, xy.y])])
+	var errors: Array = []
+	errors.resize(jobs.size())
+	var sizes: Array = []
+	sizes.resize(jobs.size())
+	var task := func(index: int) -> void:
+		var path: String = jobs[index][1]
+		errors[index] = ResourceSaver.save(jobs[index][0], path, ResourceSaver.FLAG_COMPRESS)
+		var file := FileAccess.open(path, FileAccess.READ)
+		sizes[index] = file.get_length() if file != null else 0
+	if OS.has_feature("threads") and jobs.size() > 1:
+		var group := WorkerThreadPool.add_group_task(task, jobs.size(), -1, true, "StrataBake write")
+		WorkerThreadPool.wait_for_group_task_completion(group)
+	else:
+		for index in range(jobs.size()): task.call(index)
+	var bytes := 0
+	for index in range(jobs.size()):
+		if errors[index] != OK: return _error("Could not write %s (%s)" % [jobs[index][1], error_string(errors[index])])
+		bytes += int(sizes[index])
+	return {"ok": true, "files": jobs.size(), "bytes": bytes}
+
+## Replaces the region files of [param directory] with the staged ones and removes the staging
+## directory. Files of regions the grid no longer has go with the old ones.
+static func _commit_stage(stage: String, directory: String) -> Dictionary:
+	var target := ProjectSettings.globalize_path(directory)
+	var source := ProjectSettings.globalize_path(stage)
+	var error := DirAccess.make_dir_recursive_absolute(target)
+	if error != OK:
+		_discard_stage(stage)
+		return _error("Could not create %s (%s)" % [directory, error_string(error)])
+	for file in DirAccess.get_files_at(target):
+		if file.begins_with("region_") and file.get_extension() == "res": DirAccess.remove_absolute(target.path_join(file))
+	for file in DirAccess.get_files_at(source):
+		error = DirAccess.rename_absolute(source.path_join(file), target.path_join(file))
+		if error != OK: return _error("Could not move %s into %s (%s); the region files are incomplete, bake again" % [file, directory, error_string(error)])
+	DirAccess.remove_absolute(source)
+	return {"ok": true}
 
 ## The region spec of a bake: height, material maps when the terrain maps materials, cell masks
 ## when requested, the macro map, retained channels with coverage, and one nav_<profile> map
@@ -286,7 +479,12 @@ static func _build_spec(terrain: StrataTerrain3D, options: Dictionary, spacing: 
 	return {"ok": true, "spec": spec, "macro_report": macro_report}
 
 ## compile() and publish on success. The terrain's old bake survives failure.
+## A terrain with a storage directory bakes straight into its regions directory (see the
+## region_directory option); publishing then only writes the manifest.
 static func bake(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dictionary:
+	if not options.has("region_directory") and StrataStorage.has_storage(terrain):
+		options = options.duplicate()
+		options["region_directory"] = StrataStorage.regions_directory(terrain)
 	var result := compile(terrain, options)
 	if not result.ok:
 		return result

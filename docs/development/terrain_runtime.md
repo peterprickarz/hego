@@ -32,7 +32,8 @@ The bake is a grid of regions (see [Strata regions plan](strata_regions_plan.md)
 | `render_settings` | the baked `StrataRenderSettings` copy |
 | `height_min`, `height_max`, `region_extrema` | extrema over the terrain's own samples, global and per region (`[min, max]` pairs, row-major over the grid) |
 | `regions` | embedded `Vector2i -> StrataRegionData`, the whole grid or empty |
-| `region_directory` | when no regions are embedded: the folder of `region_<i>_<j>.res` files |
+| `region_directory` | when no regions are embedded: the folder of `region_<i>_<j>.res` (all levels) and `region_<i>_<j>.lod.res` (levels `lod_level`.. only) files |
+| `lod_level` | first level of the lod files, 0..15 (default 2, the streamer's `far_level`); the bake keeps it below `mip_levels`, `region_path()` ignores the lod files when it is not. 0 writes no lod files |
 | `coarse_level`, `coarse_maps` | Phase B horizon tier: `coarse_maps[name]` is the terrain-wide image of map `name` at mip level `coarse_level`, no apron, in the map's own format, as a `PackedByteArray` of `StrataRegions.coarse_map_size(spec, description, coarse_level)` texels (see *Coarse maps*). Optional: format 2 data without them stays valid |
 
 Standard maps: `height` (RF, sample), `material_ids` and `material_weights` (RGBA8, sample, only when the terrain defines `editor_material_channels`), `holes` and `nav_exclusion` (L8, cell, only when the bake asked for cell masks), `macro` (RGBAH, sample, scale 4 apron 1 by default, only when macro channels are owned or requested), `<channel>` and `<channel>__coverage` for retained channels (RF; `rh` or `l8` quantize 0..1), and `nav_<profile>` (L8, cell, 255 = blocked) per navigation profile. Holes are never repeated in the profile maps.
@@ -81,25 +82,29 @@ The bake stitches one terrain-wide image per map of the spec (nav profile maps a
 
 The bake raises `mip_levels` to `max(options.mip_levels, far_level + 1, coarse_level + 1)` (`far_level` option, default 2; `coarse_max_side` option), so a default bake always carries levels 0..2. The report lists `coarse_level` and `coarse_sizes`.
 
+### Partial regions
+
+`StrataRegionData.first_level` (default 0) marks a partial region: levels below it are absent and `maps[name].levels[i]` is level `first_level + i` (only code that reads `levels` directly sees the shift). Every accessor takes the real level: `level_bytes` is empty and `get_image` null below `first_level`, `set_image` refuses it, `has_level(name, level)` says whether a level is held, `payload_bytes()` counts what is held, and `validate()` checks each held level's size and that `first_level + held` does not pass the map's deepest level. `level_count(name)` is the highest held level + 1, so it equals the full region's count and `level_count > far_level` still means the level can exist. `partial_copy(level)` builds the lod region (null if some map does not reach `level`). The renderer needs no change: `_region_problem` uses `validate()`, `has_map` and `level_count(name) >= 1`, and `_bind_region` reads `get_image(name, level)` for the tier's level only (`runtime_loading_test` asserts those predicates on lod data). Embedded regions must be full.
+
 ### Region loading
 
 External regions (`region_directory`, no embedded regions) are read through `StrataRuntimeData`, which owns the cache:
 
 | Method | Behaviour |
 | --- | --- |
-| `get_region(xy)` | synchronous: embedded, cached, or loaded now (a pending threaded load is completed with `load_threaded_get`); validated against the manifest, failures reported once and remembered |
-| `request_region(xy) -> bool` | starts `ResourceLoader.load_threaded_request(path, "", false, CACHE_MODE_IGNORE)`; false (nothing started) when the region is embedded, cached, pending, known missing, outside the grid or has no file (reported once). The type hint is empty because the loaders do not resolve script class names as hints |
-| `poll_regions() -> Array[Vector2i]` | never blocks: moves finished loads through the same validation as `get_region` into the cache and returns the newly cached indices; a failed or malformed load is reported once and marked missing |
-| `is_region_pending(xy)`, `pending_count()`, `is_region_missing(xy)`, `has_cached_region(xy)` | state queries; `has_cached_region` is true when `get_region` would not touch the disk (embedded or cached) |
+| `get_region(xy, min_level = 0)` | synchronous: embedded, cached, or loaded now (a pending threaded load is completed with `load_threaded_get`, then the full file is loaded if the pending one was partial and level 0 is asked); a cached region satisfies the request when its `first_level <= min_level`; validated against the manifest, failures reported once and remembered |
+| `request_region(xy, min_level = 0) -> bool` | reads `region_path(xy, min_level)` (the lod file when `min_level >= lod_level` and it exists, otherwise the full file); starts `ResourceLoader.load_threaded_request(path, "", false, CACHE_MODE_IGNORE)`; false (nothing started) when the region is embedded, cached with enough levels, pending (either kind: ask again after it arrives), known missing, outside the grid or has no file (reported once). The type hint is empty because the loaders do not resolve script class names as hints |
+| `poll_regions() -> Array[Vector2i]` | never blocks: moves finished loads through the same validation as `get_region` into the cache and returns the indices whose cached region is new or was replaced by fuller data; a failed or malformed load is reported once and marked missing |
+| `is_region_pending(xy)`, `pending_count()`, `is_region_missing(xy)`, `has_cached_region(xy, min_level = 0)`, `cached_first_level(xy)` | state queries; `is_region_pending` is true for either kind; `has_cached_region` is true when `get_region(xy, min_level)` would not touch the disk (embedded, or cached with `first_level <= min_level`); `cached_first_level` is 0 full, `lod_level` partial, -1 not cached |
 | `evict_region(xy) -> bool` | drops a cached external region; embedded regions stay |
 | `cached_region_keys()`, `cache_bytes()` | the cache (embedded regions excluded) and the bytes of its maps |
 | `clear_region_cache()` | forgets cached regions and failures |
 
-Collision and navigation keep reading windows through `get_region()`, so they share the cache with the streamer: the regions around the camera are loaded once. A far region loads its whole file in Phase B (all levels); per-level files are Phase C.
+The cache keeps the fullest data per region: a lod region is replaced when level 0 is loaded, a full one is never replaced by lod data. Every accessor (`heights_window`, `sample_height`, `cell_mask_window`, nav maps, `load_all_regions`) asks for level 0, so they load the full file and replace lod data; they share the cache with the streamer. Streamer: the far tier requests `request_region(xy, far_level)` and binds lod data; a promotion requests level 0 and keeps the far binding until the full region arrives; a demotion keeps the cached full data and rebinds it at the far level without a reload; leaving both tiers evicts. `stats()` adds `lod_loaded` and `full_loaded`.
 
 ### Region streamer
 
-`StrataRegionStreamer` (Node, `strata_region_streamer.gd`) is the residency policy. Set `renderer` (a `StrataRenderer`, or any node with the same four methods), `data` and `camera`, call `start(source, materials)` and let it run: `_process` updates when the camera moved `camera_step` (default a quarter region), or while loads and binds are outstanding. `update(camera_local_xz)` is the public step used by tests; `stats()` returns `{near, far, pending, cached, near_slots, far_slots, loads, evictions}`; `stop()` releases every region (the renderer keeps its coarse tier).
+`StrataRegionStreamer` (Node, `strata_region_streamer.gd`) is the residency policy. Set `renderer` (a `StrataRenderer`, or any node with the same four methods), `data` and `camera`, call `start(source, materials)` and let it run: `_process` updates when the camera moved `camera_step` (default a quarter region), or while loads and binds are outstanding. `update(camera_local_xz)` is the public step used by tests; `stats()` returns `{near, far, pending, cached, lod_loaded, full_loaded, near_slots, far_slots, loads, evictions}`; `stop()` releases every region (the renderer keeps its coarse tier).
 
 | Property | Default | Meaning |
 | --- | --- | --- |
@@ -163,13 +168,23 @@ What the bake does:
 - `macro` is `"auto"` (when an enabled layer owns a macro channel), `true`, `false` or an options dictionary whose `spacing` (default 4 m) must be the bake spacing times a power of two. Precompiled macro results are rejected: the map composes per region.
 - `material_ids` / `material_weights` options are no longer accepted as inputs. They are ignored and listed in `report.deprecated`; the material maps come from the stack's `editor_material_channels`.
 
+### Directory bakes
+
+`options.region_directory` (a `res://`, `user://` or absolute path; `StrataBake.bake()` fills it with `StrataStorage.regions_directory(terrain)` when the terrain has a storage directory, pass `""` to embed anyway; note that `terrain.storage_directory` itself must be `res://` or `user://`, while a direct `compile()` target may be absolute) switches the bake to batches:
+
+1. The stack is captured once. For each `bake_batch` (default 32) consecutive regions: compose on the worker pool, build mips on the pool, record extrema, hole/exclusion/nav counts, stitch the coarse cores into the coarse images, write `region_<i>_<j>.res` and `.lod.res` (`ResourceSaver.FLAG_COMPRESS`, concurrently), drop the batch.
+2. Files go to a staging directory `<directory>.baking`. After validation and the stack-signature recheck succeed they replace the target's `region_*.res` files (files of regions the grid no longer has go with them) and the staging directory is removed. A rejected bake (stack changed, validation failure, write error, budget) removes its staging directory and leaves the previous files untouched; nothing is published. `compile()` with a directory therefore already replaces the files on success, before `publish_runtime_data()` writes the manifest (`StrataStorage.save_runtime_data` writes only the manifest when no regions are embedded and keeps the directory attached).
+3. The result's data has no embedded regions, `region_directory` set, coarse maps, extrema and `lod_level`. `report` adds `written_files`, `disk_bytes`, `batches`, `peak_regions_in_memory`, `lod_level` and `region_directory`.
+
+Memory is bounded by the batch, not the grid: with 256-cell regions and the island's maps one region is about 1.3 MB with mips (height 272 KB, ids 272 KB, weights 272 KB, holes 68 KB, macro 36 KB, plus mips), so a batch of 32 is roughly 45 MB plus the workers' composition scratch; coarse maps (about 13 MB) and the extrema stay for the whole bake. Budgets: `max_directory_bytes` (default 64 GiB) caps the planned size (regions plus lod files, uncompressed), and `DirAccess.get_space_left()` of the target drive must cover it. The optional `progress` Callable gets `(done, total)` after each batch. `lod_level` (default 2, clamped to the deepest level every map has; an explicit value must be below `mip_levels` and within that depth) is validated before anything is written. Region files embed their own path, so two bakes into different directories are equal in content, not byte for byte; batch size does not change the content. `export_runtime()` / `save_runtime_scene()` embed from the full files (`load_all_regions()`), or keep pointing at the directory with `embed_regions = false`. `runtime_bake_test` covers the directory bake against an embedded bake of the same terrain.
+
 What the bake rejects:
 
 - Stale or uncooked procedural layers, outdated or preview-cutoff cell masks or heights. A reloaded scene marks every procedural cache stale until it is recooked. Pass `allow_stale_procedural` to bake cached results; the report lists them.
 - A stack that changes while compiling.
 - Bounds that are not a whole number of `spacing` intervals, invalid region cells, mip levels, channel names or profiles.
 - Malformed masks.
-- Payloads above `max_runtime_bytes` (default and maximum 512 MiB). The budget is the planned bytes of all regions, all maps and all mips (`region_bytes * regions`), checked before any region is composed. This retained payload budget does not limit process peak memory during atomic compilation/export.
+- Embedded payloads above `max_runtime_bytes` (default and maximum 512 MiB; directory bakes are exempt). The budget is the planned bytes of all regions, all maps and all mips (`region_bytes * regions`), checked before any region is composed. This retained payload budget does not limit process peak memory during atomic compilation/export.
 
 The report lists `regions`, `grid`, `mip_levels`, `coarse_level`, `coarse_sizes`, `hole_cells`, `nav_excluded_cells`, per-profile `blocked_cells` and `terms`, the macro report, `deprecated`, the manifest and `cpu_ms`.
 
@@ -247,12 +262,11 @@ How each chunk is built:
 Residency and replacement:
 
 - Residency is explicit and bounded by `max_resident_chunks`, which defaults to 64. Nothing is built until requested, and oversized requests are rejected without changing the resident set.
-- A tracked gameplay target (`track_target`, not the camera) triggers one rebuild only when it enters a new chunk.
-- A failed tracked request retries at the unchanged target when a temporary
-  budget failure is resolved. Invalid/outside/nonfinite requests preserve the
-  previous resident set. Programmatic chunk and budget values are checked;
-  invalid assignments retain valid settings. A valid `chunk_cells` change
-  clears shapes whose indexing depended on the old configuration.
+- A tracked gameplay target (`track_target`, not the camera) triggers one re-plan only when it enters a new chunk (`tick()`, called from `_physics_process`; public for tests). The resident set becomes the chunks overlapping the square of `track_radius` around the target, built synchronously on that tick. Chunks outside it are released (`evictions` in `get_stats()`).
+- Eviction under budget: when that square needs more than `max_resident_chunks`, chunks are ranked by centre distance to the target, the target's own chunk first, and the farthest are left out. A fast target therefore never stands on an unprepared chunk, and a too-small budget degrades to the nearest chunks instead of rejecting. A target off the terrain is tracked at the nearest terrain point. Changing `track_radius`, `max_resident_chunks` or `track_target` re-plans on the next tick.
+- Explicit `prepare_region()` / `prepare_around()` still reject, without changing the resident set, a request that needs more than the budget. Invalid/outside/nonfinite requests preserve the previous resident set. Programmatic chunk and budget values are checked; invalid assignments retain valid settings. A valid `chunk_cells` change clears shapes whose indexing depended on the old configuration.
+- A failed tracked re-plan (for example an invalid transform) retries every tick and warns once. Builds read regions through level 0 only (`get_region(xy, 0)`).
+- `get_stats()`: `resident_chunks`, `pending` (always 0: builds are synchronous), `evictions`, `last_prepare_ms`, `tracked`, plus build counters.
 - `replace_data(next)` rebuilds all resident chunks before anything is swapped. On failure, the old data and its shapes stay.
 - `clear()` frees every body. `collision_layer`, `collision_mask` and `physics_material` apply to every chunk.
 
@@ -290,7 +304,16 @@ Validated settings:
   never changes consumer map settings implicitly. `check_merge_conflicts`
   enables an optional per-polygon diagnostic; normal bakes avoid that overhead.
 
-Publishing:
+Tracking (`track_target`, `track_radius`, default 96 m):
+
+- `tick()` runs from `_physics_process` (public for tests) and compares the target's tile with the tile of the last re-plan; standing still is one node lookup and a tile lookup. The wanted set is the tiles within `track_radius` of the target's tile rectangle, so every point of that tile has the full radius around it; the keep set is the same with `track_radius * 1.25`, which is the hysteresis.
+- A re-plan releases resident tiles and drops in-flight bakes outside the keep set, then starts a bake for each wanted tile that is neither resident, in flight nor known empty, nearest first. Tracked bakes are per tile (they do not use `bake_region`'s all-or-nothing publication or its generation): each tile is published as its own async result arrives; `use_async = false` bakes and publishes inside the tick.
+- Budget: `max_tiles` bounds resident plus in-flight tiles. When a nearer wanted tile needs room, the farthest resident or in-flight tile (by centre distance to the target; the target's tile never) is evicted (`evictions`); a wanted tile farther than everything held is skipped. Tiles released for leaving the keep set count in `releases`.
+- A result is accepted only if its tile is still in flight with the same mesh and the epoch (bumped by `clear()`, settings changes and leaving the tree) is unchanged; otherwise it is counted in `discarded_results`. A tile with no walkable polygons is remembered as empty until it leaves the keep set, so it is not baked again. A settings change releases tiles of the old configuration at the next re-plan, since one map never mixes settings.
+- Cost: a re-plan builds source faces (the tile plus a padded border, about 70 × 70 cells at 1 m) for each new tile on the main thread, about 1.2 ms per tile measured, and hands the bake to the navigation server's thread pool. The 1 km fixture in `physics_tracking_test.gd` measured about 10 ms per re-plan with up to 8 tiles starting and about 2 ms for a collision re-plan of up to 12 chunks (worst 10 ms).
+- `get_stats()` adds `tracked`, `resident_tiles`, `pending_tiles`, `evictions`, `releases`, `replans`, `last_track_ms`. The island player tracks both nodes and restores their previous settings on exit; it leaves the navigation tiles resident.
+
+Publishing of `bake_region()`:
 
 - Async results are published together, only after every tile of the latest request has baked.
 - A superseded request or a node leaving the tree discards its results.
@@ -303,7 +326,7 @@ Publishing:
 ## Tests
 
 The runtime suites run in disposable projects through `demo/tests/runtime_test_runner.py`;
-see [Testing](testing.md#runtime-suites). Single-fixture measurements on a Ryzen 7 5800X3D
+see [Testing](testing.md#runtime-suites). Collision and navigation tracking on a synthetic 1 km terrain: `physics_tracking_test.gd`. Single-fixture measurements on a Ryzen 7 5800X3D
 with Godot 4.4.1: a 4097² 1 m bake took about 2.1 s, collision around the player (radius
 96 m, 4 chunks) about 75 ms, and a 128 m navigation area (4 tiles) 170–380 ms. The 64 MiB
 height payload retained +64.3 MiB RSS; Godot's static allocation counter shows +128 MiB

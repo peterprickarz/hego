@@ -457,7 +457,7 @@ func run() -> void:
 	var stored := StrataBake.bake(terrain, options)
 	check(stored.ok and terrain.runtime_data.regions.is_empty() and terrain.runtime_data.region_directory == storage + "/regions", "a storage directory moves the regions into files: %s" % stored.get("message"))
 	var stored_files := DirAccess.get_files_at(storage + "/regions")
-	check(stored_files.size() == 6 and FileAccess.file_exists(storage + "/runtime_data.res") and stored_files.has("region_2_1.res"), "manifest and six region files exist: %s" % [stored_files])
+	check(stored_files.size() == 12 and FileAccess.file_exists(storage + "/runtime_data.res") and stored_files.has("region_2_1.res") and stored_files.has("region_2_1.lod.res"), "manifest, six region files and six lod files exist: %s" % [stored_files])
 	check(terrain.runtime_data.validate(true).ok and payload_hashes(terrain.runtime_data) == payload_hashes(data), "the published bake serves identical bytes from memory")
 	var loaded_bake := StrataStorage.load_runtime_data(terrain)
 	check(loaded_bake != null and loaded_bake.regions.is_empty() and loaded_bake.validate(true).ok and payload_hashes(loaded_bake) == payload_hashes(data), "the saved manifest reloads and loads its regions from files")
@@ -471,7 +471,8 @@ func run() -> void:
 	check(exported_embedded.ok and exported_embedded.data.regions.size() == 6 and payload_hashes(exported_embedded.data) == payload_hashes(data), "an export of an external bake embeds its regions by default")
 	exported_embedded.root.free()
 	var smaller := StrataBake.bake(terrain, {"region_cells": 32})
-	check(smaller.ok and DirAccess.get_files_at(storage + "/regions").size() == 2, "a rebake with a 2 x 1 grid removes the stale region files: %s" % [DirAccess.get_files_at(storage + "/regions")])
+	check(smaller.ok and DirAccess.get_files_at(storage + "/regions").size() == 4, "a rebake with a 2 x 1 grid removes the stale region files: %s" % [DirAccess.get_files_at(storage + "/regions")])
+	directory_bakes(options, data)
 	var legacy := FileAccess.open(storage + "/runtime_data.res", FileAccess.WRITE)
 	legacy.close()
 	var v1 := StrataRuntimeData.new()
@@ -482,3 +483,129 @@ func run() -> void:
 	terrain.storage_directory = ""
 	scene.free()
 	finish("RUNTIME_BAKE_TEST")
+
+static func scratch(name: String) -> String:
+	return ProjectSettings.globalize_path("res://").path_join("../build/test-scratch").path_join(name).simplify_path()
+
+static func clear_directory(path: String) -> void:
+	if not DirAccess.dir_exists_absolute(path): return
+	for file in DirAccess.get_files_at(path): DirAccess.remove_absolute(path.path_join(file))
+	for folder in DirAccess.get_directories_at(path): clear_directory(path.path_join(folder))
+	DirAccess.remove_absolute(path)
+
+static func same_region(a: String, b: String) -> bool:
+	var left := ResourceLoader.load(a, "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRegionData
+	var right := ResourceLoader.load(b, "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRegionData
+	if left == null or right == null: return false
+	if left.region != right.region or left.first_level != right.first_level or left.origin != right.origin or left.height_min != right.height_min or left.height_max != right.height_max or left.map_names() != right.map_names(): return false
+	for name in left.map_names():
+		if left.maps[name].levels != right.maps[name].levels: return false
+	return true
+
+static func file_bytes(path: String) -> PackedByteArray:
+	return FileAccess.get_file_as_bytes(path)
+
+## Directory bakes (Phase C, D3): batches, lod files, equality with the embedded bake, budgets and
+## the rejection path. [param options] is the embedded test bake; [param embedded] its data.
+func directory_bakes(options: Dictionary, embedded: StrataRuntimeData) -> void:
+	var root_path := scratch("runtime_bake_directory")
+	clear_directory(root_path)
+	var reference := StrataBake.compile(terrain, options)
+	check(reference.ok and not reference.report.has("error"), "reference embedded compile")
+	var progress: Array = []
+	var small := options.duplicate()
+	small.region_directory = root_path.path_join("small/regions")
+	small.bake_batch = 2
+	small.progress = func(done: int, total: int) -> void: progress.append([done, total])
+	var compiled := StrataBake.compile(terrain, small)
+	check(compiled.ok, "a directory bake compiles: %s" % compiled.get("message", ""))
+	var data: StrataRuntimeData = compiled.data
+	var report: Dictionary = compiled.report
+	check(data.regions.is_empty() and data.region_directory == small.region_directory and data.is_resident() and data.validate().ok, "the manifest holds no embedded regions and points at the directory")
+	check(report.batches == 3 and report.peak_regions_in_memory == 2 and report.written_files == 12 and report.disk_bytes > 0 and progress == [[2, 6], [4, 6], [6, 6]], "report: %d batches, peak %d, %d files, %d bytes, progress %s" % [report.batches, report.peak_regions_in_memory, report.written_files, report.disk_bytes, progress])
+	check(not DirAccess.dir_exists_absolute(small.region_directory + StrataBake.STAGING_SUFFIX), "the staging directory is gone")
+	var listed := DirAccess.get_files_at(small.region_directory)
+	var total_size := 0
+	for file in listed: total_size += file_bytes(small.region_directory.path_join(file)).size()
+	check(listed.size() == 12 and total_size == report.disk_bytes, "twelve files whose sizes add up to disk_bytes (%d / %d)" % [total_size, report.disk_bytes])
+	var lod_ok := true
+	var lod_partial := true
+	for y in range(data.grid.y):
+		for x in range(data.grid.x):
+			var xy := Vector2i(x, y)
+			var full := ResourceLoader.load(small.region_directory.path_join(StrataRuntimeData.REGION_FILE % [x, y]), "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRegionData
+			var lod := ResourceLoader.load(small.region_directory.path_join(StrataRuntimeData.LOD_REGION_FILE % [x, y]), "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRegionData
+			if full == null or lod == null or not full.validate().ok or not lod.validate().ok or full.first_level != 0 or lod.first_level != 2: lod_ok = false; continue
+			var source: StrataRegionData = reference.data.regions[xy]
+			for name in source.map_names():
+				if full.level_bytes(name, 1) != source.level_bytes(name, 1): lod_ok = false
+				if lod.level_bytes(name, 2) != source.level_bytes(name, 2) or not lod.level_bytes(name, 0).is_empty() or not lod.level_bytes(name, 1).is_empty() or lod.get_image(name, 1) != null or lod.get_image(name, 2) == null or lod.level_count(name) != 3: lod_partial = false
+			if lod.payload_bytes() >= full.payload_bytes(): lod_partial = false
+	check(lod_ok, "every region file loads, validates and equals the embedded region")
+	check(lod_partial, "every lod file holds only levels >= lod_level, equal to the embedded levels")
+	check(data.lod_level == 2 and report.lod_level == 2 and data.get_manifest().lod_level == 2, "the manifest records lod_level 2")
+	check(data.region_extrema == reference.data.region_extrema and data.height_min == reference.data.height_min and data.height_max == reference.data.height_max, "per-region extrema equal the embedded bake")
+	check(data.coarse_level == reference.data.coarse_level and data.coarse_maps == reference.data.coarse_maps and not data.coarse_maps.is_empty(), "coarse maps are byte-exact")
+	check(report.nav_profiles == reference.report.nav_profiles and report.hole_cells == reference.report.hole_cells and report.nav_excluded_cells == reference.report.nav_excluded_cells and report.hole_cells > 0, "navigation, hole and exclusion counts equal the embedded bake: %s" % [report.nav_profiles])
+	check(payload_hashes(data) == payload_hashes(reference.data) and payload_hashes(data) == payload_hashes(embedded), "the files serve the same bytes as the embedded bake")
+	# One huge batch writes identical files.
+	var large := options.duplicate()
+	large.region_directory = root_path.path_join("large/regions")
+	large.bake_batch = 1000
+	var large_bake := StrataBake.compile(terrain, large)
+	var identical: bool = large_bake.ok and large_bake.report.batches == 1 and large_bake.report.peak_regions_in_memory == 6 and DirAccess.get_files_at(large.region_directory) == listed
+	# Files carry their own path inside, so they are compared by what they load as.
+	for file in listed:
+		if not same_region(large.region_directory.path_join(file), small.region_directory.path_join(file)): identical = false
+	check(identical and large_bake.data.coarse_maps == data.coarse_maps and large_bake.data.region_extrema == data.region_extrema, "a 2-region batch and a 1000-region batch write identical files (same loaded content)")
+	# A rejected bake keeps the previous files and removes its staging directory.
+	var before := file_bytes(large.region_directory.path_join("region_0_0.res"))
+	var rejecting := large.duplicate()
+	rejecting.bake_batch = 2
+	rejecting.progress = func(done: int, _total: int) -> void:
+		if done == 2: rough.data.set_sample(&"height", Vector2i(0, 0), 9.0)
+	var rejected := StrataBake.compile(terrain, rejecting)
+	check(not rejected.ok and "changed" in String(rejected.message), "a stack edit during the bake is rejected: %s" % rejected.get("message", ""))
+	check(not DirAccess.dir_exists_absolute(large.region_directory + StrataBake.STAGING_SUFFIX) and file_bytes(large.region_directory.path_join("region_0_0.res")) == before and DirAccess.get_files_at(large.region_directory) == listed, "the rejected bake left the previous files and no staging directory")
+	rough.data.set_sample(&"height", Vector2i(0, 0), 2.0 * sin(0.0) - 1.5)
+	# Level options and budgets.
+	var one := options.duplicate()
+	one.region_directory = root_path.path_join("one/regions")
+	one.lod_level = 1
+	var lod_one := StrataBake.compile(terrain, one)
+	var lod_one_region := ResourceLoader.load(one.region_directory.path_join("region_1_1.lod.res"), "", ResourceLoader.CACHE_MODE_IGNORE) as StrataRegionData
+	check(lod_one.ok and lod_one.data.lod_level == 1 and lod_one_region != null and lod_one_region.first_level == 1 and lod_one_region.validate().ok and lod_one_region.get_image("height", 1) != null and lod_one_region.get_image("height", 0) == null, "lod_level 1 writes lod files from level 1")
+	var none := options.duplicate()
+	none.region_directory = root_path.path_join("none/regions")
+	none.lod_level = 0
+	var no_lod := StrataBake.compile(terrain, none)
+	check(no_lod.ok and no_lod.report.written_files == 6 and not FileAccess.file_exists(none.region_directory.path_join("region_0_0.lod.res")), "lod_level 0 writes no lod files")
+	for bad in [3, 5, -1]:
+		var rejected_level := options.duplicate()
+		rejected_level.region_directory = root_path.path_join("bad/regions")
+		rejected_level.lod_level = bad
+		check(not StrataBake.compile(terrain, rejected_level).ok, "lod_level %d is rejected" % bad)
+	var capped := options.duplicate()
+	capped.region_directory = root_path.path_join("capped/regions")
+	capped.max_directory_bytes = 1000
+	var over := StrataBake.compile(terrain, capped)
+	check(not over.ok and "max_directory_bytes" in String(over.message) and not DirAccess.dir_exists_absolute(capped.region_directory), "max_directory_bytes rejects before writing: %s" % over.get("message", ""))
+	var too_big := options.duplicate()
+	too_big.max_runtime_bytes = 1000
+	check(not StrataBake.compile(terrain, too_big).ok, "the embedded payload budget still applies without a directory")
+	too_big.region_directory = root_path.path_join("budget/regions")
+	check(StrataBake.compile(terrain, too_big).ok, "a directory bake is not bound by the embedded payload budget")
+	for bad_batch in [0, -3]:
+		var rejected_batch := options.duplicate()
+		rejected_batch.region_directory = root_path.path_join("batch/regions")
+		rejected_batch.bake_batch = bad_batch
+		check(not StrataBake.compile(terrain, rejected_batch).ok, "bake_batch %d is rejected" % bad_batch)
+	# Exports from a directory manifest embed the full files.
+	terrain.publish_runtime_data(data, StrataBake.stack_signature(terrain))
+	var exported := StrataBake.export_runtime(terrain)
+	check(exported.ok and exported.data.regions.size() == 6 and payload_hashes(exported.data) == payload_hashes(embedded) and exported.data.get_region(Vector2i(0, 0)).first_level == 0, "an export of a directory bake embeds the full files")
+	if exported.ok: exported.root.free()
+	var kept := StrataBake.export_runtime(terrain, {"embed_regions": false})
+	check(kept.ok and kept.data.regions.is_empty() and kept.data.region_directory == data.region_directory and kept.data.lod_level == 2, "an export may keep pointing at the directory")
+	if kept.ok: kept.root.free()
+	clear_directory(root_path)
