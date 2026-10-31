@@ -203,8 +203,69 @@ mips), the same 48 MB resident plus a 1025² coarse set; CPU cache around 300 re
 
 ## Phase C: large worlds
 
-Per-region collision and navigation bakes driven by residency, HAPI tile transfer for fields
-larger than one dense image, island at 0.5 m, 8–16 km test terrain.
+Status: approved 2026-10-31, tracks running. Goal: an 8–16 km terrain bakes, streams and plays
+within the same memory as the island, and the island's material pass can run at 0.5 m.
+What Phase B left: the bake composes every region in memory and embeds them (a 512 MiB cap
+that 8 km at 1 m exceeds); a far region loads its whole file; navigation bakes a fixed
+rectangle; the material HDA takes one lattice of at most 4097² samples.
+
+### Decisions
+
+- **Incremental bake**: with a storage directory the bake composes regions in batches
+  (`bake_batch`, default 32, on the worker pool), writes each batch's files, stitches its
+  coarse cores and keeps only extrema, nav counts and the coarse maps in memory; the manifest
+  ends with `region_directory` and no embedded regions. Embedded mode (tests, small terrains
+  under `EMBED_LIMIT_BYTES`) is unchanged. The 512 MiB aggregate budget applies to embedded
+  payloads only; directory bakes check free disk space and a configurable sanity cap
+  (`max_directory_bytes`, default 64 GiB).
+- **Level files**: the manifest records `lod_level` (default 2, the streamer's default
+  `far_level`). Every region is saved twice: `region_<i>_<j>.res` with all levels and
+  `region_<i>_<j>.lod.res` with levels at or above `lod_level` only. `StrataRegionData` gains
+  `first_level`: a partial region holds levels `first_level..`, `get_image` returns null below
+  it, `validate` accepts it, the renderer binds it into a tier whose level it holds (it already
+  reads `get_image(map, level)` only). `request_region(xy, min_level := 0)` and
+  `get_region(xy, min_level := 0)` load the lod file when `min_level >= lod_level` and the full
+  file otherwise; the cache keeps the fullest data loaded for a region, and a promotion to
+  near replaces lod data with full data. The streamer requests `far_level` for the far tier.
+  Collision and navigation always ask for level 0.
+- **Physics by residency**: `StrataNavigation` gets `track_target`, `track_radius` and
+  distance-ordered eviction to `max_tiles`, mirroring `StrataCollision`; the island player
+  tracks both. Chunk and tile builds stay synchronous on the physics tick and read regions
+  through `get_region(xy, 0)`; a build is bounded to the chunks entering the radius.
+- **Large-world fixture**: an ARTIFICIAL procedural terrain generator (noise height, slope and
+  height driven material channels, a few holes) at a chosen size and spacing lives under
+  `demo/tests/fixtures/` and is labelled as a fixture everywhere it appears. A 2 km variant
+  runs in the suite (bake to a directory, stream, physics around a point); 8 km at 1 m and
+  16 km at 2 m run as benchmarks on demand with a scripted camera flight, reporting bake time,
+  disk size, resident GPU bytes, CPU cache, pending loads and frame times. Budgets below.
+- **Tiled material cook**: the island's material pass cooks in tiles when the lattice exceeds
+  the HDA's 4097 samples per axis: each tile is a snapshot with `bounds` of the tile plus an
+  overlap (`tile_overlap`, default 32 samples), cooked by the same HDA; the tile results are
+  assembled client-side into one field per channel and published in ONE transaction, so the
+  layer never holds a partial result. Tiles must equal a whole cook where both exist (the HDA
+  is local in position; a test proves it on a synthetic terrain, hython and Godot). Material
+  fields may be stored as 8-bit channels (`StrataLayerData` UNORM8) to keep the data in Git
+  LFS sane. The shipped island stays at 1 m until the 0.5 m sizes and times are reviewed.
+
+### Tracks
+
+| Track | Scope | Files |
+| --- | --- | --- |
+| D3 storage | incremental directory bake, lod files, partial `StrataRegionData`, `min_level` loading, streamer far loads, budgets | strata_bake.gd, strata_storage.gd, strata_region_data.gd, strata_runtime_data.gd, strata_region_streamer.gd, runtime tests, docs/development/terrain_runtime.md |
+| P3 physics | navigation tracking and eviction, island player tracking both, physics tests | strata_navigation.gd, strata_collision.gd, demo/island/island_player.gd, island_showcase.gd (physics only), tests, docs/strata runtime pages |
+| L3 large world | fixture generator, 2 km suite test, 8/16 km benchmarks with camera flight and budget assertions | demo/tests/fixtures/*, tests/large_world_test.gd, tests/large_world_benchmark.gd, docs/development/testing.md |
+| H3 Houdini | tiled material cook, tile-equals-whole proof, 0.5 m island measurement, 8-bit material fields | demo/island/island_materials.gd, island_stage_materials.gd, island_showcase.gd (cook only), scripts/houdini/*, scripts/run_terrain_island.py, docs/development/island_material_distribution.md |
+
+Order: all four in parallel; L3 scales to 8 km once D3's directory bake lands; the lead
+integrates, runs the suite and decides the island's spacing with the user.
+
+### Budgets
+
+8 km at 1 m: 1024 regions, about 1.3 GB on disk with lod files, bake under 60 s, resident GPU
+under 64 MB, CPU region cache under 300 regions, no frame over 100 ms after the first second
+of a flight. 16 km at 2 m: the same region count and budgets. Island at 0.5 m: 1024 regions,
+material fields 4 × 67 M samples (270 MB as 8-bit), four material tiles of about 4129²
+cooked one at a time (about 12 GB each in hython).
 
 ## Budgets
 
