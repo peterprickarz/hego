@@ -36,10 +36,10 @@ HDA_VERSION = "1.0"
 OPERATOR = "HEGo_IslandErosion"
 HDA_PATH = os.path.join(REPO, "otls", "HEGo_IslandErosion.hda")
 CACHE_DIR = os.path.join(REPO, "demo", "island", "cache")
-CHANNELS = ["height", "erosion_delta", "sediment", "debris", "flow", "grass", "rock", "sand", "scree"]
+CHANNELS = ["height", "erosion_delta", "sediment", "debris", "flow", "grass", "rock", "sand", "scree", "footpath"]
 MASK_CHANNELS = CHANNELS[1:]
 FLOW_REFERENCE = 100.0
-# Stage materials: one field per registry material on the mask lattice, after the 9 channels.
+# Stage materials: one field per registry material on the mask lattice, after the 10 channels.
 EVIDENCE_MASKS = ("flow", "sediment", "debris", "erosion_delta")
 MATERIAL_GATE = "material_refine_gate"  # internal diagnostic layer, never output
 MATERIAL_HABITAT_PATH = os.path.join(SCRIPT_DIR, "material_habitat.py")
@@ -796,6 +796,312 @@ if (wsum <= 0.0) error("HEGo_IslandErosion: mask sample outside the height latti
 @scree = acc[7] / wsum;
 """.replace("FLOW_REFERENCE", repr(FLOW_REFERENCE))
 
+FOOTPATH_PY = r'''
+# Footpath network on the mask lattice. Input 0: mask-lattice layers holding the
+# footpath template. Input 1: final (published) height. Walkable samples lie at
+# least 1 m above sea level everywhere in their footprint and are flatter than
+# footpath_max_slope; trails are least-cost paths (slope-weighted distance, 8
+# neighbours, diagonals need a walkable corner) joining seeded waypoints on the
+# main walkable component into one connected network, rasterised to 0..1 with
+# footpath_width. contract.json (outputs.footpath) is the specification.
+import time
+import heapq
+import math
+import numpy as np
+
+SLOPE_WEIGHT = 4.0       # walking cost per metre = 1 + SLOPE_WEIGHT * (slope / max_slope)^2
+PEAK_RADIUS_M = 64.0     # interior high points are local height maxima within this radius
+COAST_RADIUS_M = 16.0    # coast landings lie within this distance of water
+MIN_SEPARATION_M = 48.0  # waypoints are at least this far apart
+
+
+def footprint(fine, k, op):
+    """op-reduce the fine samples within |offset| <= k-1 of each coincident mask sample."""
+    if k == 1:
+        return fine.copy()
+    nb, na = fine.shape
+    mb, ma = (nb - 1) // k + 1, (na - 1) // k + 1
+    pad = np.pad(fine, k - 1, mode="edge")
+    out = None
+    for db in range(2 * k - 1):
+        for da in range(2 * k - 1):
+            sub = pad[db:db + (mb - 1) * k + 1:k, da:da + (ma - 1) * k + 1:k]
+            out = sub.copy() if out is None else op(out, sub, out=out)
+    return out
+
+
+def window_max(a, r):
+    """Square sliding maximum of radius r samples (separable, edge clamped)."""
+    out = a
+    for axis in (0, 1):
+        pad = [(0, 0), (0, 0)]
+        pad[axis] = (r, r)
+        p = np.pad(out, pad, mode="edge")
+        n = a.shape[axis]
+        acc = None
+        for s in range(2 * r + 1):
+            sl = [slice(None), slice(None)]
+            sl[axis] = slice(s, s + n)
+            acc = p[tuple(sl)].copy() if acc is None else np.maximum(acc, p[tuple(sl)], out=acc)
+        out = acc
+    return out
+
+
+def components4(mask):
+    """4-connected component labels (0 = background, 1..n) from row runs and union-find."""
+    nb, na = mask.shape
+    padded = np.zeros((nb, na + 2), np.int8)
+    padded[:, 1:-1] = mask
+    step = np.diff(padded, axis=1)
+    rows, starts = np.nonzero(step == 1)
+    ends = np.nonzero(step == -1)[1]  # exclusive; row-major order matches the starts
+    parent = list(range(starts.size))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    first = np.searchsorted(rows, np.arange(nb + 1))
+    for r in range(nb - 1):
+        a0, a1, b1 = int(first[r]), int(first[r + 1]), int(first[r + 2])
+        if a0 == a1 or a1 == b1:
+            continue
+        lo = np.searchsorted(ends[a1:b1], starts[a0:a1], side="right")
+        hi = np.searchsorted(starts[a1:b1], ends[a0:a1], side="left")
+        for i in np.nonzero(hi > lo)[0]:
+            ra = find(a0 + int(i))
+            for j in range(int(lo[i]), int(hi[i])):
+                rb = find(a1 + j)
+                if ra != rb:
+                    low, high = min(ra, rb), max(ra, rb)
+                    parent[high] = low
+                    ra = low
+    roots = np.array([find(i) for i in range(starts.size)], dtype=np.int64)
+    run_label = np.unique(roots, return_inverse=True)[1].ravel()
+    run_of = np.cumsum((step == 1)[:, :-1].ravel()).reshape(nb, na) - 1
+    labels = np.zeros((nb, na), np.int64)
+    labels[mask] = run_label[run_of[mask]] + 1
+    return labels
+
+
+def connect(tree, targets, walk, cost, steps):
+    """Multi-source Dijkstra from every tree sample (flat indices into the
+    1-sample padded grid) to the cheapest target. Diagonal moves need a
+    walkable corner, so reachability is 4-connectivity. -> path or None."""
+    dist = dict.fromkeys(tree, 0.0)
+    prev = {}
+    heap = [(0.0, t) for t in sorted(tree)]
+    while heap:
+        du, u = heapq.heappop(heap)
+        if du > dist[u]:
+            continue
+        if u in targets:
+            path = [u]
+            while u in prev:
+                u = prev[u]
+                path.append(u)
+            return path
+        cu = cost[u]
+        for off, ln, corners in steps:
+            v = u + off
+            if not walk[v] or (corners and not (walk[u + corners[0]] or walk[u + corners[1]])):
+                continue
+            nd = du + ln * 0.5 * (cu + cost[v])
+            if nd < dist.get(v, math.inf):
+                dist[v] = nd
+                prev[v] = u
+                heapq.heappush(heap, (nd, v))
+    return None
+
+
+def footpaths(h_fine, k, la, lb, sea, count, width, max_slope, seed):
+    """Footpath mask on the mask lattice (stride k of h_fine, steps la, lb in m).
+    -> (float32 [mb, ma] in 0..1, stats dict)."""
+    stats = {"status": "no_walkable_land", "waypoints": 0, "connected_waypoints": 0, "centreline_samples": 0,
+             "nonzero_samples": 0, "walkable_fraction": 0.0, "component_fraction": 0.0}
+    fine = h_fine.astype(np.float64)
+    g1, g0 = np.gradient(fine, lb / k, la / k)  # central differences, one-sided at the border
+    slope = footprint(np.degrees(np.arctan(np.hypot(g0, g1))), k, np.maximum)
+    low = footprint(fine, k, np.minimum)
+    h = fine[::k, ::k]
+    mb, ma = h.shape
+    walk = (low > sea + 1.0) & (slope < max_slope)
+    stats["walkable_fraction"] = float(walk.mean())
+    if not walk.any():
+        return np.zeros((mb, ma), np.float32), stats
+
+    # Main walkable component; its highest sample is the first waypoint.
+    labels = components4(walk)
+    sizes = np.bincount(labels.ravel())
+    sizes[0] = 0
+    comp = labels == int(np.argmax(sizes))
+    stats["component_fraction"] = float(comp.sum() / walk.sum())
+    root = np.unravel_index(int(np.argmax(np.where(comp, h, -np.inf))), h.shape)
+
+    # Waypoints: seeded k-means++-style picks (probability ~ squared distance to
+    # the waypoints so far) among interior high points, then coast landings.
+    rng = np.random.default_rng(int(seed))
+    ii1, ii0 = np.mgrid[0:mb, 0:ma]
+    px, pz = ii0 * la, ii1 * lb
+    near_water = window_max((h < sea).astype(np.uint8), max(1, int(round(COAST_RADIUS_M / min(la, lb))))) > 0
+    peaks = comp & (h >= window_max(h, max(2, int(round(PEAK_RADIUS_M / min(la, lb)))))) & ~near_water
+    coast = comp & near_water
+    n = max(2, int(count))
+    n_coast = n // 2 if coast.any() else 0
+    chosen = [(int(root[0]), int(root[1]))]
+
+    def pick(cands, m):
+        rows, cols = np.nonzero(cands)
+        if m <= 0 or not rows.size:
+            return
+        x, z = px[rows, cols], pz[rows, cols]
+        dmin = np.full(rows.size, np.inf)
+        for r, c in chosen:
+            dmin = np.minimum(dmin, np.hypot(x - px[r, c], z - pz[r, c]))
+        for _ in range(m):
+            weight = np.where(dmin >= MIN_SEPARATION_M, dmin * dmin, 0.0)
+            if weight.sum() <= 0.0:
+                return
+            j = int(np.searchsorted(np.cumsum(weight), rng.random() * weight.sum(), side="right"))
+            j = min(j, rows.size - 1)
+            chosen.append((int(rows[j]), int(cols[j])))
+            dmin = np.minimum(dmin, np.hypot(x - x[j], z - z[j]))
+
+    pick(peaks, n - n_coast - 1)
+    pick(coast, n_coast)
+    pick(comp, n - len(chosen))  # top up when either candidate set ran short
+    stats["waypoints"] = len(chosen)
+
+    # Prim-style network: connect the cheapest remaining waypoint to the whole
+    # network so far, so later paths may join earlier trails.
+    W = ma + 2
+    walk_p = np.zeros((mb + 2, ma + 2), bool)
+    walk_p[1:-1, 1:-1] = walk
+    cost_p = np.ones((mb + 2, ma + 2))
+    cost_p[1:-1, 1:-1] = 1.0 + SLOPE_WEIGHT * (np.minimum(slope, max_slope) / max_slope) ** 2
+    diag = math.hypot(la, lb)
+    steps = [(1, la, None), (-1, la, None), (W, lb, None), (-W, lb, None)]
+    steps += [(sb * W + sa, diag, (sa, sb * W)) for sa in (1, -1) for sb in (1, -1)]
+    walk_l, cost_l = walk_p.ravel().tolist(), cost_p.ravel().tolist()
+    flat = [(r + 1) * W + (c + 1) for r, c in chosen]
+    tree = {flat[0]}
+    centre = np.zeros((mb + 2) * (ma + 2), bool)
+    centre[flat[0]] = True
+    pending = set(flat[1:])
+    connected = 1
+    while pending:
+        path = connect(tree, pending, walk_l, cost_l, steps)
+        if path is None:
+            break
+        pending.discard(path[0])
+        connected += 1
+        for a, b in zip(path[:-1], path[1:]):
+            if abs(b - a) not in (1, W):  # diagonal: also mark the cheaper walkable corner (4-connected)
+                sa = 1 if (b - a) % W == 1 else -1
+                corners = [c for c in (a + sa, b - sa) if walk_l[c]]
+                centre[min(corners, key=lambda c: (cost_l[c], c))] = True
+        tree.update(path)
+        centre[path] = True
+    centre = centre.reshape(mb + 2, ma + 2)[1:-1, 1:-1]
+    stats["connected_waypoints"] = connected
+    stats["centreline_samples"] = int(centre.sum())
+
+    # Rasterise: 1 within width/2 of a centreline sample, linear to 0 one cell
+    # farther, and 0 on every non-walkable sample.
+    half = 0.5 * max(0.0, float(width))
+    soft = max(la, lb)
+    ra, rb = int(math.ceil((half + soft) / la)), int(math.ceil((half + soft) / lb))
+    dist = np.where(centre, 0.0, np.inf)
+    padded = np.pad(centre, ((rb, rb), (ra, ra)))
+    for db in range(-rb, rb + 1):
+        for da in range(-ra, ra + 1):
+            r = math.hypot(da * la, db * lb)
+            if (da or db) and r < half + soft:
+                hit = padded[rb + db:rb + db + mb, ra + da:ra + da + ma]
+                np.minimum(dist, np.where(hit, r, np.inf), out=dist)
+    mask = np.where(walk, np.clip(1.0 - (dist - half) / soft, 0.0, 1.0), 0.0).astype(np.float32)
+    # Drop edge samples that touch the trail only diagonally across blocked ground,
+    # so the nonzero mask is one 4-connected component.
+    labels = components4(mask > 0)
+    mask[labels != labels[centre][0]] = 0.0
+    stats["nonzero_samples"] = int((mask > 0).sum())
+    stats["status"] = "connected" if connected == len(chosen) else "partial"
+    return mask, stats
+
+
+node = hou.pwd()
+geo = node.geometry()
+started = time.time()
+stats = {"status": "disabled", "waypoints": 0, "connected_waypoints": 0, "centreline_samples": 0,
+         "nonzero_samples": 0, "walkable_fraction": 0.0, "component_fraction": 0.0}
+
+
+def fail(message):
+    raise hou.NodeError("HEGo_IslandErosion: " + message)
+
+
+def named(g, name, where):
+    prims = [p for p in g.prims() if p.attribValue("name") == name] if g.findPrimAttrib("name") else []
+    if len(prims) != 1 or prims[0].type() != hou.primType.Volume:
+        fail("%s needs exactly one '%s' Volume" % (where, name))
+    return prims[0]
+
+
+def lattice(prim):
+    res = prim.resolution()
+    origin = np.array(prim.indexToPos((0, 0, 0)), dtype=np.float64)
+    step_a = np.array(prim.indexToPos((1, 0, 0)), dtype=np.float64) - origin
+    step_b = np.array(prim.indexToPos((0, 1, 0)), dtype=np.float64) - origin
+    return (res[0], res[1]), origin, step_a, step_b
+
+
+def publish():
+    stats["seconds"] = time.time() - started
+    for key, value in stats.items():
+        name = "hego_island_footpath_" + key
+        if geo.findGlobalAttrib(name) is None:
+            geo.addAttrib(hou.attribType.Global, name, value)
+        geo.setGlobalAttribValue(name, value)
+
+
+def run():
+    target = named(geo, "footpath", "mask layers")
+    (na, nb), origin, step_a, step_b = lattice(target)
+    mask = np.zeros((nb, na), np.float32)
+    if node.evalParm("footpaths"):
+        count, width = int(node.evalParm("count")), float(node.evalParm("width"))
+        max_slope, sea = float(node.evalParm("max_slope")), float(node.evalParm("sea_level"))
+        if not 2 <= count <= 64:
+            fail("footpath_count must be in [2, 64]")
+        if not (np.isfinite(width) and width >= 0.0):
+            fail("footpath_width must be finite and >= 0")
+        if not 0.0 < max_slope < 90.0:
+            fail("footpath_max_slope must be in (0, 90) degrees")
+        height = named(node.inputs()[1].geometry(), "height", "final height input")
+        (ha, hb), h_origin, h_a, h_b = lattice(height)
+        la, lb = float(np.linalg.norm(step_a)), float(np.linalg.norm(step_b))
+        k = int(round(la / float(np.linalg.norm(h_a))))
+        if (k < 1 or np.abs(h_origin - origin).max() > 1e-3 or np.abs(h_a * k - step_a).max() > 1e-4
+                or np.abs(h_b * k - step_b).max() > 1e-4 or ((ha - 1) // k + 1, (hb - 1) // k + 1) != (na, nb)):
+            fail("footpath lattice is not an integer stride of the height lattice")
+        fine = np.frombuffer(height.allVoxelsAsString(), dtype="<f4").reshape(hb, ha)
+        if not np.isfinite(fine).all():
+            fail("final height has non-finite samples")
+        mask, found = footpaths(fine, k, la, lb, sea, count, width, max_slope, int(node.evalParm("seed")))
+        stats.update(found)
+    if not (np.isfinite(mask).all() and mask.min() >= 0.0 and mask.max() <= 1.0):
+        fail("internal error: footpath mask outside [0, 1]")
+    target.setAllVoxelsFromString(np.ascontiguousarray(mask, dtype="<f4").tobytes())
+
+
+try:
+    run()
+finally:
+    publish()
+'''
+
 ROUTE_VEX = r"""
 s@hegostrata_layer_path = chs("../target_layer_path");
 s@hegostrata_role = "value";
@@ -821,10 +1127,16 @@ MATERIAL_ATTRIBUTES = [
     ("f", "limit_redistributed_mass_mean"), ("i", "limit_tie_fallback_voxels"), ("i", "max_nonzero"),
     ("f", "max_sum_error"), ("f[]", "dominant_fraction"), ("s", "registry_sha256"),
 ]
+FOOTPATH_ATTRIBUTES = [
+    ("s", "status"), ("f", "seconds"), ("i", "waypoints"), ("i", "connected_waypoints"), ("i", "centreline_samples"),
+    ("i", "nonzero_samples"), ("f", "walkable_fraction"), ("f", "component_fraction"),
+]
 DIAG_VEX = "// Diagnostics only; never routed to terrain layers.\n" + "".join(
     f'{t}@hego_island_{n} = detail(1, "hego_island_{n}");\n' for t, n in DIAG_ATTRIBUTES) + "".join(
     f'{t}@hego_island_transition_{n} = detail(2, "hego_island_transition_{n}");\n' for t, n in TRANSITION_ATTRIBUTES) + "".join(
-    f'{t}@hego_island_material_{n} = detail(3, "hego_island_material_{n}");\n' for t, n in MATERIAL_ATTRIBUTES) + r"""
+    f'{t}@hego_island_material_{n} = detail(3, "hego_island_material_{n}");\n' for t, n in MATERIAL_ATTRIBUTES) + "".join(
+    # The footpath statistics travel with the mask layers through the material stage.
+    f'{t}@hego_island_footpath_{n} = detail(3, "hego_island_footpath_{n}");\n' for t, n in FOOTPATH_ATTRIBUTES) + r"""
 s@hego_island_operator = "Sop/OPERATOR";
 s@hego_island_stage = chi("../detail_stage") ? "detail" : "coarse";
 i@hego_island_seed = chi("../seed");
@@ -877,6 +1189,20 @@ MATERIAL_EVIDENCE_PARMS = [
     ("material_flow_evidence", "Flow Evidence", 1.0, 0.0, 1.0,
      "Weight of concentrated flow (drainage lines) as evidence; 0 counts only height change, sediment and debris."),
 ]
+# Footpath network (Python SOP footpath_network) on the mask lattice.
+FOOTPATH_PARMS = [
+    ("footpath_count", "Waypoints", 8, 2, 64,
+     "Number of trail waypoints on the main walkable area: the highest walkable point, interior high points and "
+     "about half coast landings, picked from Seed. Every waypoint is joined into one connected network."),
+    ("footpath_width", "Width", 3.0, 0.0, 32.0,
+     "Trail width in metres at full mask value (1); the mask then falls linearly to 0 over one mask sample."),
+    ("footpath_max_slope", "Max Slope", 30.0, 5.0, 60.0,
+     "Steepest walkable slope in degrees. Steeper ground, water and land less than 1 m above sea level carry no trail."),
+]
+FOOTPATH_REFS = [("footpaths", 'ch("../footpaths")'), ("count", 'ch("../footpath_count")'),
+                 ("width", 'ch("../footpath_width")'), ("max_slope", 'ch("../footpath_max_slope")'),
+                 ("seed", 'ch("../seed")'), ("sea_level", 'ch("../sea_level")')]
+
 SLUMP_EXPRESSIONS = {
     "iterations": 'ch("../slump_iterations")',
     "repose_angle": 'ch("../slump_repose_angle")',
@@ -902,12 +1228,13 @@ NODE_NOTES = {
     "mask_grid": ("masks", "Empty heightfield on the mask lattice"),
     "mask_layers": ("masks", "Mask-lattice channel templates"),
     "masks": ("masks", "Tent-filtered erosion_delta/sediment/debris/flow + legacy grass/rock/sand/scree"),
+    "footpath_network": ("masks", "Footpath mask: least-cost trails joining seeded waypoints on walkable land (Python: graph search)"),
     "material_layers": ("materials", "Registry material_<name> templates + internal material_refine_gate"),
     "material_stage": ("materials", "Stage materials: prior + gate(this pass's sim evidence) * (evolved - base)"),
     "keep_materials": ("materials", "Publish the registry material fields (gate stays internal)"),
     "keep_height": ("output", "Height channel"),
-    "keep_masks": ("output", "8 mask-lattice channels"),
-    "merge_channels": ("output", "height, 8 masks, registry materials"),
+    "keep_masks": ("output", "9 mask-lattice channels (8 simulation/habitat masks + footpath)"),
+    "merge_channels": ("output", "height, 9 masks, registry materials"),
     "route": ("output", "HEGo routing attributes"),
     "clean_attributes": ("output", "Strip scratch attributes"),
     "diagnostics": ("output", "Diagnostic detail attributes (never routed)"),
@@ -950,8 +1277,16 @@ def _heightfield(parent, name, prefix):
 
 
 def _document(hou, sub):
-    from graph_layout import organize, EROSION_STAGES
-    organize(hou, sub, EROSION_STAGES, NODE_NOTES)
+    import graph_layout
+    # graph_layout.py is shared with the material HDA builder; the footpath row
+    # and its semantic handoff name are added here for this asset only.
+    stages = []
+    for label, rows in graph_layout.EROSION_STAGES:
+        if label.startswith("04 "):
+            label, rows = "04 Published simulation, habitat and footpath masks", rows + [[("footpath_network", 0)]]
+        stages.append((label, rows))
+    graph_layout.HANDOFF_NAMES.setdefault("footpath_network", "MASK_CHANNELS")
+    graph_layout.organize(hou, sub, stages, NODE_NOTES)
 
 
 def _parm_templates(hou):
@@ -963,7 +1298,8 @@ def _parm_templates(hou):
     group.append(hou.ToggleParmTemplate(
         "detail_stage", "Detail Stage", default_value=False,
         help="Off: coarse preset (strong hydraulic carving). On: detail preset (gentler hydraulic, finer thermal talus)."))
-    group.append(hou.IntParmTemplate("seed", "Seed", 1, default_value=(7,), min=0, max=1000))
+    group.append(hou.IntParmTemplate("seed", "Seed", 1, default_value=(7,), min=0, max=1000,
+                                     help="HeightField Erode random seed; also picks the footpath waypoints."))
     group.append(hou.IntParmTemplate(
         "freeze_frame", "Freeze Frame", 1, default_value=(24,), min=1, max=400, min_is_strict=True, max_is_strict=True,
         help="Number of simulated frames. The frozen state is output at every timeline frame."))
@@ -1026,6 +1362,17 @@ def _parm_templates(hou):
         materials.addParmTemplate(hou.FloatParmTemplate(
             name, label, 1, default_value=(default,), min=low, max=high, min_is_strict=True, help=text))
     group.append(materials)
+    footpaths = hou.FolderParmTemplate("footpaths_folder", "Footpaths", folder_type=hou.folderType.Collapsible)
+    footpaths.addParmTemplate(hou.ToggleParmTemplate(
+        "footpaths", "Footpaths", default_value=True,
+        help="Compute the footpath channel: least-cost trails over walkable land joining seeded waypoints. "
+             "Off: the footpath channel is still output, all zeros."))
+    for name, label, default, low, high, text in FOOTPATH_PARMS:
+        template = (hou.IntParmTemplate if isinstance(default, int) else hou.FloatParmTemplate)(
+            name, label, 1, default_value=(default,), min=low, max=high, min_is_strict=True, max_is_strict=True,
+            disable_when="{ footpaths == 0 }", help=text)
+        footpaths.addParmTemplate(template)
+    group.append(footpaths)
     return group
 
 
@@ -1112,10 +1459,21 @@ def build_hda(hou, hda_path, staging_dir):
         copies.parm(f"srcname{index}").set("mask")
         copies.parm(f"dstname{index}").set(name)
     masks = _wrangle(sub, "masks", "volumewrangle", MASKS_VEX, [copies, transition, resample, grid_info])
+    footpath = sub.createNode("python", "footpath_network")
+    footpath.setInput(0, masks)
+    footpath.setInput(1, transition)
+    footpath.parm("python").set(FOOTPATH_PY.strip() + "\n")
+    fgroup = footpath.parmTemplateGroup()
+    for name, _ in FOOTPATH_REFS:
+        fgroup.append((hou.IntParmTemplate if name in ("footpaths", "count", "seed") else hou.FloatParmTemplate)(name, name, 1))
+    footpath.setParmTemplateGroup(fgroup)
+    # Explicit channel references give the Python SOP real parameter dependencies.
+    for name, expression in FOOTPATH_REFS:
+        footpath.parm(name).setExpression(expression)
 
     names, _ = material_names()
     material_layers = sub.createNode("heightfield_copylayer", "material_layers")
-    material_layers.setInput(0, masks)
+    material_layers.setInput(0, footpath)
     targets = ["material_" + name for name in names] + [MATERIAL_GATE]
     material_layers.parm("numcopy").set(len(targets))
     for index, name in enumerate(targets, 1):
@@ -1144,7 +1502,7 @@ def build_hda(hou, hda_path, staging_dir):
     keep_height.parm("grouptype").set("prims")
     keep_height.parm("negate").set(1)
     keep_masks = sub.createNode("blast", "keep_masks")
-    keep_masks.setInput(0, masks)
+    keep_masks.setInput(0, footpath)
     keep_masks.parm("group").set(" ".join(f"@name={name}" for name in MASK_CHANNELS))
     keep_masks.parm("grouptype").set("prims")
     keep_masks.parm("negate").set(1)
@@ -1175,7 +1533,7 @@ def build_hda(hou, hda_path, staging_dir):
         ignore_external_references=True, change_node_type=True, create_backup=False)
     definition = asset.type().definition()
     from graph_layout import document_definition
-    document_definition(hou, definition, _parm_templates(hou), 'HEGo Island Erosion', 'Native hydraulic and thermal erosion with optional debris slump. Each stage initializes uncovered materials and refines inherited mixtures only from its own simulation evidence. Protected pre-transition height excludes manual pad corrections from material evidence.', ['Cumulative terrain:', '    Required height; optional all 32 prior material fields, sampled by physical position on their own lattices. Optional material __ownership companions control coverage.', 'Raw manual constraints:', '    Optional protection and owned absolute manual target height.'], ['Terrain channels:', '    Height, eight simulation/habitat masks, then all 32 registry material fields. Materials and masks use the mask lattice.'])
+    document_definition(hou, definition, _parm_templates(hou), 'HEGo Island Erosion', 'Native hydraulic and thermal erosion with optional debris slump. Each stage initializes uncovered materials and refines inherited mixtures only from its own simulation evidence. Protected pre-transition height excludes manual pad corrections from material evidence. A footpath mask joins seeded waypoints on walkable land with least-cost trails.', ['Cumulative terrain:', '    Required height; optional all 32 prior material fields, sampled by physical position on their own lattices. Optional material __ownership companions control coverage.', 'Raw manual constraints:', '    Optional protection and owned absolute manual target height.'], ['Terrain channels:', '    Height, eight simulation/habitat masks, the footpath mask, then all registry material fields. Materials and masks use the mask lattice.'])
     definition.setIcon("SOP_heightfield_erode")
     definition.setComment("HEGo island erosion: genuine frozen heightfield_erode::3.0; built by scripts/houdini/build_island_hda.py")
     with open(os.path.abspath(__file__)) as handle:
@@ -1355,7 +1713,7 @@ def _analyse(label, out, pre_height_zx, spacing_ratio, metrics):
     import numpy as np
     names = [name for name in out]
     record = {"channels": names, "grids": {n: _grid_record(v) for n, v in out.items()}}
-    if names != CHANNELS:
+    if names != CHANNELS + ["material_" + n for n in material_names()[0]]:
         raise RuntimeError(f"{label}: unexpected channel list {names}")
     for name, volume in out.items():
         attrs = volume["attrs"]
@@ -1379,6 +1737,7 @@ def _analyse(label, out, pre_height_zx, spacing_ratio, metrics):
         record[name] = _stats(out[name]["data"])
     biomes = sum(out[n]["data"].astype(np.float64) for n in ("grass", "rock", "sand", "scree"))
     record["biome_sum_max_error"] = float(np.abs(biomes - 1.0).max())
+    record["footpath_nonzero_fraction"] = float((out["footpath"]["data"] > 0).mean())
     land = _image_zx(out["erosion_delta"])
     record["erosion_delta_eroded_fraction"] = float((land < -0.05).mean())
     record["erosion_delta_deposited_fraction"] = float((land > 0.05).mean())

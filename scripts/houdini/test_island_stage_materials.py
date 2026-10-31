@@ -35,6 +35,8 @@ sys.dont_write_bytecode = True
 import build_island_hda as island  # noqa: E402
 
 OPERATOR = "HEGo_IslandErosion"
+# Contract v1 channels: everything before the footpath, which v1 did not output.
+V1_CHANNELS = [c for c in island.CHANNELS if c != "footpath"]
 # The four island materials: loose rock is the talus family, water-moved material is gravel
 # or sand, and incised ground reads as gravel or bare rock.
 FAMILIES = {
@@ -159,7 +161,12 @@ def main():
     def contract_checks(label, node, expect_status):
         out = volumes(node)
         check(f"{label}: no cook errors", not node.errors(), list(node.errors()))
-        check(f"{label}: 9 channels then {len(names)} registry materials in order", list(out) == channels, list(out)[:12])
+        check(f"{label}: {len(island.CHANNELS)} channels (height, masks, footpath) then {len(names)} registry materials in order",
+              list(out) == channels, list(out)[:12])
+        footpath = out["footpath"].astype(np.float64)
+        check(f"{label}: footpath finite in [0, 1] on the mask lattice", footpath.shape == out["erosion_delta"].shape
+              and bool(np.isfinite(footpath).all()) and footpath.min() >= 0.0 and footpath.max() <= 1.0,
+              (float(footpath.min()), float(footpath.max()), detail(node, "footpath_status")))
         g = node.geometry()
         attrs = {p.attribValue("name"): p.attribValue("hegostrata_channel") for p in g.prims()}
         check(f"{label}: routing channel == name", all(k == v for k, v in attrs.items()))
@@ -233,9 +240,9 @@ def main():
 
     if args.baseline_hda and args.coarse_input:
         ref = baseline(args.coarse_input, "", coarse_parms, False, "baseline_coarse")
-        same = all(np.array_equal(ref[c], nout[c].ravel()) for c in island.CHANNELS)
-        check("slump off: coarse 9 channels byte-identical to contract v1", same and list(ref) == island.CHANNELS,
-              {c: float(np.abs(ref[c] - nout[c].ravel()).max()) for c in island.CHANNELS})
+        same = all(np.array_equal(ref[c], nout[c].ravel()) for c in V1_CHANNELS)
+        check("slump off: coarse 9 channels byte-identical to contract v1", same and list(ref)[:len(V1_CHANNELS)] == V1_CHANNELS,
+              {c: float(np.abs(ref[c] - nout[c].ravel()).max()) for c in V1_CHANNELS})
 
     # --- Detail on an actual 2 m crop around the building pad ---------------
     if args.detail_input and args.constraints:
@@ -286,10 +293,11 @@ def main():
         check("fully protected samples keep inherited materials", owned.sum() > 0 and bool(closed[owned].all()),
               {"protected_samples": int(owned.sum())})
         # Previous-stage simulation fields are not re-applied.
-        prior_sim = with_prior("prior_materials_and_sim", d0, "@name=material_* @name=erosion_delta @name=sediment @name=debris @name=flow")
+        prior_sim = with_prior("prior_materials_and_sim", d0,
+                               "@name=material_* @name=erosion_delta @name=sediment @name=debris @name=flow @name=footpath")
         d3 = erosion("detail_prior_sim_fields", prior_sim, raw, **detail_parms)
         d3out = volumes(d3)
-        check("previous-stage sediment/debris/flow/delta inputs are ignored",
+        check("previous-stage sediment/debris/flow/delta/footpath inputs are ignored",
               all(np.array_equal(d3out[c], d2out[c]) for c in channels))
         # The manual transition is not erosion evidence.
         d4 = erosion("detail_no_transition", prior, raw, **dict(detail_parms, manual_transition=0))
@@ -320,8 +328,8 @@ def main():
             noff = volumes(ns_off)
             ref = baseline(args.detail_input, args.constraints, detail_parms, True, "baseline_detail")
             check("slump off: detail 9 channels (incl. protection + manual transition) byte-identical to v1",
-                  all(np.array_equal(ref[c], noff[c].ravel()) for c in island.CHANNELS),
-                  {c: float(np.abs(ref[c] - noff[c].ravel()).max()) for c in island.CHANNELS})
+                  all(np.array_equal(ref[c], noff[c].ravel()) for c in V1_CHANNELS),
+                  {c: float(np.abs(ref[c] - noff[c].ravel()).max()) for c in V1_CHANNELS})
             check("slump on: transition anchors identical to slump off",
                   detail(d0, "transition_anchor_samples") == detail(ns_off, "transition_anchor_samples"))
 

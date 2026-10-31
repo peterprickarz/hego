@@ -18,7 +18,7 @@
         "material_<registry name>": "Optional all registry channels or none. Finite nonnegative scalar weights; each may use its own valid dense orthogonal horizontal lattice. Sampled at mask centres by physical position. All-zero samples are unassigned.",
         "material_<registry name>__ownership": "Optional finite companion sharing that material lattice. Samples >=0.5 are owned. Coverage-weighted bilinear samples with total coverage >=0.5 are assigned; outside the prior bounds is unowned. All channels must be covered."
       },
-      "other_volumes": "Previous-stage simulation masks are accepted but deliberately not used as new material evidence; other volumes are discarded."
+      "other_volumes": "Previous-stage simulation masks and footpath are accepted but deliberately not used: they are not new material evidence and the footpath is recomputed from this pass's final height; other volumes are discarded."
     },
     {
       "index": 1,
@@ -60,7 +60,7 @@
     "seed": {
       "type": "int",
       "default": 7,
-      "notes": "heightfield_erode Random Seed."
+      "notes": "heightfield_erode Random Seed; also the footpath waypoint seed (outputs.footpath)."
     },
     "freeze_frame": {
       "type": "int",
@@ -274,6 +274,42 @@
         100000
       ],
       "notes": "World-space habitat variation seed."
+    },
+    "footpaths": {
+      "type": "toggle",
+      "default": 1,
+      "folder": "Footpaths",
+      "notes": "Compute the footpath channel. 0: the footpath channel is still output (same lattice and routing), every sample 0."
+    },
+    "footpath_count": {
+      "type": "int",
+      "default": 8,
+      "range": [
+        2,
+        64
+      ],
+      "folder": "Footpaths",
+      "notes": "Number of waypoints joined into the network: the highest walkable sample, interior high points and about half coast landings (outputs.footpath.waypoints)."
+    },
+    "footpath_width": {
+      "type": "float",
+      "default": 3.0,
+      "range": [
+        0.0,
+        32.0
+      ],
+      "folder": "Footpaths",
+      "notes": "Trail width (m) at full mask value 1 around the centreline samples; the value then falls linearly to 0 over one mask sample spacing. Centreline samples are always 1."
+    },
+    "footpath_max_slope": {
+      "type": "float",
+      "default": 30.0,
+      "range": [
+        5.0,
+        60.0
+      ],
+      "folder": "Footpaths",
+      "notes": "Steepest walkable slope (degrees), measured as in outputs.footpath.walkable. Steeper samples are impassable and always 0."
     }
   },
   "lattice": {
@@ -343,10 +379,28 @@
         "grid": "mask",
         "range": "0..1",
         "notes": "Thermal debris and talus on mid slopes."
+      },
+      {
+        "name": "footpath",
+        "grid": "mask",
+        "range": "0..1, finite; exactly 0 on water and on every non-walkable sample",
+        "notes": "Walkable trail network for navigation baking (NPCs walk only on footpaths): least-cost paths over the final height joining seeded waypoints into one connected network. Centreline samples are 1. Recomputed by every stage on its own mask lattice. See outputs.footpath."
       }
     ],
+    "footpath": {
+      "node": "footpath_network, a Python SOP (numpy + heapq): early-exit multi-source Dijkstra, waypoint selection and rasterisation in one pass on the mask lattice. Houdini 22 has no heightfield path SOP; the native Find Shortest Path SOP would need a polygon graph of the whole lattice and a loop per waypoint.",
+      "grid": "mask lattice (stride k of the height lattice, coincident centres); coarse preset 513x513 @ 8 m, detail preset 1025x1025 @ 4 m",
+      "walkable": "Mask sample s is walkable when every final-height sample within its tent footprint (|offset| <= k-1 height samples) is above sea_level + 1 m and their maximum slope is below footpath_max_slope. Slope = atan(|grad h|) in degrees, central differences on the height lattice (one-sided at the border), as in the masks stage.",
+      "graph": "8-neighbour mask lattice restricted to walkable samples; a diagonal move needs at least one walkable corner sample, so reachability equals 4-connectivity. Edge cost = step length (m) * mean of the two samples' cost, cost = 1 + 4 * (slope / footpath_max_slope)^2. Water and steep ground are impassable.",
+      "waypoints": "Only the largest 4-connected walkable component is used. Waypoint 1 is its highest sample. Then up to footpath_count - 1 - floor(footpath_count / 2) interior high points (local height maxima within 64 m, more than 16 m from water) and floor(footpath_count / 2) coast landings (within 16 m of water), each drawn with probability proportional to the squared distance to the waypoints so far (numpy default_rng(seed)), never closer than 48 m; short candidate sets are topped up from the whole component. Fewer waypoints result only when the component is too small for the separation.",
+      "network": "Prim-style: repeatedly a multi-source Dijkstra from every sample of the network so far reaches the cheapest unconnected waypoint, and that path joins the network. Every waypoint is therefore connected to every other. Diagonal steps also mark their cheaper walkable corner, so the centreline is 4-connected.",
+      "rasterisation": "value = clamp(1 - (d - footpath_width / 2) / spacing, 0, 1) with d = distance (m) to the nearest centreline sample and spacing = the larger mask step; 0 on every non-walkable sample and on samples not 4-connected to the centreline through nonzero samples. The nonzero mask is therefore one 4-connected (and 8-connected) component.",
+      "stages": "Coarse and detail stages both recompute the network on their own mask lattice from their own final height with the same algorithm (no upsampling); the footpath of a previous stage on input 0 is ignored. The detail stage uses its own seed parameter.",
+      "determinism": "Pure function of the final height, sea_level, seed and the footpath parameters: identical inputs give byte-identical output; a different seed generally moves the waypoints.",
+      "diagnostics": "Detail attributes hego_island_footpath_{status,seconds,waypoints,connected_waypoints,centreline_samples,nonzero_samples,walkable_fraction,component_fraction}; never routed. status is disabled, no_walkable_land, connected or partial."
+    },
     "removed": "Every other volume and input ownership companion is deleted. Internal material_refine_gate is diagnostic only. No vector volumes.",
-    "detail_attributes": "Diagnostic detail attributes prefixed hego_island_ (stage, effective feature size, freeze frame, grids). They are not routed to terrain layers. Material statistics use hego_island_material_* including inherited_exact_fraction, inherited_unrefined_fraction, prior_outside_fraction, inherit_limited_samples, inherit_redistributed_mass_max and inherit_tie_fallback_voxels.",
+    "detail_attributes": "Diagnostic detail attributes prefixed hego_island_ (stage, effective feature size, freeze frame, grids). They are not routed to terrain layers. Material statistics use hego_island_material_* including inherited_exact_fraction, inherited_unrefined_fraction, prior_outside_fraction, inherit_limited_samples, inherit_redistributed_mass_max and inherit_tie_fallback_voxels. Footpath statistics use hego_island_footpath_* (outputs.footpath.diagnostics).",
     "materials": {
       "channels": [
         "material_coastal_sand",
@@ -355,7 +409,7 @@
         "material_dark_cliff"
       ],
       "registry_sha256": "1d6de50122508d2041c69668e5520e95e84f8ed894c4e7c82212477264eb7e87",
-      "grid": "mask lattice, after the original nine channels",
+      "grid": "mask lattice, after the nine original channels and footpath",
       "range": "finite >=0, normalized sum1, at most4 positive weights",
       "algorithm": "Base habitat on pre-simulation height; evolved habitat on protected post-simulation height with only this pass sediment/debris/flow and simulation-only delta (before manual transition). Prior + evidence gate * (evolved-base), nonnegative normalized shared soft top4. Protection closes gate; uncovered samples initialize from base.",
       "inheritance": "Valid normalized <=4 prior mixtures are byte-exact at gate0. Resampled >4 mixtures use shared soft limiter; tie fallback and redistributed mass diagnostics are explicit. Prior simulation fields are never reapplied.",
