@@ -518,7 +518,7 @@ def run(hou, args):
                          ("two height volumes", session.material(session.load([("height", flat, (0, 0, 0), right, up), ("height", flat, (0, 0, 0), right, up)]))),
                          ("3D height volume", session.material(session.load([("height", np.stack([flat, flat]), (0, 0, 0), right, up)]))),
                          ("2x2 height", session.material(session.load([("height", np.zeros((2, 2)), (0, 0, 0), right, up)]))),
-                         ("1026-sample axis", session.material(session.load([("height", np.zeros((3, 1026)), (0, 0, 0), right, up)]))),
+                         ("4098-sample axis", session.material(session.load([("height", np.zeros((3, 4098)), (0, 0, 0), right, up)]))),
                          ("non-horizontal step", session.material(session.load([("height", flat, (0, 0, 0), (4.0, 1.0, 0.0), up)]))),
                          ("non-orthogonal steps", session.material(session.load([("height", flat, (0, 0, 0), right, (1.0, 0.0, 4.0))]))),
                          ("nonfinite height", session.material(session.load([("height", np.where(np.eye(9) > 0, np.inf, 5.0), (0, 0, 0), right, up)]))),
@@ -535,6 +535,19 @@ def run(hou, args):
     validate(large_out, "synthetic 1025", (1025, 1025), (-2048.0, 0.0, -2048.0), right, up)
     metrics["synthetic_1025_internal_seconds"] = large_out["_detail"].get("hego_material_seconds")
     check(metrics["synthetic_1025_seconds"] < 30.0, f"1025^2 cook is economical ({metrics['synthetic_1025_seconds']:.2f} s)")
+
+    print("[9b] lattice above the old 1025 cap: 2049 x 1537 at 2 m, non-square, offset origin (ARTIFICIAL terrain)", flush=True)
+    step2 = (2.0, 0.0, 0.0), (0.0, 0.0, 2.0)
+    origin2 = (-2048.0, 0.0, -1536.0)
+    x2, z2 = grid(2049, 1537, origin2, *step2)
+    big = session.material(session.load([("height", island(x2 / 2.0, z2 / 2.0), origin2, *step2)]))
+    metrics["synthetic_2049_seconds"] = cook(big)
+    big_out = outputs(big)
+    validate(big_out, "synthetic 2049x1537", (2049, 1537), origin2, *step2)
+    check(all(tuple(big_out[c]["data"].shape[-2:]) == (1537, 2049) for c in CHANNELS),
+          "2049x1537 input: every output is on exactly the input lattice")
+    sample_x = sample_world(big_out["material_island_grass"], -2048.0 + 2.0 * 1000, -1536.0 + 2.0 * 700)
+    check(np.isfinite(float(sample_x)), "2049x1537 input: world sampling at an interior lattice point works")
 
     if args.actual:
         run_actual(session, args, metrics)

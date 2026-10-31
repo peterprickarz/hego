@@ -29,7 +29,7 @@
         "terrain_spacing": 4.0
       },
       "volumes": {
-        "height": "REQUIRED. Exactly one 2D scalar Volume primitive named 'height' (not VDB): the complete stack cumulative through the last height layer, absolute terrain-local metres, finite. Any dense orthogonal horizontal lattice from 3x3 up to 1025 samples per axis (the island packer accepts at most 1025); for the 4 km island send terrain_spacing 4.0 = 1025x1025, origin (-2048, 0, -2048).",
+        "height": "REQUIRED. Exactly one 2D scalar Volume primitive named 'height' (not VDB): the complete stack cumulative through the last height layer, absolute terrain-local metres, finite. Any dense orthogonal horizontal lattice from 3x3 up to 4097 samples per axis (the terrain's own lattice, 16.8 M samples at most; the HDA enforces MAX_SAMPLES = 4097). Transitional: the Godot island composition still sends the 4 km island at 4 m = 1025x1025, origin (-2048, 0, -2048); the Godot packer cap is lifted by another track.",
         "flow": "optional; 0..1 (heightfield_erode log-scaled flow as published by Sop/HEGo_IslandErosion). Missing = 0.",
         "sediment": "optional; >= 0 metres. Missing = 0.",
         "debris": "optional; >= 0 metres. Missing = 0.",
@@ -189,7 +189,7 @@
   "errors": [
     "empty target_layer_path",
     "no 'height' volume, more than one, a VDB, or a non-2D/3D volume",
-    "height smaller than 3x3 or larger than 1025 samples per axis",
+    "height smaller than 3x3 or larger than 4097 samples per axis",
     "nonfinite, zero, non-horizontal or non-orthogonal lattice steps",
     "nonfinite height samples",
     "a float parameter that is nonfinite or outside its range, or seed outside 0..100000 (values set through HAPI are re-checked inside the cook)",
@@ -197,7 +197,7 @@
     "prior material channels: a partial set of the registry channels, a duplicate, a non-Volume, another lattice, or nonfinite/negative values"
   ],
   "algorithm": {
-    "summary": "A deterministic heuristic habitat model (not a physical simulation, scripts/houdini/material_habitat.py): smooth terrain signals -> stick-breaking habitat partition -> per-habitat variant shares -> 32 full normalized weight fields, used for samples without stage materials (all samples in standalone/regenerate). Pure numpy in one Python SOP; about 3-5 s for 1025^2.",
+    "summary": "A deterministic heuristic habitat model (not a physical simulation, scripts/houdini/material_habitat.py): smooth terrain signals -> stick-breaking habitat partition -> per-habitat variant shares -> 32 full normalized weight fields, used for samples without stage materials (all samples in standalone/regenerate). Pure numpy in one Python SOP; about 2 s for 1025^2 and about 75 s (12 GB peak) for 4097^2.",
     "gaussian": "G_s: three box passes per axis approximating a Gaussian of s metres on each axis's physical step; edges extend the boundary sample",
     "signals": {
       "z": "height - sea_level",

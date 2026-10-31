@@ -3,7 +3,7 @@
 
 A mask-only HDA, the final MaterialCook pass: it reads the cumulative FINAL
 terrain height (input 0, volume 'height', a dense orthogonal horizontal lattice
-such as 1025^2 at 4 m), the optional erosion masks flow / sediment / debris /
+such as 1025^2 at 4 m or 4097^2 at 1 m, up to 4097 samples per axis), the optional erosion masks flow / sediment / debris /
 erosion_delta and the optional stage material_<name> fields authored by the
 erosion HDAs, all on exactly the same lattice, and writes one normalized weight
 volume per registry material, at most four positive contributions per sample
@@ -39,7 +39,7 @@ HDA_PATH = os.path.join(REPO, "otls", "HEGo_MaterialDistribution.hda")
 CONTRACT_PATH = os.path.join(REPO, "demo", "island", "hda", "material_contract.json")
 REGISTRY_PATH = os.path.join(REPO, "demo", "island", "materials", "material_registry.json")
 OPTIONAL_MASKS = ("flow", "sediment", "debris", "erosion_delta")
-MAX_SAMPLES = 1025  # per axis; the island packer (pack_material_weights) accepts at most 1025
+MAX_SAMPLES = 4097  # per axis; matches the erosion and tint HDAs (the terrain lattice, 1 m for a 4 km island)
 PACKER_SLOTS = 4  # soft limit matches the native packer; every registry field remains present
 WEIGHT_LIMIT_PATH = os.path.join(SCRIPT_DIR, "material_weight_limit.py")
 HABITAT_PATH = os.path.join(SCRIPT_DIR, "material_habitat.py")
@@ -162,7 +162,7 @@ res = source.resolution()
 if res[2] != 1 or res[0] < 3 or res[1] < 3:
     fail("height must be a 2D grid of at least 3x3 samples")
 if res[0] > MAX_SAMPLES or res[1] > MAX_SAMPLES:
-    fail("height exceeds %d samples per axis; send the cumulative final height with terrain_spacing 4.0" % MAX_SAMPLES)
+    fail("height exceeds %d samples per axis; send the cumulative final height on the terrain lattice" % MAX_SAMPLES)
 values = {}
 for name, low, high in FLOAT_RANGES:
     value = float(node.evalParm(name))
@@ -474,7 +474,7 @@ def build_hda(hou, hda_path, staging_dir):
         ignore_external_references=True, change_node_type=True, create_backup=False)
     definition = asset.type().definition()
     from graph_layout import document_definition
-    document_definition(hou, definition, _parm_templates(hou), 'HEGo Material Distribution', 'Final mask-only material pass. Keep Stage Materials preserves valid covered mixtures byte for byte and fills uncovered samples. Regenerate explicitly classifies all samples from final height and available simulation masks.', ['Cumulative final fields:', '    Required height; optional flow, sediment, debris, erosion_delta and all 32 stage materials. Every field and ownership companion must use the exact height lattice.'], ['Registry materials:', '    All 32 material_<name> scalar fields in registry ID order; no height output.'])
+    document_definition(hou, definition, _parm_templates(hou), 'HEGo Material Distribution', 'Final mask-only material pass. Keep Stage Materials preserves valid covered mixtures byte for byte and fills uncovered samples. Regenerate explicitly classifies all samples from final height and available simulation masks.', ['Cumulative final fields:', '    Required height on the terrain lattice (3 to 4097 samples per axis, any spacing; every output keeps exactly that lattice); optional flow, sediment, debris, erosion_delta and all 32 stage materials. Every field and ownership companion must use the exact height lattice.'], ['Registry materials:', '    All 32 material_<name> scalar fields in registry ID order; no height output.'])
     definition.setIcon("SOP_heightfield_maskbyfeature")
     definition.setComment("HEGo registry-material weights from the cumulative final height; built by "
                           "scripts/houdini/build_material_distribution_hda.py")

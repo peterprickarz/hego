@@ -227,7 +227,7 @@ are built for the island's four materials, and make good templates for your own:
 | --- | --- | --- |
 | `HEGo_IslandErosion` | cumulative `height`; optionally the raw `height` and `constraint` of a later hand layer, which it protects and blends toward | `height`, `erosion_delta`, `sediment`, `debris`, `flow`, `grass`, `rock`, `sand`, `scree`, `footpath`, plus one `material_<name>` weight per material |
 | `HEGo_TerrainTint` | cumulative `height` | `terrain_tint_r`, `terrain_tint_g`, `terrain_tint_b`, `terrain_ao` |
-| `HEGo_MaterialDistribution` | cumulative `height` | one `material_<name>` weight per material, summing to 1 |
+| `HEGo_MaterialDistribution` | cumulative `height` | one `material_<name>` weight per material, summing to 1 | The material HDA works on the terrain's own lattice, up to 4097 samples per axis, and writes every output on exactly the lattice it receives; a 4097-sample cook takes about 75 s and about 12 GB of memory. Transitional: the island still composes and sends the material height at 4 m (1025 samples) until the Godot-side region work lands.
 
 `footpath` is a trail network: least-cost paths over the final height join a handful of
 seeded waypoints into one connected network, and water and steep ground are never part of it.
