@@ -403,4 +403,42 @@ func run() -> void:
 		check(embedded.get_region(Vector2i(2, 3)) == embedded.regions[Vector2i(2, 3)], "get_region returns the embedded resource")
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(directory.path_join("manifest.res")))
 		for xy in embedded.regions: DirAccess.remove_absolute(ProjectSettings.globalize_path(directory.path_join("region_%d_%d.res" % [xy.x, xy.y])))
+	# compose_map: any sub-window equals the matching texels of the region's composed map.
+	var map_ok := true
+	var map_problem := ""
+	var probe_xy := Vector2i(1, 2)
+	var probe: StrataRegionData = regions[probe_xy]
+	for name in ["height", "material_ids", "material_weights", "holes", "nav_exclusion", "macro", "mask", "mask__coverage"]:
+		var base_name: String = name.trim_suffix(StrataRegions.COVERAGE_SUFFIX)
+		var description: Dictionary = spec.maps[base_name]
+		var full_window := StrataRegions.map_window(spec, probe_xy, description)
+		var full: Dictionary = StrataRegionCompose.compose_map(terrain, null, base_name, full_window, spec)
+		var size: Vector2i = full_window.size
+		var rect := Rect2i(Vector2i(3, 2), Vector2i(mini(5, size.x - 3), mini(5, size.y - 2)))
+		var sub_window: Dictionary = full_window.duplicate()
+		sub_window.first = (full_window.first as Vector2i) + rect.position
+		sub_window.size = rect.size
+		sub_window.origin = (full_window.origin as Vector2) + Vector2(rect.position) * float(full_window.step)
+		var sub: Dictionary = StrataRegionCompose.compose_map(terrain, null, base_name, sub_window, spec)
+		if not full.ok or not sub.ok:
+			map_ok = false; map_problem = "%s: %s %s" % [name, full.get("message"), sub.get("message")]; break
+		var key := "coverage" if name.ends_with(StrataRegions.COVERAGE_SUFFIX) else ("ids" if name == "material_ids" else ("weights" if name == "material_weights" else "image"))
+		var whole_image: Image = full[key]
+		var sub_image: Image = sub[key]
+		if whole_image.get_data() != probe.get_image(name).get_data():
+			map_ok = false; map_problem = name + ": the full window differs from compose_region"; break
+		if sub_image.get_data() != whole_image.get_region(rect).get_data():
+			map_ok = false; map_problem = name + ": the sub-window differs from the full window"; break
+	check(map_ok, "compose_map windows equal the region composition (height, materials, masks, macro, channel and coverage): " + map_problem)
+	var both := StrataRegionCompose.compose_map(terrain, null, "material_weights", StrataRegions.map_window(spec, probe_xy, spec.maps.material_weights), spec)
+	check(both.ok and both.has("ids") and both.has("weights") and both.image == both.weights, "material maps return ids and weights together")
+	var rectangular := StrataRegions.map_window(spec, probe_xy, spec.maps.holes)
+	rectangular.size = Vector2i(6, 4)
+	var rejected := StrataRegionCompose.compose_map(terrain, null, "holes", rectangular, spec)
+	check(not rejected.ok and String(rejected.message).contains("square"), "a rectangular cell-mask window is rejected: %s" % rejected.get("message"))
+	var thin := StrataRegions.map_window(spec, probe_xy, spec.maps.macro)
+	thin.size = Vector2i(1, 5)
+	rejected = StrataRegionCompose.compose_map(terrain, null, "macro", thin, spec)
+	check(not rejected.ok and String(rejected.message).contains("2 x 2"), "a macro window under 2 texels is rejected: %s" % rejected.get("message"))
+	check(not StrataRegionCompose.compose_map(terrain, null, "nav_wet", rectangular, spec).ok and not StrataRegionCompose.compose_map(terrain, null, "unknown", rectangular, spec).ok, "derived and unknown maps are rejected")
 	finish("REGION_COMPOSE_TEST")

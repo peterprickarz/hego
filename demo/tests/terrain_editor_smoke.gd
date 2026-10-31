@@ -1,6 +1,11 @@
 @tool
 extends EditorPlugin
-## Install as a temporary plugin in an isolated editor project only.
+## Editor smoke test for the textured region preview, the brush and undo on the island scene.
+## Install as a temporary plugin in an isolated editor project only. Nothing in
+## scripts/run_tests.sh runs it; it needs a display, Forward+ and the saved island data (not Git
+## LFS pointers). See "Editor smoke test" in docs/development/testing.md for the staging steps.
+## It reads the region preview (terrain.editor_preview_bridge.get_region / get_spec and the
+## renderer's CPU regions), not whole-terrain images. Screenshots go to user://.
 var failures := 0
 var _camera: Camera3D
 var _pose := Transform3D.IDENTITY
@@ -24,6 +29,15 @@ func check(value: bool, message: String) -> void:
 		failures += 1
 		push_error("EDITOR_CHECK: " + message)
 	else: print("EDITOR_CHECK_PASS: ", message)
+
+## The macro tint of the bridge's composed region at a terrain-local position.
+func _macro_at(bridge: Node, position: Vector2) -> Color:
+	var spec: Dictionary = bridge.get_spec()
+	var xy := StrataRegions.region_at(spec, position)
+	var data: StrataRegionData = bridge.get_region(xy)
+	if data == null or not spec.maps.has(StrataRegions.MAP_MACRO): return Color(1, 1, 1, 1)
+	var texel := Vector2i(StrataRegions.texel_at(spec, xy, spec.maps.macro, position).round())
+	return data.get_image(StrataRegions.MAP_MACRO).get_pixelv(texel)
 
 func _frames(count: int) -> void:
 	for index in range(count): await get_tree().process_frame
@@ -58,7 +72,7 @@ func _run() -> void:
 	var high_stats := renderer.get_stats()
 	EditorInterface.inspect_object(terrain)
 	await _frames(10)
-	await _capture("/tmp/hego-terrain-editor-overview.png")
+	await _capture("user://hego-terrain-editor-overview.png")
 	_camera.global_transform = _pose
 	renderer.force_lod_update()
 	var before_plan: int = renderer.get_stats().lod_updates
@@ -113,7 +127,12 @@ func _run() -> void:
 		sculpt_plugin._dab(Vector2(-1008, 592))
 		sculpt_plugin._finish_stroke()
 		await _frames(10)
-		check(renderer._hole_image != null and renderer._hole_image.get_pixel(1040, 2640).r > 0.0, "mask brush updates canonical renderer holes")
+		check(renderer._cell_is_hole(Vector2(-1008, 592)), "mask brush updates the renderer's hole regions")
+		var hole_spec: Dictionary = terrain.editor_preview_bridge.get_spec()
+		var hole_xy := StrataRegions.region_at(hole_spec, Vector2(-1008, 592))
+		var hole_region: StrataRegionData = terrain.editor_preview_bridge.get_region(hole_xy)
+		var hole_texel := Vector2i(StrataRegions.texel_at(hole_spec, hole_xy, hole_spec.maps.holes, Vector2(-1008, 592)).floor())
+		check(hole_region != null and hole_region.get_image(StrataRegions.MAP_HOLES).get_pixelv(hole_texel).r > 0.0, "the bridge's composed hole region holds the painted cell")
 		var manager := get_undo_redo()
 		manager.get_history_undo_redo(manager.get_object_history_id(manual)).undo()
 		await _frames(10)
@@ -135,7 +154,7 @@ func _run() -> void:
 		sculpt_plugin._finish_stroke()
 		await _frames(5)
 		check(int(terrain.editor_preview_bridge.get_stats().full_compiles) == tint_previous_compiles, "tint brush patches macro without full height compilation")
-		check(terrain.editor_preview_bridge._macro_image.get_pixel(260, 660).r < 1.0, "tint brush uses neutral-one base and dirty macro lattice")
+		check(_macro_at(terrain.editor_preview_bridge, Vector2(-1008, 592)).r < 1.0, "tint brush uses neutral-one base and patches the macro region")
 		check(renderer._channel_preview_texture.get_image().get_pixel(260, 660).r > 0.0 and renderer._channel_preview_texture.get_image().get_pixel(260, 660).r < 1.0, "scalar preview preserves actual macro value instead of subtracting datum")
 		print("EDITOR_TINT_DAB_AND_SETTLE_MS=", (Time.get_ticks_usec() - started) / 1000.0)
 		manager.get_history_undo_redo(manager.get_object_history_id(manual)).undo()
@@ -148,7 +167,7 @@ func _run() -> void:
 		sculpt_plugin._overrides.button_pressed = true
 	terrain.show_overrides = true
 	await _frames(10)
-	await _capture("/tmp/hego-terrain-editor-ownership.png")
+	await _capture("user://hego-terrain-editor-ownership.png")
 	terrain.show_overrides = false
 	terrain.preview_through_layer = terrain.get_node("ManualFine")
 	await _frames(10)

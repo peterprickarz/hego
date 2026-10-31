@@ -25,8 +25,8 @@ static func _error(message: String) -> Dictionary:
 	return {"ok": false, "message": message}
 
 ## Options:
-##   spacing (1.0): runtime lattice spacing; bounds must divide exactly.
-##   region_cells (256), region_apron (2): the region grid; region_cells is a power of two.
+##   spacing (the terrain's region_spacing): runtime lattice spacing; bounds must divide exactly.
+##   region_cells (the terrain's region_cells, 0 = automatic), region_apron (2): the region grid; region_cells is a power of two.
 ##   mip_levels (3): levels per map including level 0 (capped per map by its size).
 ##   cell_masks: true, a compile options Dictionary, or a precompiled
 ##     StrataProcedural.compile_cell_masks() result. Holes and navigation
@@ -69,7 +69,7 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 		return _error("Bake needs a live terrain inside the scene tree")
 	if not terrain.is_transform_valid():
 		return _error("Terrain bake requires translation/yaw and unit scale")
-	var spacing := float(options.get("spacing", 1.0))
+	var spacing := float(options.get("spacing", terrain.region_spacing))
 	var bounds := terrain.base_bounds
 	if not is_finite(spacing) or spacing <= 0.0 or not bounds.position.is_finite() or not bounds.size.is_finite() or not bounds.end.is_finite() or bounds.size.x <= 0.0 or bounds.size.y <= 0.0:
 		return _error("Bake needs positive finite spacing and terrain bounds")
@@ -81,7 +81,7 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 		return _error("Terrain bounds %s are not a whole number of %s m intervals" % [bounds.size, spacing])
 	var resolution := Vector2i(roundi(columns) + 1, roundi(rows) + 1)
 	var cells := resolution - Vector2i.ONE
-	var region_cells := int(options.get("region_cells", StrataRegions.DEFAULT_CELLS))
+	var region_cells := StrataRegions.resolve_cells(int(options.get("region_cells", terrain.region_cells)), bounds, spacing)
 	var region_apron := int(options.get("region_apron", StrataRegions.DEFAULT_APRON))
 	var mip_levels := int(options.get("mip_levels", 3))
 	if mip_levels < 1 or mip_levels > 16: return _error("mip_levels must be 1..16")

@@ -204,25 +204,25 @@ func _refresh() -> void:
 		set_process(true)
 		_progress_status()
 
-## Creates or reconfigures the renderer when the configuration changed. The region maps are
-## bound afterwards, so it is configured with a two-sample stand-in field only.
+## Creates or reconfigures the renderer when the configuration changed. It is configured with
+## the spec and no regions; the composed regions are bound afterwards with set_regions.
 func _configure_renderer() -> bool:
 	if is_instance_valid(renderer) and not _configuration_dirty: return true
 	if _configuration_failed: return false
-	var stand_in := _stand_in()
+	var spec := _make_spec()
 	if not is_instance_valid(renderer):
 		renderer = StrataRenderer.new()
 		renderer.name = "TexturedEditorPreview"
 		renderer.render_settings = terrain.render_settings
 		terrain.add_child(renderer, false, Node.INTERNAL_MODE_BACK)
 		renderer.set_camera(_camera)
-		if not renderer.configure_compiled_field(terrain, terrain.editor_materials, stand_in):
+		if not renderer.configure_regions(terrain, terrain.editor_materials, spec, {}):
 			renderer.queue_free(); renderer = null
 			status = "Textured preview requires Forward+ and valid materials"
 			_configuration_failed = true
 			return false
 		terrain.editor_renderer = renderer
-	elif not renderer.configure_compiled_field(terrain, terrain.editor_materials, stand_in):
+	elif not renderer.configure_regions(terrain, terrain.editor_materials, spec, {}):
 		# Configuration is transactional, including the rendered regions.
 		status = "Invalid material/control configuration; previous rendered terrain retained"
 		_configuration_failed = true
@@ -231,13 +231,6 @@ func _configure_renderer() -> bool:
 	_renderer_bound = false
 	_aux_dirty = true
 	return true
-
-## Two-sample height field over the bounds: it only lets the renderer configure; set_regions
-## replaces it with the composed regions.
-func _stand_in() -> Dictionary:
-	var image := Image.create(2, 2, false, Image.FORMAT_RF)
-	var bounds := terrain.base_bounds
-	return {"ok": true, "image": image, "bounds": bounds, "resolution": Vector2i(2, 2), "sample_step_x": Vector3(bounds.size.x, 0.0, 0.0), "sample_step_y": Vector3(0.0, 0.0, bounds.size.y), "min": 0.0, "max": 0.0}
 
 ## Composes the cache for the current stack without a renderer (tests, scripts): the same
 ## job a refresh runs, completed at once. False with the reason in [member status] on failure.
@@ -370,27 +363,25 @@ func _compose_class(cls: String, xy: Vector2i, spec: Dictionary, selected: Strat
 	_region_compositions += 1
 	match cls:
 		CLASS_HEIGHT:
-			var composed := StrataRegionCompose._compose_plane(terrain, &"height", selected, _window(spec, xy, StrataRegions.MAP_HEIGHT, rect), spec, false)
-			if not composed.ok: return _problem("Height: " + String(composed.message))
+			var composed := StrataRegionCompose.compose_map(terrain, selected, StrataRegions.MAP_HEIGHT, _window(spec, xy, StrataRegions.MAP_HEIGHT, rect), spec)
+			if not composed.ok: return _problem(String(composed.message))
 			return {StrataRegions.MAP_HEIGHT: composed.image}
 		CLASS_HOLES:
-			var mask := StrataRegionCompose._compose_mask(terrain, selected, &"hole", _window(spec, xy, StrataRegions.MAP_HOLES, rect), StrataRegions.MAP_HOLES, {})
-			if not mask.ok: return _problem("Holes: " + String(mask.message))
+			var mask := StrataRegionCompose.compose_map(terrain, selected, StrataRegions.MAP_HOLES, _window(spec, xy, StrataRegions.MAP_HOLES, rect), spec)
+			if not mask.ok: return _problem(String(mask.message))
 			return {StrataRegions.MAP_HOLES: mask.image}
 		CLASS_MATERIALS:
 			var window := _window(spec, xy, StrataRegions.MAP_MATERIAL_IDS, rect)
 			if not _material_problem().is_empty():
 				var size: Vector2i = window.size
 				return {StrataRegions.MAP_MATERIAL_IDS: Image.create(size.x, size.y, false, Image.FORMAT_RGBA8), StrataRegions.MAP_MATERIAL_WEIGHTS: Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)}
-			var packed := StrataRegionCompose._compose_materials(terrain, selected, window, spec)
-			if not packed.ok: return _problem("Materials: " + String(packed.message))
+			var packed := StrataRegionCompose.compose_map(terrain, selected, StrataRegions.MAP_MATERIAL_IDS, window, spec)
+			if not packed.ok: return _problem(String(packed.message))
 			return {StrataRegions.MAP_MATERIAL_IDS: packed.ids, StrataRegions.MAP_MATERIAL_WEIGHTS: packed.weights}
 		_:
-			var macro := StrataRegionCompose._compose_macro(terrain, selected, _window(spec, xy, StrataRegions.MAP_MACRO, rect), spec)
-			if not macro.ok: return _problem("Macro: " + String(macro.message))
-			var image: Image = macro.image
-			if image.get_format() != int(spec.maps.macro.format): image.convert(int(spec.maps.macro.format))
-			return {StrataRegions.MAP_MACRO: image}
+			var macro := StrataRegionCompose.compose_map(terrain, selected, StrataRegions.MAP_MACRO, _window(spec, xy, StrataRegions.MAP_MACRO, rect), spec)
+			if not macro.ok: return _problem(String(macro.message))
+			return {StrataRegions.MAP_MACRO: macro.image}
 
 func _problem(message: String) -> Dictionary:
 	if not _job.is_empty(): _job.problem = message

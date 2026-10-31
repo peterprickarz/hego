@@ -51,6 +51,17 @@ static func standard_spec(bounds: Rect2, spacing: float, cells: int = DEFAULT_CE
 		},
 	}
 
+## Cells per region side for a terrain: [param requested] when it is positive, otherwise the
+## automatic size, the largest power of two at or below min(DEFAULT_CELLS, the smaller bounds
+## side in cells), at least MIN_CELLS. StrataTerrain3D.region_spec() and StrataBake both take
+## their cells from here, so a bake of a terrain's settings matches the editor's regions.
+static func resolve_cells(requested: int, bounds: Rect2, spacing: float) -> int:
+	if requested > 0: return requested
+	var side := minf(bounds.size.x, bounds.size.y) / spacing if spacing > 0.0 and bounds.size.is_finite() else 0.0
+	var cells := MIN_CELLS
+	while cells * 2 <= mini(DEFAULT_CELLS, int(minf(side, 1.0e6))): cells *= 2
+	return cells
+
 static func _error(message: String) -> Dictionary:
 	return {"ok": false, "message": message}
 

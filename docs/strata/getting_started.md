@@ -39,10 +39,17 @@ brush and the textured editor view; the node and resource types are available ei
 The textured editor view is built from square regions. In the *Regions* group, `region_spacing`
 sets the metres between samples (1 m by default; heights, holes and material weights are all
 composed at that spacing, so a brush or mask can place a feature as narrow as one sample) and
-`region_cells` the cells per region side (a power of two from 16 to 4096, 256 by default). A
-4 km island at the defaults is 16 x 16 regions of 256 m. Bounds that are not a multiple of the
-region size give a warning; the last regions then extend past the bounds. The older
-`editor_compile_spacing` is an alias of `region_spacing`.
+`region_cells` the cells per region side. `region_cells` is 0 by default, which chooses the
+size for you: the largest power of two up to 256 that fits the terrain, never below 16. The
+default 64 m terrain at 1 m gets 64-cell regions (one region), a 4 km island 256-cell regions
+(16 x 16 of them). Set a value of your own, a power of two from 16 to 4096, to override it.
+Bounds that are not a multiple of the region size give a warning; the last regions then extend
+past the bounds. The older `editor_compile_spacing` is an alias of `region_spacing`.
+
+Each 256-cell region at 1 m costs about 0.9 MB of video memory with materials (height,
+material IDs and weights, holes and the tint map), so the 4 km island holds about 235 MB. A
+coarser `region_spacing` shrinks that by the square of the ratio; see
+[limits](reference.md#limits) for what else bounds the terrain size.
 
 Keep the terrain's transform to translation and rotation around Y with unit scale,
 including its parents. The node shows a configuration warning otherwise, and the brush is
@@ -144,10 +151,10 @@ channels at the samples it touches, so the layer owns the complete mix there and
 procedural recook below cannot shift it. Weights never become negative this way; a negative
 weight anywhere in the stack would leave the whole terrain unassigned.
 
-The editor composes the material channels through the stack on a 4 m grid, keeps the four
-strongest materials at each point and normalizes their weights; the renderer then blends
-those four using the materials' height maps. Where no material has any weight, the terrain
-is left unassigned. This grid allows terrains up to 4096 m on a side.
+The editor composes the material channels through the stack at `region_spacing` (1 m by
+default), keeps the four strongest materials at each sample and normalizes their weights; the
+renderer then blends those four using the materials' height maps. Where no material has any
+weight, the terrain is left unassigned.
 
 If you compute material placement elsewhere, you can instead leave
 `editor_material_channels` empty and assign precomputed control maps to

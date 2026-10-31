@@ -17,7 +17,7 @@ scripts/run_tests.sh --skip-import   # the demo project is already imported
 
 `GODOT_BIN` must point at the real Godot 4.7.2 executable (a launcher that opens a terminal
 window never returns), and `HFS` at the Houdini installation for the Houdini group
-(default `/opt/hfs22.0`). Logs go to a temporary directory, or to `TEST_LOG_DIR`;
+(default `/opt/hfs22.0`). Logs go to `build/test-logs/run.XXXXXX` (a fresh directory per run), or to `TEST_LOG_DIR`;
 `TEST_TIMEOUT` (default 600 s) bounds each Godot test.
 
 Godot 4.7 aborts while quitting a headless `--import` of a project whose GDExtensions it
@@ -38,9 +38,43 @@ of the same project never shows the problem.
 The Houdini group unsets `HOUDINI_OTLSCAN_PATH` and `HOUDINI_PACKAGE_DIR` so the editor test
 discovers the island HDAs through `otls/` at Houdini startup, as a user's session would.
 
+### Where tests stage projects
+
+Scripts that copy the demo project or its addons into a disposable project stage it under
+`build/test-staging/<name>` in the repository (`build/` is git-ignored; the scripts create it),
+never in `/tmp`, which is tmpfs on this machine and would keep the imported fixtures in RAM.
+Logs of `scripts/run_tests.sh` go to `build/test-logs`. The staging runners clean up after a
+successful run and keep the project of a failed one for inspection; `--keep` keeps them in any
+case, and `--work` moves the directory (not onto tmpfs; `/tmp`, `/dev/shm` and `/run` are
+refused).
+
+| Script | Staging directory |
+| --- | --- |
+| `demo/tests/runtime_test_runner.py` | `build/test-staging/runtime` (`authoring/` and `runtime_only/`) |
+| `demo/tests/addon_split_runner.py` | `build/test-staging/addon-split/<project>` |
+| `scripts/run_terrain_prototype.py --test`, `scripts/run_terrain_houdini_integration.py`, `scripts/smoke_test.py` | `build/test-staging/<tempdir>` |
+
+Some tests still write their output images or JSON to `/tmp` (the shading and height-blend
+fixtures, the island GPU capture); those are small outputs, not staged projects.
+
+### Editor smoke test
+
+`demo/tests/terrain_editor_smoke.gd` is an `EditorPlugin`, not a `--script` test, and nothing in
+`run_tests.sh` runs it: it needs a display, Forward+ and the saved island (not Git LFS pointers).
+It opens the island scene in a real editor, checks the textured region preview (live regions,
+LOD following the editor camera, the brush on a hand layer with undo and redo, a hole stroke read
+back from the renderer's hole regions, a tint stroke read back from the bridge's macro regions, the
+cutoff, quality and material changes, save and reopen). To run it, stage a copy of the demo under
+`build/test-staging/editor-smoke`, put the script in `addons/terrain_editor_smoke/` as a plugin
+(a `plugin.cfg` naming it, enabled under `[editor_plugins]` in `project.godot`), set the island scene as
+the main scene and start `$GODOT_BIN --editor --path build/test-staging/editor-smoke`. It exits
+the editor with code 0 and prints `TERRAIN_EDITOR_SMOKE failures=0` when it passes; failed checks
+print `EDITOR_CHECK:` errors. Screenshots are written to the project's `user://` directory.
+It is run by hand.
+
 ### Runtime suites
 
-`demo/tests/runtime_test_runner.py` copies the Strata addon into a disposable project (never
+`demo/tests/runtime_test_runner.py` copies the Strata addon into a disposable project under `build/test-staging/runtime` (never
 into `demo/addons/`), imports it and runs:
 
 | Suite | Coverage |

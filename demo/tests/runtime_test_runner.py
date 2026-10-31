@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime bake/collision/navigation suites in disposable /tmp projects.
+"""Runtime bake/collision/navigation suites in disposable projects under build/test-staging.
 
 Stages demo/addons/strata into an isolated authoring project (never into
 the tracked demo add-on directories), imports it, runs the
@@ -21,6 +21,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 ADDON = ROOT / "demo" / "addons" / "strata"
 TESTS = Path(__file__).resolve().parent
+# Staged projects live on disk under the repository's ignored build/ directory, never in
+# tmpfs (/tmp, /dev/shm), where the imported 4097-square fixtures would sit in RAM.
+STAGING = ROOT / "build" / "test-staging"
+TMPFS = (Path("/tmp"), Path("/dev/shm"), Path("/run"))
 RUNTIME_SCRIPTS = ("strata_regions.gd", "strata_region_data.gd", "strata_runtime_data.gd", "strata_nav_profiles.gd", "strata_collision.gd", "strata_navigation.gd", "strata_render_settings.gd")
 SUITES = ("runtime_data_test.gd", "runtime_collision_test.gd", "runtime_navigation_test.gd", "runtime_bake_test.gd", "runtime_macro_test.gd", "region_compose_test.gd")
 RUNTIME_ONLY_SUITES = ("runtime_roundtrip_test.gd", "runtime_macro_roundtrip_test.gd")
@@ -102,13 +106,17 @@ def seed_extension_list(project: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", default=os.environ.get("GODOT_BIN", "godot"))
-    parser.add_argument("--work", type=Path, default=Path("/tmp/hego-runtime-test"))
+    parser.add_argument("--work", type=Path, default=STAGING / "runtime")
     parser.add_argument("--large", action="store_true", help="also run the 4097x4097 bake measurement")
     parser.add_argument("--only", action="append", help="run only this suite (repeatable)")
+    parser.add_argument("--keep", action="store_true", help="keep the staged projects after a successful run (they are always kept after a failure)")
     args = parser.parse_args()
     work = args.work.resolve()
-    if work == ROOT or ROOT in work.parents:
-        parser.error("--work must be outside the repository")
+    if any(work == root or root in work.parents for root in TMPFS):
+        parser.error("--work must not be on tmpfs (/tmp, /dev/shm, /run); the default is build/test-staging/runtime")
+    if (work == ROOT or ROOT in work.parents) and STAGING not in work.parents and work != STAGING:
+        parser.error("--work inside the repository must be under build/test-staging")
+    work.mkdir(parents=True, exist_ok=True)
     authoring = work / "authoring"
     runtime_only = work / "runtime_only"
     stage_project(authoring, "HEGo runtime authoring tests")
@@ -154,6 +162,11 @@ def main() -> int:
     if failed:
         print("RUNTIME SUITES FAILED:", ", ".join(failed))
         return 1
+    if not args.keep:
+        for staged in (authoring, runtime_only):
+            shutil.rmtree(staged, ignore_errors=True)
+        try: work.rmdir()
+        except OSError: pass
     print("RUNTIME SUITES PASSED")
     return 0
 

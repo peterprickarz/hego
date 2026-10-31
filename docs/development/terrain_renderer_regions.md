@@ -139,6 +139,40 @@ bytes per region, 113.5 MB for 256 regions. The 1025-texel control maps become s
 number; 1 m controls written by the planned producers cost the plan's figure. The 16-cell test
 fixture costs 6,084 bytes per region.
 
+## Configuring from regions (Track X)
+
+```gdscript
+func configure_regions(source: Node3D, materials: Array[StrataMaterial], spec: Dictionary, regions: Dictionary) -> bool
+```
+
+Configures the renderer straight from a spec and a (possibly empty or partial) region set. Bounds and
+spacing come from the spec; `runtime_mode` is false when `source` is a `StrataTerrain3D` (the spec bounds
+must then equal its `base_bounds`) and true for any other `Node3D`. The spec is cut down to the maps the
+shader reads, material ids are checked against the pool, and the call is transactional like `configure`:
+a rejection leaves the previous configuration and regions. `configure_runtime` builds its region set from
+the manifest and calls it.
+
+## Composing a map window
+
+```gdscript
+static func StrataRegionCompose.compose_map(terrain, through_layer, map: String, window: Dictionary, spec: Dictionary, options := {}) -> Dictionary
+```
+
+Returns `{ok, message, image}` for any window (a `StrataRegions.map_window` result or a sub-rectangle of
+one) of a spec map: height; `material_ids` / `material_weights` (both composed, returned as `ids` and
+`weights`, `image` being the requested one); `holes` / `nav_exclusion`; `macro`; any other sample map as a
+custom channel (with `coverage` when the spec has `<name>__coverage`). Every texel is the whole-terrain
+expression, so a window equals the matching rectangle of the full map bit for bit (`region_compose_test`).
+Cell-mask windows must be square and macro windows at least 2 x 2 texels; `nav_<profile>` and coverage
+maps are derived and rejected. `compose_region` composes each of its maps through it.
+
+## Region size
+
+`StrataTerrain3D.region_cells` 0 (the default) is automatic, `StrataRegions.resolve_cells(requested, bounds,
+spacing)`: the largest power of two at or below min(256, smaller bounds side / spacing), at least 16.
+`region_spec()` and `StrataBake` (unless its `region_cells` / `spacing` options override) both call it with
+the terrain's values, so a default bake has the editor's regions. Explicit values are used as given.
+
 ## Editor preview (Track E)
 
 `StrataEditorPreview` composes the live authoring stack as regions and binds them with
@@ -150,8 +184,8 @@ the editor, for the island binding).
   region_cells)`; material ids/weights only when `editor_material_channels` is not empty (as
   `StrataBake`), macro only when an enabled layer owns a tint or AO channel (scale nearest to 4 m),
   holes always. `editor_compile_spacing` is an alias of `region_spacing`.
-- Renderer set-up: there is no public "configure without a field" entry, so the bridge configures
-  the renderer with a two-sample stand-in field and then calls `set_regions`.
+- Renderer set-up: the bridge calls `configure_regions(terrain, materials, spec, {})` (no regions yet, no
+  stand-in field) and binds the composed regions with `set_regions` afterwards.
 - Full refresh, time sliced (`StrataEditorPreview.SLICE_MS` = 4 ms of composition per frame, progress in
   `status`): pass 1 composes height and holes of every region with `compose_region` (material and macro
   maps start unassigned/neutral) and binds them; pass 2 composes materials and macro per region and
@@ -167,8 +201,8 @@ the editor, for the island binding).
   dabs ids and weights, hole dabs holes, tint/AO dabs macro. A dab that introduces a channel's
   ownership (first tint sample) changes the whole class and falls back to a full refresh of it. At
   spacings that are not powers of two whole region maps are recomposed instead of windows.
-- It calls the private `StrataRegionCompose._compose_plane/_compose_mask/_compose_materials/_compose_macro`
-  for sub-windows; a public `compose_map(terrain, through, map, window, spec)` would replace that.
+- Sub-windows come from the public `StrataRegionCompose.compose_map(terrain, through, map, window, spec)`, which
+  `compose_region` uses as well (see below); the bridge calls no private composer function.
 
 Measured on the saved island (256 regions of 256 cells): a 12 m-radius dab costs 1 ms (height) and 2.2 ms
 (materials); a full refresh is compute bound by the 1 m material pack (about 80 ms per region, 13 ms

@@ -101,5 +101,20 @@ func run() -> void:
 	check(loaded != null and loaded.validate().ok and loaded.get_image(StrataRegions.MAP_HEIGHT).get_data() == data.get_image(StrataRegions.MAP_HEIGHT).get_data() and loaded.region == Vector2i(3, 5), "the loaded region is byte-identical")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
+	# Automatic region size: the largest power of two at or below min(256, side in cells), at least 16.
+	check(StrataRegions.resolve_cells(0, Rect2(-32, -32, 64, 64), 1.0) == 64, "a 64 m terrain at 1 m gets 64-cell regions")
+	check(StrataRegions.resolve_cells(0, Rect2(-2048, -2048, 4096, 4096), 1.0) == 256, "a 4 km terrain at 1 m gets 256-cell regions")
+	check(StrataRegions.resolve_cells(0, Rect2(0, 0, 100, 100), 1.0) == 64 and StrataRegions.resolve_cells(0, Rect2(0, 0, 10, 10), 1.0) == 16, "the automatic size rounds down and is at least 16")
+	check(StrataRegions.resolve_cells(0, Rect2(0, 0, 64, 64), 0.25) == 256 and StrataRegions.resolve_cells(0, Rect2(0, 0, 64, 1024), 1.0) == 64, "spacing and the smaller side decide")
+	check(StrataRegions.resolve_cells(128, Rect2(0, 0, 64, 64), 1.0) == 128 and StrataRegions.resolve_cells(16, Rect2(0, 0, 8192, 8192), 1.0) == 16, "an explicit size is kept")
+	var automatic := StrataTerrain3D.new()
+	check(automatic.region_cells == 0 and automatic.effective_region_cells() == 64 and StrataRegions.validate_spec(automatic.region_spec()).ok and automatic.region_spec().cells == 64, "a default terrain is automatic: 64 m at 1 m gives 64-cell regions")
+	check(automatic._get_configuration_warnings().is_empty(), "the default small terrain has no configuration warning")
+	automatic.region_cells = 100
+	check(automatic.region_cells == 128 and automatic.region_spec().cells == 128, "an explicit value rounds to a power of two and is used")
+	automatic.region_cells = 0
+	check(automatic.region_cells == 0, "0 returns to automatic")
+	automatic.free()
+
 	print("REGION_GEOMETRY checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)

@@ -3,7 +3,8 @@
 
 HEGo and Strata must each work without the other; only hego_strata
 depends on both. Likewise HEGo works without Terrain3D; only hego_terrain3d depends on
-both. This stages these projects under --work, never touching demo/:
+both. This stages these projects under --work (default build/test-staging/addon-split), never touching
+demo/, and removes each one after it passes:
 
   hego_only       addons/hego alone                    -> tests/hego_standalone_test.gd
   strata_only     addons/strata alone                  -> tests/terrain_cache_standalone_test.gd
@@ -24,6 +25,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ADDONS = ROOT / "demo" / "addons"
+# Staged on disk under the ignored build/ directory, never in tmpfs (/tmp, /dev/shm, /run).
+STAGING = ROOT / "build" / "test-staging"
+TMPFS = (Path("/tmp"), Path("/dev/shm"), Path("/run"))
 TESTS = Path(__file__).resolve().parent
 PROJECTS = {
     "hego_only": (("hego",), "hego_standalone_test.gd", "HEGO_STANDALONE_TEST: PASS"),
@@ -83,11 +87,16 @@ def run(command: list, timeout: int) -> tuple[int, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--godot", default=os.environ.get("GODOT_BIN", "godot"))
-    parser.add_argument("--work", type=Path, default=Path("/tmp/hego-addon-split-test"))
+    parser.add_argument("--work", type=Path, default=STAGING / "addon-split")
+    parser.add_argument("--keep", action="store_true", help="keep the staged projects after a successful run (failed ones are always kept)")
     args = parser.parse_args()
+    work = args.work.resolve()
+    if any(work == root or root in work.parents for root in TMPFS):
+        parser.error("--work must not be on tmpfs (/tmp, /dev/shm, /run); the default is build/test-staging/addon-split")
+    work.mkdir(parents=True, exist_ok=True)
     failed = []
     for name, (addons, test, marker) in PROJECTS.items():
-        project = args.work / name
+        project = work / name
         stage(project, addons, test)
         code, output = run([args.godot, "--headless", "--editor", "--path", str(project), "--import", "--quit"], 600)
         if code != 0:
@@ -98,6 +107,11 @@ def main() -> int:
         print(output)
         if code != 0 or marker not in output:
             failed.append(f"{name}: {test} failed")
+        elif not args.keep:
+            shutil.rmtree(project, ignore_errors=True)
+    if not failed:
+        try: work.rmdir()
+        except OSError: pass
     if failed:
         print("ADDON SPLIT FAILED: " + "; ".join(failed))
         return 1

@@ -10,6 +10,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "demo"
+
+
+def staging_dir() -> Path:
+    """Disposable projects live under build/test-staging (disk), never in tmpfs /tmp."""
+    path = ROOT / "build" / "test-staging"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 ADDON_SOURCE = ROOT / "demo" / "addons" / "strata"
 PROTOTYPE_SCENE = "res://scenes/terrain_prototype/main.tscn"
 RENDER_LAB_SCENE = "res://scenes/terrain_prototype/render_lab.tscn"
@@ -101,7 +110,7 @@ def main() -> int:
 
     # Unit/render suites get a small disposable project so imports do not scan
     # the main demo's full island texture collection or mutate source metadata.
-    test_context = tempfile.TemporaryDirectory(prefix="hego-terrain-tests-") if args.test or args.test_renderer else None
+    test_context = tempfile.TemporaryDirectory(prefix="hego-terrain-tests-", dir=staging_dir()) if args.test or args.test_renderer else None
     project = stage_test_project(Path(test_context.name)) if test_context else PROJECT
     if test_context:
         imported = subprocess.run(

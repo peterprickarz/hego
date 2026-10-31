@@ -215,18 +215,6 @@ func configure(source: StrataTerrain3D, materials: Array[StrataMaterial], height
 func configure_runtime(source: Node3D, data: StrataRuntimeData, materials: Array[StrataMaterial]) -> bool:
 	if data == null or not data.validate().get("ok", false) or not data.is_resident(): return false
 	if render_settings == null: render_settings = data.get("render_settings") if data.get("render_settings") != null else StrataRenderSettings.new()
-	var input := _runtime_region_input(data, materials.size())
-	if input.is_empty(): return false
-	return _configure(source, materials, data.get_spacing(), {}, data.bounds, true, input)
-
-## The region spec (shader maps only) and the region set of the whole grid of a runtime
-## manifest, or {} after a warning. Material ids are checked against the pool size.
-func _runtime_region_input(data: StrataRuntimeData, material_count: int) -> Dictionary:
-	var spec := data.get_spec().duplicate(true)
-	var maps := {}
-	for name in spec.maps:
-		if _SHADER_MAPS.has(name): maps[name] = spec.maps[name]
-	spec.maps = maps
 	var regions := {}
 	var grid := data.grid
 	for y in range(grid.y):
@@ -234,22 +222,55 @@ func _runtime_region_input(data: StrataRuntimeData, material_count: int) -> Dict
 			var region := data.get_region(Vector2i(x, y))
 			if region == null:
 				push_warning("Runtime region (%d, %d) is unavailable; renderer not configured." % [x, y])
-				return {}
+				return false
 			regions[Vector2i(x, y)] = region
+	return configure_regions(source, materials, data.get_spec(), regions)
+
+## Configures the renderer straight from regions: [param spec] is a StrataRegions spec (its
+## bounds and spacing become the renderer's), [param regions] maps Vector2i to the
+## StrataRegionData of the resident regions (may be empty or partial; missing regions render as
+## nothing until set_regions / update_region supplies them). Maps the shader does not read are
+## ignored. [param source] is the terrain the renderer is a child of: with a StrataTerrain3D the
+## renderer follows its authoring layers (runtime_mode false, the spec bounds must equal its
+## base_bounds), with any other Node3D it is a runtime renderer. Transactional like configure():
+## false leaves the previous configuration and regions untouched.
+func configure_regions(source: Node3D, materials: Array[StrataMaterial], spec: Dictionary, regions: Dictionary) -> bool:
+	if not is_instance_valid(source):
+		push_error("Renderer must be an identity child of a terrain with translation/yaw and unit scale.")
+		return false
+	var input := _region_input(spec, regions, materials.size())
+	if input.is_empty(): return false
+	if render_settings == null: render_settings = source.render_settings if source is StrataTerrain3D else StrataRenderSettings.new()
+	return _configure(source, materials, float(spec.spacing), {}, spec.bounds, not source is StrataTerrain3D, input)
+
+## The spec cut down to the maps the shader reads and the region set, with the material ids
+## checked against the pool size, or {} after a warning.
+func _region_input(spec: Dictionary, regions: Dictionary, material_count: int) -> Dictionary:
+	var checked := StrataRegions.validate_spec(spec)
+	if not checked.ok:
+		push_warning("Region set rejected: " + String(checked.message))
+		return {}
+	var shader_spec := spec.duplicate(true)
+	var maps := {}
+	for name in shader_spec.maps:
+		if _SHADER_MAPS.has(name): maps[name] = shader_spec.maps[name]
+	shader_spec.maps = maps
 	if maps.has(StrataRegions.MAP_MATERIAL_IDS) and maps.has(StrataRegions.MAP_MATERIAL_WEIGHTS):
 		var native := ClassDB.class_has_method(&"StrataLayerData", &"prepare_control_maps")
-		for region: StrataRegionData in regions.values():
+		for key in regions:
+			var region := regions[key] as StrataRegionData
+			if region == null: continue
 			var ids := region.get_image(StrataRegions.MAP_MATERIAL_IDS, 0)
 			var weights := region.get_image(StrataRegions.MAP_MATERIAL_WEIGHTS, 0)
 			if ids == null or weights == null: return {}
 			if native:
-				var checked: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, material_count)
-				if not checked.get("ok", false):
-					push_warning("Region %s: %s" % [region.region, checked.get("message", "invalid material controls")])
+				var result: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, material_count)
+				if not result.get("ok", false):
+					push_warning("Region %s: %s" % [region.region, result.get("message", "invalid material controls")])
 					return {}
 			elif not _validate_control_images(ids, weights, material_count):
 				return {}
-	return {"spec": spec, "regions": regions}
+	return {"spec": shader_spec, "regions": regions}
 
 func _bounds_for_source() -> Rect2:
 	return _runtime_bounds if _runtime_mode else (_source as StrataTerrain3D).base_bounds

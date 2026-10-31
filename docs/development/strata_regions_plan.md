@@ -1,6 +1,6 @@
 # Strata regions: plan
 
-Status: approved 2026-10-31, Phase A in progress. This is the engineering plan for moving
+Status: approved 2026-10-31. Phase A tracks F, N, R, D, C, E, H1 and X landed on 2026-10-31; H2 (island) in progress. This is the engineering plan for moving
 Strata from whole-terrain maps to fixed-size regions. User-facing behaviour is described in
 `docs/strata/` once each phase lands; this page is the contract the implementation tracks
 build against.
@@ -18,8 +18,9 @@ model.
 
 ## Decisions
 
-- **Region**: a square of `cells` × `cells` cells at the terrain's `spacing` (default 256 cells,
-  1 m), covering `cells × spacing` metres. Region `(i, j)` starts at
+- **Region**: a square of `cells` × `cells` cells at the terrain's `spacing` (1 m default),
+  covering `cells × spacing` metres. `region_cells` 0 (the default) picks the largest power of
+  two at or below min(256, side / spacing), at least 16, so small terrains get small regions. Region `(i, j)` starts at
   `bounds.position + (i, j) × cells × spacing`. The region grid covers `bounds`; regions may
   extend past the far edge, where samples compose to the channel default.
 - **Samples and aprons**: a sample map of a region holds `cells + 1` samples per axis

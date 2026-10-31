@@ -103,7 +103,9 @@ def main():
     root = Path(__file__).resolve().parents[1]
     # Copy only HEGo; the demo includes unrelated native addons with their own
     # architecture requirements. Never change the user's project or sessions.
-    with tempfile.TemporaryDirectory(prefix="hego-smoke-") as directory:
+    staging = root / "build" / "test-staging"
+    staging.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="hego-smoke-", dir=staging) as directory:
         project = Path(directory)
         shutil.copytree(root / "demo/addons/hego", project / "addons/hego")
         (project / "project.godot").write_text(

@@ -70,7 +70,7 @@ Renderer adapters keep working by assembling whole images from the regions: `cre
 
 `StrataCollision` and `StrataNavigation` read only these windows (`heights_window`, and `cell_mask_window` for `holes` and the profile's `nav_profile_map`), so chunk and tile sizes need not divide the region size. `holes` is the one remaining **transitional** whole-lattice property (assembled once and cached; only `runtime_data_test` reads it); do not use it in new code. The whole-lattice `heights` property is gone.
 
-`StrataRenderer.configure_runtime(source, data, materials)` builds the renderer from the manifest: the spec (bounds, spacing, cells, apron) with the maps the shader reads (`height`, `material_ids`, `material_weights`, `holes`, `macro`), and `set_regions()` with every region of the grid. Material ids are validated against the pool size; a missing region or invalid ids make it return false with the previous renderer state kept.
+`StrataRenderer.configure_runtime(source, data, materials)` builds the region set from the manifest and configures through `configure_regions()`: the spec (bounds, spacing, cells, apron) with the maps the shader reads (`height`, `material_ids`, `material_weights`, `holes`, `macro`), and `set_regions()` with every region of the grid. Material ids are validated against the pool size; a missing region or invalid ids make it return false with the previous renderer state kept.
 
 ### Canonical surface
 

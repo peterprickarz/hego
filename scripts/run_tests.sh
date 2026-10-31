@@ -69,7 +69,8 @@ GPU_TESTS=(
     terrain_material_hook_test
 )
 
-LOG_DIR="${TEST_LOG_DIR:-$(mktemp -d /tmp/hego-tests.XXXXXX)}"
+mkdir -p "$ROOT_DIR/build/test-logs"
+LOG_DIR="${TEST_LOG_DIR:-$(mktemp -d "$ROOT_DIR/build/test-logs/run.XXXXXX")}"
 mkdir -p "$LOG_DIR"
 PASSED=(); FAILED=(); SKIPPED=()
 

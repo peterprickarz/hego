@@ -61,6 +61,24 @@ A cook sets the composition of each channel it publishes from `hegostrata_compos
 | `runtime_data` | `StrataTerrain3D` | the published bake |
 | `runtime_bake_stale` | `StrataTerrain3D` | the stack changed since the bake; also `is_runtime_bake_stale()` and the `runtime_bake_stale_changed(stale)` signal |
 
+## Regions
+
+The editor view and the bake store a terrain as square regions. These `StrataTerrain3D`
+properties (the *Regions* group) set them:
+
+| Property | Default | Meaning |
+| --- | --- | --- |
+| `region_spacing` | 1.0 | metres between samples of the region maps: heights, holes and material IDs and weights. The tint and AO map uses about 4 m. `editor_compile_spacing` is an alias |
+| `region_cells` | 0 | cells per region side. 0 is automatic: the largest power of two at or below 256 and the terrain's smaller side in cells, at least 16 (64 m at 1 m gives 64, 4 km gives 256). Otherwise a power of two from 16 to 4096 |
+
+`StrataBake` takes both from the terrain unless its options say otherwise, so a bake of the
+default settings uses the regions you see in the editor.
+
+Memory: with materials, a 256-cell region at 1 m is about 0.9 MB of video memory (height
+0.27 MB, material IDs 0.27 MB, material weights 0.27 MB, holes 0.07 MB, tint 0.04 MB) plus
+a CPU copy for sampling. A 4 km terrain at 1 m is 256 regions, about
+235 MB. Halving `region_spacing` quadruples that; doubling it divides it by four.
+
 ## Bridge attributes
 
 Primitive attributes on heightfield volumes exchanged with Houdini:
@@ -93,10 +111,11 @@ Options of `StrataBake.bake(terrain, options)` and `StrataBake.compile()`:
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `spacing` | 1.0 | metres between baked samples; `base_bounds` must be a whole number of them |
+| `spacing` | the terrain's `region_spacing` | metres between baked samples; `base_bounds` must be a whole number of them |
+| `region_cells` | the terrain's `region_cells` | cells per region side, a power of two from 16 to 4096; 0 is automatic |
 | `cell_masks` | off | `true` bakes the `hole` and `nav_exclusion` channels; a dictionary passes mask options such as `continuous_channels` and `thresholds` |
 | `holes`, `nav_exclusions` | none | explicit cell masks instead of `cell_masks`: an image or bytes of (width − 1) × (height − 1) cells |
-| `material_ids`, `material_weights` | none | packed material controls: an RGBA8 ID image and an RGBAF or RGBAH weight image, both at most 1025 per side |
+| `material_ids`, `material_weights` | none | packed material controls: an RGBA8 ID image and an RGBAF or RGBAH weight image, both covering the terrain at the bake's spacing |
 | `macro` | `"auto"` | the tint and AO map: `"auto"` when a layer owns a tint or AO channel, `true` always, `false` never, or a dictionary with a `spacing` (default 4 m) |
 | `channels` | none | extra channels to keep in the bake for `StrataRuntimeData.sample_channel()` and for navigation profile rules |
 | `nav_profiles` | none | an array of `{"name": StringName, "rule": Dictionary}`; one walkability mask per name, one byte per cell. `default` is reserved: it is always the `nav_exclusion` mask. A rule that is invalid, or reads a channel the bake does not keep, fails the bake |
@@ -209,10 +228,11 @@ All are binary `.res` resources, written through a temporary `<name>~.res` file.
 | --- | --- |
 | Brush dab | 65,536 samples of the layer's grid; radius up to 4096 m |
 | Materials | 32 per terrain, at most four blended at any point |
-| Material control maps | 1025 texels per side; the editor composes them at 4 m |
-| Rendered heightfield | 4097 samples per side: the editor compiles at `editor_compile_spacing` (1 m by default), the runtime renderer uses the bake's spacing |
-| Tint and AO map | 4097 texels per side; 4 m spacing by default |
-| Bake | 20 Mi samples (4097 × 4097 fits) and 512 MiB in total |
+| Terrain bounds | square, with a side of 8 m × a power of two (8 m to 32 km at the default render quality; the factor is the quality's minimum patch size); non-square or other sizes are not drawn |
+| Regions | 4096 cells per side at most, and no more regions than the graphics device has texture array layers; every region is resident, so video memory is the practical limit |
+| Precomputed control maps | `editor_control_ids` and `editor_control_weights` are at most 1025 texels per side; region composition has no such limit |
+| Baked tint and AO map | at most 4097 texels per side: the default 4 m spacing covers terrains up to 16 km, a larger terrain needs a coarser `macro` spacing |
+| Bake | 512 MiB in total for all regions and their detail levels |
 | Heightfield exchanged with Houdini | 20 Mi samples per volume |
 | One input row | 64 Mi samples including companions; `terrain_max_samples` raises it to 128 Mi |
 | One cook's result | 128 Mi samples including ownership companions |

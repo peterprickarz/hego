@@ -28,15 +28,11 @@ static func compose(terrain: StrataTerrain3D, through_layer: StrataLayer, xy: Ve
 	var checked := StrataRegions.validate_spec(spec)
 	if not checked.ok: return checked
 	if not StrataRegions.contains_region(spec, xy): return _error("Region %s lies outside the %s region grid" % [xy, StrataRegions.grid_size(spec)])
-	if not is_instance_valid(terrain) or not terrain.is_inside_tree() or not terrain.is_transform_valid():
-		return _error("Region composition requires a live valid terrain")
-	if through_layer != null and (not is_instance_valid(through_layer) or not terrain.get_layers().has(through_layer)):
-		return _error("Region cutoff must be a live direct terrain layer")
+	var live := _check_terrain(terrain, through_layer)
+	if not live.ok: return live
 	var maps: Dictionary = spec.maps
 	if not maps.has(StrataRegions.MAP_HEIGHT): return _error("A region spec needs a height map")
 	var channels := PackedStringArray(options.get("channels", []))
-	var sources: Dictionary = options.get("sources", {})
-	var mask_options: Dictionary = options.get("mask_options", {})
 	var region := StrataRegionData.new()
 	region.region = xy
 	region.cells = int(spec.cells)
@@ -52,35 +48,27 @@ static func compose(terrain: StrataTerrain3D, through_layer: StrataLayer, xy: Ve
 		var image: Image = null
 		match name:
 			StrataRegions.MAP_HEIGHT:
-				if sources.has("height"):
-					image = _slice_samples(sources.height, window, Image.FORMAT_RF)
-				else:
-					var composed := _compose_plane(terrain, &"height", through_layer, window, spec, false)
-					if not composed.ok: return _error("Height: " + composed.message)
-					image = composed.image
+				var composed := compose_map(terrain, through_layer, name, window, spec, options)
+				if not composed.ok: return composed
+				image = composed.image
 			StrataRegions.MAP_MATERIAL_IDS, StrataRegions.MAP_MATERIAL_WEIGHTS:
 				if composed_materials: continue
 				composed_materials = true
 				var wanted_ids: Dictionary = maps.get(StrataRegions.MAP_MATERIAL_IDS, {})
 				var wanted_weights: Dictionary = maps.get(StrataRegions.MAP_MATERIAL_WEIGHTS, {})
 				if wanted_ids.is_empty() or wanted_weights.is_empty(): return _error("material_ids and material_weights go together")
-				var packed := _compose_materials(terrain, through_layer, window, spec)
-				if not packed.ok: return _error("Materials: " + packed.message)
+				var packed := compose_map(terrain, through_layer, StrataRegions.MAP_MATERIAL_IDS, window, spec, options)
+				if not packed.ok: return packed
 				if not region.set_image(StrataRegions.MAP_MATERIAL_IDS, packed.ids, 0, wanted_ids): return _error("material_ids must be RGBA8 on the sample lattice")
 				if not region.set_image(StrataRegions.MAP_MATERIAL_WEIGHTS, packed.weights, 0, wanted_weights): return _error("material_weights must be RGBA8 on the sample lattice")
 				continue
 			StrataRegions.MAP_HOLES, StrataRegions.MAP_NAV_EXCLUSION:
-				var key := "holes" if name == StrataRegions.MAP_HOLES else "nav_exclusion"
-				if sources.has(key):
-					image = _slice_cells(sources[key], window, spec)
-				else:
-					var channel := String(mask_options.get("hole_channel", "hole")) if name == StrataRegions.MAP_HOLES else String(mask_options.get("nav_exclusion_channel", "nav_exclusion"))
-					var mask := _compose_mask(terrain, through_layer, StringName(channel), window, name, mask_options)
-					if not mask.ok: return _error("%s: %s" % [name, mask.message])
-					image = mask.image
+				var mask := compose_map(terrain, through_layer, name, window, spec, options)
+				if not mask.ok: return mask
+				image = mask.image
 			StrataRegions.MAP_MACRO:
-				var macro := _compose_macro(terrain, through_layer, window, spec)
-				if not macro.ok: return _error("Macro: " + macro.message)
+				var macro := compose_map(terrain, through_layer, name, window, spec, options)
+				if not macro.ok: return macro
 				image = macro.image
 			_:
 				if StrataRegions.is_nav_profile_map(name): continue
@@ -89,11 +77,11 @@ static func compose(terrain: StrataTerrain3D, through_layer: StrataLayer, xy: Ve
 					continue
 				if not channels.has(name): return _error("Map %s is not a standard map and not a requested channel" % name)
 				var coverage_name: String = name + StrataRegions.COVERAGE_SUFFIX
-				var composed := _compose_channel(terrain, through_layer, StringName(name), window, spec, maps.has(coverage_name))
-				if not composed.ok: return _error("Channel %s: %s" % [name, composed.message])
-				if not region.set_image(name, _quantize(composed.image, int(description.format)), 0, description): return _error("Channel map %s must be a sample map" % name)
+				var composed := compose_map(terrain, through_layer, name, window, spec, options)
+				if not composed.ok: return composed
+				if not region.set_image(name, composed.image, 0, description): return _error("Channel map %s must be a sample map" % name)
 				if maps.has(coverage_name):
-					if not region.set_image(coverage_name, _quantize(composed.coverage, int(maps[coverage_name].format)), 0, maps[coverage_name]): return _error("Coverage map %s must be a sample map of the channel's size" % coverage_name)
+					if not region.set_image(coverage_name, composed.coverage, 0, maps[coverage_name]): return _error("Coverage map %s must be a sample map of the channel's size" % coverage_name)
 				continue
 		if image == null: return _error("Map %s could not be composed" % name)
 		if image.get_format() != int(description.format): image.convert(int(description.format))
@@ -114,6 +102,78 @@ static func compose(terrain: StrataTerrain3D, through_layer: StrataLayer, xy: Ve
 		var applied := NavProfiles.apply_region(region, profiles, channels)
 		if not applied.ok: return applied
 	return {"ok": true, "message": "", "region": region}
+
+## Composes one map of a region spec over any window of its lattice, with the exact
+## expressions a whole-terrain composition uses, so a window is bit-identical to the matching
+## rectangle of the full map. [param map] is a name of [param spec].maps, [param window] a
+## StrataRegions.map_window() result ({first, size, step, origin}) or a sub-rectangle of one
+## (first, size and origin shifted together). Returns {ok, message, image} with the image in the
+## spec's format for that map:
+##   height: the RF samples.
+##   material_ids / material_weights: both composed together; "ids" and "weights" hold the two
+##     RGBA8 images and "image" the requested one.
+##   holes / nav_exclusion: the L8 cell mask; the window must be square.
+##   macro: the RGBAH tint and AO; the window must be at least 2 x 2 texels.
+##   any other sample-map name: a custom channel, plus "coverage" when the spec has
+##     "<name>__coverage".
+## nav_<profile> and coverage maps are rejected (they come from compose_region). Options as
+## compose(): sources (height, holes, nav_exclusion) replace the composition, mask_options
+## configures the cell masks.
+static func compose_map(terrain: StrataTerrain3D, through_layer: StrataLayer, map: String, window: Dictionary, spec: Dictionary, options: Dictionary = {}) -> Dictionary:
+	var checked := StrataRegions.validate_spec(spec)
+	if not checked.ok: return checked
+	var live := _check_terrain(terrain, through_layer)
+	if not live.ok: return live
+	var maps: Dictionary = spec.maps
+	if not maps.has(map): return _error("Map %s is not in the region spec" % map)
+	var size: Vector2i = window.get("size", Vector2i.ZERO)
+	if not window.has("first") or not window.has("step") or not window.has("origin") or size.x < 1 or size.y < 1:
+		return _error("Map %s: the window needs first, size, step and origin with a positive size" % map)
+	var description: Dictionary = maps[map]
+	var sources: Dictionary = options.get("sources", {})
+	var mask_options: Dictionary = options.get("mask_options", {})
+	match map:
+		StrataRegions.MAP_HEIGHT:
+			if sources.has("height"): return {"ok": true, "message": "", "image": _slice_samples(sources.height, window, Image.FORMAT_RF)}
+			var composed := _compose_plane(terrain, &"height", through_layer, window, spec, false)
+			if not composed.ok: return _error("Height: " + composed.message)
+			return {"ok": true, "message": "", "image": _quantize(composed.image, int(description.format))}
+		StrataRegions.MAP_MATERIAL_IDS, StrataRegions.MAP_MATERIAL_WEIGHTS:
+			if not maps.has(StrataRegions.MAP_MATERIAL_IDS) or not maps.has(StrataRegions.MAP_MATERIAL_WEIGHTS): return _error("material_ids and material_weights go together")
+			if int(maps[StrataRegions.MAP_MATERIAL_IDS].format) != Image.FORMAT_RGBA8 or int(maps[StrataRegions.MAP_MATERIAL_WEIGHTS].format) != Image.FORMAT_RGBA8: return _error("material_ids and material_weights must be RGBA8")
+			var packed := _compose_materials(terrain, through_layer, window, spec)
+			if not packed.ok: return _error("Materials: " + packed.message)
+			return {"ok": true, "message": "", "ids": packed.ids, "weights": packed.weights, "image": packed.ids if map == StrataRegions.MAP_MATERIAL_IDS else packed.weights}
+		StrataRegions.MAP_HOLES, StrataRegions.MAP_NAV_EXCLUSION:
+			if size.x != size.y: return _error("%s: a cell-mask window must be square, got %s" % [map, size])
+			var key := "holes" if map == StrataRegions.MAP_HOLES else "nav_exclusion"
+			if sources.has(key): return {"ok": true, "message": "", "image": _slice_cells(sources[key], window, spec)}
+			var channel := String(mask_options.get("hole_channel", "hole")) if map == StrataRegions.MAP_HOLES else String(mask_options.get("nav_exclusion_channel", "nav_exclusion"))
+			var mask := _compose_mask(terrain, through_layer, StringName(channel), window, map, mask_options)
+			if not mask.ok: return _error("%s: %s" % [map, mask.message])
+			return {"ok": true, "message": "", "image": mask.image}
+		StrataRegions.MAP_MACRO:
+			if size.x < 2 or size.y < 2: return _error("Macro: a window needs at least 2 x 2 texels, got %s" % size)
+			var macro := _compose_macro(terrain, through_layer, window, spec)
+			if not macro.ok: return _error("Macro: " + macro.message)
+			return {"ok": true, "message": "", "image": _quantize(macro.image, int(description.format))}
+	if StrataRegions.is_nav_profile_map(map) or map.ends_with(StrataRegions.COVERAGE_SUFFIX):
+		return _error("Map %s is derived (navigation profile or coverage) and is composed by compose_region" % map)
+	if String(description.kind) != StrataRegions.KIND_SAMPLE: return _error("Channel map %s must be a sample map" % map)
+	var coverage_name: String = map + StrataRegions.COVERAGE_SUFFIX
+	var wants_coverage := maps.has(coverage_name)
+	var channel_result := _compose_channel(terrain, through_layer, StringName(map), window, spec, wants_coverage)
+	if not channel_result.ok: return _error("Channel %s: %s" % [map, channel_result.message])
+	var result := {"ok": true, "message": "", "image": _quantize(channel_result.image, int(description.format))}
+	if wants_coverage: result["coverage"] = _quantize(channel_result.coverage, int(maps[coverage_name].format))
+	return result
+
+static func _check_terrain(terrain: StrataTerrain3D, through_layer: StrataLayer) -> Dictionary:
+	if not is_instance_valid(terrain) or not terrain.is_inside_tree() or not terrain.is_transform_valid():
+		return _error("Region composition requires a live valid terrain")
+	if through_layer != null and (not is_instance_valid(through_layer) or not terrain.get_layers().has(through_layer)):
+		return _error("Region cutoff must be a live direct terrain layer")
+	return {"ok": true, "message": ""}
 
 # Plane composition -----------------------------------------------------
 

@@ -42,6 +42,7 @@ func run() -> void:
 	test_extrema_bounds()
 	test_transactional_rejection()
 	test_adapters()
+	await test_configure_regions()
 	print("REGION_RENDERER_TEST failures=", failures)
 	quit(0 if failures == 0 else 1)
 
@@ -405,3 +406,30 @@ func test_adapters() -> void:
 	check(renderer.update_compiled_region({"ok": true, "image": raised, "bounds": Rect2(bounds.position + Vector2(10, 10), Vector2(4, 4))}), "update_compiled_region patches the region layers")
 	check(absf(renderer.sample_render_height(bounds.position + Vector2(12, 12)) - 20.0) < 0.00001 and absf(renderer._height_image.get_pixel(12, 12).r - 20.0) < 0.00001, "The patch reaches the regions and the CPU image")
 	check(renderer._height_max == 20.0, "The global range follows the patch")
+
+func test_configure_regions() -> void:
+	build_regions()
+	var pool: Array[StrataMaterial] = []
+	for index in range(10):
+		pool.append(StrataMaterial.new())
+	var fresh := StrataRenderer.new(); source.add_child(fresh)
+	var moved := spec.duplicate(true)
+	moved.bounds = Rect2(BOUNDS.position + Vector2.ONE, BOUNDS.size)
+	check(not fresh.configure_regions(source, pool, moved, regions), "configure_regions rejects a spec whose bounds differ from the terrain")
+	check(fresh.get_region(Vector2i(0, 0)) == null, "A rejected first configuration binds nothing")
+	check(fresh.configure_regions(source, pool, spec, regions), "configure_regions configures straight from regions on a StrataTerrain3D")
+	check(not fresh._runtime_mode and fresh._render_bounds == BOUNDS and is_equal_approx(fresh._height_spacing, 1.0), "A terrain source gives runtime_mode false, the spec's bounds and spacing")
+	check(fresh.get_stats().regions == 16 and fresh.get_region(Vector2i(3, 3)) == regions[Vector2i(3, 3)] and not source.is_preview_enabled(), "All regions are resident and the legacy preview is off")
+	check(fresh.configure_regions(source, pool, spec, {}) and fresh.get_stats().regions == 0, "Reconfiguring with no regions binds none (editor bridge path)")
+	check(fresh.set_regions(spec, regions) and fresh.get_stats().regions == 16, "set_regions binds the composed regions afterwards")
+	var kept := fresh.get_region(Vector2i(2, 2))
+	check(not fresh.configure_regions(source, pool, moved, regions) and fresh.get_region(Vector2i(2, 2)) == kept and fresh.get_stats().regions == 16, "A rejected reconfiguration keeps the previous regions")
+	var broken := regions.duplicate()
+	broken[Vector2i(1, 0)] = make_region(Vector2i(1, 0))
+	broken[Vector2i(1, 0)].remove_map("holes")
+	check(not fresh.configure_regions(source, pool, spec, broken) and fresh.get_region(Vector2i(1, 0)) == regions[Vector2i(1, 0)], "A region lacking a spec map is rejected and nothing changes")
+	var plain := Node3D.new(); viewport.get_child(0).add_child(plain)
+	var runtime := StrataRenderer.new(); plain.add_child(runtime)
+	check(runtime.configure_regions(plain, pool, spec, regions) and runtime._runtime_mode and runtime.get_stats().regions == 16, "A non-terrain source configures a runtime renderer")
+	await process_frame
+	runtime.queue_free(); fresh.queue_free(); plain.queue_free()

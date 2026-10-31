@@ -18,6 +18,12 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def staging_dir() -> Path:
+    """Disposable projects live under build/test-staging (disk), never in tmpfs /tmp."""
+    path = ROOT / "build" / "test-staging"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 DEFAULT_NATIVE_TEST = "res://tests/hego_heightfield_fields_native_test.gd"
 DEFAULT_INTEGRATION_TEST = "res://tests/terrain_houdini_roundtrip_test.gd"
 DEFAULT_STANDALONE_TEST = "res://tests/terrain_cache_standalone_test.gd"
@@ -192,9 +198,9 @@ def main() -> int:
 
         temp_context = None
         if args.keep_project:
-            project = Path(tempfile.mkdtemp(prefix="hego-terrain-houdini-"))
+            project = Path(tempfile.mkdtemp(prefix="hego-terrain-houdini-", dir=staging_dir()))
         else:
-            temp_context = tempfile.TemporaryDirectory(prefix="hego-terrain-houdini-")
+            temp_context = tempfile.TemporaryDirectory(prefix="hego-terrain-houdini-", dir=staging_dir())
             project = Path(temp_context.name)
         standalone_project = project / "standalone"
         integration_project = project / "integration"
