@@ -30,9 +30,9 @@ STUB_XML_DIR="$DOCS_DIR/.tmp_stub_xml"
 LEGACY_TOOLS_DIR="$DOCS_DIR/tools"
 REGISTER_TYPES_CPP="$ROOT_DIR/src/register_types.cpp"
 
-VERSION_PY_URL="https://raw.githubusercontent.com/godotengine/godot/refs/heads/4.4/version.py"
-MAKE_RST_URL="https://raw.githubusercontent.com/godotengine/godot/4.4/doc/tools/make_rst.py"
-COLOR_PY_URL="https://raw.githubusercontent.com/godotengine/godot/4.4/misc/utility/color.py"
+VERSION_PY_URL="https://raw.githubusercontent.com/godotengine/godot/refs/heads/4.7/version.py"
+MAKE_RST_URL="https://raw.githubusercontent.com/godotengine/godot/4.7/doc/tools/make_rst.py"
+COLOR_PY_URL="https://raw.githubusercontent.com/godotengine/godot/4.7/misc/utility/color.py"
 
 mkdir -p "$TOOLS_DIR"
 mkdir -p "$TOOLS_MISC_DIR"
