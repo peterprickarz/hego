@@ -61,7 +61,7 @@ const DEFAULT_NAV_PROFILE := &"default"
 @export var render_settings: Resource
 
 # Floating-point payloads persist as raw bytes (see _get_property_list): Godot
-# 4.4 text resources write floats with ~6 significant digits, which would
+# text resources (4.4 through 4.7) write floats with ~6 significant digits, which would
 # silently move a .tres/.tscn bake away from its collision and render data.
 var bounds := Rect2()
 var heights := PackedFloat32Array():

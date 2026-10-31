@@ -1,4 +1,4 @@
-// Generated constant-index descriptor dispatch for Godot 4.4.1.
+// Generated constant-index descriptor dispatch for Godot 4.4 and later (checked on 4.7.2).
 // Sampler arrays are individually bound Texture2D resources. No nonuniform
 // descriptor indexing is required. Derivatives are provided by the caller.
 vec4 terrain_color_grad(int id, vec2 uv, vec2 dx, vec2 dy) {

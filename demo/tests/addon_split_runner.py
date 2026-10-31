@@ -53,6 +53,22 @@ def stage(destination: Path, addons: tuple, test: str) -> None:
     (destination / "tests").mkdir()
     shutil.copy2(TESTS / test, destination / "tests" / test)
     (destination / "project.godot").write_text(PROJECT.format(name=destination.name))
+    seed_extension_list(destination)
+
+
+def seed_extension_list(project: Path) -> None:
+    """Pre-register the staged GDExtensions as Godot itself would after a first scan.
+
+    Godot 4.7 (and 4.8-dev6) aborts while quitting a headless --import of a project whose
+    extensions it discovers only during that first scan; with .godot/extension_list.cfg
+    already naming them it exits cleanly, so write it before the first import.
+    """
+    descriptors = sorted(project.glob("addons/*/**/*.gdextension")) + sorted(project.glob("addons/*/*.gdextension"))
+    if not descriptors:
+        return
+    (project / ".godot").mkdir(exist_ok=True)
+    lines = sorted({"res://" + path.relative_to(project).as_posix() for path in descriptors})
+    (project / ".godot" / "extension_list.cfg").write_text("\n".join(lines) + "\n")
 
 
 def run(command: list, timeout: int) -> tuple[int, str]:

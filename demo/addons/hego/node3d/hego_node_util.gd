@@ -63,20 +63,23 @@ static func checked_task(host: Variant, task: HEGoTask) -> Dictionary:
 ## Reads [method ProjectSettings.get_global_class_list], which exported games have too. This
 ## is how HEGo finds the [HEGoInputHandler]s and [HEGoOutputHandler]s other addons provide.
 static func global_subclasses(base: StringName) -> Dictionary:
+	# Class names are StringNames from Godot 4.7 on; StringName ordering is by identity, not
+	# text, so callers that sort the result must sort Strings. Key everything by String.
 	var bases := {}
 	var paths := {}
 	for entry in ProjectSettings.get_global_class_list():
-		bases[entry["class"]] = entry["base"]
-		paths[entry["class"]] = entry["path"]
+		bases[String(entry["class"])] = String(entry["base"])
+		paths[String(entry["class"])] = String(entry["path"])
 	var found := {}
 	for name in bases:
 		var ancestor: Variant = bases[name]
+		var target := String(base)
 		# Bounded, so a malformed class cache cannot loop forever.
 		for _depth in range(64):
-			if ancestor == base or not bases.has(ancestor):
+			if ancestor == target or not bases.has(ancestor):
 				break
 			ancestor = bases[ancestor]
-		if name != base and ancestor == base:
+		if name != target and ancestor == target:
 			found[name] = paths[name]
 	return found
 

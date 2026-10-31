@@ -60,7 +60,6 @@ ISLAND_DATA_TESTS=(island_storage_test terrain_demo_scene_test)
 HOUDINI_GODOT_TESTS=(
     editor_hda_package_test hego_graph_native_test hego_heightfield_fields_native_test
     hego_input_children_native_test hego_parameter_native_test hego_surface_preload_test
-    hego_named_pipe_session_test
 )
 HYTHON_TESTS=(test_hda_package_graphs test_island_stage_materials test_material_distribution test_terrain_tint test_island_transition)
 # Forward+ on a real display.
@@ -105,6 +104,13 @@ fi
 
 if [[ "$SKIP_IMPORT" != true ]] && (run_group godot || run_group houdini || run_group gpu); then
     echo "── Import the demo project ──"
+    # Godot 4.7 aborts while quitting a headless import that discovered its GDExtensions
+    # during that same first scan (fresh checkout, CI). Pre-registering them as the editor
+    # itself would avoids it.
+    if [[ ! -f "$PROJECT/.godot/extension_list.cfg" ]]; then
+        mkdir -p "$PROJECT/.godot"
+        (cd "$PROJECT" && find addons -name '*.gdextension' | sort | sed 's|^|res://|') > "$PROJECT/.godot/extension_list.cfg"
+    fi
     timeout 900 "$GODOT" --headless --editor --path "$PROJECT" --import --quit > "$LOG_DIR/import.log" 2>&1; record $? import
 fi
 
@@ -136,6 +142,8 @@ if [[ "$HOUDINI" == true ]] && run_group houdini; then
     for name in "${HOUDINI_GODOT_TESTS[@]}"; do
         ( unset HOUDINI_OTLSCAN_PATH HOUDINI_PACKAGE_DIR; godot_test "$name" true )
     done
+    # Drives demo/tests/hego_named_pipe_session_test.gd against disposable HAPI servers.
+    ( cd "$ROOT_DIR" && unset HOUDINI_OTLSCAN_PATH HOUDINI_PACKAGE_DIR && timeout 1800 "$HYTHON" scripts/test_named_pipe_sessions.py --godot "$GODOT" > "$LOG_DIR/hego_named_pipe_session_test.log" 2>&1 ); record $? hego_named_pipe_session_test
     for name in "${HYTHON_TESTS[@]}"; do
         ( cd "$ROOT_DIR" && unset HOUDINI_OTLSCAN_PATH && HOUDINI_PATH="$ROOT_DIR:&" timeout 1800 "$HYTHON" "scripts/houdini/$name.py" > "$LOG_DIR/$name.log" 2>&1 ); record $? "$name"
     done

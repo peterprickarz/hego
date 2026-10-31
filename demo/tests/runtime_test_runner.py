@@ -84,6 +84,21 @@ def stage_project(path: Path, name: str):
     (path / "project.godot").write_text(PROJECT.format(name=name))
 
 
+def seed_extension_list(project: Path) -> None:
+    """Pre-register the staged GDExtensions as Godot itself would after a first scan.
+
+    Godot 4.7 (and 4.8-dev6) aborts while quitting a headless --import of a project whose
+    extensions it discovers only during that first scan; with .godot/extension_list.cfg
+    already naming them it exits cleanly, so write it before the first import.
+    """
+    descriptors = sorted(project.glob("addons/*/**/*.gdextension")) + sorted(project.glob("addons/*/*.gdextension"))
+    if not descriptors:
+        return
+    (project / ".godot").mkdir(exist_ok=True)
+    lines = sorted({"res://" + path.relative_to(project).as_posix() for path in descriptors})
+    (project / ".godot" / "extension_list.cfg").write_text("\n".join(lines) + "\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", default=os.environ.get("GODOT_BIN", "godot"))
@@ -101,6 +116,7 @@ def main() -> int:
     for script in TESTS.glob("runtime_*.gd"):
         shutil.copy2(script, authoring / "tests" / script.name)
     (authoring / "export").mkdir()
+    seed_extension_list(authoring)
     imported = run([args.godot, "--headless", "--editor", "--path", str(authoring), "--import", "--quit"], 120, quiet=True)
     if imported.returncode: return imported.returncode
 
@@ -127,6 +143,7 @@ def main() -> int:
         shutil.copytree(authoring / "export", runtime_only / "export")
         for script in ("runtime_test_base.gd",) + RUNTIME_ONLY_SUITES:
             shutil.copy2(TESTS / script, runtime_only / "tests" / script)
+        seed_extension_list(runtime_only)
         imported = run([args.godot, "--headless", "--editor", "--path", str(runtime_only), "--import", "--quit"], 120, quiet=True)
         if imported.returncode: return imported.returncode
         for suite in runtime_only_suites:

@@ -8,7 +8,7 @@ extends Node3D
 ## agent-radius erosion is consistent across tile edges and adjacent regions
 ## connect on the shared map.
 ##
-## Map requirement: Godot 4.4 merges region edges by flooring vertices to
+## Map requirement: Godot (4.4 through 4.7) merges region edges by flooring vertices to
 ## cell_size * merge_rasterizer_cell_scale. Recast emits terrain vertices closer
 ## than one 0.25 m cell (measured 0.04 m on the 1 m island), which the default
 ## scale 1.0 collapses into "already-merged edge" errors. Set
@@ -228,7 +228,7 @@ func _finish(generation: int) -> Dictionary:
 	bake_finished.emit(result)
 	return result
 
-## Mirrors Godot 4.4's map edge merge: polygon vertices are floored to
+## Mirrors Godot's map edge merge (4.4 through 4.7): polygon vertices are floored to
 ## cell_size * merge_rasterizer_cell_scale (and cell_height * scale); an edge key
 ## shared by more than two published polygon edges cannot merge and makes the
 ## engine report an "already-merged edge" synchronization error.
@@ -386,7 +386,7 @@ func _plan(local_rect: Rect2, keep_existing: bool) -> Dictionary:
 		mesh.agent_max_climb = climb
 		mesh.agent_max_slope = agent_max_slope
 		mesh.edge_max_error = edge_max_error
-		# Godot 4.4 trims border_size inward from the baking bounds, so the
+		# Godot (4.4 through 4.7) trims border_size inward from the baking bounds, so the
 		# bounds are the tile grown by the border: the padded geometry is
 		# rasterized and the result is clipped exactly at the tile edge.
 		mesh.border_size = border

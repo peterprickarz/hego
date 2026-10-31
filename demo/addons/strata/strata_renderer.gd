@@ -547,7 +547,7 @@ func set_compiled_field(compiled: Dictionary) -> bool:
 	return true
 
 ## A brush can compile only its affected 1 m rectangle. The RF CPU image is
-## patched natively; Godot 4.4 ImageTexture still uploads the whole texture.
+## patched natively; ImageTexture (Godot 4.4 through 4.7) still uploads the whole texture.
 func update_compiled_region(compiled: Dictionary) -> bool:
 	if _height_image == null or not compiled.get("ok", false): return false
 	var patch: Image = compiled.get("image")
@@ -751,7 +751,7 @@ func _validate_lod_parameters(bounds: Rect2) -> bool:
 	if not is_finite(ratio) or ratio < 1.0 or ratio > 4096.0 or absf(log(ratio) / log(2.0) - round(log(ratio) / log(2.0))) > 0.000001:
 		push_warning("Terrain size/minimum patch size must be a power of two with depth at most twelve; previous patches retained.")
 		return false
-	# Godot 4.4.1's default Vector/vertex/uniform fields use float32. Dyadic
+	# Godot's default single-precision Vector/vertex/uniform fields use float32. Dyadic
 	# reconstruction removes cracks, but cannot recover collapsed local vertices.
 	var minimum_vertex_step := min_patch_size / float(cells_per_patch)
 	if not vertex_spacing_is_representable(bounds, minimum_vertex_step):

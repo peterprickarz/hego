@@ -246,7 +246,7 @@ all tiles of a request appear together. Set the agent with `agent_radius`, `agen
 navigation cell size defaults to the map's and must be at most half the bake spacing.
 
 ```{important}
-Godot 4.4 merges navigation regions on a grid that is too coarse for terrain tiles and
+Godot merges navigation regions on a grid that is too coarse for terrain tiles and
 reports "already-merged edge" errors. Set **Project Settings →
 navigation/3d/merge_rasterizer_cell_scale** to `0.01`, or call
 `NavigationServer3D.map_set_merge_rasterizer_cell_scale(map, 0.01)` on a map you own.

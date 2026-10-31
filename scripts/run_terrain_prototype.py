@@ -17,6 +17,17 @@ TEST_SCRIPTS = ("native_data_test.gd", "terrain_mesher_test.gd", "render_materia
                 "frontend_smoke_test.gd", "render_shader_probe.gd", "render_state_test.gd")
 
 
+def seed_extension_list(project: Path) -> None:
+    """Pre-register staged GDExtensions as Godot would after a first scan: Godot 4.7 aborts
+    while quitting a headless --import that discovered them during that same scan."""
+    descriptors = sorted(project.glob("addons/**/*.gdextension"))
+    if not descriptors:
+        return
+    (project / ".godot").mkdir(exist_ok=True)
+    lines = sorted({"res://" + path.relative_to(project).as_posix() for path in descriptors})
+    (project / ".godot" / "extension_list.cfg").write_text("\n".join(lines) + "\n")
+
+
 def stage_test_project(destination: Path) -> Path:
     """Copy only the terrain addon, test scripts and artificial prototype scenes."""
     shutil.copytree(ADDON_SOURCE, destination / "addons/strata")
@@ -29,6 +40,7 @@ def stage_test_project(destination: Path) -> Path:
     (destination / "project.godot").write_text(
         'config_version=5\n\n[application]\nconfig/name="Strata Disposable Tests"\n'
         '[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
+    seed_extension_list(destination)
     return destination
 
 

@@ -74,6 +74,17 @@ def run(command, env, timeout):
     return result.stdout
 
 
+def seed_extension_list(project: Path) -> None:
+    """Pre-register staged GDExtensions as Godot would after a first scan: Godot 4.7 aborts
+    while quitting a headless --import that discovered them during that same scan."""
+    descriptors = sorted(project.glob("addons/**/*.gdextension"))
+    if not descriptors:
+        return
+    (project / ".godot").mkdir(exist_ok=True)
+    lines = sorted({"res://" + path.relative_to(project).as_posix() for path in descriptors})
+    (project / ".godot" / "extension_list.cfg").write_text("\n".join(lines) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--godot", default="godot", help="Godot 4.7+ executable matching the CPU")
@@ -100,6 +111,7 @@ def main():
             '[rendering]\nrenderer/rendering_method="gl_compatibility"\n'
             '[editor_plugins]\nenabled=PackedStringArray("res://addons/hego/plugin.cfg")\n'
         )
+        seed_extension_list(project)
         (project / "smoke.gd").write_text(SCRIPT)
         command = [godot, "--headless", "--path", str(project)]
         run(command + ["--editor", "--import"], env, args.timeout)

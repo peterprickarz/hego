@@ -20,6 +20,12 @@ window never returns), and `HFS` at the Houdini installation for the Houdini gro
 (default `/opt/hfs22.0`). Logs go to a temporary directory, or to `TEST_LOG_DIR`;
 `TEST_TIMEOUT` (default 600 s) bounds each Godot test.
 
+Godot 4.7 aborts while quitting a headless `--import` of a project whose GDExtensions it
+discovers during that same first scan (a fresh checkout, CI, or a staged test project). The
+runner and every script that stages a project write `.godot/extension_list.cfg` first, as the
+editor itself would after a successful scan, so the first import exits cleanly. A second import
+of the same project never shows the problem.
+
 | Group | What runs | Needs |
 | --- | --- | --- |
 | `python` | `python3 -m unittest discover -s scripts/tests`: addon boundaries, terrain build script, distribution publisher, material preparation, launchers | Python |

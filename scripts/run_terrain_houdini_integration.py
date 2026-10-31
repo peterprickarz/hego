@@ -39,6 +39,17 @@ HEGO_LIBRARY_NAME = "libhego.linux.template_debug.x86_64.so"
 TERRAIN_LIBRARY_NAME = "libstrata.linux.template_debug.x86_64.so"
 
 
+def seed_extension_list(project: Path) -> None:
+    """Pre-register staged GDExtensions as Godot would after a first scan: Godot 4.7 aborts
+    while quitting a headless --import that discovered them during that same scan."""
+    descriptors = sorted(project.glob("addons/**/*.gdextension"))
+    if not descriptors:
+        return
+    (project / ".godot").mkdir(exist_ok=True)
+    lines = sorted({"res://" + path.relative_to(project).as_posix() for path in descriptors})
+    (project / ".godot" / "extension_list.cfg").write_text("\n".join(lines) + "\n")
+
+
 def stage_project(destination: Path, hego_library: Path, terrain_library: Path, hfs: Path, test_scripts: list[str]) -> None:
     (destination / "addons").mkdir(parents=True, exist_ok=True)
     # The bridge carries the terrain input handler and target binding the tests cook through.
@@ -76,6 +87,7 @@ def stage_project(destination: Path, hego_library: Path, terrain_library: Path, 
         'renderer/rendering_method="gl_compatibility"\n',
         encoding="utf-8",
     )
+    seed_extension_list(destination)
 
 
 def stage_standalone_project(destination: Path, terrain_library: Path, test_script: str, transaction_script: str) -> None:
@@ -116,6 +128,7 @@ def stage_standalone_project(destination: Path, terrain_library: Path, test_scri
         'renderer/rendering_method="gl_compatibility"\n',
         encoding="utf-8",
     )
+    seed_extension_list(destination)
 
 
 def run(command: list[str], *, env: dict[str, str], cwd: Path, timeout: int) -> int:

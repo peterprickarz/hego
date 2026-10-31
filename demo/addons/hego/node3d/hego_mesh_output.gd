@@ -411,7 +411,7 @@ static func copy_array_mesh_contents(target_mesh: ArrayMesh, source_mesh: ArrayM
 
 
 ## The LODs of one surface of [param mesh], keyed by edge length, from the public getter
-## where it exists. Godot 4.4 has none, and RenderingServer.mesh_get_surface returns broken
+## where it exists. Godot (through 4.7) has none, and RenderingServer.mesh_get_surface returns broken
 ## LOD arrays there, so the resource serialization is read instead: it alternates edge
 ## length and packed index bytes, with the index width of the base surface.
 static func _surface_lods(mesh: ArrayMesh, surface_index: int, arrays: Array) -> Dictionary:

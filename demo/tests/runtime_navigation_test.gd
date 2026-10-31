@@ -17,10 +17,20 @@ func gentle(i: int, j: int) -> float:
 	var distance := Vector2(i - 85, j - 12).length()
 	return height + maxf(0.0, 5.0 - 1.8 * distance)
 
+## Waits until the navigation map has absorbed the latest bake. Regions and the map update on
+## their own iterations (asynchronously since Godot 4.7), so wait for the iteration id to
+## settle rather than a fixed frame count.
 func sync_map() -> void:
-	for frame in range(4):
+	var last := NavigationServer3D.map_get_iteration_id(map)
+	var stable := 0
+	for frame in range(120):
 		await physics_frame
 		await process_frame
+		var now := NavigationServer3D.map_get_iteration_id(map)
+		stable = stable + 1 if now == last else 0
+		last = now
+		if frame >= 3 and stable >= 3:
+			return
 
 func world_at(lattice: Vector2) -> Vector3:
 	var local := data.lattice_to_local(lattice)
@@ -46,7 +56,7 @@ func blocked_clearance(local: Vector2, profile: StringName = StrataRuntimeData.D
 			nearest = minf(nearest, (closest - lattice).length() * data.get_spacing())
 	return nearest
 
-## Mirrors Godot 4.4's map merge: world vertices floor-quantized to the map
+## Mirrors Godot's map merge (4.4 through 4.7): world vertices floor-quantized to the map
 ## cell size/height; an edge key used by more than two polygons fails to merge.
 func merge_conflicts(regions: Array[NavigationRegion3D] = []) -> Dictionary:
 	var size := NavigationServer3D.map_get_cell_size(map) * NavigationServer3D.map_get_merge_rasterizer_cell_scale(map)
