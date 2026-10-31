@@ -28,7 +28,18 @@ func run() -> void:
 	var data := terrain.runtime_data
 	var spec := renderer.region_spec()
 	var probe := Vector2i(4, 10)
-	check(level._bound_data == data and renderer.get_region(probe) == data.get_region(probe), "Runtime renderer holds the manifest's regions (configure_runtime)")
+	# The runtime renderer streams by camera distance (the overview camera sees coarse maps
+	# only), so bring the camera to the pad and wait until the probed region is resident near.
+	var pad_height := terrain.sample_height(level.PAD)
+	level.camera.teleport_to(Vector3(level.PAD.x - 82.0, pad_height + 75.0, level.PAD.y + 110.0), Vector3(level.PAD.x + 4.0, pad_height + 1.0, level.PAD.y))
+	started = Time.get_ticks_msec()
+	while renderer.region_level(probe) != 0:
+		if Time.get_ticks_msec() - started > 30000: push_error("The streamer did not bind the probed region near the camera"); quit(2); return
+		await process_frame
+	var streaming: Dictionary = level.streamer.stats()
+	check(int(streaming.near) > 0 and int(streaming.near) <= level.streamer.near_slots and int(streaming.far) <= level.streamer.far_slots, "Streamer binds near and far regions around the camera within its slot budgets")
+	check(renderer.get_stats().gpu_bytes_near + renderer.get_stats().gpu_bytes_far + renderer.get_stats().gpu_bytes_coarse < 120 * 1024 * 1024, "Resident GPU payload stays far below the whole-island 235 MB")
+	check(level._bound_data == data and renderer.get_region(probe) == data.get_region(probe), "Runtime renderer holds the manifest's regions (streamed through configure_runtime)")
 	check(spec.spacing == terrain.region_spacing and spec.maps.has("material_ids") and spec.maps.has("material_weights") and spec.maps.has("holes") and spec.maps.has("height"), "Renderer spec has the stack's maps at the terrain's region spacing")
 	check(renderer.get_stats().control_resolution == renderer.get_stats().height_resolution, "Material maps are on the height lattice, not a 4 m control lattice")
 	check(level.get_node_or_null("MaterialControlsBinding") == null and terrain.editor_control_ids == null and terrain.editor_control_weights == null, "No control-map binding or packed control maps")

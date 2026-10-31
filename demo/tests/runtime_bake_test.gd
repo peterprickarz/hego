@@ -283,7 +283,7 @@ func run() -> void:
 	with_budget.max_runtime_bytes = base_total + profile_cost
 	var exact := StrataBake.compile(terrain, with_budget)
 	check(exact.ok and exact.data.get_manifest().total_bytes == base_total + profile_cost, "profiles fit a budget of exactly their mask bytes")
-	check(StrataBake.compile(terrain, {"mip_levels": 1, "region_cells": 16}).data.get_manifest().total_bytes < StrataBake.compile(terrain, {"mip_levels": 3, "region_cells": 16}).data.get_manifest().total_bytes, "mip_levels changes the planned payload")
+	check(StrataBake.compile(terrain, {"mip_levels": 1, "far_level": 0, "coarse_max_side": 1 << 20, "region_cells": 16}).data.get_manifest().total_bytes < StrataBake.compile(terrain, {"mip_levels": 3, "region_cells": 16}).data.get_manifest().total_bytes, "mip_levels changes the planned payload")
 	detail.procedural_stale = true
 	check(terrain.is_runtime_bake_stale(), "procedural stale intent invalidates an otherwise unchanged bake")
 	var accepted_options := options.duplicate(); accepted_options.allow_stale_procedural = true

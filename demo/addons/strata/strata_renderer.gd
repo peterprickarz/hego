@@ -170,6 +170,18 @@ var _region_layers: Dictionary = {}
 var _region_arrays: Dictionary = {}
 var _region_table_image: Image
 var _region_table_texture: ImageTexture
+# Residency (Phase B). _region_layers is the near slot of every region that owns one (all
+# grid regions in the Phase A layout, only the bound ones with residency); _far_layers the far
+# slot of the regions bound at far_level; _regions the CPU data of every bound region.
+var _far_layers: Dictionary = {}
+var _far_arrays: Dictionary = {}
+var _coarse_textures: Dictionary = {}
+var _coarse_images: Dictionary = {}
+var _coarse_extrema: Dictionary = {}
+var _coarse_range := Vector2(INF, -INF)
+var _residency: Dictionary = {}
+var _near_free: Array[int] = []
+var _far_free: Array[int] = []
 var _window_cache: Dictionary = {}
 # Aliases of the region arrays, kept for tests and tools that compare texture identity.
 var _height_texture: Texture2DArray
@@ -211,20 +223,48 @@ var _stats := {"patches": 0, "triangles": 0, "mesh_cache_entries": 0, "lod_updat
 func configure(source: StrataTerrain3D, materials: Array[StrataMaterial], height_spacing: float = 1.0, compiled: Dictionary = {}) -> bool:
 	return _configure(source, materials, height_spacing, compiled, source.base_bounds if is_instance_valid(source) else Rect2(), false)
 
-## Compiled-only runtime path: no authoring layers or Houdini session required.
-func configure_runtime(source: Node3D, data: StrataRuntimeData, materials: Array[StrataMaterial]) -> bool:
+## Compiled-only runtime path: no authoring layers or Houdini session required. Without
+## [param residency] every region of [param data] is loaded and bound (Phase A). With
+## {near_slots, far_slots, far_level} no region is bound: the manifest's coarse maps
+## (data.coarse_level, data.coarse_maps: map name -> PackedByteArray in the map's format) are
+## bound and the regions are supplied afterwards with set_region_level(), normally by a
+## StrataRegionStreamer. Slot counts are capped at the number of regions.
+func configure_runtime(source: Node3D, data: StrataRuntimeData, materials: Array[StrataMaterial], residency: Dictionary = {}) -> bool:
 	if data == null or not data.validate().get("ok", false) or not data.is_resident(): return false
 	if render_settings == null: render_settings = data.get("render_settings") if data.get("render_settings") != null else StrataRenderSettings.new()
 	var regions := {}
 	var grid := data.grid
-	for y in range(grid.y):
-		for x in range(grid.x):
-			var region := data.get_region(Vector2i(x, y))
-			if region == null:
-				push_warning("Runtime region (%d, %d) is unavailable; renderer not configured." % [x, y])
+	if residency.is_empty():
+		for y in range(grid.y):
+			for x in range(grid.x):
+				var region := data.get_region(Vector2i(x, y))
+				if region == null:
+					push_warning("Runtime region (%d, %d) is unavailable; renderer not configured." % [x, y])
+					return false
+				regions[Vector2i(x, y)] = region
+		return configure_regions(source, materials, data.get_spec(), regions)
+	var spec := data.get_spec()
+	var count := grid.x * grid.y
+	var plan := {"near_slots": mini(int(residency.get("near_slots", 25)), count), "far_slots": mini(int(residency.get("far_slots", 256)), count), "far_level": int(residency.get("far_level", 2))}
+	var coarse_bytes: Variant = data.get("coarse_maps")
+	if coarse_bytes is Dictionary and not (coarse_bytes as Dictionary).is_empty():
+		var level := int(data.get("coarse_level"))
+		var images := {}
+		for name in spec.maps:
+			if not _SHADER_MAPS.has(name): continue
+			if not (coarse_bytes as Dictionary).has(name):
+				push_warning("Runtime coarse maps lack %s; renderer not configured." % name)
 				return false
-			regions[Vector2i(x, y)] = region
-	return configure_regions(source, materials, data.get_spec(), regions)
+			var description: Dictionary = spec.maps[name]
+			var size := StrataRegions.coarse_map_size(spec, description, level)
+			var bytes: PackedByteArray = coarse_bytes[name]
+			if bytes.size() != size.x * size.y * StrataRegions.bytes_per_texel(int(description.format)):
+				push_warning("Runtime coarse map %s has %d bytes, expected %d; renderer not configured." % [name, bytes.size(), size.x * size.y * StrataRegions.bytes_per_texel(int(description.format))])
+				return false
+			images[name] = Image.create_from_data(size.x, size.y, false, int(description.format), bytes)
+		plan.coarse_level = level
+		plan.coarse_maps = images
+	return configure_regions(source, materials, spec, regions, plan)
 
 ## Configures the renderer straight from regions: [param spec] is a StrataRegions spec (its
 ## bounds and spacing become the renderer's), [param regions] maps Vector2i to the
@@ -234,18 +274,21 @@ func configure_runtime(source: Node3D, data: StrataRuntimeData, materials: Array
 ## renderer follows its authoring layers (runtime_mode false, the spec bounds must equal its
 ## base_bounds), with any other Node3D it is a runtime renderer. Transactional like configure():
 ## false leaves the previous configuration and regions untouched.
-func configure_regions(source: Node3D, materials: Array[StrataMaterial], spec: Dictionary, regions: Dictionary) -> bool:
+## [param residency] (empty: the Phase A layout, every grid region owns a near layer, no far
+## tier, no coarse maps) is {near_slots, far_slots, far_level, coarse_level, coarse_maps}; see
+## set_regions().
+func configure_regions(source: Node3D, materials: Array[StrataMaterial], spec: Dictionary, regions: Dictionary, residency: Dictionary = {}) -> bool:
 	if not is_instance_valid(source):
 		push_error("Renderer must be an identity child of a terrain with translation/yaw and unit scale.")
 		return false
-	var input := _region_input(spec, regions, materials.size())
+	var input := _region_input(spec, regions, materials.size(), residency)
 	if input.is_empty(): return false
 	if render_settings == null: render_settings = source.render_settings if source is StrataTerrain3D else StrataRenderSettings.new()
 	return _configure(source, materials, float(spec.spacing), {}, spec.bounds, not source is StrataTerrain3D, input)
 
 ## The spec cut down to the maps the shader reads and the region set, with the material ids
 ## checked against the pool size, or {} after a warning.
-func _region_input(spec: Dictionary, regions: Dictionary, material_count: int) -> Dictionary:
+func _region_input(spec: Dictionary, regions: Dictionary, material_count: int, residency: Dictionary = {}) -> Dictionary:
 	var checked := StrataRegions.validate_spec(spec)
 	if not checked.ok:
 		push_warning("Region set rejected: " + String(checked.message))
@@ -270,7 +313,7 @@ func _region_input(spec: Dictionary, regions: Dictionary, material_count: int) -
 					return {}
 			elif not _validate_control_images(ids, weights, material_count):
 				return {}
-	return {"spec": shader_spec, "regions": regions}
+	return {"spec": shader_spec, "regions": regions, "residency": residency}
 
 func _bounds_for_source() -> Rect2:
 	return _runtime_bounds if _runtime_mode else (_source as StrataTerrain3D).base_bounds
@@ -349,7 +392,7 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 		_control_ids = null; _control_weights = null
 	elif _control_ids == null:
 		_make_control_fixture()
-	if not (set_regions(region_input.spec, region_input.regions) if not region_input.is_empty() else refresh_heightfield()):
+	if not (set_regions(region_input.spec, region_input.regions, region_input.get("residency", {})) if not region_input.is_empty() else refresh_heightfield()):
 		_source = previous.source
 		_runtime_mode = previous.runtime_mode
 		_runtime_bounds = previous.runtime_bounds
@@ -1361,11 +1404,15 @@ func _update_patch_bounds(patch: MeshInstance3D) -> void:
 ## data exists yet. Patches overlapping only low regions keep a tight bound when another
 ## region is edited.
 func _patch_height_range(bounds: Rect2) -> Vector2:
-	if _region_spec.is_empty() or _regions.is_empty(): return Vector2(_height_min, _height_max)
+	if _region_spec.is_empty() or _regions.is_empty() and _coarse_extrema.is_empty(): return Vector2(_height_min, _height_max)
 	var minimum := INF; var maximum := -INF
 	for xy in StrataRegions.regions_touching(_region_spec, bounds):
 		var data: StrataRegionData = _regions.get(xy)
-		if data == null: continue
+		if data == null:
+			# A region drawn from the coarse maps contributes the extrema of its coarse texels.
+			var coarse: Vector2 = _coarse_extrema.get(xy, Vector2(INF, -INF))
+			minimum = minf(minimum, coarse.x); maximum = maxf(maximum, coarse.y)
+			continue
 		minimum = minf(minimum, data.height_min); maximum = maxf(maximum, data.height_max)
 	return Vector2(minimum, maximum) if is_finite(minimum) else Vector2(_height_min, _height_max)
 
@@ -1402,6 +1449,7 @@ const _ADAPTER_MAX_MACRO_SCALE := 4
 const _ADAPTER_MAX_RESAMPLE_TEXELS := 4 * 1024 * 1024
 static var _placeholder_arrays := {}
 static var _placeholder_table: ImageTexture
+static var _placeholder_coarse := {}
 
 ## The region spec in effect (a copy); empty before any regions exist.
 func region_spec() -> Dictionary:
@@ -1413,28 +1461,40 @@ func get_region(xy: Vector2i) -> StrataRegionData:
 
 ## Replaces every region at once. [param spec] is a StrataRegions spec whose bounds are the
 ## terrain's, [param regions] maps Vector2i -> StrataRegionData for the resident regions (a
-## missing one is left non-resident and renders as height 0, no holes, no material). The
-## shader reads height (RF), material_ids (RGBA8), material_weights (RGBA8 or RGBAF, same
-## scale and apron as the ids), holes (L8 cell map) and macro (RGBAH); other maps are
-## ignored. Everything is validated and built before anything is swapped, so a rejected
-## call changes nothing. Whole-image adapters (set_compiled_field and friends) replace
-## regions set here, and the other way round.
-func set_regions(spec: Dictionary, regions: Dictionary) -> bool:
+## missing one is left non-resident and renders as height 0, no holes, no material, or from the
+## coarse maps when there are any). The shader reads height (RF), material_ids (RGBA8),
+## material_weights (RGBA8 or RGBAF, same scale and apron as the ids), holes (L8 cell map) and
+## macro (RGBAH); other maps are ignored. Everything is validated and built before anything is
+## swapped, so a rejected call changes nothing. Whole-image adapters (set_compiled_field and
+## friends) replace regions set here, and the other way round.
+##
+## [param residency] selects the residency tiers (docs/development/terrain_renderer_regions.md).
+## Empty is the Phase A layout: every grid region owns a near layer, no far tier, no coarse
+## maps. Otherwise {near_slots: int, far_slots: int, far_level: int, coarse_level: int,
+## coarse_maps: {map name: Image}}: near arrays hold near_slots layers at level 0, far arrays
+## far_slots layers (0 = no far tier) of the level-far_level maps, and coarse_maps (one image
+## per shader map, sized StrataRegions.coarse_map_size at coarse_level) draw every region
+## without a tier. [param regions] are bound into near slots and must fit. Defaults for missing
+## keys: near_slots = the number of grid regions, far_slots 0, far_level 2, no coarse maps. Residency
+## mode serves slots through set_region_level()/release_region(); the whole-image adapters are
+## not available with it.
+func set_regions(spec: Dictionary, regions: Dictionary, residency: Dictionary = {}) -> bool:
 	if _shader_material == null or not is_instance_valid(_source):
 		push_warning("set_regions needs a configured renderer; nothing changed.")
 		return false
-	var problem := _regions_problem(spec, regions)
+	var plan := _residency_plan(spec, residency)
+	var problem := _regions_problem(spec, regions, plan)
 	if not problem.is_empty():
 		push_warning("Region set rejected, previous regions retained: " + problem)
 		return false
 	if spec.bounds != _bounds_for_source():
 		push_warning("Region set rejected, previous regions retained: spec bounds differ from the terrain bounds.")
 		return false
-	var state := _build_region_state(spec, regions)
+	var state := _build_region_state(spec, regions, plan)
 	if state.is_empty(): return false
 	var camera_position := _source.to_local(_camera.global_position) if is_instance_valid(_camera) else Vector3.ZERO
-	var plan := _select_patch_plan(spec.bounds, Vector2(camera_position.x, camera_position.z), Vector2(state.minimum, state.maximum))
-	if plan.is_empty() or not _prepare_patch_meshes(plan): return false
+	var plan_patches := _select_patch_plan(spec.bounds, Vector2(camera_position.x, camera_position.z), Vector2(state.minimum, state.maximum))
+	if plan_patches.is_empty() or not _prepare_patch_meshes(plan_patches): return false
 	_height_image = null
 	_control_ids = null; _control_weights = null; _hole_image = null; _macro_image = null
 	_compiled_input = {}
@@ -1447,35 +1507,106 @@ func set_regions(spec: Dictionary, regions: Dictionary) -> bool:
 	_shader_material.set_shader_parameter("field_origin", spec.bounds.position)
 	_shader_material.set_shader_parameter("field_size", spec.bounds.size)
 	_shader_material.set_shader_parameter("camera_position", camera_position)
-	_apply_patch_plan(plan, true)
+	_apply_patch_plan(plan_patches, true)
 	return true
 
 ## Replaces one region's data (all of its maps) in place: layers are rewritten, the table and
-## texture arrays keep their identity. False and no change for an unknown region or data that
-## does not match the spec.
+## texture arrays keep their identity, and the region keeps its tier (near, or far with the
+## level-far_level maps). False and no change for an unknown region, data that does not match
+## the spec or lacks the tier's level, and, with residency, a region that is not bound (use
+## set_region_level).
 func update_region(xy: Vector2i, data: StrataRegionData) -> bool:
 	if _region_spec.is_empty() or data == null or not _regions.has(xy) and not StrataRegions.contains_region(_region_spec, xy): return false
+	if bool(_residency.get("active", false)) and not _regions.has(xy): return false
+	return _bind_region(xy, data, maxi(region_level(xy), 0))
+
+## Binds [param data] into the tier of [param level]: 0 is near, the residency's far_level is
+## far. A region moving between tiers frees its old slot. False, with nothing changed, when the
+## tier has no free slot (free_slots), the level is neither 0 nor the far level of an existing
+## far tier, the data lacks that level for a shader map, or it does not match the spec.
+func set_region_level(xy: Vector2i, data: StrataRegionData, level: int) -> bool:
+	if _region_spec.is_empty() or data == null or not StrataRegions.contains_region(_region_spec, xy): return false
+	if level != 0 and not (_has_far_tier() and level == int(_residency.far_level)): return false
+	return _bind_region(xy, data, level)
+
+## Unbinds a region: its slot is freed (the layer keeps stale pixels the table no longer
+## points at) and it renders from the coarse maps, or as nothing without them. False when the
+## region is not bound.
+func release_region(xy: Vector2i) -> bool:
+	if not _regions.has(xy): return false
+	var was_active := _refinement_zone_active()
+	_free_slot(xy)
+	_regions.erase(xy)
+	_write_region_table(xy)
+	_region_changed(xy, was_active)
+	_update_residency_stats()
+	return true
+
+## 0 for a near region, the far level for a far region, -1 when the region is not bound.
+func region_level(xy: Vector2i) -> int:
+	if not _regions.has(xy): return -1
+	return int(_residency.far_level) if _far_layers.has(xy) else 0
+
+## Unused slots of the tier of [param level] (0 near, the far level for far); 0 for any other
+## level.
+func free_slots(level: int) -> int:
+	if _region_spec.is_empty(): return 0
+	if level == 0: return int(_residency.near_slots) - (_regions.size() - _far_layers.size())
+	if _has_far_tier() and level == int(_residency.far_level): return int(_residency.far_slots) - _far_layers.size()
+	return 0
+
+func _has_far_tier() -> bool:
+	return int(_residency.get("far_slots", 0)) > 0
+
+## Uploads [param data] at [param level] into a slot of that tier (reusing the region's own
+## slot when it is already there) and moves the bookkeeping; validates before touching state.
+func _bind_region(xy: Vector2i, data: StrataRegionData, level: int) -> bool:
 	var problem := _region_problem(_region_spec, xy, data)
 	if not problem.is_empty():
 		push_warning("Region update rejected, previous region retained: " + problem)
 		return false
 	var images := {}
-	for name in _region_spec.maps:
-		images[name] = data.get_image(name, 0)
-	var layer := int(_region_layers[xy])
+	for name in _region_arrays:
+		var image := data.get_image(name, level)
+		if image == null:
+			push_warning("Region %s lacks level %d of %s; previous region retained." % [str(xy), level, name])
+			return false
+		images[name] = image
+	var far := level != 0
+	var slots: Dictionary = _far_layers if far else _region_layers
+	var fresh := not slots.has(xy)
+	if fresh and (_far_free if far else _near_free).is_empty():
+		return false
+	var slot: int = (_far_free if far else _near_free)[0] if fresh else int(slots[xy])
 	var was_active := _refinement_zone_active()
+	var arrays: Dictionary = _far_arrays if far else _region_arrays
 	for name in images:
-		(_region_arrays[name] as Texture2DArray).update_layer(images[name], layer)
+		(arrays[name] as Texture2DArray).update_layer(images[name], slot)
+	if fresh:
+		if _regions.has(xy): _free_slot(xy)
+		(_far_free if far else _near_free).erase(slot)
+		slots[xy] = slot
 	_regions[xy] = data
-	if not _region_resident(xy): _set_region_resident(xy, true)
+	_write_region_table(xy)
 	_region_changed(xy, was_active)
+	_update_residency_stats()
 	return true
+
+## Returns the region's slot to its free list. The Phase A layout keeps its fixed near layers.
+func _free_slot(xy: Vector2i) -> void:
+	if _far_layers.has(xy):
+		_far_free.append(int(_far_layers[xy]))
+		_far_layers.erase(xy)
+	elif bool(_residency.get("active", false)) and _region_layers.has(xy):
+		_near_free.append(int(_region_layers[xy]))
+		_region_layers.erase(xy)
 
 ## Writes [param patch] into texels of one region's map starting at [param texel_origin]
 ## (apron included): the CPU region and the GPU layer are patched in place. The patch must
-## have the map's format and lie inside the region's map; heights must be finite.
+## have the map's format and lie inside the region's map; heights must be finite. Serves near
+## regions only (false for far, coarse-only and unbound regions).
 func update_region_window(xy: Vector2i, map: String, patch: Image, texel_origin: Vector2i) -> bool:
-	if not _regions.has(xy) or not _region_spec.get("maps", {}).has(map) or patch == null: return false
+	if not _regions.has(xy) or _far_layers.has(xy) or not _region_spec.get("maps", {}).has(map) or patch == null: return false
 	var description: Dictionary = _region_spec.maps[map]
 	if patch.get_format() != int(description.format) or patch.is_compressed() or patch.has_mipmaps(): return false
 	var size := StrataRegions.map_size(_region_spec.cells, description, 0)
@@ -1514,21 +1645,47 @@ func _region_changed(xy: Vector2i, was_active: bool) -> void:
 func _region_resident(xy: Vector2i) -> bool:
 	return _region_table_image != null and _region_table_image.get_pixelv(xy).a > 0.0
 
-func _set_region_resident(xy: Vector2i, resident: bool) -> void:
-	var layer := int(_region_layers[xy])
-	_region_table_image.set_pixelv(xy, Color8(layer & 255, layer >> 8, 0, 255 if resident else 0))
+## Alpha of a bound near region in the table: 1 with residency, 255 in the Phase A layout
+## (which predates the tier flags; the shader reads any value but 0 and 2 as near).
+func _near_flag() -> int:
+	return 1 if bool(_residency.get("active", false)) else 255
+
+## Writes the table texel from the bookkeeping: R/G slot low/high byte, B level (0 near, the
+## far level far, 255 none), A flag (1 near, 2 far, 0 none). An unbound region of the fixed
+## Phase A layout keeps its layer in R/G.
+func _write_region_table(xy: Vector2i) -> void:
+	var color := Color8(0, 0, 255, 0)
+	if _far_layers.has(xy) and _regions.has(xy):
+		var slot := int(_far_layers[xy])
+		color = Color8(slot & 255, slot >> 8, int(_residency.far_level), 2)
+	elif _region_layers.has(xy):
+		var slot := int(_region_layers[xy])
+		color = Color8(slot & 255, slot >> 8, 0, _near_flag()) if _regions.has(xy) else Color8(slot & 255, slot >> 8, 255, 0)
+	_region_table_image.set_pixelv(xy, color)
 	_region_table_texture.update(_region_table_image)
 
 ## Height extrema of the resident regions (the global range that drives refinement culling).
 func _refresh_height_extrema() -> void:
-	var minimum := INF; var maximum := -INF
+	var minimum := _coarse_range.x; var maximum := _coarse_range.y
 	for data: StrataRegionData in _regions.values():
 		minimum = minf(minimum, data.height_min); maximum = maxf(maximum, data.height_max)
 	_height_min = minimum if is_finite(minimum) else 0.0
 	_height_max = maximum if is_finite(maximum) else 0.0
 
+## The residency of a set_regions call with defaults filled in: {active, near_slots, far_slots,
+## far_level, coarse_level, coarse_maps}. Not validated; _regions_problem does that.
+func _residency_plan(spec: Dictionary, residency: Dictionary) -> Dictionary:
+	var count := 0
+	if StrataRegions.validate_spec(spec).ok:
+		var grid := StrataRegions.grid_size(spec)
+		count = grid.x * grid.y
+	if residency.is_empty():
+		return {"active": false, "near_slots": count, "far_slots": 0, "far_level": 1, "coarse_level": 0, "coarse_maps": {}}
+	return {"active": true, "near_slots": residency.get("near_slots", count), "far_slots": residency.get("far_slots", 0), "far_level": residency.get("far_level", 2), "coarse_level": residency.get("coarse_level", 0), "coarse_maps": residency.get("coarse_maps", {})}
+
 ## Why a region set cannot be bound, or "" when it can.
-func _regions_problem(spec: Dictionary, regions: Dictionary) -> String:
+func _regions_problem(spec: Dictionary, regions: Dictionary, plan: Dictionary = {}) -> String:
+	if plan.is_empty(): plan = _residency_plan(spec, {})
 	var checked := StrataRegions.validate_spec(spec)
 	if not checked.ok: return String(checked.message)
 	var maps: Dictionary = spec.maps
@@ -1540,14 +1697,48 @@ func _regions_problem(spec: Dictionary, regions: Dictionary) -> String:
 		if int(description.format) not in rule[0] or String(description.kind) != rule[1]: return "%s has an unsupported format or kind" % name
 	if maps.has(StrataRegions.MAP_MATERIAL_IDS) != maps.has(StrataRegions.MAP_MATERIAL_WEIGHTS): return "material ids and weights must come together"
 	if maps.has(StrataRegions.MAP_MATERIAL_IDS) and (int(maps.material_ids.get("scale", 1)) != int(maps.material_weights.get("scale", 1)) or int(maps.material_ids.get("apron", spec.apron)) != int(maps.material_weights.get("apron", spec.apron))): return "material ids and weights must share scale and apron"
-	var device := RenderingServer.get_rendering_device()
-	var grid := StrataRegions.grid_size(spec)
-	if device != null and grid.x * grid.y > device.limit_get(RenderingDevice.LIMIT_MAX_TEXTURE_ARRAY_LAYERS): return "%d regions exceed the device's %d array layers" % [grid.x * grid.y, device.limit_get(RenderingDevice.LIMIT_MAX_TEXTURE_ARRAY_LAYERS)]
+	var problem := _residency_problem(spec, regions, plan)
+	if not problem.is_empty(): return problem
 	for key in regions:
 		if typeof(key) != TYPE_VECTOR2I or not StrataRegions.contains_region(spec, key): return "region %s lies outside the grid" % str(key)
 		if not regions[key] is StrataRegionData: return "region %s is not a StrataRegionData" % str(key)
-		var problem := _region_problem(spec, key, regions[key])
+		problem = _region_problem(spec, key, regions[key])
 		if not problem.is_empty(): return problem
+	return ""
+
+## Slot counts, levels and coarse images of a residency plan against the spec and the device.
+func _residency_problem(spec: Dictionary, regions: Dictionary, plan: Dictionary) -> String:
+	for key in ["near_slots", "far_slots", "far_level", "coarse_level"]:
+		if typeof(plan[key]) != TYPE_INT: return "residency %s must be an integer" % key
+	if not plan.coarse_maps is Dictionary: return "residency coarse_maps must be a Dictionary"
+	var device := RenderingServer.get_rendering_device()
+	var limit: int = device.limit_get(RenderingDevice.LIMIT_MAX_TEXTURE_ARRAY_LAYERS) if device != null else 2048
+	if plan.near_slots < 1 or plan.near_slots > limit: return "%d near slots are outside 1..%d (the device's array layers)" % [plan.near_slots, limit]
+	if plan.far_slots < 0 or plan.far_slots > limit: return "%d far slots are outside 0..%d (the device's array layers)" % [plan.far_slots, limit]
+	if regions.size() > plan.near_slots: return "%d regions do not fit %d near slots" % [regions.size(), plan.near_slots]
+	var deepest := 1 << 20
+	for name in spec.maps:
+		if _SHADER_MAPS.has(name): deepest = mini(deepest, StrataRegions.max_level(int(spec.cells), spec.maps[name]))
+	if plan.far_slots > 0 and (plan.far_level < 1 or plan.far_level > deepest): return "far level %d is outside 1..%d, the deepest level every map has" % [plan.far_level, deepest]
+	return _coarse_problem(spec, plan.coarse_level, plan.coarse_maps, deepest)
+
+## Why coarse images cannot be bound at [param level], or "". Empty images mean no coarse tier.
+func _coarse_problem(spec: Dictionary, level: int, images: Dictionary, deepest: int = -1) -> String:
+	if images.is_empty(): return ""
+	if deepest < 0:
+		deepest = 1 << 20
+		for name in spec.maps:
+			if _SHADER_MAPS.has(name): deepest = mini(deepest, StrataRegions.max_level(int(spec.cells), spec.maps[name]))
+	if level < 0 or level > deepest: return "coarse level %d is outside 0..%d" % [level, deepest]
+	for name in spec.maps:
+		if not _SHADER_MAPS.has(name): continue
+		var image := images.get(name) as Image
+		if image == null: return "the coarse maps lack %s" % name
+		var description: Dictionary = spec.maps[name]
+		if image.get_format() != int(description.format) or image.is_compressed() or image.has_mipmaps(): return "coarse %s has the wrong format" % name
+		var size := StrataRegions.coarse_map_size(spec, description, level)
+		if image.get_size() != size: return "coarse %s is %s, expected %s" % [name, str(image.get_size()), str(size)]
+	if not bool(StrataLayerData.validate_dense(images[StrataRegions.MAP_HEIGHT]).get("ok", false)): return "the coarse height map holds non-finite values"
 	return ""
 
 func _region_problem(spec: Dictionary, xy: Vector2i, data: StrataRegionData) -> String:
@@ -1565,46 +1756,113 @@ func _region_problem(spec: Dictionary, xy: Vector2i, data: StrataRegionData) -> 
 	return ""
 
 ## Creates the texture arrays and table for a region set without touching renderer state.
-func _build_region_state(spec: Dictionary, regions: Dictionary) -> Dictionary:
+func _build_region_state(spec: Dictionary, regions: Dictionary, plan: Dictionary = {}) -> Dictionary:
+	if plan.is_empty(): plan = _residency_plan(spec, {})
 	var grid := StrataRegions.grid_size(spec)
 	var table := Image.create(grid.x, grid.y, false, Image.FORMAT_RGBA8)
 	var layers := {}
+	var near_order: Array[Vector2i] = []
 	var minimum := INF; var maximum := -INF
 	for y in range(grid.y):
 		for x in range(grid.x):
 			var xy := Vector2i(x, y)
-			var layer := y * grid.x + x
-			layers[xy] = layer
 			var resident := regions.has(xy)
-			table.set_pixel(x, y, Color8(layer & 255, layer >> 8, 0, 255 if resident else 0))
+			if plan.active:
+				if resident:
+					layers[xy] = near_order.size()
+					near_order.append(xy)
+			else:
+				layers[xy] = y * grid.x + x
+				near_order.append(xy)
+			var layer: int = layers.get(xy, 0)
+			table.set_pixel(x, y, Color8(layer & 255, layer >> 8, 0 if resident else 255, (1 if plan.active else 255) if resident else 0))
 			if resident:
 				minimum = minf(minimum, (regions[xy] as StrataRegionData).height_min)
 				maximum = maxf(maximum, (regions[xy] as StrataRegionData).height_max)
 	var arrays := {}
+	var far_arrays := {}
 	for name in spec.maps:
 		if not _SHADER_MAPS.has(name): continue
 		var description: Dictionary = spec.maps[name]
 		var size := StrataRegions.map_size(spec.cells, description, 0)
+		var blank := Image.create(size.x, size.y, false, int(description.format))
 		var images: Array[Image] = []
-		for y in range(grid.y):
-			for x in range(grid.x):
-				var data: StrataRegionData = regions.get(Vector2i(x, y))
+		if plan.active:
+			for slot in range(plan.near_slots):
+				var data: StrataRegionData = regions.get(near_order[slot]) if slot < near_order.size() else null
 				var image: Image = data.get_image(name, 0) if data != null else null
-				if image == null: image = Image.create(size.x, size.y, false, int(description.format))
-				images.append(image)
+				images.append(image if image != null else blank)
+		else:
+			for xy in near_order:
+				var data: StrataRegionData = regions.get(xy)
+				var image: Image = data.get_image(name, 0) if data != null else null
+				images.append(image if image != null else blank)
 		var array := Texture2DArray.new()
 		var error := array.create_from_images(images)
 		if error != OK:
 			push_warning("Region texture array for %s could not be created (error %d); previous regions retained." % [name, error])
 			return {}
 		arrays[name] = array
-	return {"spec": spec.duplicate(true), "regions": regions.duplicate(), "layers": layers, "arrays": arrays, "table_image": table, "table_texture": ImageTexture.create_from_image(table), "minimum": minimum if is_finite(minimum) else 0.0, "maximum": maximum if is_finite(maximum) else 0.0}
+		if plan.far_slots > 0:
+			var far_size := StrataRegions.map_size(spec.cells, description, plan.far_level)
+			var far_blank := Image.create(far_size.x, far_size.y, false, int(description.format))
+			var far_images: Array[Image] = []
+			for slot in range(plan.far_slots): far_images.append(far_blank)
+			var far_array := Texture2DArray.new()
+			error = far_array.create_from_images(far_images)
+			if error != OK:
+				push_warning("Far texture array for %s could not be created (error %d); previous regions retained." % [name, error])
+				return {}
+			far_arrays[name] = far_array
+	var coarse := _build_coarse(spec, plan.coarse_level, plan.coarse_maps)
+	var near_free: Array[int] = []
+	if plan.active:
+		for slot in range(near_order.size(), plan.near_slots): near_free.append(slot)
+	var far_free: Array[int] = []
+	for slot in range(plan.far_slots): far_free.append(slot)
+	var coarse_range: Vector2 = coarse.range
+	return {"spec": spec.duplicate(true), "regions": regions.duplicate(), "layers": layers, "arrays": arrays, "far_arrays": far_arrays, "coarse": coarse, "residency": plan.duplicate(), "near_free": near_free, "far_free": far_free, "table_image": table, "table_texture": ImageTexture.create_from_image(table), "minimum": minf(minimum, coarse_range.x) if is_finite(minf(minimum, coarse_range.x)) else 0.0, "maximum": maxf(maximum, coarse_range.y) if is_finite(maxf(maximum, coarse_range.y)) else 0.0}
+
+## Coarse textures, images and per-region height extrema for validated coarse images.
+func _build_coarse(spec: Dictionary, level: int, images: Dictionary) -> Dictionary:
+	var result := {"textures": {}, "images": {}, "extrema": {}, "range": Vector2(INF, -INF)}
+	if images.is_empty(): return result
+	for name in spec.maps:
+		if not _SHADER_MAPS.has(name): continue
+		var image := (images[name] as Image).duplicate() as Image
+		result.images[name] = image
+		result.textures[name] = ImageTexture.create_from_image(image)
+	var height: Image = result.images[StrataRegions.MAP_HEIGHT]
+	var description: Dictionary = spec.maps[StrataRegions.MAP_HEIGHT]
+	var grid := StrataRegions.grid_size(spec)
+	var low := INF; var high := -INF
+	for y in range(grid.y):
+		for x in range(grid.x):
+			var placement := StrataRegions.coarse_placement(spec, Vector2i(x, y), description, level)
+			var origin: Vector2i = placement.destination
+			var side: int = (placement.source as Rect2i).size.x
+			var core := height.get_region(Rect2i(origin, Vector2i(side, side)))
+			var extrema: Dictionary = StrataLayerData.validate_dense(core)
+			if not extrema.get("ok", false): continue
+			result.extrema[Vector2i(x, y)] = Vector2(float(extrema.min), float(extrema.max))
+			low = minf(low, float(extrema.min)); high = maxf(high, float(extrema.max))
+	result.range = Vector2(low, high)
+	return result
 
 func _commit_region_state(state: Dictionary) -> void:
 	_region_spec = state.spec
 	_regions = state.regions
 	_region_layers = state.layers
 	_region_arrays = state.arrays
+	_far_arrays = state.far_arrays
+	_far_layers = {}
+	_residency = state.residency
+	_near_free = state.near_free
+	_far_free = state.far_free
+	_coarse_textures = state.coarse.textures
+	_coarse_images = state.coarse.images
+	_coarse_extrema = state.coarse.extrema
+	_coarse_range = state.coarse.range
 	_region_table_image = state.table_image
 	_region_table_texture = state.table_texture
 	_window_cache.clear()
@@ -1617,15 +1875,59 @@ func _commit_region_state(state: Dictionary) -> void:
 	_macro_texture = _region_arrays.get(StrataRegions.MAP_MACRO)
 	_bind_region_uniforms()
 	var grid := StrataRegions.grid_size(_region_spec)
-	var per_region := 0
-	for name in _region_spec.maps:
-		if _SHADER_MAPS.has(name): per_region += StrataRegions.map_bytes(_region_spec.cells, _region_spec.maps[name], 0)
 	_stats.regions = _regions.size()
 	_stats.region_grid = grid
 	_stats.region_cells = int(_region_spec.cells)
-	_stats.region_bytes = per_region
+	_stats.region_bytes = _tier_bytes(0)
 	_stats.height_resolution = _map_resolution(StrataRegions.MAP_HEIGHT)
 	_stats.control_resolution = _map_resolution(StrataRegions.MAP_MATERIAL_IDS)
+	_update_residency_stats()
+
+## Bytes of one region's shader maps at a level.
+func _tier_bytes(level: int) -> int:
+	var total := 0
+	for name in _region_spec.maps:
+		if _SHADER_MAPS.has(name): total += StrataRegions.map_bytes(_region_spec.cells, _region_spec.maps[name], level)
+	return total
+
+func _update_residency_stats() -> void:
+	var far_slots := int(_residency.get("far_slots", 0))
+	var coarse_bytes := 0
+	for image: Image in _coarse_images.values(): coarse_bytes += image.get_data_size()
+	_stats.regions = _regions.size()
+	_stats.near_resident = _regions.size() - _far_layers.size()
+	_stats.far_resident = _far_layers.size()
+	_stats.near_slots = int(_residency.get("near_slots", 0))
+	_stats.far_slots = far_slots
+	_stats.gpu_bytes_near = int(_residency.get("near_slots", 0)) * _tier_bytes(0)
+	_stats.gpu_bytes_far = far_slots * _tier_bytes(int(_residency.far_level)) if far_slots > 0 else 0
+	_stats.gpu_bytes_coarse = coarse_bytes
+
+## Replaces the coarse maps: [param images] maps each shader map of the spec to a terrain-wide
+## Image sized StrataRegions.coarse_map_size(spec, description, [param coarse_level]) in the
+## map's format (an empty Dictionary removes the coarse tier). Regions without a tier render
+## from them. Height extrema of coarse-only regions come from the coarse height map and are
+## computed here once. False, with nothing changed, if any image is missing, mis-sized or in
+## the wrong format.
+func set_coarse_maps(coarse_level: int, images: Dictionary) -> bool:
+	if _region_spec.is_empty(): return false
+	var problem := _coarse_problem(_region_spec, coarse_level, images)
+	if not problem.is_empty():
+		push_warning("Coarse maps rejected, previous maps retained: " + problem)
+		return false
+	var coarse := _build_coarse(_region_spec, coarse_level, images)
+	var was_active := _refinement_zone_active()
+	_coarse_textures = coarse.textures
+	_coarse_images = coarse.images
+	_coarse_extrema = coarse.extrema
+	_coarse_range = coarse.range
+	_residency.coarse_level = coarse_level
+	_bind_region_uniforms()
+	_refresh_height_extrema()
+	if was_active != _refinement_zone_active(): _invalidate_geometry_lod()
+	for instance: MeshInstance3D in _patches.values(): _update_patch_bounds(instance)
+	_update_residency_stats()
+	return true
 
 ## Samples per axis the regions imply for a sample map (the lattice over the terrain bounds).
 func _map_resolution(map: String) -> Vector2i:
@@ -1663,9 +1965,17 @@ func _bind_region_uniforms() -> void:
 		var prefix: String = _SAMPLER_UNIFORMS[name]
 		var array: Texture2DArray = _region_arrays.get(name)
 		material.set_shader_parameter(prefix + "_regions", array if array != null else _array_placeholder(name))
+		var far_array: Texture2DArray = _far_arrays.get(name)
+		material.set_shader_parameter(prefix + "_far_regions", far_array if far_array != null else _array_placeholder(name))
+		var coarse_texture: Texture2D = _coarse_textures.get(name)
+		material.set_shader_parameter("coarse_" + prefix, coarse_texture if coarse_texture != null else _coarse_placeholder(name))
 		if name in layouts and spec.get("maps", {}).has(name):
 			material.set_shader_parameter(prefix + "_scale", int(spec.maps[name].get("scale", 1)))
 			material.set_shader_parameter(prefix + "_apron", int(spec.maps[name].get("apron", spec.apron)))
+	material.set_shader_parameter("far_level", int(_residency.get("far_level", 1)))
+	material.set_shader_parameter("coarse_level", int(_residency.get("coarse_level", 0)))
+	material.set_shader_parameter("has_far_tier", not _far_arrays.is_empty())
+	material.set_shader_parameter("has_coarse_maps", not _coarse_textures.is_empty())
 	_bind_region_flags()
 
 ## Which optional maps the shader reads. The adapters clear a flag without dropping the map.
@@ -1683,6 +1993,11 @@ static func _array_placeholder(map: String) -> Texture2DArray:
 		array.create_from_images([image] as Array[Image])
 		_placeholder_arrays[map] = array
 	return _placeholder_arrays[map]
+
+static func _coarse_placeholder(map: String) -> ImageTexture:
+	if not _placeholder_coarse.has(map):
+		_placeholder_coarse[map] = ImageTexture.create_from_image(Image.create(1, 1, false, int((_SHADER_MAPS[map] as Array)[0][0])))
+	return _placeholder_coarse[map]
 
 static func _table_placeholder() -> ImageTexture:
 	if _placeholder_table == null: _placeholder_table = ImageTexture.create_from_image(Image.create(1, 1, false, Image.FORMAT_RGBA8))
@@ -1708,10 +2023,24 @@ func _region_window(map: String, xy: Vector2i) -> Dictionary:
 	if not _window_cache.has(key): _window_cache[key] = StrataRegions.map_window(_region_spec, xy, _region_spec.maps[map], 0)
 	return _window_cache[key]
 
+## Height of a fine lattice point for a region without data: the bilinear sample of the coarse
+## height image (0 without coarse maps), the same surface the GPU draws.
+func _coarse_lattice_height(index: Vector2i) -> float:
+	var image: Image = _coarse_images.get(StrataRegions.MAP_HEIGHT)
+	if image == null: return 0.0
+	var texel := Vector2(index) / float(1 << int(_residency.coarse_level))
+	var last := image.get_size() - Vector2i.ONE
+	var base := Vector2i(texel.floor()).clamp(Vector2i.ZERO, last)
+	var f := (texel - Vector2(base)).clamp(Vector2.ZERO, Vector2.ONE)
+	var next := (base + Vector2i.ONE).min(last)
+	var top := lerpf(image.get_pixel(base.x, base.y).r, image.get_pixel(next.x, base.y).r, f.x)
+	var bottom := lerpf(image.get_pixel(base.x, next.y).r, image.get_pixel(next.x, next.y).r, f.x)
+	return lerpf(top, bottom, f.y)
+
 func _lattice_height(index: Vector2i) -> float:
 	var located := _lattice_texel(StrataRegions.MAP_HEIGHT, index)
 	var bytes := _texel_bytes(StrataRegions.MAP_HEIGHT, located[0])
-	if bytes.is_empty(): return 0.0
+	if bytes.is_empty(): return _coarse_lattice_height(index)
 	var size: Vector2i = _region_window(StrataRegions.MAP_HEIGHT, located[0]).size
 	var texel: Vector2i = located[1]
 	return bytes.decode_float((texel.y * size.x + texel.x) * 4)
@@ -1926,6 +2255,9 @@ static func _slice_clamped(source: Image, first: Vector2i, size: Vector2i) -> Im
 ## rebuilt and swapped in one step. False, with nothing changed, if it cannot be built.
 func _sync_regions(changed: Array) -> bool:
 	if _height_image == null or _shader_material == null: return true
+	if bool(_residency.get("active", false)):
+		push_warning("The whole-image adapters are not available with region residency; use set_region_level.")
+		return false
 	var plan := _adapter_plan()
 	if plan.is_empty(): return false
 	var spec: Dictionary = plan.spec
@@ -2018,7 +2350,7 @@ func _blit_lattice_patch(map: String, patch: Image, origin: Vector2i) -> bool:
 	var step := StrataRegions.texel_step(_region_spec, description, 0)
 	var area := Rect2(_render_bounds.position + Vector2(start) * step, Vector2(extended.get_size()) * step)
 	for xy in StrataRegions.regions_touching(_region_spec, area, description):
-		if not _regions.has(xy): continue
+		if not _regions.has(xy) or _far_layers.has(xy): continue
 		var window := StrataRegions.map_window(_region_spec, xy, description, 0)
 		var destination := start - Vector2i(window.first)
 		var clipped := Rect2i(destination, extended.get_size()).intersection(Rect2i(Vector2i.ZERO, window.size))

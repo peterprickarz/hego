@@ -33,6 +33,9 @@ var _full_compiled: Dictionary = {}
 ## The manifest the renderer was configured from, and the regions it holds as private copies
 ## (stage views and brush dabs edit copies, never the baked regions).
 var _bound_data: StrataRuntimeData
+## Residency policy of the runtime renderer: near and far regions follow the camera, everything
+## else is drawn from the manifest's coarse maps.
+var streamer: StrataRegionStreamer
 var _private_regions: Dictionary = {}
 var _contract: Dictionary = {}
 var _tint_contract: Dictionary = {}
@@ -451,8 +454,9 @@ func _remember_hands() -> void:
 
 ## Bakes the complete stack into region data (heights, holes, macro tint, material ids and
 ## weights composed from the stack at [member StrataTerrain3D.region_spacing]) and, when a
-## renderer exists, builds it from that manifest with configure_runtime. A bake loaded from
-## storage that is still current is reused rather than rebuilt.
+## renderer exists, streams it from that manifest (StrataRegionStreamer: coarse maps first, then
+## the regions around the camera). A bake loaded from storage that is still current is reused
+## rather than rebuilt.
 func _bake_runtime() -> bool:
 	var spacing := terrain.region_spacing
 	if terrain.runtime_data == null or terrain.is_runtime_bake_stale():
@@ -466,14 +470,18 @@ func _bake_runtime() -> bool:
 	return true
 
 
-## Builds the renderer from the terrain's manifest, or restores it from a stage view.
+## Starts streaming the renderer from the terrain's manifest, or restores it from a stage view.
+## Private copies exist only for regions the renderer holds near; restoring skips the others.
 func _bind_renderer() -> bool:
 	if _bound_data == terrain.runtime_data and renderer.region_spec().size() > 0:
 		for xy in _private_regions: renderer.update_region(xy, terrain.runtime_data.get_region(xy))
 		_private_regions = {}
 		return true
-	if not renderer.configure_runtime(terrain, terrain.runtime_data, _materials):
-		push_error("The renderer rejected the baked island regions")
+	if streamer == null:
+		streamer = StrataRegionStreamer.new(); streamer.name = "IslandStreamer"; add_child(streamer)
+	streamer.renderer = renderer; streamer.data = terrain.runtime_data; streamer.camera = camera
+	if not streamer.start(terrain, _materials):
+		push_error("The renderer rejected the baked island manifest")
 		return false
 	_bound_data = terrain.runtime_data
 	_private_regions = {}
@@ -511,8 +519,11 @@ func _install_runtime() -> bool:
 
 
 ## A private copy of a renderer region, installed in place of the baked one, so a stage view
-## or a brush dab never edits the manifest's regions.
+## or a brush dab never edits the manifest's regions. Null when the renderer does not hold the
+## region near (far and coarse regions are not editable; the streamer rebinds baked data when a
+## region leaves and returns).
 func _private_region(xy: Vector2i) -> StrataRegionData:
+	if renderer.region_level(xy) != 0: return null
 	if _private_regions.has(xy): return renderer.get_region(xy)
 	var copy: StrataRegionData = terrain.runtime_data.get_region(xy).duplicate()
 	copy.maps = terrain.runtime_data.get_region(xy).maps.duplicate(true)
@@ -532,7 +543,7 @@ func _show_stage(through: StrataLayer) -> bool:
 	for y in range(grid.y):
 		for x in range(grid.x):
 			var xy := Vector2i(x, y)
-			if _private_region(xy) == null: return false
+			if _private_region(xy) == null: continue
 			for map in [StrataRegions.MAP_HEIGHT, StrataRegions.MAP_HOLES]:
 				if not spec.maps.has(map): continue
 				var window := StrataRegions.map_window(spec, xy, spec.maps[map])
@@ -554,7 +565,7 @@ func _patch_regions(patch: Dictionary) -> bool:
 	var first := Vector2i(((bounds.position - spec.bounds.position) / spacing).round())
 	var description: Dictionary = spec.maps[StrataRegions.MAP_HEIGHT]
 	for xy in StrataRegions.regions_touching(spec, bounds, description):
-		if _private_region(xy) == null: return false
+		if _private_region(xy) == null: continue
 		# Region texel (u, v) is terrain sample (xy * cells + (u, v) - apron).
 		var offset: Vector2i = xy * int(spec.cells) - Vector2i.ONE * int(description.apron)
 		var size := StrataRegions.map_size(int(spec.cells), description)

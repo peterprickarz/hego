@@ -33,6 +33,7 @@ The bake is a grid of regions (see [Strata regions plan](strata_regions_plan.md)
 | `height_min`, `height_max`, `region_extrema` | extrema over the terrain's own samples, global and per region (`[min, max]` pairs, row-major over the grid) |
 | `regions` | embedded `Vector2i -> StrataRegionData`, the whole grid or empty |
 | `region_directory` | when no regions are embedded: the folder of `region_<i>_<j>.res` files |
+| `coarse_level`, `coarse_maps` | Phase B horizon tier: `coarse_maps[name]` is the terrain-wide image of map `name` at mip level `coarse_level`, no apron, in the map's own format, as a `PackedByteArray` of `StrataRegions.coarse_map_size(spec, description, coarse_level)` texels (see *Coarse maps*). Optional: format 2 data without them stays valid |
 
 Standard maps: `height` (RF, sample), `material_ids` and `material_weights` (RGBA8, sample, only when the terrain defines `editor_material_channels`), `holes` and `nav_exclusion` (L8, cell, only when the bake asked for cell masks), `macro` (RGBAH, sample, scale 4 apron 1 by default, only when macro channels are owned or requested), `<channel>` and `<channel>__coverage` for retained channels (RF; `rh` or `l8` quantize 0..1), and `nav_<profile>` (L8, cell, 255 = blocked) per navigation profile. Holes are never repeated in the profile maps.
 
@@ -64,13 +65,54 @@ Terrain-local XZ everywhere. `Status` is `OK`, `OUTSIDE`, `ABSENT`, `NOT_RESIDEN
 | `get_height_at(index: Vector2i) -> float` | One sample by terrain lattice index. |
 | `has_nav_profile`, `get_nav_profile_names`, `get_nav_profile_rule`, `get_nav_profile_mask`, `get_nav_profile_image` | as before; masks are assembled over `get_cell_resolution()`. |
 | `has_macro()`, `sample_macro(position)`, `get_macro_image()`, `get_macro_bounds()`, `get_macro_binding()` | `sample_macro` reads the owning region (bilinear inside its apron); the image forms assemble the macro lattice and fail above 4097 per side. |
-| `get_manifest() -> Dictionary` | byte counts (`region_bytes`, `total_bytes`, per-map `map_bytes`), grid, channels, profiles; `payload_bytes()` is the planned total. |
+| `get_manifest() -> Dictionary` | byte counts (`region_bytes`, `total_bytes`, per-map `map_bytes`), grid, channels, profiles, `coarse_level`, `coarse_bytes` and per-map `coarse_maps` `{size, bytes}`; `payload_bytes()` is the planned region total plus the coarse maps. |
 
 Renderer adapters keep working by assembling whole images from the regions: `create_height_image()`, `to_compiled_field()` (same shape as `StrataProcedural.compile_heightfield()`), `get_hole_image()`, `get_nav_exclusion_image()`. They return null or `{ok: false, message}` when a side exceeds 4097 samples or a region is unavailable.
 
 `StrataCollision` and `StrataNavigation` read only these windows (`heights_window`, and `cell_mask_window` for `holes` and the profile's `nav_profile_map`), so chunk and tile sizes need not divide the region size. `holes` is the one remaining **transitional** whole-lattice property (assembled once and cached; only `runtime_data_test` reads it); do not use it in new code. The whole-lattice `heights` property is gone.
 
-`StrataRenderer.configure_runtime(source, data, materials)` builds the region set from the manifest and configures through `configure_regions()`: the spec (bounds, spacing, cells, apron) with the maps the shader reads (`height`, `material_ids`, `material_weights`, `holes`, `macro`), and `set_regions()` with every region of the grid. Material ids are validated against the pool size; a missing region or invalid ids make it return false with the previous renderer state kept.
+`StrataRenderer.configure_runtime(source, data, materials)` without a residency builds the region set from the manifest and configures through `configure_regions()`: the spec (bounds, spacing, cells, apron) with the maps the shader reads (`height`, `material_ids`, `material_weights`, `holes`, `macro`), and `set_regions()` with every region of the grid. Material ids are validated against the pool size; a missing region or invalid ids make it return false with the previous renderer state kept.
+
+### Coarse maps
+
+The bake stitches one terrain-wide image per map of the spec (nav profile maps and retained channels included, not only the maps the shader reads) from the regions' level-`coarse_level` cores with `StrataRegions.coarse_placement()` (`StrataBake.stitch_coarse()`). Regions are placed in row-major order, so the sample row or column a region shares with its east and south neighbours comes from the region that owns it, and the last row and column of the terrain from the last regions; every coarse texel therefore equals the matching texel of its owning region byte for byte (`region_coarse_test`). `coarse_level` is `StrataRegions.coarse_level(spec, coarse_max_side)`: the smallest level whose coarse height map has at most `coarse_max_side` (default 1024) cells per axis. The island (4 km at 1 m) gets level 2 (1025 x 1025 height, about 13 MB for all maps).
+
+`coarse_image(name) -> Image` returns a copy (null when absent or malformed), `has_coarse_maps()` and `coarse_bytes()` summarise them. `validate()` checks every entry against the spec (map exists, `PackedByteArray`, exact size for its format, `coarse_level < mip_levels`). A manifest that holds coarse maps but no regions validates; `is_resident()` stays false for it, because it only describes a region source (embedded regions or a directory). The renderer's residency path (`configure_runtime(..., residency)`) binds only the coarse maps and never calls `get_region()`; the eager path, collision and navigation still need regions. `duplicate_runtime()`, `export_runtime()` and `save_runtime_scene()` carry the maps, so an exported scene streams.
+
+The bake raises `mip_levels` to `max(options.mip_levels, far_level + 1, coarse_level + 1)` (`far_level` option, default 2; `coarse_max_side` option), so a default bake always carries levels 0..2. The report lists `coarse_level` and `coarse_sizes`.
+
+### Region loading
+
+External regions (`region_directory`, no embedded regions) are read through `StrataRuntimeData`, which owns the cache:
+
+| Method | Behaviour |
+| --- | --- |
+| `get_region(xy)` | synchronous: embedded, cached, or loaded now (a pending threaded load is completed with `load_threaded_get`); validated against the manifest, failures reported once and remembered |
+| `request_region(xy) -> bool` | starts `ResourceLoader.load_threaded_request(path, "", false, CACHE_MODE_IGNORE)`; false (nothing started) when the region is embedded, cached, pending, known missing, outside the grid or has no file (reported once). The type hint is empty because the loaders do not resolve script class names as hints |
+| `poll_regions() -> Array[Vector2i]` | never blocks: moves finished loads through the same validation as `get_region` into the cache and returns the newly cached indices; a failed or malformed load is reported once and marked missing |
+| `is_region_pending(xy)`, `pending_count()`, `is_region_missing(xy)`, `has_cached_region(xy)` | state queries; `has_cached_region` is true when `get_region` would not touch the disk (embedded or cached) |
+| `evict_region(xy) -> bool` | drops a cached external region; embedded regions stay |
+| `cached_region_keys()`, `cache_bytes()` | the cache (embedded regions excluded) and the bytes of its maps |
+| `clear_region_cache()` | forgets cached regions and failures |
+
+Collision and navigation keep reading windows through `get_region()`, so they share the cache with the streamer: the regions around the camera are loaded once. A far region loads its whole file in Phase B (all levels); per-level files are Phase C.
+
+### Region streamer
+
+`StrataRegionStreamer` (Node, `strata_region_streamer.gd`) is the residency policy. Set `renderer` (a `StrataRenderer`, or any node with the same four methods), `data` and `camera`, call `start(source, materials)` and let it run: `_process` updates when the camera moved `camera_step` (default a quarter region), or while loads and binds are outstanding. `update(camera_local_xz)` is the public step used by tests; `stats()` returns `{near, far, pending, cached, near_slots, far_slots, loads, evictions}`; `stop()` releases every region (the renderer keeps its coarse tier).
+
+| Property | Default | Meaning |
+| --- | --- | --- |
+| `near_radius`, `far_radius` | 0 = 2.5 and 8 region extents | metres from the camera to the closest point of the region rectangle |
+| `near_slots`, `far_slots` | 25, 256 | layers per tier; the nearest regions win when more qualify |
+| `far_level` | 2 | needs `data.mip_levels > far_level`; otherwise there is no far tier (`far_slots` 0 is passed to the renderer) |
+| `loads_per_frame` | 2 | new threaded requests per update; in flight is capped at four times that |
+| `hysteresis` | 1.25 | a bound region stays until it is this factor beyond its tier radius (still subject to the slot cap) |
+| `camera_step` | 0 = extent / 4 | camera movement that triggers an update when nothing is outstanding |
+
+Each update: poll finished loads; compute every region's tier (near if within `near_radius`, else far if within `far_radius`), cap each tier by taking the nearest; release regions that left both tiers (`renderer.release_region`) and evict them from the data cache; demote near regions that became far before anything is promoted (their near slots free first); bind cached regions with `renderer.set_region_level(xy, region, level)`; request uncached ones nearest first. Data reaches the renderer only through `poll_regions()` or from the embedded set, and `_process` never loads synchronously. A region that is neither bound nor wanted is evicted, so the cache holds about the bound regions plus loads in flight. Renderer API used: `configure_runtime(source, data, materials, {near_slots, far_slots, far_level})`, `set_region_level`, `release_region`, `free_slots`.
+
+Budgets with the defaults (island): 25 near regions x 0.9 MB, 231 far regions x 56 KB, 13 MB coarse maps. `region_streamer_test` covers the policy against a recording stand-in renderer (tiers, caps, nearest first, hysteresis, eviction, `loads_per_frame`, poll-only arrival), `runtime_loading_test` the loading API and coarse validation.
 
 ### Canonical surface
 
@@ -96,7 +138,8 @@ CPU queries, collision and navigation source triangles all use this split. The n
 var result := StrataBake.bake(terrain, {
     "spacing": 1.0,                       # bounds must divide exactly
     "region_cells": 256, "region_apron": 2,
-    "mip_levels": 3,                      # levels per map, level 0 included
+    "mip_levels": 3,                      # levels per map, level 0 included; raised to far_level + 1 and coarse_level + 1
+    "far_level": 2, "coarse_max_side": 1024,   # streamer far tier, coarse map size
     "cell_masks": true,                   # from layered hole/nav_exclusion channels
     # or explicit: "holes": hole_image, "nav_exclusions": exclusion_image,
     #   (w-1)x(h-1) L8/R8 (>=128) or RF (>=0.5)
@@ -128,7 +171,7 @@ What the bake rejects:
 - Malformed masks.
 - Payloads above `max_runtime_bytes` (default and maximum 512 MiB). The budget is the planned bytes of all regions, all maps and all mips (`region_bytes * regions`), checked before any region is composed. This retained payload budget does not limit process peak memory during atomic compilation/export.
 
-The report lists `regions`, `grid`, `hole_cells`, `nav_excluded_cells`, per-profile `blocked_cells` and `terms`, the macro report, `deprecated`, the manifest and `cpu_ms`.
+The report lists `regions`, `grid`, `mip_levels`, `coarse_level`, `coarse_sizes`, `hole_cells`, `nav_excluded_cells`, per-profile `blocked_cells` and `terms`, the macro report, `deprecated`, the manifest and `cpu_ms`.
 
 ### Stale tracking
 

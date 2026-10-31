@@ -17,9 +17,11 @@ func _ready() -> void:
 	var materials := HEGoIslandMaterialRegistry.pool()
 	if materials.is_empty() or materials.size() != HEGoIslandMaterialRegistry.count(): push_error("Runtime needs every registered material resource"); get_tree().quit(2); return
 	var renderer := StrataRenderer.new(); renderer.name = "IslandRenderer"; add_child(renderer)
-	if not renderer.configure_runtime(self, data, materials): return
 	var camera := Camera3D.new(); camera.name = "Camera"; camera.set_script(load("res://island/island_camera.gd")); camera.far = 22000.0; add_child(camera)
 	camera.set("renderer", renderer)
+	# Coarse maps first, then the regions around the camera (the streamer owns residency).
+	var streamer := StrataRegionStreamer.new(); streamer.name = "Streamer"; streamer.renderer = renderer; streamer.data = data; streamer.camera = camera; add_child(streamer)
+	if not streamer.start(self, materials): push_error("The renderer rejected the runtime manifest"); return
 	camera.call("teleport_to", to_global(Vector3(-3000.0, 2000.0, 3300.0)), to_global(Vector3(-700.0, 80.0, -250.0))); camera.current = true; renderer.set_camera(camera)
 	var environment := Environment.new(); environment.background_mode = Environment.BG_SKY
 	var sky := Sky.new(); var sky_material := ProceduralSkyMaterial.new(); sky_material.sky_top_color = Color(0.18, 0.35, 0.49); sky_material.sky_horizon_color = Color(0.7, 0.78, 0.78); sky_material.ground_bottom_color = Color(0.14, 0.23, 0.24); sky_material.ground_horizon_color = Color(0.7, 0.75, 0.73); sky.sky_material = sky_material; environment.sky = sky

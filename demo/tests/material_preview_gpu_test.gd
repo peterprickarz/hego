@@ -72,7 +72,7 @@ func settle(bridge: StrataEditorPreview) -> void:
 	await draw()
 ## Material weights of lattice sample (0, 0): texel (apron, apron) of region (0, 0).
 func lattice_weights(bridge: StrataEditorPreview) -> Color:
-	var region := bridge.renderer.get_region(Vector2i.ZERO)
+	var region: StrataRegionData = bridge.renderer.get_region(Vector2i.ZERO)
 	return region.get_image("material_weights").get_pixel(region.apron, region.apron)
 
 func test_editor_bridge(material: StrataMaterial, saved_ids: Image, saved_weights: Image) -> void:

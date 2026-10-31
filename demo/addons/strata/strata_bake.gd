@@ -27,7 +27,12 @@ static func _error(message: String) -> Dictionary:
 ## Options:
 ##   spacing (the terrain's region_spacing): runtime lattice spacing; bounds must divide exactly.
 ##   region_cells (the terrain's region_cells, 0 = automatic), region_apron (2): the region grid; region_cells is a power of two.
-##   mip_levels (3): levels per map including level 0 (capped per map by its size).
+##   mip_levels (3): levels per map including level 0 (capped per map by its size). Raised to
+##     max(mip_levels, far_level + 1, coarse_level + 1) so the streamer's far tier and the coarse
+##     maps exist.
+##   far_level (2): the streamer's far tier level; only raises mip_levels.
+##   coarse_max_side (StrataRegions.COARSE_MAX_SIDE, 1024): longest side in cells of the coarse
+##     height map; picks coarse_level. Every map of the spec is stitched into data.coarse_maps.
 ##   cell_masks: true, a compile options Dictionary, or a precompiled
 ##     StrataProcedural.compile_cell_masks() result. Holes and navigation
 ##     exclusions then come from the layers' categorical hole/nav_exclusion
@@ -85,6 +90,10 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	var region_apron := int(options.get("region_apron", StrataRegions.DEFAULT_APRON))
 	var mip_levels := int(options.get("mip_levels", 3))
 	if mip_levels < 1 or mip_levels > 16: return _error("mip_levels must be 1..16")
+	var far_level := int(options.get("far_level", 2))
+	if far_level < 0 or far_level > 15: return _error("far_level must be 0..15")
+	var coarse_max_side := int(options.get("coarse_max_side", StrataRegions.COARSE_MAX_SIDE))
+	if coarse_max_side < 1: return _error("coarse_max_side must be positive")
 	var requested_channels := PackedStringArray()
 	for name in PackedStringArray(options.get("channels", [])):
 		if name == "height" or name.strip_edges().is_empty() or name.ends_with(StrataProcedural.OWNERSHIP_SUFFIX) or name.ends_with(StrataRegions.COVERAGE_SUFFIX) or name.begins_with(StrataRegions.NAV_PROFILE_PREFIX) or StrataRegions.standard_spec(bounds, spacing).maps.has(name):
@@ -102,6 +111,9 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	if not spec.ok: return spec
 	var region_spec: Dictionary = spec.spec
 	var grid := StrataRegions.grid_size(region_spec)
+	var coarse_level := StrataRegions.coarse_level(region_spec, coarse_max_side)
+	mip_levels = maxi(mip_levels, maxi(far_level, coarse_level) + 1)
+	if mip_levels > 16: return _error("The far and coarse levels need %d mip levels (at most 16)" % mip_levels)
 	var planned_bytes := StrataRegions.region_bytes(region_spec, mip_levels) * grid.x * grid.y
 	if planned_bytes > payload_limit: return _error("Requested runtime regions (%d bytes for %d regions) exceed the aggregate payload budget" % [planned_bytes, grid.x * grid.y])
 	var stale: PackedStringArray = []
@@ -159,23 +171,35 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	var compose_options := {"channels": requested_channels, "nav_profiles": profiles, "sources": sources, "mask_options": mask_options}
 	var global_min := INF
 	var global_max := -INF
+	# Every region composes concurrently on the worker pool (nothing edits the layers while a
+	# bake runs; the stack signature is checked again below), then the mips build the same way.
+	var order: Array[Vector2i] = []
 	for y in range(grid.y):
-		for x in range(grid.x):
-			var composed := StrataRegions.compose_region(terrain, null, Vector2i(x, y), region_spec, compose_options)
-			if not composed.ok: return _error("Region %d,%d: %s" % [x, y, composed.message])
-			var region: StrataRegionData = composed.region
-			if mip_levels > 1: StrataRegions.build_mips(region, mip_levels)
-			embedded[Vector2i(x, y)] = region
-			extrema.append(region.height_min)
-			extrema.append(region.height_max)
-			global_min = minf(global_min, region.height_min)
-			global_max = maxf(global_max, region.height_max)
-			for entry in profiles:
-				var map := StrataRegions.nav_map_name(StringName(entry.name))
-				var blocked := NavProfiles._interior_count(region.level_bytes(map), region)
-				if not nav_report.has(entry.name): nav_report[entry.name] = {"blocked_cells": 0, "terms": NavProfiles.validate(entry.rule, requested_channels).terms}
-				nav_report[entry.name].blocked_cells += blocked
+		for x in range(grid.x): order.append(Vector2i(x, y))
+	var composed := StrataRegions.compose_regions(terrain, null, region_spec, order, compose_options)
+	if not composed.ok: return _error(String(composed.message))
+	embedded = composed.regions
+	if mip_levels > 1:
+		var mip_task := func(index: int) -> void: StrataRegions.build_mips(embedded[order[index]], mip_levels)
+		if OS.has_feature("threads") and order.size() > 1:
+			var group := WorkerThreadPool.add_group_task(mip_task, order.size(), -1, true, "StrataBake mips")
+			WorkerThreadPool.wait_for_group_task_completion(group)
+		else:
+			for index in range(order.size()): mip_task.call(index)
+	for xy in order:
+		var region: StrataRegionData = embedded[xy]
+		extrema.append(region.height_min)
+		extrema.append(region.height_max)
+		global_min = minf(global_min, region.height_min)
+		global_max = maxf(global_max, region.height_max)
+		for entry in profiles:
+			var map := StrataRegions.nav_map_name(StringName(entry.name))
+			var blocked := NavProfiles._interior_count(region.level_bytes(map), region)
+			if not nav_report.has(entry.name): nav_report[entry.name] = {"blocked_cells": 0, "terms": NavProfiles.validate(entry.rule, requested_channels).terms}
+			nav_report[entry.name].blocked_cells += blocked
 	data.regions = embedded
+	data.coarse_level = coarse_level
+	data.coarse_maps = stitch_coarse(region_spec, embedded, coarse_level)
 	data.region_extrema = extrema
 	data.height_min = global_min
 	data.height_max = global_max
@@ -195,8 +219,30 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	for key in ["material_ids", "material_weights"]:
 		if options.has(key): deprecated.append("%s is ignored: material maps are composed from the stack's editor_material_channels" % key)
 	var cell_size := data.get_cell_resolution()
-	var report := {"resolution": resolution, "spacing": spacing, "regions": grid.x * grid.y, "grid": grid, "cells": region_cells, "mip_levels": mip_levels, "stale_procedural_used": stale, "mask_source": "layers" if not masks.is_empty() else ("explicit" if sources.has("holes") else "none"), "mask_report": masks.get("report", {}), "hole_cells": data.cell_mask_window(StrataRegions.MAP_HOLES, Rect2i(Vector2i.ZERO, cell_size)).count(StrataRuntimeData.MASK_SET), "nav_excluded_cells": data.cell_mask_window(StrataRegions.MAP_NAV_EXCLUSION, Rect2i(Vector2i.ZERO, cell_size)).count(StrataRuntimeData.MASK_SET), "nav_profiles": nav_report, "macro": spec.macro_report, "deprecated": deprecated, "manifest": data.get_manifest(), "cpu_ms": (Time.get_ticks_usec() - started) / 1000.0}
+	var coarse_sizes := {}
+	for name in data.coarse_maps: coarse_sizes[name] = StrataRegions.coarse_map_size(region_spec, data.description(name), coarse_level)
+	var report := {"resolution": resolution, "spacing": spacing, "regions": grid.x * grid.y, "grid": grid, "cells": region_cells, "mip_levels": mip_levels, "coarse_level": coarse_level, "coarse_sizes": coarse_sizes, "stale_procedural_used": stale, "mask_source": "layers" if not masks.is_empty() else ("explicit" if sources.has("holes") else "none"), "mask_report": masks.get("report", {}), "hole_cells": data.cell_mask_window(StrataRegions.MAP_HOLES, Rect2i(Vector2i.ZERO, cell_size)).count(StrataRuntimeData.MASK_SET), "nav_excluded_cells": data.cell_mask_window(StrataRegions.MAP_NAV_EXCLUSION, Rect2i(Vector2i.ZERO, cell_size)).count(StrataRuntimeData.MASK_SET), "nav_profiles": nav_report, "macro": spec.macro_report, "deprecated": deprecated, "manifest": data.get_manifest(), "cpu_ms": (Time.get_ticks_usec() - started) / 1000.0}
 	return {"ok": true, "data": data, "signature": signature, "report": report}
+
+## One terrain-wide image per map of [param spec] at [param level], stitched from the regions'
+## level cores (StrataRegions.coarse_placement). Regions are placed in row-major order, so the
+## sample a region shares with its east and south neighbours ends up with the region that owns
+## it; the last column and row come from the last regions. Returns name -> PackedByteArray.
+static func stitch_coarse(spec: Dictionary, regions: Dictionary, level: int) -> Dictionary:
+	var grid := StrataRegions.grid_size(spec)
+	var result := {}
+	for name in spec.maps:
+		var description: Dictionary = spec.maps[name]
+		var size := StrataRegions.coarse_map_size(spec, description, level)
+		var image := Image.create_empty(size.x, size.y, false, int(description.format))
+		for y in range(grid.y):
+			for x in range(grid.x):
+				var xy := Vector2i(x, y)
+				var placed := StrataRegions.coarse_placement(spec, xy, description, level)
+				var source: Image = (regions[xy] as StrataRegionData).get_image(name, level)
+				image.blit_rect(source, placed.source, placed.destination)
+		result[name] = image.get_data()
+	return result
 
 ## The region spec of a bake: height, material maps when the terrain maps materials, cell masks
 ## when requested, the macro map, retained channels with coverage, and one nav_<profile> map

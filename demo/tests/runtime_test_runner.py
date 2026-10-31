@@ -26,7 +26,7 @@ TESTS = Path(__file__).resolve().parent
 STAGING = ROOT / "build" / "test-staging"
 TMPFS = (Path("/tmp"), Path("/dev/shm"), Path("/run"))
 RUNTIME_SCRIPTS = ("strata_regions.gd", "strata_region_data.gd", "strata_runtime_data.gd", "strata_nav_profiles.gd", "strata_collision.gd", "strata_navigation.gd", "strata_render_settings.gd")
-SUITES = ("runtime_data_test.gd", "runtime_collision_test.gd", "runtime_navigation_test.gd", "runtime_bake_test.gd", "runtime_macro_test.gd", "region_compose_test.gd")
+SUITES = ("runtime_data_test.gd", "runtime_collision_test.gd", "runtime_navigation_test.gd", "runtime_bake_test.gd", "runtime_macro_test.gd", "region_compose_test.gd", "runtime_loading_test.gd", "region_coarse_test.gd")
 RUNTIME_ONLY_SUITES = ("runtime_roundtrip_test.gd", "runtime_macro_roundtrip_test.gd")
 PROJECT = """config_version=5
 
@@ -121,7 +121,7 @@ def main() -> int:
     runtime_only = work / "runtime_only"
     stage_project(authoring, "HEGo runtime authoring tests")
     shutil.copytree(ADDON, authoring / "addons" / "strata")
-    for script in list(TESTS.glob("runtime_*.gd")) + [TESTS / "region_compose_test.gd"]:
+    for script in list(TESTS.glob("runtime_*.gd")) + [TESTS / "region_compose_test.gd", TESTS / "region_coarse_test.gd"]:
         shutil.copy2(script, authoring / "tests" / script.name)
     (authoring / "export").mkdir()
     seed_extension_list(authoring)

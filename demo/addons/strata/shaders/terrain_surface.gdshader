@@ -40,6 +40,22 @@ uniform sampler2DArray macro_regions : filter_linear, repeat_disable;
 uniform int macro_scale = 4;
 uniform int macro_apron = 1;
 uniform bool has_terrain_macro_map = false;
+// Residency tiers (Phase B): far arrays hold the regions bound at far_level, coarse_<map> are
+// terrain-wide images at coarse_level that draw every region without a tier.
+uniform int far_level = 1;
+uniform int coarse_level = 0;
+uniform bool has_far_tier = false;
+uniform bool has_coarse_maps = false;
+uniform sampler2DArray height_far_regions : filter_linear, repeat_disable;
+uniform sampler2DArray material_ids_far_regions : filter_nearest, repeat_disable;
+uniform sampler2DArray material_weights_far_regions : filter_nearest, repeat_disable;
+uniform sampler2DArray holes_far_regions : filter_nearest, repeat_disable;
+uniform sampler2DArray macro_far_regions : filter_linear, repeat_disable;
+uniform sampler2D coarse_height : filter_linear, repeat_disable;
+uniform sampler2D coarse_material_ids : filter_nearest, repeat_disable;
+uniform sampler2D coarse_material_weights : filter_nearest, repeat_disable;
+uniform sampler2D coarse_holes : filter_nearest, repeat_disable;
+uniform sampler2D coarse_macro : filter_linear, repeat_disable;
 uniform sampler2D ownership_field : filter_linear, repeat_disable;
 uniform bool show_ownership = false;
 uniform float terrain_tint_strength = 1.0;

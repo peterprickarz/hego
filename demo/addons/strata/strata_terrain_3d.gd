@@ -386,9 +386,11 @@ func _check_runtime_bake() -> void:
 		runtime_bake_stale = true
 		runtime_bake_stale_changed.emit(true)
 
+## A bake from before coarse maps existed (Phase B) is stale as well: the streamer's horizon
+## tier needs them, and every bake since writes them.
 func is_runtime_bake_stale() -> bool:
 	_check_runtime_bake()
-	return runtime_data == null or runtime_bake_stale
+	return runtime_data == null or runtime_bake_stale or not runtime_data.has_coarse_maps()
 
 ## Called by StrataBake.bake() after the complete result validated. With a storage
 ## directory the bake is also written to its fixed file there.

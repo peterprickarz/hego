@@ -49,7 +49,7 @@ GODOT_TESTS=(
     hego_panel_contract_test hego_point_util_test hego_terrain3d_bridge_test
     island_transition_test material_binding_test material_brush_test material_distribution_test
     material_preview_cutoff_test material_region_refresh_test material_resource_test native_data_test
-    procedural_transaction_test region_geometry_test stage_material_persistence_test stage_material_transport_test
+    procedural_transaction_test region_geometry_test region_streamer_test stage_material_persistence_test stage_material_transport_test
     terrain_bulk_test terrain_cell_mask_test terrain_material_soft_limit_test terrain_mesher_test terrain_refinement_test
     terrain_runtime_intent_test terrain_transport_lifetime_test
 )
@@ -66,7 +66,7 @@ HYTHON_TESTS=(test_hda_package_graphs test_island_stage_materials test_material_
 GPU_TESTS=(
     island_showcase_test material_preview_gpu_test render_material_test render_state_test terrain_height_blend_test
     terrain_shading_test terrain_normal_displacement_test terrain_triplanar_test terrain_appearance_test
-    terrain_material_hook_test
+    terrain_material_hook_test residency_render_test
 )
 
 mkdir -p "$ROOT_DIR/build/test-logs"
