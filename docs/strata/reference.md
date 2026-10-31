@@ -107,6 +107,63 @@ Options of `StrataBake.bake(terrain, options)` and `StrataBake.compile()`:
 terrain's bake instead of copying it), `allow_stale_bake`, and for `save_runtime_scene()`,
 `data_path` to save the bake as its own resource.
 
+## Custom material shader code
+
+`StrataMaterial.custom_fragment_code` is the body of a function the renderer adds to the
+terrain shader for that material:
+
+```glsl
+void strata_material_<id>(inout StrataSurface s, in StrataContext c) {
+    // custom_fragment_code
+}
+```
+
+It runs once per pixel for each blended material that has code, before blending, and its
+result is weighted like the material's textures. All vectors are in the terrain's local space
+(the `StrataTerrain3D` node's axes, Y up). `TIME` and the other global built-ins are available.
+
+| `s` (`StrataSurface`, read and write) | Starts as |
+| --- | --- |
+| `vec3 albedo` | the material's linear colour, before the terrain tint map |
+| `vec3 normal` | the unit normal including the material's normal map |
+| `float roughness` | roughness after `roughness_scale` and `roughness_bias` |
+| `float metallic` | metallic from the ORMH map |
+| `float ao` | occlusion from the ORMH map |
+| `vec3 emission` | 0; added to the terrain's emission |
+
+| `c` (`StrataContext`, read only) | Meaning |
+| --- | --- |
+| `vec3 position` | the surface point before material displacement, in metres |
+| `vec3 world_position` | the rendered point in world space |
+| `vec3 view` | unit vector from the surface toward the camera |
+| `vec3 geometric_normal` | the lighting normal without any material normal map |
+| `vec2 uv` | the top projection's texture coordinate, `position.xz * uv_scale` |
+| `vec2 screen_uv` | the screen position, as `SCREEN_UV` |
+| `vec3 axis_weights` | the material's triplanar weights for the X, Y (top) and Z projections |
+| `float weight` | the material's final blend weight at this point, above 0 and at most 1 |
+| `float height` | the material's ORMH height, 0.5 neutral |
+| `int id` | the material's ID, its index in the material list |
+
+`custom_fragment_parameters` maps names to values. Each entry becomes a variable of that
+name in the code. Names must be snake_case (lowercase letters, digits and underscores,
+starting with a letter), must not be `s`, `c` or a shader keyword, and must not start with
+`strata_` or `gl_`; other entries are ignored with a warning. Supported values:
+
+| Value | Type in the code |
+| --- | --- |
+| `float`, `int`, `bool` | `float`, `int`, `bool` |
+| `Vector2`, `Vector3`, `Vector4` | `vec2`, `vec3`, `vec4` |
+| `Color` | `vec4`, converted to linear |
+
+In the shader the values are uniforms named `strata_material_<id>_<name>`, so they never
+clash with Strata's own uniforms or with another material's. Changing a value only updates
+its uniform. Changing the code, or adding, removing or retyping a parameter, regenerates
+the terrain shader. When no material has code, the terrain uses its plain shader unchanged.
+
+Code that does not compile is reported with the material's path and ID, and that material is
+drawn without it. The code runs in the pixel stage only: it cannot move vertices, change
+displacement or the height blend, discard pixels, or declare its own textures.
+
 ## Files
 
 With a `storage_directory`, a terrain keeps

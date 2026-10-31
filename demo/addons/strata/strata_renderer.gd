@@ -124,6 +124,18 @@ extends Node3D
 		if is_inside_tree():
 			_apply_wireframe_state()
 
+const SURFACE_SHADER_PATH := "res://addons/strata/shaders/terrain_surface.gdshader"
+const _HOOK_MARKER := "STRATA_MATERIAL_HOOK_FUNCTIONS"
+## Seconds of editor idle time after a custom_fragment_code edit before the
+## shader is regenerated, so typing does not compile every keystroke.
+const _HOOK_REBUILD_DELAY := 0.5
+const _RESERVED_HOOK_NAMES := ["s", "c", "bool", "int", "uint", "float", "vec2", "vec3", "vec4", "ivec2", "ivec3", "ivec4", "uvec2", "uvec3", "uvec4", "bvec2", "bvec3", "bvec4", "mat2", "mat3", "mat4", "void", "true", "false", "if", "else", "for", "while", "do", "switch", "case", "default", "break", "continue", "return", "discard", "in", "out", "inout", "const", "uniform", "varying", "struct", "flat", "smooth", "lowp", "mediump", "highp", "instance", "global", "precision"]
+# Generated surface shaders by complete source, shared by every renderer
+# (editor preview and runtime) so a reconfigure never recompiles known code.
+# A null value records source that failed to compile.
+static var _generated_shaders := {}
+static var _hook_name_pattern: RegEx
+
 var _source: Node3D
 var _runtime_bounds := Rect2()
 var _runtime_mode := false
@@ -132,6 +144,16 @@ var _mesher: RefCounted
 var _shader_material: ShaderMaterial
 var _crease_shader: Shader
 var _active_crease_variant := false
+# "smooth|" or "creases|" plus the applied custom-code key: the shader in use.
+var _active_shader_key := ""
+# Custom fragment code requested by the materials, the request the shader was
+# last generated for, and the entries that compiled into the current shader.
+var _hook_spec_pending: Array = []
+var _hook_key_pending := ""
+var _hook_spec_applied: Array = []
+var _hook_key_applied := ""
+var _hook_spec_bound: Array = []
+var _hook_rebuild_serial := 0
 var _materials: Array[StrataMaterial] = []
 var _watched_materials: Array[StrataMaterial] = []
 var _material_refresh_queued := false
@@ -230,7 +252,7 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 		_stats.refinement_status = "Native refinement unavailable: rebuild the terrain extension or disable Displacement Refinement Enabled."
 		push_error(_stats.refinement_status)
 		return false
-	var previous := {"active_crease_variant": _active_crease_variant, "source": _source, "runtime_mode": _runtime_mode, "runtime_bounds": _runtime_bounds, "spacing": _height_spacing, "materials": _materials, "mesher": _mesher, "shader": _shader_material, "bound_multiplier": _bound_displacement_multiplier, "compiled": _compiled_input, "stats": _stats.duplicate(true)}
+	var previous := {"active_crease_variant": _active_crease_variant, "active_shader_key": _active_shader_key, "hook_spec_applied": _hook_spec_applied, "hook_key_applied": _hook_key_applied, "hook_spec_bound": _hook_spec_bound, "source": _source, "runtime_mode": _runtime_mode, "runtime_bounds": _runtime_bounds, "spacing": _height_spacing, "materials": _materials, "mesher": _mesher, "shader": _shader_material, "bound_multiplier": _bound_displacement_multiplier, "compiled": _compiled_input, "stats": _stats.duplicate(true)}
 	_source = source
 	_runtime_mode = runtime_mode
 	_runtime_bounds = bounds
@@ -239,11 +261,14 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 	_materials = materials.duplicate()
 	_mesher = candidate_mesher
 	_shader_material = ShaderMaterial.new()
-	_shader_material.shader = load("res://addons/strata/shaders/terrain_surface.gdshader")
+	_shader_material.shader = load(SURFACE_SHADER_PATH)
 	_active_crease_variant = false
+	_active_shader_key = "smooth|"
+	_hook_spec_bound = []
 	_shader_material.set_shader_parameter("field_origin", bounds.position)
 	_shader_material.set_shader_parameter("field_size", bounds.size)
 	_bind_material_pool()
+	_apply_hook_spec()
 	_update_material_settings()
 	var empty_ownership := Image.create(1, 1, false, Image.FORMAT_RF)
 	_ownership_texture = ImageTexture.create_from_image(empty_ownership)
@@ -264,6 +289,10 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 		_mesher = previous.mesher
 		_shader_material = previous.shader
 		_active_crease_variant = previous.active_crease_variant
+		_active_shader_key = previous.active_shader_key
+		_hook_spec_applied = previous.hook_spec_applied
+		_hook_key_applied = previous.hook_key_applied
+		_hook_spec_bound = previous.hook_spec_bound
 		_bound_displacement_multiplier = previous.bound_multiplier
 		_compiled_input = previous.compiled
 		_stats = previous.stats
@@ -373,6 +402,9 @@ func _refresh_materials_deferred() -> void:
 			push_warning("Invalid material edit; previous terrain bindings retained.")
 			return
 	_bind_material_pool()
+	if _hook_key_pending != _hook_key_applied:
+		if Engine.is_editor_hint(): _schedule_hook_rebuild()
+		else: _apply_hook_spec()
 	_update_material_settings()
 	_stats.material_binding_updates = int(_stats.get("material_binding_updates", 0)) + 1
 
@@ -415,6 +447,9 @@ func _bind_material_pool() -> void:
 	_shader_material.set_shader_parameter("material_roughness_scales", roughness_scales)
 	_shader_material.set_shader_parameter("material_roughness_biases", roughness_biases)
 	_stats.material_count = _materials.size()
+	_hook_spec_pending = _material_hook_spec()
+	_hook_key_pending = "" if _hook_spec_pending.is_empty() else var_to_str(_hook_spec_pending.map(func(entry: Dictionary) -> Array: return [entry.id, entry.code, entry.parameters.map(func(parameter: Dictionary) -> Array: return [parameter.name, parameter.type])]))
+	_bind_hook_parameters()
 
 static func _solid_texture(color: Color) -> ImageTexture:
 	var image := Image.create(2, 2, false, Image.FORMAT_RGBA8)
@@ -423,27 +458,172 @@ static func _solid_texture(color: Color) -> ImageTexture:
 
 func _update_shading_variant() -> void:
 	var wants_creases := smooth_shading and crease_angle_degrees < 180.0
-	if wants_creases == _active_crease_variant: return
-	var target: Shader
-	if wants_creases:
-		if _crease_shader == null:
-			_crease_shader = Shader.new()
-			var base_shader: Shader = load("res://addons/strata/shaders/terrain_surface.gdshader")
-			var code := base_shader.code
-			# A generated wrapper shares the entire source. Absolute include paths
-			# are required because this cached Shader has no separate source file.
-			code = code.replace('#include "', '#include "res://addons/strata/shaders/')
-			_crease_shader.code = "#define HEGO_TERRAIN_CREASES\n" + code
-		target = _crease_shader
-	else:
-		target = load("res://addons/strata/shaders/terrain_surface.gdshader")
-	# Rebinding happens only on explicit variant changes, never per frame.
+	var key := ("creases|" if wants_creases else "smooth|") + _hook_key_applied
+	if key == _active_shader_key: return
+	var target := _surface_shader(wants_creases)
+	# Rebinding happens only on explicit variant or custom-code changes, never
+	# per frame. Uniforms the target lacks (removed custom parameters) are dropped.
+	var target_names := {}
+	for uniform in target.get_shader_uniform_list(): target_names[uniform.name] = true
 	var parameters := {}
+	var dropped: Array[String] = []
 	for uniform in _shader_material.shader.get_shader_uniform_list():
-		parameters[uniform.name] = _shader_material.get_shader_parameter(uniform.name)
+		if target_names.has(uniform.name): parameters[uniform.name] = _shader_material.get_shader_parameter(uniform.name)
+		elif String(uniform.name).begins_with("strata_material_"): dropped.append(uniform.name)
 	_shader_material.shader = target
 	for name in parameters: _shader_material.set_shader_parameter(name, parameters[name])
+	for name in dropped: _shader_material.set_shader_parameter(name, null)
 	_active_crease_variant = wants_creases
+	_active_shader_key = key
+	_bind_hook_parameters()
+
+## The plain shader file, its cached crease variant, or a shader generated for
+## the applied custom fragment code. Code that does not compile is reported per
+## material and left out; if nothing compiles the plain shader is used.
+func _surface_shader(creases: bool) -> Shader:
+	_hook_spec_bound = []
+	var failed_ids := PackedInt32Array()
+	_stats.custom_shader_material_ids = PackedInt32Array()
+	_stats.custom_shader_failed_ids = failed_ids
+	if not _hook_spec_applied.is_empty():
+		var entries := _hook_spec_applied
+		var shader := _compiled_shader(_hook_shader_code(entries, creases))
+		if shader == null:
+			entries = []
+			for entry: Dictionary in _hook_spec_applied:
+				if _compiled_shader(_hook_shader_code([entry], creases)) != null:
+					entries.append(entry)
+				else:
+					failed_ids.append(entry.id)
+					push_error("%s: custom_fragment_code does not compile, so this material renders without it. The SHADER ERROR printed above (when this code was first compiled) gives the reason." % entry.label)
+			_stats.custom_shader_failed_ids = failed_ids
+			if not entries.is_empty():
+				shader = _compiled_shader(_hook_shader_code(entries, creases))
+				if shader == null:
+					push_error("The custom_fragment_code of materials %s compiles separately but not together; the terrain uses its plain shader." % ", ".join(entries.map(func(entry: Dictionary) -> String: return entry.label)))
+		if shader != null:
+			_hook_spec_bound = entries
+			_stats.custom_shader_material_ids = PackedInt32Array(entries.map(func(entry: Dictionary) -> int: return entry.id))
+			return shader
+	if not creases:
+		return load(SURFACE_SHADER_PATH)
+	if _crease_shader == null:
+		_crease_shader = Shader.new()
+		var base_shader: Shader = load(SURFACE_SHADER_PATH)
+		var code := base_shader.code
+		# A generated wrapper shares the entire source. Absolute include paths
+		# are required because this cached Shader has no separate source file.
+		code = code.replace('#include "', '#include "res://addons/strata/shaders/')
+		_crease_shader.code = "#define HEGO_TERRAIN_CREASES\n" + code
+	return _crease_shader
+
+static func _compiled_shader(code: String) -> Shader:
+	if _generated_shaders.has(code): return _generated_shaders[code]
+	var shader := Shader.new()
+	shader.code = code
+	# Godot reports no compile status; a failed spatial shader has no uniforms,
+	# while every terrain shader declares many.
+	var compiled: Shader = shader if not code.is_empty() and not shader.get_shader_uniform_list().is_empty() else null
+	if _generated_shaders.size() >= 32: _generated_shaders.erase(_generated_shaders.keys()[0])
+	_generated_shaders[code] = compiled
+	return compiled
+
+## The plain shader source with STRATA_MATERIAL_HOOKS defined and its marker
+## replaced by one function per material plus constant-ID dispatch, in the
+## style of terrain_texture_dispatch.gdshaderinc.
+static func _hook_shader_code(entries: Array, creases: bool) -> String:
+	var base_shader: Shader = load(SURFACE_SHADER_PATH)
+	var code := base_shader.code.replace('#include "', '#include "res://addons/strata/shaders/')
+	var marker := code.find("\n" + _HOOK_MARKER + "\n")
+	if marker < 0:
+		push_error("terrain_surface.gdshader has no %s line; custom fragment code is ignored." % _HOOK_MARKER)
+		return ""
+	var block := PackedStringArray(['#include "res://addons/strata/shaders/terrain_material_hooks.gdshaderinc"'])
+	var has_cases := ""
+	var call_cases := ""
+	for entry: Dictionary in entries:
+		for parameter: Dictionary in entry.parameters:
+			block.append("uniform %s %s%s;" % [parameter.glsl, parameter.uniform, " : source_color" if parameter.type == "color" else ""])
+		block.append("// custom_fragment_code of material ID %d" % entry.id)
+		block.append("void strata_material_%d(inout StrataSurface s, in StrataContext c) {" % entry.id)
+		for parameter: Dictionary in entry.parameters:
+			block.append("\t%s %s = %s;" % [parameter.glsl, parameter.name, parameter.uniform])
+		block.append(entry.code)
+		block.append("}")
+		has_cases += "\t\tcase %d: return true;\n" % entry.id
+		call_cases += "\t\tcase %d: strata_material_%d(s, c); break;\n" % [entry.id, entry.id]
+	block.append("bool strata_material_has_hook(int id) {\n\tswitch (id) {\n%s\t}\n\treturn false;\n}" % has_cases)
+	block.append("void strata_material_hook(int id, inout StrataSurface s, in StrataContext c) {\n\tswitch (id) {\n%s\t}\n}" % call_cases)
+	code = code.substr(0, marker + 1) + "\n".join(block) + code.substr(marker + 1 + _HOOK_MARKER.length())
+	return "#define STRATA_MATERIAL_HOOKS\n" + ("#define HEGO_TERRAIN_CREASES\n" if creases else "") + code
+
+## The custom fragment code of the current materials, by material ID. Invalid
+## parameter entries are reported and left out.
+func _material_hook_spec() -> Array:
+	var spec := []
+	for id in range(_materials.size()):
+		var material := _materials[id]
+		if material == null or material.custom_fragment_code.strip_edges().is_empty(): continue
+		var label := "%s (material ID %d)" % [material.resource_path if not material.resource_path.is_empty() else "Unsaved StrataMaterial", id]
+		var keys := material.custom_fragment_parameters.keys()
+		keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
+		var parameters := []
+		var seen := {}
+		for key: Variant in keys:
+			var name := str(key)
+			var type := _hook_parameter_type(material.custom_fragment_parameters[key])
+			if type.is_empty() or not _valid_hook_parameter_name(name) or seen.has(name):
+				push_warning("%s: custom fragment parameter \"%s\" is ignored. Names are unique snake_case GLSL identifiers other than s, c, keywords and strata_*; values are float, int, bool, Vector2, Vector3, Vector4 or Color." % [label, name])
+				continue
+			seen[name] = true
+			# The material ID prefix keeps every name distinct from the plain
+			# shader's uniforms (none start with strata_) and from other materials.
+			parameters.append({"name": name, "key": key, "type": type, "glsl": "vec4" if type == "color" else type, "uniform": "strata_material_%d_%s" % [id, name]})
+		spec.append({"id": id, "code": material.custom_fragment_code, "parameters": parameters, "label": label})
+	return spec
+
+static func _hook_parameter_type(value: Variant) -> String:
+	match typeof(value):
+		TYPE_BOOL: return "bool"
+		TYPE_INT: return "int"
+		TYPE_FLOAT: return "float"
+		TYPE_VECTOR2: return "vec2"
+		TYPE_VECTOR3: return "vec3"
+		TYPE_VECTOR4: return "vec4"
+		TYPE_COLOR: return "color"
+	return ""
+
+static func _valid_hook_parameter_name(name: String) -> bool:
+	if _hook_name_pattern == null:
+		_hook_name_pattern = RegEx.create_from_string("^[a-z][a-z0-9_]*$")
+	return _hook_name_pattern.search(name) != null and not name.begins_with("strata_") and not name.begins_with("gl_") and not _RESERVED_HOOK_NAMES.has(name)
+
+func _apply_hook_spec() -> void:
+	_hook_spec_applied = _hook_spec_pending
+	_hook_key_applied = _hook_key_pending
+
+func _schedule_hook_rebuild() -> void:
+	_hook_rebuild_serial += 1
+	if is_inside_tree():
+		get_tree().create_timer(_HOOK_REBUILD_DELAY).timeout.connect(_rebuild_hooks_after_edit.bind(_hook_rebuild_serial))
+
+func _rebuild_hooks_after_edit(serial: int) -> void:
+	if serial != _hook_rebuild_serial or _shader_material == null: return
+	_apply_hook_spec()
+	_update_material_settings()
+
+## Uploads custom parameter values for the code compiled into the current
+## shader. A value whose type changed waits for the regenerated shader.
+func _bind_hook_parameters() -> void:
+	if _shader_material == null: return
+	for entry: Dictionary in _hook_spec_bound:
+		var id: int = entry.id
+		if id >= _materials.size() or _materials[id] == null: continue
+		var values := _materials[id].custom_fragment_parameters
+		for parameter: Dictionary in entry.parameters:
+			var value: Variant = values.get(parameter.key)
+			if value != null and _hook_parameter_type(value) == parameter.type:
+				_shader_material.set_shader_parameter(parameter.uniform, value)
 
 func _update_material_settings() -> void:
 	if _shader_material == null:

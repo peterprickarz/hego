@@ -97,6 +97,32 @@ var _source_uv_multiplier := 1.0
 		roughness_bias = value
 		emit_changed()
 
+@export_group("Custom Shader", "custom_")
+## Optional GLSL statements that adjust this material in the terrain's fragment
+## shader, for example a fresnel rim. They become the body of
+## [code]void strata_material_<id>(inout StrataSurface s, in StrataContext c)[/code]:
+## modify [code]s.albedo[/code], [code]s.normal[/code], [code]s.roughness[/code],
+## [code]s.metallic[/code], [code]s.ao[/code] or [code]s.emission[/code], reading
+## [code]c.view[/code], [code]c.position[/code], [code]c.weight[/code] and the other
+## context fields. The result is blended with the other materials by weight.
+## Empty (the default) keeps the plain terrain shader. Code that does not
+## compile is reported and this material renders without it.
+@export_multiline var custom_fragment_code := "":
+	set(value):
+		if custom_fragment_code == value: return
+		custom_fragment_code = value
+		emit_changed()
+## Values for [member custom_fragment_code], by name. Each entry becomes a
+## local variable of that name in the code; changing a value needs no shader
+## recompile. Names are snake_case GLSL identifiers; values are float, int,
+## bool, Vector2, Vector3, Vector4 or Color (a linear vec4 in the shader).
+## Assign a new dictionary (or call [method Resource.emit_changed]) after
+## editing it from a script.
+@export var custom_fragment_parameters: Dictionary = {}:
+	set(value):
+		custom_fragment_parameters = value.duplicate()
+		emit_changed()
+
 ## A UV variant shares textures and follows its source profile's edits. Saving
 ## a variant stores its current exported values as an independent snapshot.
 ## Source edits overwrite variant-specific controls; use a separate resource
@@ -126,6 +152,9 @@ func _sync_source_profile() -> void:
 	height_blend_bias = _source_profile.height_blend_bias
 	roughness_scale = _source_profile.roughness_scale
 	roughness_bias = _source_profile.roughness_bias
+	custom_fragment_code = _source_profile.custom_fragment_code
+	if custom_fragment_parameters != _source_profile.custom_fragment_parameters:
+		custom_fragment_parameters = _source_profile.custom_fragment_parameters
 
 func _watch_textures() -> void:
 	for texture in _watched_textures:

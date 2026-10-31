@@ -138,6 +138,40 @@ If you compute material placement elsewhere, you can instead leave
 `editor_control_ids` (an RGBA8 image of four material IDs per texel) and
 `editor_control_weights` (an RGBAF image of the matching weights).
 
+### Custom shader code per material
+
+A material can carry a few lines of shader code of its own, for an effect that only that
+material should have, such as a fresnel rim on wet rock or a faint glow on lava. The rest of
+the terrain keeps its usual shader. Select the `StrataMaterial` and open **Custom Shader** in
+the inspector:
+
+- **Fragment Code** (`custom_fragment_code`): Godot shading language statements that adjust
+  this material's surface `s` using what is known about the fragment, `c`.
+- **Fragment Parameters** (`custom_fragment_parameters`): named values the code uses. Each
+  name becomes a variable in the code. Editing a value updates the terrain straight away;
+  editing the code recompiles the terrain shader about half a second after you stop typing.
+
+This rim brightens the material where it is seen at a grazing angle:
+
+```glsl
+float facing = clamp(dot(s.normal, c.view), 0.0, 1.0);
+s.emission += rim_color.rgb * pow(1.0 - facing, rim_power);
+```
+
+with the parameters `rim_color` (a `Color`) and `rim_power` (a `float`, for example 3.0).
+
+The code runs before the materials are blended, so its result fades out with the material:
+where the material has half the weight, half of the rim shows. `s.albedo`, `s.normal`,
+`s.roughness`, `s.metallic`, `s.ao` and `s.emission` can be changed; `c.view`,
+`c.position`, `c.weight` and the other fields listed in the
+[reference](reference.md#custom-material-shader-code) can be read. The code is saved with
+the material and works the same in the editor and in a baked runtime scene.
+
+If the code does not compile, Godot prints the shader error, Strata names the material in
+the output, and that material is drawn without its code while the others keep theirs.
+Materials without code cost nothing extra; each material with code adds its own work wherever
+it is one of the blended materials.
+
 ### Render quality
 
 The terrain's `render_settings` (`StrataRenderSettings`) choose the geometry density with a

@@ -149,6 +149,12 @@ float material_height_offset(vec3 base_point, vec3 projection_normal) {
 	return height_detail * displacement_strength * fade;
 }
 
+#ifdef STRATA_MATERIAL_HOOKS
+// StrataRenderer replaces the next line with terrain_material_hooks.gdshaderinc
+// and the functions generated from StrataMaterial.custom_fragment_code.
+STRATA_MATERIAL_HOOK_FUNCTIONS
+#endif
+
 void vertex() {
 	// Dyadic normalized coordinates reconstruct the same global point on both
 	// sides of every patch boundary, even with a fractional terrain origin.
@@ -219,6 +225,20 @@ void fragment() {
 		}
 	}
 	weights = terrain_height_blend_weights(weights, heights, contrasts, biases);
+#ifdef STRATA_MATERIAL_HOOKS
+	// Materials with custom code are completed one by one before blending, so
+	// they need the lighting normal now. It depends on terrain position alone.
+	vec2 gradient = base_shading_gradient(terrain_position, smooth_gradient);
+	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
+	vec3 hooked_normal = vec3(0.0); vec3 emission = vec3(0.0);
+	StrataContext context;
+	context.position = base_point;
+	context.world_position = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	// Translation/yaw with unit scale: the transposed basis is the inverse.
+	context.view = normalize(transpose(mat3(MODEL_MATRIX)) * (mat3(INV_VIEW_MATRIX) * VIEW));
+	context.geometric_normal = geometric_normal;
+	context.screen_uv = SCREEN_UV;
+#endif
 	// Tangent-space detail is accumulated per projection axis across materials;
 	// reorientation is linear in it, so each axis is reoriented once below.
 	vec3 axis_details[3];
@@ -227,6 +247,10 @@ void fragment() {
 		if (weights[slot] > 0.0) {
 			int id = ids[slot]; float scale = uv_scales[id];
 			vec3 axis_weights = slot_axis_weights[slot];
+#ifdef STRATA_MATERIAL_HOOKS
+			bool hooked = strata_material_has_hook(id);
+			vec3 slot_color = vec3(0.0); vec3 slot_normal = vec3(0.0);
+#endif
 			for (int axis = 0; axis < 3; axis++) {
 				float axis_weight = axis_weights[axis];
 				if (axis_weight > 0.0) {
@@ -241,12 +265,37 @@ void fragment() {
 						vec3 far_normal = vec3(far_rg, sqrt(max(0.0, 1.0 - dot(far_rg, far_rg))));
 						near_normal = mix(near_normal, far_normal, far_mix);
 					}
+#ifdef STRATA_MATERIAL_HOOKS
+					// Reorientation is linear in detail, so this material's own sum
+					// equals its share of the per-axis accumulation below.
+					if (hooked) {
+						slot_color += sampled_color * axis_weight;
+						slot_normal += terrain_reoriented_normal(frames[axis], geometric_normal, near_normal * axis_weight);
+						continue;
+					}
+#endif
 					color += sampled_color * (weights[slot] * axis_weight);
 					axis_details[axis] += near_normal * (weights[slot] * axis_weight);
 				}
 			}
 			vec3 sampled_orm = packed_samples[slot].rgb;
 			sampled_orm.g = clamp(sampled_orm.g * material_roughness_scales[id] + material_roughness_biases[id], 0.0, 1.0);
+#ifdef STRATA_MATERIAL_HOOKS
+			if (hooked) {
+				float normal_length = length(slot_normal);
+				StrataSurface surface = StrataSurface(slot_color, normal_length > 0.00000001 ? slot_normal / normal_length : geometric_normal, sampled_orm.g, sampled_orm.b, sampled_orm.r, vec3(0.0));
+				context.uv = base_point.xz * scale; context.axis_weights = axis_weights;
+				context.weight = weights[slot]; context.height = packed_samples[slot].a; context.id = id;
+				strata_material_hook(id, surface, context);
+				float written_length = length(surface.normal);
+				// An unchanged normal restores this material's exact contribution.
+				vec3 written_normal = written_length > 0.00000001 ? surface.normal / written_length : geometric_normal;
+				color += surface.albedo * weights[slot];
+				hooked_normal += written_normal * (max(normal_length, 0.00000001) * weights[slot]);
+				sampled_orm = vec3(surface.ao, surface.roughness, surface.metallic);
+				emission += surface.emission * weights[slot];
+			}
+#endif
 			orm += sampled_orm * weights[slot];
 		}
 	}
@@ -258,10 +307,15 @@ void fragment() {
 	// Keep lighting smooth independently of canonical triangle height sampling.
 	// Each projection's detail is reoriented onto this lighting normal, so a flat
 	// normal map reproduces it exactly for every sharpness and crease setting.
+#ifndef STRATA_MATERIAL_HOOKS
 	vec2 gradient = base_shading_gradient(terrain_position, smooth_gradient);
 	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
+#endif
 	vec3 final_normal = vec3(0.0);
 	for (int axis = 0; axis < 3; axis++) { final_normal += terrain_reoriented_normal(frames[axis], geometric_normal, axis_details[axis]); }
+#ifdef STRATA_MATERIAL_HOOKS
+	final_normal += hooked_normal;
+#endif
 	float final_length_squared = dot(final_normal, final_normal);
 	final_normal = final_length_squared > 0.00000001 ? final_normal * inversesqrt(final_length_squared) : geometric_normal;
 	NORMAL = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(final_normal, 0.0)).xyz);
@@ -282,6 +336,9 @@ void fragment() {
 	}
 	ROUGHNESS = clamp(orm.g, 0.04, 1.0); METALLIC = clamp(orm.b, 0.0, 1.0);
 	AO = clamp(orm.r, 0.0, 1.0) * mix(1.0, terrain_macro.a, terrain_ao_strength);
+#ifdef STRATA_MATERIAL_HOOKS
+	EMISSION = emission;
+#endif
 	if (debug_shading_normals) { EMISSION = final_normal * 0.5 + 0.5; ALBEDO = vec3(0.0); ROUGHNESS = 1.0; METALLIC = 0.0; AO = 1.0; }
 	if (debug_lod) { ALBEDO = mix(ALBEDO, vec3(fract(patch_level * 0.37), fract(patch_level * 0.61 + 0.3), fract(patch_level * 0.19 + 0.6)), 0.65); }
 	if (debug_discarded) { ALBEDO = mix(vec3(0.05, 0.15, 0.05), vec3(1.0, 0.0, 0.25), clamp(discarded * 2.0, 0.0, 1.0)); }
