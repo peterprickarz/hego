@@ -157,6 +157,11 @@ static func save_runtime_data(terrain: StrataTerrain3D, embed_regions: bool = fa
 	if not made.ok:
 		return made
 	var data := terrain.runtime_data
+	# A manifest that does not validate (for example one loaded while its script was being
+	# edited) must never replace the saved bake.
+	var checked := data.validate()
+	if not checked.ok:
+		return _error("The published bake is invalid and was not saved: " + String(checked.message))
 	var saved: Array = []
 	if not data.regions.is_empty() and not embed_regions:
 		var folder := regions_directory(terrain)

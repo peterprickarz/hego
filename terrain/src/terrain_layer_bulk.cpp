@@ -190,8 +190,11 @@ Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool
         double top[4] = {-1.0, -1.0, -1.0, -1.0};
         double exact[4] = {0.0, 0.0, 0.0, 0.0};
         for (int id = 0; id < count_ids; ++id) {
-            const double value = load_float(inputs[id], pixel);
-            if (!std::isfinite(value) || value < 0.0) return failure("Material weights must be finite and nonnegative; previous controls retained.");
+            double value = load_float(inputs[id], pixel);
+            if (!std::isfinite(value)) return failure("Material weights must be finite; previous controls retained.");
+            // Material channels are coverage: a channel painted as a generic signed channel (or
+            // an Add layer that subtracts more than the stack holds) counts as no coverage.
+            if (value < 0.0) value = 0.0;
             values[id] = value; total += value;
             positive[id] += value > 0.0;
             // Ascending ID traversal and strict comparison provide a stable

@@ -125,8 +125,8 @@ static func _pack_sparse(planes: Array[Image]) -> Dictionary:
 	if _native(&"pack_material_weights_sparse"):
 		var sparse: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"pack_material_weights_sparse", planes)
 		if not sparse.get("ok", false):
-			if String(sparse.get("message", "")).begins_with("Material weights must be finite and nonnegative"):
-				return {"ok": false, "message": "Composed material weights must be finite and nonnegative"}
+			if String(sparse.get("message", "")).begins_with("Material weights must be finite"):
+				return {"ok": false, "message": "Composed material weights must be finite"}
 			return sparse
 		var unassigned := int(sparse.unassigned)
 		sparse.erase("unassigned")
@@ -152,19 +152,23 @@ static func _pack_sparse_compat(planes: Array[Image]) -> Dictionary:
 	var count := planes[0].get_width() * planes[0].get_height()
 	var assigned := PackedByteArray(); assigned.resize(count)
 	var scanned := {}
-	for plane in planes:
-		if scanned.has(plane.get_instance_id()): continue
-		scanned[plane.get_instance_id()] = true
+	# Material channels are coverage: negative values (a channel painted as a generic signed
+	# channel) count as no coverage, like the native pack does.
+	var prepared := planes.duplicate()
+	for slot in range(prepared.size()):
+		var plane: Image = prepared[slot]
 		var values := plane.get_data().to_float32_array()
+		var clamped := false
 		for index in range(count):
-			if not is_finite(values[index]) or values[index] < 0.0:
-				return {"ok": false, "message": "Composed material weights must be finite and nonnegative"}
-			if values[index] > 0.0: assigned[index] = 1
-	var first := planes[0].get_data().to_float32_array()
+			if not is_finite(values[index]):
+				return {"ok": false, "message": "Composed material weights must be finite"}
+			if values[index] < 0.0: values[index] = 0.0; clamped = true
+			elif values[index] > 0.0: assigned[index] = 1
+		if clamped: prepared[slot] = Image.create_from_data(plane.get_width(), plane.get_height(), false, Image.FORMAT_RF, values.to_byte_array())
+	var first := (prepared[0] as Image).get_data().to_float32_array()
 	var missing := PackedInt32Array()
 	for index in range(count):
 		if assigned[index] == 0: first[index] = 1.0; missing.append(index)
-	var prepared := planes.duplicate()
 	prepared[0] = Image.create_from_data(planes[0].get_width(), planes[0].get_height(), false, Image.FORMAT_RF, first.to_byte_array())
 	packed = native.call("pack_material_weights", prepared)
 	if not packed.get("ok", false): return packed

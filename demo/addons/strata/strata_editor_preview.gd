@@ -738,10 +738,19 @@ func _apply_task(task: Dictionary) -> bool:
 	return true
 
 func _fail(message: String) -> void:
-	status = message + "; previous preview retained"
 	_cancel_work()
 	_signatures.clear()
 	_working = false
+	if is_instance_valid(renderer) and not _renderer_bound:
+		# Nothing was ever bound: a configured renderer would draw a flat terrain at height 0, so
+		# drop it (which brings the shaped untextured preview mesh back) until the next refresh.
+		status = message + "; textured preview withheld until the stack composes"
+		(renderer as Node).queue_free()
+		renderer = null
+		if is_instance_valid(terrain): terrain.editor_renderer = null
+		_configuration_dirty = true
+		return
+	status = message + "; previous preview retained"
 
 func _touch(xy: Vector2i) -> void:
 	_use_counter += 1

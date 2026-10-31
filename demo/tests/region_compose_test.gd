@@ -619,4 +619,33 @@ func run() -> void:
 	rejected = StrataRegionCompose.compose_map(terrain, null, "macro", thin, spec)
 	check(not rejected.ok and String(rejected.message).contains("2 x 2"), "a macro window under 2 texels is rejected: %s" % rejected.get("message"))
 	check(not StrataRegionCompose.compose_map(terrain, null, "nav_wet", rectangular, spec).ok and not StrataRegionCompose.compose_map(terrain, null, "unknown", rectangular, spec).ok, "derived and unknown maps are rejected")
+	# A material channel painted as a generic signed channel (negative values) counts as no
+	# coverage instead of failing the composition (the island's "test" channel case).
+	var signed_scene := Node3D.new(); get_root().add_child(signed_scene)
+	var signed_terrain := StrataTerrain3D.new(); signed_terrain.base_bounds = Rect2(-8, -8, 16, 16); signed_terrain.set_preview_enabled(false); signed_scene.add_child(signed_terrain)
+	signed_terrain.editor_materials = [StrataMaterial.new(), StrataMaterial.new()]
+	var signed_base := StrataLayer.new(); signed_base.name = "Base"; signed_terrain.add_child(signed_base); signed_base.data.grid_origin = Vector2(-8, -8)
+	var signed_hand := StrataLayer.new(); signed_hand.name = "Hand"; signed_terrain.add_child(signed_hand); signed_hand.data.grid_origin = Vector2(-8, -8)
+	for j in range(17):
+		for i in range(17):
+			signed_base.data.set_sample(&"height", Vector2i(i, j), 1.0)
+			signed_base.data.set_sample(&"material_a", Vector2i(i, j), 1.0)
+			signed_hand.data.set_sample(&"test", Vector2i(i, j), -3.0 if i < 8 else 1.0)
+	signed_terrain.editor_material_channels = PackedStringArray(["test", "material_a"])
+	var signed_spec := signed_terrain.region_spec()
+	var signed_ids := StrataRegionCompose.compose_map(signed_terrain, null, "material_ids", StrataRegions.map_window(signed_spec, Vector2i.ZERO, signed_spec.maps.material_ids), signed_spec)
+	var signed_weights := StrataRegionCompose.compose_map(signed_terrain, null, "material_weights", StrataRegions.map_window(signed_spec, Vector2i.ZERO, signed_spec.maps.material_weights), signed_spec)
+	check(signed_ids.get("ok", false) and signed_weights.get("ok", false), "negative material values do not fail the composition: %s" % signed_weights.get("message", ""))
+	if signed_ids.get("ok", false) and signed_weights.get("ok", false):
+		var a: int = signed_spec.apron
+		var negative_side: Color = signed_weights.image.get_pixel(a + 2, a + 8) * 255.0
+		var negative_ids: Color = signed_ids.image.get_pixel(a + 2, a + 8) * 255.0
+		var positive_side: Color = signed_weights.image.get_pixel(a + 12, a + 8) * 255.0
+		check(roundi(negative_side.r) == 255 and roundi(negative_ids.r) == 1 and roundi(negative_side.g) == 0, "a negative value is no coverage: material_a alone where test is negative")
+		check(absi(roundi(positive_side.r) - 128) <= 1 and absi(roundi(positive_side.g) - 127) <= 1, "a positive value shares as usual")
+	var nan_plane := Image.create(4, 4, false, Image.FORMAT_RF); nan_plane.fill(Color(NAN, 0, 0))
+	var full_plane := Image.create(4, 4, false, Image.FORMAT_RF); full_plane.fill(Color(1.0, 0, 0))
+	var nan_pack: Dictionary = StrataLayerData.pack_material_weights_sparse([nan_plane, full_plane])
+	check(not nan_pack.get("ok", false) and String(nan_pack.get("message", "")).begins_with("Material weights must be finite"), "non-finite material values still fail the pack")
+	signed_scene.free()
 	finish("REGION_COMPOSE_TEST")
