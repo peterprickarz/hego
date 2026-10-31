@@ -1,6 +1,6 @@
 # Strata
 
-Layered terrain for Godot 4.4+: hand-painted and procedural layers composed into one
+Layered terrain for Godot 4.7+: hand-painted and procedural layers composed into one
 heightfield, a quadtree mesher, a material renderer with up to 32 materials, and a bake
 that produces runtime data for collision and navigation. Strata has no dependency on
 HEGo or Houdini; the native extension needs only godot-cpp.

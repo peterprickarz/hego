@@ -5,7 +5,7 @@ and navigate. Nothing here needs Houdini; [Strata and Houdini](houdini.md) adds 
 
 ## Requirements
 
-- Godot 4.4 or newer.
+- Godot 4.7 or newer.
 - The Strata native library for your platform. Packages ship Linux x86_64, Windows x86_64
   and macOS (universal) builds.
 - The Forward+ renderer for the textured terrain. Other renderers still show a coarse,

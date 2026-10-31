@@ -15,7 +15,7 @@ runs HEGo alone and all addons together in disposable projects.
 
 ## Integration check
 
-This is an opt-in Linux check for the terrain field bridge. It requires Godot 4.4.1, Houdini 22.0 with a working Engine license, the initialized `godot-cpp` submodule, and a built Linux debug library for each extension. It starts its own Houdini named-pipe session and uses only generated project data and built-in Houdini SOPs.
+This is an opt-in Linux check for the terrain field bridge. It requires Godot 4.7.2, Houdini 22.0 with a working Engine license, the initialized `godot-cpp` submodule, and a built Linux debug library for each extension. It starts its own Houdini named-pipe session and uses only generated project data and built-in Houdini SOPs.
 
 ## Build and run
 
@@ -30,7 +30,7 @@ Then run the disposable project harness, which stages all three addons:
 
 ```sh
 python3 scripts/run_terrain_houdini_integration.py \
-  --godot /home/peter/Godot/Godot_v4.4.1-stable_linux.x86_64 \
+  --godot /home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64 \
   --hfs /opt/hfs22.0 \
   --hego-library terrain/integration_bin/libhego.linux.template_debug.x86_64.so
 ```

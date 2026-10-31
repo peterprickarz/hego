@@ -11,10 +11,10 @@ git submodule update --init godot-cpp
 scons -f SConstruct.terrain platform=linux target=template_debug -j8
 ```
 
-Launch the visible demo, selecting the Godot 4.4.1 executable if it is not on `PATH`:
+Launch the visible demo, selecting the Godot 4.7.2 executable if it is not on `PATH`:
 
 ```sh
-python3 scripts/run_terrain_prototype.py --godot /home/peter/Godot/Godot_v4.4.1-stable_linux.x86_64
+python3 scripts/run_terrain_prototype.py --godot /home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64
 ```
 
 Open `demo/project.godot` and choose `res://scenes/terrain_prototype/main.tscn`, or use the optional launcher above. `--editor` opens that scene in the main demo editor. `--test` copies the installed Terrain addon, six suite scripts and prototype scenes into a disposable `/tmp/hego-terrain-tests-*` project, then imports and runs the four headless data, mesher, material-reference and frontend suites. `--test-renderer` uses the same isolation for its graphical suites. `--prepare-only` validates the installed addon directory without staging or starting Godot. Set `GODOT_BIN` to choose the executable without repeating `--godot`.
@@ -26,8 +26,8 @@ The extension manifest lists the available platform/target library paths; instal
 The prototype launcher opens the sculpt fixture by default. Use `--render-lab` to open `res://scenes/terrain_prototype/render_lab.tscn`, a separate Forward+ scene with a deterministic 256 m synthetic heightfield, 32 generated 128 px material sets, LOD controls and optional height displacement. The fixture textures are generated test inputs, not finished art assets.
 
 ```sh
-python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.4.1 --render-lab
-python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.4.1 --render-lab --capture /tmp/hego-renderlab.png --quit-after-frames 120
+python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.7.2 --render-lab
+python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.7.2 --render-lab --capture /tmp/hego-renderlab.png --quit-after-frames 120
 ```
 
 Right drag orbits, the wheel zooms, WASD moves the camera target, and **F** toggles the fixed camera path. The panel toggles displacement, LOD colors and wireframe and reports patch/triangle counts, renderer CPU update times, and viewport CPU/GPU render times. GPU timing is reported as unavailable when Godot returns no GPU measurement.
@@ -35,14 +35,14 @@ Right drag orbits, the wheel zooms, WASD moves the camera target, and **F** togg
 Run a finite benchmark with at least 60 warmup frames and 300 measured frames, writing JSON to an explicit path:
 
 ```sh
-python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.4.1 --benchmark --frames 3000 --report /tmp/hego-renderlab-displacement.json
-python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.4.1 --benchmark --frames 3000 --report /tmp/hego-renderlab-flat.json --no-displacement
+python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.7.2 --benchmark --frames 3000 --report /tmp/hego-renderlab-displacement.json
+python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.7.2 --benchmark --frames 3000 --report /tmp/hego-renderlab-flat.json --no-displacement
 ```
 
 Each run follows the same frame-indexed near-ground camera path, forces Forward+, disables VSync and requests a 1920×1080 window. The JSON stores engine, actual viewport pixels, fixture details, script, renderer-process and viewport render CPU/GPU timing distributions (mean, median, p95 and maximum), and renderer stats. GPU timing is marked unavailable if the engine returns zero. There is no performance threshold or speed claim; compare paired reports only with matching hardware, drivers, engine version, settings and display conditions. `--test-renderer` separately runs the graphical shader/material integration and renderer lifecycle checks under Forward+ and requires a working GPU display. To save its integration frame, use:
 
 ```sh
-python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.4.1 --test-renderer --capture /tmp/hego-renderlab-materials.png
+python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.7.2 --test-renderer --capture /tmp/hego-renderlab-materials.png
 ```
 
 
@@ -64,7 +64,7 @@ The renderer-process p95 is above the 1 ms planning target, so CPU work still ne
 Run `res://scenes/terrain_prototype/main.tscn` in the main demo project and use its **Save layers** control to write an editor fixture at `demo/generated/editor_example.tscn`. The runtime also accepts `--prepare-editor-example` to generate that fixture and exit. Open it with:
 
 ```sh
-/home/peter/Godot/Godot_v4.4.1-stable_linux.x86_64 --editor --path demo res://generated/editor_example.tscn
+/home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64 --editor --path demo res://generated/editor_example.tscn
 ```
 
 The fixture contains the finite terrain and its three selectable layers. Its `.res` data and full-tile snapshots are experimental prototype formats, not production storage or a production undo format.
@@ -83,7 +83,7 @@ The viewport displays the cumulative surface through the selected layer. Named s
 ## Verification
 
 ```sh
-python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.4.1 --test
+python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.7.2 --test
 ```
 
 This creates and imports the disposable test project, then runs the native data, native mesher, material-composition reference, and prototype interaction suites. Negative tests deliberately print rejection diagnostics for unsupported versions, invalid ownership and changing a populated grid. A successful run ends with all four suites passing and exit code zero. The native mesher suite reported 394,222 invariant checks, including 18,312 bit-identical shared UV vertices. The separate `--test-renderer` graphical shader/material and renderer-lifecycle suites passed on Forward+ with a real GPU, including the CPU/GPU blend reference and readback checks.

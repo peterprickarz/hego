@@ -117,11 +117,11 @@ categorical compiler's scope.
 
 ## Reproduce verification
 
-Build from the repository root with Godot 4.4.1-compatible godot-cpp:
+Build from the repository root with Godot 4.7.2-compatible godot-cpp:
 
 ```sh
 scons -f SConstruct.terrain platform=linux target=template_debug -j8
-python3 - /path/to/Godot_v4.4.1-stable_linux.x86_64 <<'PY'
+python3 - /path/to/Godot_v4.7.2-stable_linux.x86_64 <<'PY'
 from pathlib import Path
 import shutil, subprocess, sys, tempfile
 root = Path.cwd()
@@ -143,7 +143,7 @@ for test in tests:
 PY
 ```
 
-Replace the executable argument with your Godot 4.4.1 path. This staging keeps
+Replace the executable argument with your Godot 4.7.2 path. This staging keeps
 tests separate from active demo/HAPI work and prints its temporary project path.
 The main demo uses its installed `demo/addons/strata` directly;
 `scripts/run_terrain_prototype.py --prepare-only` validates that location without

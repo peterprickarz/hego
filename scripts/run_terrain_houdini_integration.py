@@ -69,7 +69,7 @@ def stage_project(destination: Path, hego_library: Path, terrain_library: Path, 
         'config_version=5\n\n'
         '[application]\n'
         'config/name="Strata Houdini Integration"\n'
-        'config/features=PackedStringArray("4.4")\n\n'
+        'config/features=PackedStringArray("4.7")\n\n'
         '[hego]\n'
         f'houdini_installation_path="{str(hfs).replace(chr(92), chr(92) * 2)}"\n\n'
         '[rendering]\n'
@@ -111,7 +111,7 @@ def stage_standalone_project(destination: Path, terrain_library: Path, test_scri
         'config_version=5\n\n'
         '[application]\n'
         'config/name="Strata Standalone Resource Test"\n'
-        'config/features=PackedStringArray("4.4")\n\n'
+        'config/features=PackedStringArray("4.7")\n\n'
         '[rendering]\n'
         'renderer/rendering_method="gl_compatibility"\n',
         encoding="utf-8",
@@ -144,7 +144,7 @@ def run(command: list[str], *, env: dict[str, str], cwd: Path, timeout: int) -> 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--godot", help="Godot 4.4.1 executable (or set GODOT_BIN)")
+    parser.add_argument("--godot", help="Godot 4.7.2 executable (or set GODOT_BIN)")
     parser.add_argument("--hfs", default=os.environ.get("HFS", "/opt/hfs22.0"), help="Houdini installation root")
     parser.add_argument("--hego-library", required=True, help="Built HEGo Linux debug extension library (copied only into the temp project)")
     parser.add_argument(

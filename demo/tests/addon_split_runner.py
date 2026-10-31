@@ -36,7 +36,7 @@ PROJECT = """config_version=5
 [application]
 
 config/name="{name}"
-config/features=PackedStringArray("4.4")
+config/features=PackedStringArray("4.7")
 
 [rendering]
 

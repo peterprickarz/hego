@@ -1,6 +1,6 @@
 # Strata terrain
 
-Strata is a layered terrain for Godot 4.4 and newer. You build a terrain from an ordered
+Strata is a layered terrain for Godot 4.7 and newer. You build a terrain from an ordered
 stack of layers: some you paint in the editor, others are written by a producer such as a
 Houdini Digital Asset. Strata composes the stack into one heightfield with materials, holes
 and navigation masks, and bakes it into a single resource that collision, navigation and

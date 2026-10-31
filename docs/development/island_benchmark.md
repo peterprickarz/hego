@@ -40,7 +40,7 @@ After the cached island scene is ready, run:
 
 ```bash
 scripts/benchmark_terrain_island.py \
-  --godot /path/to/Godot_v4.4.1 \
+  --godot /path/to/Godot_v4.7.2 \
   --frames 300 --warmup 60 \
   --report /tmp/hego-island/report.json \
   --capture-dir /tmp/hego-island/captures

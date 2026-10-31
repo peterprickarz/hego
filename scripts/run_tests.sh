@@ -7,7 +7,7 @@
 #   scripts/run_tests.sh --only python   # one group: python, godot, split, runtime, houdini, gpu
 #   scripts/run_tests.sh --skip-import   # the demo project is already imported
 #
-# GODOT_BIN must be the real Godot 4.4.1 executable; a launcher that opens a terminal
+# GODOT_BIN must be the real Godot 4.7.2 executable; a launcher that opens a terminal
 # window never returns here. HFS points Houdini tests at the Houdini installation.
 # Island tests that read demo/island/terrain are skipped when the checkout holds Git LFS
 # pointers instead of the data (git lfs pull fetches it).
@@ -32,11 +32,11 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 if [[ -z "$GODOT" ]]; then
-    for candidate in "$HOME/Godot/Godot_v4.4.1-stable_linux.x86_64" "$(command -v godot || true)"; do
+    for candidate in "$HOME/Godot/Godot_v4.7.2-stable_linux.x86_64" "$(command -v godot || true)"; do
         [[ -n "$candidate" && -x "$candidate" ]] && GODOT="$candidate" && break
     done
 fi
-[[ -n "$GODOT" && -x "$GODOT" ]] || { echo "error: set GODOT_BIN to the Godot 4.4.1 executable" >&2; exit 2; }
+[[ -n "$GODOT" && -x "$GODOT" ]] || { echo "error: set GODOT_BIN to the Godot 4.7.2 executable" >&2; exit 2; }
 
 # Headless Godot tests that need neither Houdini nor a GPU. hego_standalone_test,
 # terrain_cache_standalone_test and the runtime_* suites run in their own staged projects

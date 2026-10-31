@@ -76,7 +76,7 @@ def run(command, env, timeout):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--godot", default="godot", help="Godot 4.4+ executable matching the CPU")
+    parser.add_argument("--godot", default="godot", help="Godot 4.7+ executable matching the CPU")
     parser.add_argument("--hfs", type=Path, help="Houdini runtime installation (otherwise uses HFS/default)")
     parser.add_argument("--load-only", action="store_true", help="Check extension loading without Houdini or a license")
     parser.add_argument("--timeout", type=int, default=120, help="Timeout per Godot process in seconds")

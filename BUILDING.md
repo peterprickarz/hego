@@ -1,6 +1,6 @@
 # Building HEGo on macOS and Linux
 
-HEGo is a Godot 4.4+ C++ GDExtension. The pinned `godot-cpp` submodule supplies
+HEGo is a Godot 4.7+ C++ GDExtension. The pinned `godot-cpp` submodule supplies
 Godot's bindings. HEGo reads Houdini 22.0.429 HAPI headers at compile time and loads
 Houdini Engine dynamically when a session starts. Cross-compiling therefore does
 not require a Houdini installation for the target operating system.
@@ -119,7 +119,7 @@ Linux compatibility build plus the Windows MinGW build. Build macOS separately.
 ### Linux ARM64 testing
 
 ARM64 support is experimental until tested with an ARM Houdini runtime. Use an
-ARM64 Godot 4.4+ executable and the **Houdini 22 Linux ARM Technical Preview**,
+ARM64 Godot 4.7+ executable and the **Houdini 22 Linux ARM Technical Preview**,
 preferably 22.0.429 to match this checkout's bindings. SideFX requires a CPU
 implementing the Neoverse-N1 instruction set; see the
 [Houdini system requirements](https://www.sidefx.com/Support/system-requirements/).

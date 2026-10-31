@@ -20,7 +20,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "demo"
-GODOT = "/home/peter/Godot/Godot_v4.4.1-stable_linux.x86_64"
+GODOT = "/home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64"
 SHOWCASE = "res://island/island_showcase.tscn"
 EDITOR_SCENE = "res://scenes/terrain_island.tscn"
 
@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
     godot = str(Path(args.godot).expanduser()) if Path(args.godot).expanduser().is_file() else shutil.which(args.godot)
-    if not godot: parser.error("Godot executable is missing; set GODOT_BIN or --godot to Godot 4.4.1")
+    if not godot: parser.error("Godot executable is missing; set GODOT_BIN or --godot to Godot 4.7.2")
     args.godot = godot
     terrain_library = ROOT / "demo/addons/strata/bin/libstrata.linux.template_debug.x86_64.so"
     if not terrain_library.is_file(): parser.error("Build the Strata library first: scripts/build-terrain.sh")

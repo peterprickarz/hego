@@ -76,7 +76,7 @@ The `next` channel publishes the addons as `release-next` (HEGo), `strata-releas
 ## Requirements
 
 - **Houdini 22.0.429** - No license needed for building, active commercial(FX,Core or Houdini Engine) license required for runtime
-- **Godot 4.4+** - Stable or newer versions supported  
+- **Godot 4.7+** - tested on 4.7.2; stable or newer versions supported  
 
 ## Developer Setup
 > If you're interested in contributing read on, otherwise check out the Releases section for the latest version

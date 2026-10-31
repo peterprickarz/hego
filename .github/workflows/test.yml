@@ -32,12 +32,12 @@ jobs:
       - name: Build Strata (debug, host toolchain)
         run: scripts/build-terrain.sh linux template_debug
 
-      - name: Install Godot 4.4.1
+      - name: Install Godot 4.7.2
         run: |
-          curl -sSL -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip
+          curl -sSL -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
           unzip -q godot.zip
-          chmod +x Godot_v4.4.1-stable_linux.x86_64
-          echo "GODOT_BIN=$PWD/Godot_v4.4.1-stable_linux.x86_64" >> "$GITHUB_ENV"
+          chmod +x Godot_v4.7.2-stable_linux.x86_64
+          echo "GODOT_BIN=$PWD/Godot_v4.7.2-stable_linux.x86_64" >> "$GITHUB_ENV"
 
       - name: Run the test suites
         run: TEST_LOG_DIR="$PWD/test-logs" scripts/run_tests.sh

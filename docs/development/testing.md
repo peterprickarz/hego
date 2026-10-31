@@ -15,7 +15,7 @@ scripts/run_tests.sh --only python   # one group: python, godot, split, runtime,
 scripts/run_tests.sh --skip-import   # the demo project is already imported
 ```
 
-`GODOT_BIN` must point at the real Godot 4.4.1 executable (a launcher that opens a terminal
+`GODOT_BIN` must point at the real Godot 4.7.2 executable (a launcher that opens a terminal
 window never returns), and `HFS` at the Houdini installation for the Houdini group
 (default `/opt/hfs22.0`). Logs go to a temporary directory, or to `TEST_LOG_DIR`;
 `TEST_TIMEOUT` (default 600 s) bounds each Godot test.
