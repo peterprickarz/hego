@@ -99,10 +99,103 @@ and D; H after E; X last.
 
 ## Phase B: residency
 
-Per-level texture arrays, the table's level byte, a residency manager (distance tiers, worker
-thread loading, eviction, `max_resident_regions` below the GPU's array layer limit), the
-terrain-wide coarse map, bake-time mips for every map. Editor composes resident regions only
-and caches composed regions on disk by stack signature.
+Status: approved 2026-10-31, tracks running. Goal: GPU and CPU memory bounded by what the
+camera can see, not by the terrain size, with the island as the first beneficiary (235 MB GPU
+today) and 16 km terrains the design point. Three tiers:
+
+| Tier | Level | Where | Who decides |
+| --- | --- | --- | --- |
+| near | 0 | `<map>_regions` arrays, `near_slots` layers (Phase A arrays) | streamer, by distance |
+| far | `far_level` (default 2, 1/16 of the texels) | `<map>_far_regions` arrays, `far_slots` layers | streamer, by distance |
+| coarse | `coarse_level` | one terrain-wide `coarse_<map>` Texture2D per shader map, from the manifest | bake |
+
+A region is in exactly one tier or none; a region in no tier (or not yet loaded) is drawn from
+the coarse maps, so the whole terrain is always visible. Phase A behaviour is the special
+case `near_slots = regions, far_slots = 0, no coarse maps`, which stays the default of
+`set_regions`/`configure_regions` and of every test that does not ask for residency.
+
+### Decisions
+
+- **Region table** (RGBA8, one texel per region): R/G = slot (layer) low/high byte, B = level
+  of the bound data (0 near, `far_level` far, 255 none), A = flags: 1 near, 2 far, 0 none.
+- **Mips**: every region file carries `mip_levels` levels per map (the bake raises
+  `mip_levels` to `max(option, far_level + 1, coarse_level + 1)`). Level `l` texel `u` of a
+  sample map covers lattice index `(u − a) << l`, so levels share lattice points. Height
+  levels are built by decimation (the coincident level-0 sample, not a filter), which makes
+  heights identical at shared points across tiers; scalar channels keep the tent filter, IDs
+  the majority rule, masks "any". Patch LOD vertex spacing at a tier boundary must be at
+  least `spacing << level` of the coarser side for the seam to be exact; the streamer's
+  default radii guarantee that for the default render settings and a test checks it.
+- **Coarse maps**: the terrain-wide lattice at step `spacing × scale << coarse_level`, no
+  apron (sampler clamp), sample maps `grid × n_c + 1` texels per axis, cell maps `grid × n_c`,
+  `n_c = cells / (scale << coarse_level)`. `coarse_level` is the smallest level whose coarse
+  height map is at most `COARSE_MAX_SIDE` (1024 cells) per axis, so the island (4 km at 1 m)
+  gets 4 m coarse maps (1025²) and a 16 km terrain 16 m. The bake stitches them from the
+  regions' level-`coarse_level` cores and stores them in the manifest
+  (`coarse_level`, `coarse_maps[name] = PackedByteArray`, formats of the map). `StrataRegions`
+  owns the geometry (`coarse_level`, `coarse_map_size`, `coarse_window`,
+  `coarse_texel_position`).
+- **Loading**: `StrataRuntimeData` owns region I/O. `request_region(xy)` starts a threaded load
+  (`ResourceLoader.load_threaded_request`), `poll_regions()` moves finished loads into the
+  cache and returns them, `evict_region(xy)` drops an external region, `get_region(xy)` stays
+  synchronous (it completes a pending threaded load). Collision and navigation keep reading
+  windows through `get_region`; sharing the cache with the streamer means the regions around
+  the camera are loaded once. A far region loads its whole file in Phase B (all levels);
+  splitting files per level is Phase C.
+- **Streamer**: `StrataRegionStreamer` (Node; `renderer`, `data`, `camera`; policy exports
+  `near_radius`, `far_radius`, `near_slots` 25, `far_slots` 256, `far_level` 2,
+  `loads_per_frame` 2, `hysteresis` 1.25). Each update (throttled to camera moves of a quarter
+  region): the tier of every region is the nearest tier whose radius contains the closest point
+  of the region rectangle; when a tier has more candidates than slots the nearest regions win;
+  regions leaving a tier are released after the hysteresis band; loads are requested nearest
+  first and bound on poll. `start()` calls
+  `renderer.configure_runtime(source, data, materials, policy)` and binds the coarse maps;
+  `stats()` reports tiers, pending loads, bytes. Radii default from the region extent
+  (near 2.5 ×, far 8 ×).
+- **Renderer**: `configure_regions(source, materials, spec, regions, residency = {})` and
+  `set_regions(spec, regions, residency = {})` take
+  `{near_slots, far_slots, far_level, coarse_level, coarse_maps: {name: Image}}`;
+  `set_region_level(xy, data, level)` binds a region into the tier of `level` (moving it frees
+  its old slot; false when the tier is full or the data lacks the level);
+  `release_region(xy)` returns it to the coarse tier; `region_level(xy)` (0, `far_level`, −1);
+  `free_slots(level)`; `set_coarse_maps(coarse_level, images)`;
+  `configure_runtime(source, data, materials, residency = {})` loads every region eagerly
+  without a residency (Phase A) and otherwise binds only the manifest's coarse maps.
+  `update_region_window` serves near regions only. Stats: resident regions per tier, slots,
+  GPU bytes per tier.
+- **Editor**: the preview composes the coarse maps first (directly at the coarse step, one
+  `compose_map` per map over the terrain-wide window) and binds them, so the terrain appears
+  within a second; then near regions at level 0 in camera-distance order, then far regions
+  composed directly at `far_level` (a direct coarse composition, not a downsample of level
+  0: acceptable for a preview, never for a bake). Dabs recompose the touched near windows as
+  today; a dab on a far or coarse-only region recomposes that region's far level and the
+  coarse texels it covers. The slot policy is the streamer's; the editor camera drives it.
+  A disk cache of composed regions by stack signature is deferred to Phase C.
+- **Performance**: a full island composition takes 26 s and the bake 15 s. Region
+  composition parallelizes over regions with `WorkerThreadPool` once native read paths are
+  shown thread-safe (test: concurrent `compose_dense` of every region equals the serial
+  result byte for byte); `compose_map` gains a `level` (compose directly on the coarser
+  lattice); native fast paths where profiling shows GDScript loops dominate. Targets on this
+  machine: island full editor refresh under 8 s, bake under 8 s.
+
+### Tracks
+
+| Track | Scope | Files |
+| --- | --- | --- |
+| F2 foundation | coarse geometry helpers, this section | strata_regions.gd, tests/region_geometry_test.gd |
+| R2 renderer | tiers, far arrays, coarse textures, table level byte, slot API, `configure_runtime` residency, shader tier selection, GPU tests (tier seam, coarse fallback, slot churn) | strata_renderer.gd, shaders/*, tests/region_renderer_test.gd, tests/residency_render_test.gd, docs/development/terrain_renderer_regions.md |
+| D2 data | threaded region loading and eviction in `StrataRuntimeData`, coarse maps in the bake and manifest (validate, payload, export, duplicate), `StrataRegionStreamer`, island runtime bootstrap and showcase streaming, headless tests (loading, streamer policy against a stub renderer, coarse stitching) | strata_runtime_data.gd, strata_bake.gd, strata_storage.gd, strata_region_streamer.gd (new), demo/island/runtime_bootstrap.gd, island_showcase.gd, tests, docs/development/terrain_runtime.md |
+| N2 performance | profile composition and bake, parallel region composition, `compose_map` level, decimated height mips, native fast paths | strata_region_compose.gd, strata_regions.gd (compose, mips), terrain/src if needed, tests/region_compose_test.gd, docs/development/terrain_bulk.md |
+| E2 editor | coarse-first, distance-ordered, tiered preview composition; dab paths for far and coarse; status and stats | strata_editor_preview.gd, plugin.gd, tests/region_preview_test.gd, docs/strata |
+
+Order: F2 first (done with this section); R2, D2, N2 in parallel; E2 after R2 and N2; the
+bake and the editor adopt N2's parallel composition last.
+
+### Budgets
+
+Island with the defaults: 25 near regions × 0.9 MB, 231 far regions × 56 KB, coarse maps
+13 MB: about 48 MB GPU (Phase A: 235 MB). 16 km at 1 m: 4096 regions on disk (about 4 GB with
+mips), the same 48 MB resident plus a 1025² coarse set; CPU cache around 300 regions.
 
 ## Phase C: large worlds
 
@@ -114,4 +207,4 @@ larger than one dense image, island at 0.5 m, 8–16 km test terrain.
 Island, 4 km at 1 m, 16 × 16 regions, apron 2: height 272 KB, ids 272 KB, weights 272 KB,
 holes 68 KB, macro at scale 4 36 KB per region; about 235 MB GPU resident in Phase A, which is
 the price of 1 m materials (today's 4 m maps are 90 MB). 16 km at 1 m is 4096 regions and
-about 3 GB on disk; Phase B keeps roughly 150 MB resident.
+about 3 GB on disk; Phase B keeps roughly 50 MB resident (see the Phase B budgets).

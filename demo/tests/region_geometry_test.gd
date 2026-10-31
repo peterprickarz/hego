@@ -116,5 +116,21 @@ func run() -> void:
 	check(automatic.region_cells == 0, "0 returns to automatic")
 	automatic.free()
 
+	# Coarse maps (Phase B): the terrain-wide horizon tier at a shared level, no apron.
+	check(StrataRegions.coarse_level(spec) == 2, "the 4 km island at 1 m gets 4 m coarse maps (level 2, 1024 cells per axis)")
+	check(StrataRegions.coarse_map_size(spec, height, 2) == Vector2i(1025, 1025) and StrataRegions.coarse_map_size(spec, holes, 2) == Vector2i(1024, 1024) and StrataRegions.coarse_map_size(spec, macro, 2) == Vector2i(257, 257), "coarse sample maps share the far edge, cell maps do not, scale divides")
+	check(StrataRegions.coarse_level(StrataRegions.standard_spec(Rect2(-8192, -8192, 16384, 16384), 1.0)) == 4, "a 16 km terrain gets 16 m coarse maps")
+	check(StrataRegions.coarse_level(StrataRegions.standard_spec(Rect2(-32, -32, 64, 64), 1.0, 16)) == 0, "a small terrain's coarse maps are its level 0")
+	check(StrataRegions.coarse_level(StrataRegions.standard_spec(Rect2(-8192, -8192, 16384, 16384), 1.0, 16), 1) == 2, "the level is capped so every map keeps a texel per region (scale-4 macro at 16 cells)")
+	var coarse := StrataRegions.coarse_window(spec, height, 2)
+	check(coarse.first == Vector2i.ZERO and coarse.size == Vector2i(1025, 1025) and is_equal_approx(coarse.step, 4.0) and coarse.origin == bounds.position and coarse.level == 2, "the coarse window covers the grid at the level's step")
+	check(StrataRegions.coarse_texel_position(spec, height, Vector2i(1024, 1024), 2) == bounds.end and StrataRegions.coarse_texel_position(spec, holes, Vector2i(1, 0), 2) == bounds.position + Vector2(4, 0), "coarse texels step by spacing × scale << level from the bounds origin")
+	var placement := StrataRegions.coarse_placement(spec, Vector2i(3, 5), height, 2)
+	check(placement.source == Rect2i(2, 2, 65, 65) and placement.destination == Vector2i(192, 320), "a region's level-2 core (apron excluded, shared edge included) lands at grid × 64")
+	var cell_placement := StrataRegions.coarse_placement(spec, Vector2i(15, 15), holes, 2)
+	check(cell_placement.source == Rect2i(2, 2, 64, 64) and cell_placement.destination + cell_placement.source.size == Vector2i(1024, 1024), "the last region's cells end the coarse cell map")
+	check(StrataRegions.coarse_texel_position(spec, height, placement.destination, 2) == StrataRegions.region_origin(spec, Vector2i(3, 5)), "the placed core's first texel is the region origin")
+	check(StrataRegions.map_window(spec, Vector2i(3, 5), height, 1).level == 1, "map windows carry their level")
+
 	print("REGION_GEOMETRY checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)

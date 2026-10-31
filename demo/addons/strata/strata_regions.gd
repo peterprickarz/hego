@@ -167,7 +167,7 @@ static func map_window(spec: Dictionary, xy: Vector2i, description: Dictionary, 
 	var apron := int(description.get("apron", DEFAULT_APRON))
 	var step := texel_step(spec, description, level)
 	var first := xy * n - Vector2i.ONE * apron
-	return {"first": first, "size": map_size(spec.cells, description, level), "origin": (spec.bounds as Rect2).position + Vector2(first) * step, "step": step}
+	return {"first": first, "size": map_size(spec.cells, description, level), "origin": (spec.bounds as Rect2).position + Vector2(first) * step, "step": step, "level": level}
 
 ## Terrain-local XZ of a texel of a region's map. For a cell map this is the cell's minimum
 ## corner.
@@ -205,6 +205,46 @@ static func regions_touching(spec: Dictionary, area: Rect2, description: Diction
 		for x in range(first.x, last.x + 1):
 			result.append(Vector2i(x, y))
 	return result
+
+## Coarse maps (Phase B): one terrain-wide image per map at a shared level, no apron, the
+## horizon tier of the renderer. The level is the smallest whose coarse height map has at most
+## [param max_side] cells per axis, capped so every map of the spec still has a texel per
+## region at that level.
+const COARSE_MAX_SIDE := 1024
+
+static func coarse_level(spec: Dictionary, max_side: int = COARSE_MAX_SIDE) -> int:
+	var grid := grid_size(spec)
+	var maps: Dictionary = spec.get("maps", {})
+	var height: Dictionary = maps.get(MAP_HEIGHT, {"scale": 1, "apron": int(spec.get("apron", DEFAULT_APRON)), "kind": KIND_SAMPLE, "format": Image.FORMAT_RF})
+	var deepest := max_level(int(spec.cells), height)
+	for name in maps: deepest = mini(deepest, max_level(int(spec.cells), maps[name]))
+	var level := 0
+	while level < deepest and maxi(grid.x, grid.y) * texels_per_axis(int(spec.cells), height, level) > max_side: level += 1
+	return level
+
+## Texels per axis of a map's coarse image at a level: grid × cells / (scale << level), plus
+## the shared far edge for sample maps.
+static func coarse_map_size(spec: Dictionary, description: Dictionary, level: int) -> Vector2i:
+	var size := grid_size(spec) * texels_per_axis(int(spec.cells), description, level)
+	return size + (Vector2i.ONE if String(description.kind) == KIND_SAMPLE else Vector2i.ZERO)
+
+## The composition window of a coarse map, shaped like [method map_window]: lattice index 0 at
+## bounds.position, one index per texel step of the level, the whole grid.
+static func coarse_window(spec: Dictionary, description: Dictionary, level: int) -> Dictionary:
+	return {"first": Vector2i.ZERO, "size": coarse_map_size(spec, description, level), "origin": (spec.bounds as Rect2).position, "step": texel_step(spec, description, level), "level": level}
+
+## Terrain-local XZ of a coarse texel (a cell map's texel is the cell's minimum corner).
+static func coarse_texel_position(spec: Dictionary, description: Dictionary, texel: Vector2i, level: int) -> Vector2:
+	return (spec.bounds as Rect2).position + Vector2(texel) * texel_step(spec, description, level)
+
+## Where a region's level-[param level] core lands in the coarse map: [code]source[/code] is
+## the rect inside the region's map (apron excluded, the shared far edge included for sample
+## maps) and [code]destination[/code] the coarse texel it is placed at.
+static func coarse_placement(spec: Dictionary, xy: Vector2i, description: Dictionary, level: int) -> Dictionary:
+	var n := texels_per_axis(int(spec.cells), description, level)
+	var apron := int(description.get("apron", DEFAULT_APRON))
+	var side := n + (1 if String(description.kind) == KIND_SAMPLE else 0)
+	return {"source": Rect2i(apron, apron, side, side), "destination": xy * n}
 
 ## Image over a level's bytes; the bytes are copied by Image.
 static func image_from_level(description: Dictionary, cells: int, level: int, bytes: PackedByteArray) -> Image:
