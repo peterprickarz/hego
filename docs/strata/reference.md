@@ -17,6 +17,7 @@ names have a meaning to Strata:
 | `height` | terrain height in metres | The stack starts from a flat 0. |
 | `hole` | 1 cuts the cell out of rendering, collision and navigation; 0 is solid | Mask; Replace only. |
 | `nav_exclusion` | 1 removes the cell from navigation only | Mask; Replace only. |
+| `footpath` | 0 to 1 trail network, 1 on the centreline, 0 off the trail | Cooked by `HEGo_IslandErosion`; for [navigation profiles](#navigation-profile-rules). |
 | `terrain_tint_r`, `terrain_tint_g`, `terrain_tint_b` | linear multiplier on material colour | Neutral 1, range 0 to 2. |
 | `terrain_ao` | multiplier on ambient and indirect light | Neutral 1, range 0 to 1. |
 | the names in `editor_material_channels` | the weight of the material with the same index in `editor_materials` | Zero or positive. The island calls them `material_<name>`. |
@@ -97,7 +98,8 @@ Options of `StrataBake.bake(terrain, options)` and `StrataBake.compile()`:
 | `holes`, `nav_exclusions` | none | explicit cell masks instead of `cell_masks`: an image or bytes of (width − 1) × (height − 1) cells |
 | `material_ids`, `material_weights` | none | packed material controls: an RGBA8 ID image and an RGBAF or RGBAH weight image, both at most 1025 per side |
 | `macro` | `"auto"` | the tint and AO map: `"auto"` when a layer owns a tint or AO channel, `true` always, `false` never, or a dictionary with a `spacing` (default 4 m) |
-| `channels` | none | extra channels to keep in the bake for `StrataRuntimeData.sample_channel()` |
+| `channels` | none | extra channels to keep in the bake for `StrataRuntimeData.sample_channel()` and for navigation profile rules |
+| `nav_profiles` | none | an array of `{"name": StringName, "rule": Dictionary}`; one walkability mask per name, one byte per cell. `default` is reserved: it is always the `nav_exclusion` mask. A rule that is invalid, or reads a channel the bake does not keep, fails the bake |
 | `allow_stale_procedural` | false | bake stale or loaded procedural results as they are; the report lists them |
 | `max_runtime_bytes` | 512 MiB | the bake's size budget, at most 512 MiB |
 
@@ -106,6 +108,37 @@ Options of `StrataBake.bake(terrain, options)` and `StrataBake.compile()`:
 (`true` or a dictionary of node properties), `name`, `share_data` (reference the
 terrain's bake instead of copying it), `allow_stale_bake`, and for `save_runtime_scene()`,
 `data_path` to save the bake as its own resource.
+
+## Navigation profile rules
+
+A rule is a Dictionary that is true where a cell is walkable. Each Dictionary is exactly
+one of these forms; unknown keys, wrong types and empty lists are errors.
+
+| Form | Walkable where | Notes |
+| --- | --- | --- |
+| `{"channel": name, "min": x, "max": y}` | the channel is within the range | `min` and/or `max`, inclusive. The channel must be in the bake's `channels`. |
+| `{"height_min": x, "height_max": y}` | the height is within the range | Either or both, in metres. |
+| `{"slope_min": x, "slope_max": y}` | the slope is within the range | Either or both, in degrees from 0 to 90. The steeper of the cell's two triangles counts. |
+| `{"exclusion": true}` | the cell is not in the `nav_exclusion` mask | The mask's own per-cell value. |
+| `{"not": rule}` | the inner rule is false | |
+| `{"all": [rules]}` | every inner rule is true | Non-empty list. |
+| `{"any": [rules]}` | at least one inner rule is true | Non-empty list. |
+
+Channel and height tests use the mean of the cell's four corner samples. A 0/1 channel meant
+as a category should use `"min": 0.5`, which means at least two corners are set. One rule may
+contain at most `StrataNavProfiles.MAX_TERMS` (8) distinct tests.
+
+Runtime API:
+
+| Member | Meaning |
+| --- | --- |
+| `StrataRuntimeData.get_nav_profile_names()` | the profile names, including `default` |
+| `StrataRuntimeData.has_nav_profile(name)`, `get_nav_profile_rule(name)` | whether a profile exists, and the rule it was baked from |
+| `StrataRuntimeData.is_nav_blocked_cell(cell, profile)` | whether the cell is a hole or blocked for that profile |
+| `StrataRuntimeData.sample_channel(name, position, interpolation)` | `{ok, status, value, coverage}` for a retained channel; `has_channel(name)` tests for one |
+| `StrataTerrain3D.sample_runtime_channel(name, world_position)` | the same, in world space |
+| `StrataNavigation.profile` | the profile this node bakes; default `default`. A profile missing from the data is reported by the bake |
+| `StrataNavigation.navigation_layers` | the layer bits of this node's regions; agents choose a population with them |
 
 ## Custom material shader code
 

@@ -225,9 +225,25 @@ are built for the island's four materials, and make good templates for your own:
 
 | HDA | Reads | Publishes |
 | --- | --- | --- |
-| `HEGo_IslandErosion` | cumulative `height`; optionally the raw `height` and `constraint` of a later hand layer, which it protects and blends toward | `height`, `erosion_delta`, `sediment`, `debris`, `flow`, `grass`, `rock`, `sand`, `scree`, plus one `material_<name>` weight per material |
+| `HEGo_IslandErosion` | cumulative `height`; optionally the raw `height` and `constraint` of a later hand layer, which it protects and blends toward | `height`, `erosion_delta`, `sediment`, `debris`, `flow`, `grass`, `rock`, `sand`, `scree`, `footpath`, plus one `material_<name>` weight per material |
 | `HEGo_TerrainTint` | cumulative `height` | `terrain_tint_r`, `terrain_tint_g`, `terrain_tint_b`, `terrain_ao` |
 | `HEGo_MaterialDistribution` | cumulative `height` | one `material_<name>` weight per material, summing to 1 |
+
+`footpath` is a trail network: least-cost paths over the final height join a handful of
+seeded waypoints into one connected network, and water and steep ground are never part of it.
+It is 1 on the trail centreline and falls to 0 at the edges, so a navigation profile can use
+it as `{"channel": "footpath", "min": 0.5}` (see
+[navigation profiles](getting_started.md#navigation-profiles)). The *Footpaths* parameters
+control it:
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `footpaths` | on | compute the channel; off still outputs it, all 0 |
+| `footpath_count` | 8 | waypoints joined into the network |
+| `footpath_width` | 3 m | trail width at full value |
+| `footpath_max_slope` | 30 degrees | steepest ground a trail may use |
+
+`seed` also picks the waypoints.
 
 Each has a `target_layer_path` parameter and routes every output as described above. They
 embed a helper, `util_MaterialWeightLimit`, that limits material weights to the four

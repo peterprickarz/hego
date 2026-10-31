@@ -288,6 +288,66 @@ Strata never changes your map settings. `check_merge_conflicts` turns on a check
 warns when tiles would conflict.
 ```
 
+### Navigation profiles
+
+Different populations often walk on different ground: enemies that stay inside a fungal
+network, villagers that keep to footpaths, a player who can go almost anywhere. The terrain
+is static, so Strata decides this once, at bake time. Each population gets a *profile*, a
+walkability mask baked from the terrain's channels. A profile is never recomputed while the
+game runs.
+
+Define profiles with the `nav_profiles` bake option, a list of names and rules. A rule can
+only read channels the bake keeps, so list them in `channels` too:
+
+```gdscript
+var result := StrataBake.bake(terrain, {
+    "cell_masks": true,
+    "channels": PackedStringArray(["footpath", "fungal"]),
+    "nav_profiles": [
+        {"name": &"paths_only", "rule": {"channel": "footpath", "min": 0.5}},
+        {"name": &"fungal", "rule": {"all": [
+            {"channel": "fungal", "min": 0.3},
+            {"slope_max": 35},
+        ]}},
+    ],
+})
+```
+
+`paths_only` is walkable where the `footpath` channel is at least 0.5. `fungal` is walkable
+where the `fungal` channel is at least 0.3 and the ground is no steeper than 35 degrees. A
+rule is built from a few forms (a channel range, a height range, a slope range, the
+`nav_exclusion` mask, and `not`, `all` and `any` to combine them); the
+[reference](reference.md#navigation-profile-rules) lists them. An invalid rule fails the
+bake with a message.
+
+Every bake also has the `default` profile, which is the `nav_exclusion` mask on its own.
+Holes are blocked for every profile.
+
+Then add one `StrataNavigation` per profile, each with its own `profile` and its own
+`navigation_layers` bit:
+
+```gdscript
+func add_navigation(terrain: StrataTerrain3D, profile: StringName, layer: int) -> StrataNavigation:
+    var navigation := StrataNavigation.new()
+    navigation.data = terrain.runtime_data
+    navigation.profile = profile
+    navigation.navigation_layers = 1 << layer
+    terrain.add_child(navigation)
+    navigation.bake_region(Rect2(-512, -512, 1024, 1024))
+    return navigation
+
+add_navigation(terrain, &"paths_only", 1)
+add_navigation(terrain, &"fungal", 2)
+```
+
+An agent chooses its population by setting `navigation_layers` on its `NavigationAgent3D` to
+that bit, so its paths only use that profile's tiles. Two nodes that bake the same area for
+different profiles share one navigation map; the layers keep them apart.
+
+To steer by the channels themselves, for example to prefer the middle of a footpath, read
+them with `terrain.sample_runtime_channel(&"footpath", world_position)`. It returns
+`{ok, status, value, coverage}` and, like the height queries, never composes layers.
+
 ## Draw the terrain in your game
 
 The textured view in the editor is an editor tool. In a running game, the terrain shows its

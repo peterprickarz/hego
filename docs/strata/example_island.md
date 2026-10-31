@@ -29,6 +29,14 @@ The `HEGoNode3D` nodes that cook them sit under `HDA`: `CoarseCook`, `DetailCook
 `TintCook` and `MaterialCook`. The terrain uses four ambientCG materials: coastal sand,
 island grass, scree gravel and dark cliff.
 
+## Footpaths and navigation profiles (coming)
+
+`HEGo_IslandErosion` can now cook a `footpath` channel, and Strata can bake per-population
+[navigation profiles](getting_started.md#navigation-profiles) from it. The island's committed
+data does not carry `footpath` yet: it appears once `CoarseCook` and `DetailCook` are
+recooked. The island and its showcase do not yet wire two profiles; today they navigate with
+the `default` profile only.
+
 ## Open it
 
 The island's layers, cooked channels and textures are stored with

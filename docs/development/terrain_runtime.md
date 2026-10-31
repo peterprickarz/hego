@@ -184,6 +184,10 @@ Residency and replacement:
 - `replace_data(next)` rebuilds all resident chunks before anything is swapped. On failure, the old data and its shapes stay.
 - `clear()` frees every body. `collision_layer`, `collision_mask` and `physics_material` apply to every chunk.
 
+## Navigation profiles
+
+A profile mask is stored like `nav_exclusions`: one byte per cell, 255 = blocked, empty = nothing blocked; `default` is the `nav_exclusions` mask itself and holes are never written into profile masks. `StrataBake` evaluates each rule in `strata_nav_profiles.gd` after the channels and masks, over channels retained in the bake only, so every mask can be reproduced from the data. The rules are saved in `nav_profile_rules` as bytes (`var_to_bytes`), because `.tres` rounds floats and would drift the thresholds. `strata_nav_profiles.gd` is needed at runtime only to re-evaluate a rule, not to load or navigate. Each distinct term sets one bit per cell and a 256-entry table maps the bits to the mask; slope is the costly pass. A three-term rule over the full 4097² lattice costs about 1.2 s of GDScript. Each profile adds one byte per cell to the payload budget.
+
 ## Navigation
 
 ```gdscript
