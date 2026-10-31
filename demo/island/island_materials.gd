@@ -91,6 +91,53 @@ static func pack(layer: StrataLayer) -> Dictionary:
 	packed["pack_cpu_ms"] = (Time.get_ticks_usec() - started) / 1000.0
 	return packed
 
+## The layer immediately preceding [param target] in the terrain stack, or null.
+static func layer_below(terrain: StrataTerrain3D, target: StrataLayer) -> StrataLayer:
+	var layers := terrain.get_layers()
+	var index := layers.find(target)
+	return layers[index - 1] if index > 0 else null
+
+## Enabled layers above [param target] that own at least one material channel.
+static func material_layers_above(terrain: StrataTerrain3D, target: StrataLayer) -> Array[StrataLayer]:
+	var result: Array[StrataLayer] = []
+	var names := channels()
+	var layers := terrain.get_layers()
+	for index in range(layers.find(target) + 1, layers.size()):
+		var layer: StrataLayer = layers[index]
+		if not layer.enabled: continue
+		var owned := layer.get_channel_names()
+		for channel in names:
+			if owned.has(channel): result.append(layer); break
+	return result
+
+## Cheap identity of what manual layers above [param target] contribute to the material
+## channels; unrelated channels such as height do not change it.
+static func above_state(terrain: StrataTerrain3D, target: StrataLayer) -> Array:
+	var names := channels()
+	var state: Array = []
+	for layer in material_layers_above(terrain, target):
+		var entries: Array = []
+		var owned := layer.get_channel_names()
+		for channel in names:
+			if not owned.has(channel): continue
+			var field: StrataFieldData = layer.procedural_fields.get(channel)
+			entries.append([channel, layer.get_composition(StringName(channel)), field.signature() if field != null else [layer.data.get_instance_id(), layer.data.get_revision()]])
+		state.append([layer.get_instance_id(), entries])
+	return state
+
+## Control maps for the terrain. Without material-owning layers above the procedural pass
+## this is the strict [method pack] of [param target]; with them, the procedural pass is
+## still validated by [method pack], and the maps come from the stack composed through the
+## final layer so hand-painted weights win where they own a texel.
+static func controls(terrain: StrataTerrain3D, target: StrataLayer) -> Dictionary:
+	var packed := pack(target)
+	if not packed.get("ok", false) or material_layers_above(terrain, target).is_empty(): return packed
+	var composed := StrataMaterialControls.compose(terrain, channels(), null)
+	if not composed.get("ok", false): return composed
+	if composed.get("empty", false): return {"ok": false, "message": "Composed material controls are empty"}
+	composed["source"] = packed.get("source", "") + " with manual material layers"
+	return composed
+
 ## Adds only a missing mask stage/producer. Existing layer identity, input rows,
 ## user material edits, parameters and every preexisting node are retained. The host's
 ## target is its HDA's target_layer_path parameter, which [method cook_explicit] sets.
@@ -114,10 +161,10 @@ static func attach(scene: Node3D, contract: Dictionary, upgrade_legacy_input: bo
 		group.add_child(host); host.owner = scene
 	if host.asset_name.is_empty(): host.asset_name = contract.operator
 	elif host.asset_name != contract.operator: return {"ok": false, "message": "MaterialCook uses a different HDA"}
-	if target != terrain.get_layers()[-1]: return {"ok": false, "message": "MaterialDistribution must follow the final authored stack"}
-	var layers := terrain.get_layers()
-	if layers.size() < 2: return {"ok": false, "message": "MaterialDistribution needs an earlier cumulative height source"}
-	var below: StrataLayer = layers[-2]
+	# The cook reads the cumulative stack directly below the layer. Manual layers above it
+	# (hand-painted material touch-ups) are composed after the cook and never fed back in.
+	var below := layer_below(terrain, target)
+	if below == null: return {"ok": false, "message": "MaterialDistribution needs an earlier cumulative height source"}
 	if host.input_stash.is_empty(): host.input_stash = [{"inputs": ["../../Terrain/" + String(below.name)], "settings": {"terrain_mode": "cumulative", "terrain_channels": HEGoIslandStageMaterials.input_channels(), "terrain_spacing": 4.0, "terrain_max_samples": StrataProcedural.MAX_SAMPLES}}]
 	if host.input_stash.size() != 1 or host.input_stash[0].get("inputs", []) != ["../../Terrain/" + String(below.name)] or host.input_stash[0].get("settings", {}).get("terrain_mode") != "cumulative" or HEGoIslandStageMaterials.channel_names(host.input_stash[0].get("settings", {}).get("terrain_channels", [])) not in [PackedStringArray(["height"]), HEGoIslandStageMaterials.input_channels()] or host.input_stash[0].get("settings", {}).get("terrain_spacing", 0.0) != 4.0: return {"ok": false, "message": "MaterialCook requires the final cumulative height/material/simulation input at 4 m (or the saved legacy height-only binding); use the explicit stage input migration to upgrade"}
 	if upgrade_legacy_input and HEGoIslandStageMaterials.channel_names(host.input_stash[0].settings.terrain_channels) == PackedStringArray(["height"]):

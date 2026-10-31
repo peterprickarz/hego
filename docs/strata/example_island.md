@@ -19,6 +19,12 @@ From the bottom of the stack to the top:
 | `TerrainTint` | procedural, masks only | `HEGo_TerrainTint`: terrain-wide colour variation and cavity AO |
 | `MaterialDistribution` | procedural, masks only | `HEGo_MaterialDistribution`: the final weight of each material |
 
+`MaterialDistribution` is last only in the shipped island. It reads the stack directly below
+it, so you can add a manual layer above it and paint the four `material_*` channels by hand
+(for example to touch up a path or a beach). The terrain's material controls then compose
+your hand weights over the Houdini result, and a recook of `MaterialCook` never reads that
+layer back.
+
 The `HEGoNode3D` nodes that cook them sit under `HDA`: `CoarseCook`, `DetailCook`,
 `TintCook` and `MaterialCook`. The terrain uses four ambientCG materials: coastal sand,
 island grass, scree gravel and dark cliff.
@@ -61,6 +67,9 @@ that order. Save the scene afterwards.
 
 ## Things to try
 
+- **Touch up materials.** Add a `StrataLayer` above `MaterialDistribution`, give it the
+  `material_island_grass` (or another `material_*`) channel and paint weights. Your strokes
+  win where they own a sample; everywhere else the Houdini distribution stays.
 - **Paint.** Select `Terrain/ManualFine` and sculpt with the brush. It is an Add layer, so
   your strokes ride on the eroded ground.
 - **Watch the dependency.** Every cooked layer opens marked stale, because it was loaded

@@ -148,6 +148,22 @@ func run() -> void:
 		check(upgraded.target.procedural_stale and upgraded.target.procedural_status == "Inputs changed; explicit recook required", "an upgraded input marks the cached distribution stale until an explicit recook")
 		attached.host.input_stash[0].inputs = ["../../Terrain/" + HEGoIslandMaterials.LAYER]
 		check(not HEGoIslandMaterials.attach(scene, {"operator": "Sop/test_materials::1.0"}).ok and attached.host.input_stash[0].inputs == ["../../Terrain/" + HEGoIslandMaterials.LAYER], "conflicting user input row rejected without overwriting it")
+	# A manual layer may sit above MaterialDistribution: the cook still reads the layer below it.
+	var touch := StrataLayer.new(); touch.name = "TouchUp"; terrain.add_child(touch)
+	check(attached.ok and HEGoIslandMaterials.layer_below(terrain, attached.target) == base and HEGoIslandMaterials.material_layers_above(terrain, attached.target).is_empty(), "a layer above without material channels is allowed and not a material layer")
+	var plain_state := HEGoIslandMaterials.above_state(terrain, attached.target)
+	touch.data.sample_spacing = 4.0
+	touch.data.set_sample(&"height", Vector2i.ZERO, 1.0)
+	check(HEGoIslandMaterials.above_state(terrain, attached.target) == plain_state, "height edits above MaterialDistribution do not change the material watch state")
+	attached.host.input_stash[0].inputs = ["../../Terrain/UserHand"]
+	var reattached := HEGoIslandMaterials.attach(scene, {"operator": "Sop/test_materials::1.0"})
+	check(reattached.ok and reattached.host.input_stash[0].inputs == ["../../Terrain/UserHand"], "attach with a manual layer above keeps the cook input on the layer below MaterialDistribution")
+	touch.set_composition(StringName(entries[1].channel), StrataLayer.Composition.ADD)
+	touch.data.set_sample(StringName(entries[1].channel), Vector2i.ZERO, 5.0)
+	check(HEGoIslandMaterials.material_layers_above(terrain, attached.target).size() == 1 and HEGoIslandMaterials.material_layers_above(terrain, attached.target)[0] == touch and HEGoIslandMaterials.above_state(terrain, attached.target) != plain_state, "a material-owning layer above is detected and changes the watch state")
+	var moved := HEGoIslandMaterials.attach(scene, {"operator": "Sop/test_materials::1.0"})
+	check(moved.ok and moved.host.input_stash[0].inputs == ["../../Terrain/UserHand"], "the manual material layer is never fed back into the cook")
+	check(HEGoIslandStageMaterials.migrate(scene).message.find("authored stack") < 0, "stage migration no longer demands MaterialDistribution be last")
 	base.data.set_sample(&"height", Vector2i.ZERO, 42.0)
 	base.composition_modes = {"terrain_tint_r": 0, "terrain_ao": 1}
 	var layer_hash := HEGoIslandMaterials.layer_content_hash(base)
@@ -164,5 +180,35 @@ func run() -> void:
 	var initialized := HEGoIslandMaterials.attach(scaffold_scene, {"operator": "Sop/test_materials::1.0"})
 	check(initialized.ok and initialized.host == scaffold and scaffold.asset_name == "Sop/test_materials::1.0" and scaffold.input_stash.size() == 1 and scaffold.get_child_count() == 0, "an existing blank MaterialCook scaffold initializes safely")
 	scaffold_scene.free()
+	await _controls_with_manual_layer(entries)
 	print("MATERIAL_DISTRIBUTION checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)
+
+
+## End to end on the real 4 m, 1025 lattice: without material layers above, controls are the
+## strict procedural pack; with one, hand weights compose over the procedural result.
+func _controls_with_manual_layer(entries: Array) -> void:
+	var terrain := StrataTerrain3D.new(); terrain.name = "Terrain"; terrain.base_bounds = Rect2(0, 0, 4096, 4096); terrain.set_preview_enabled(false)
+	var below := StrataLayer.new(); below.name = "Below"; terrain.add_child(below)
+	var target := StrataLayer.new(); target.name = HEGoIslandMaterials.LAYER; target.procedural = true; terrain.add_child(target)
+	for index in range(count):
+		var image := Image.create(1025, 1025, false, Image.FORMAT_RF); image.fill(Color(1.0 if index == 0 else 0.0, 0, 0))
+		var field := StrataFieldData.from_field({"name": StringName(entries[index].channel), "image": image, "sample_origin": Vector3.ZERO, "sample_step_x": Vector3(4, 0, 0), "sample_step_y": Vector3(0, 0, 4)})
+		target.procedural_fields[entries[index].channel] = field
+	root.add_child(terrain)
+	await process_frame
+	var plain := HEGoIslandMaterials.controls(terrain, target)
+	var strict := HEGoIslandMaterials.pack(target)
+	check(plain.get("ok", false) and plain.ids.get_data() == strict.ids.get_data() and plain.weights.get_data() == strict.weights.get_data(), "without material layers above, controls are exactly the strict procedural pack")
+	var hand := StrataLayer.new(); hand.name = "Hand"; hand.data.sample_spacing = 4.0; terrain.add_child(hand)
+	hand.set_composition(StringName(entries[1].channel), StrataLayer.Composition.REPLACE)
+	hand.data.set_sample(StringName(entries[1].channel), Vector2i.ZERO, 1.0)
+	hand.data.set_sample(StringName(entries[0].channel), Vector2i.ZERO, 0.0)
+	var touched := HEGoIslandMaterials.controls(terrain, target)
+	check(touched.get("ok", false), "controls compose with a manual material layer above")
+	if touched.get("ok", false):
+		check(roundi(touched.ids.get_pixel(0, 0).r * 255.0) == 1 and is_equal_approx(touched.weights.get_pixel(0, 0).r, 1.0), "hand-painted material replaces the procedural weight at its texel")
+		check(roundi(touched.ids.get_pixel(5, 5).r * 255.0) == 0 and is_equal_approx(touched.weights.get_pixel(5, 5).r, 1.0), "unowned texels keep the procedural result")
+	target.procedural_fields.erase(entries[0].channel)
+	check(not HEGoIslandMaterials.controls(terrain, target).get("ok", false), "an invalid procedural pack is still rejected even with a layer above")
+	root.remove_child(terrain); terrain.free()

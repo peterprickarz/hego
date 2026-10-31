@@ -10,6 +10,7 @@ var terrain: StrataTerrain3D
 var _revision := -1
 var _pending := false
 var _final_state: Dictionary = {}
+var _above: Array = []
 var status := "Saved Houdini material controls"
 
 
@@ -22,6 +23,7 @@ func setup(source: StrataTerrain3D) -> void:
 	if target != null:
 		_revision = target.procedural_revision
 		_final_state = _state(target)
+		_above = HEGoIslandMaterials.above_state(terrain, target)
 	terrain.authoring_preview_changed.connect(_changed)
 
 
@@ -40,7 +42,8 @@ func _changed() -> void:
 	if _final_state.is_empty():
 		_final_state = _state(target)
 		_revision = target.procedural_revision
-	if target.procedural_stale or target.procedural_revision == _revision: return
+	if target.procedural_stale: return
+	if target.procedural_revision == _revision and HEGoIslandMaterials.above_state(terrain, target) == _above: return
 	_pending = true
 	_repack.call_deferred()
 
@@ -49,9 +52,18 @@ func _repack() -> void:
 	_pending = false
 	if not is_instance_valid(terrain): return
 	var target := terrain.get_node_or_null(HEGoIslandMaterials.LAYER) as StrataLayer
-	if target == null or target.procedural_stale or target.procedural_revision == _revision: return
-	var packed := HEGoIslandMaterials.pack(target)
+	if target == null or target.procedural_stale: return
+	var above := HEGoIslandMaterials.above_state(terrain, target)
+	var fresh := target.procedural_revision != _revision
+	if not fresh and above == _above: return
+	var packed := HEGoIslandMaterials.controls(terrain, target)
 	if not packed.get("ok", false):
+		if not fresh:
+			# Only a manual layer changed: the procedural result stays as it is.
+			_above = above
+			status = String(packed.get("message", "Material packing failed")) + "; previous controls retained"
+			push_error(status)
+			return
 		_reject(target, String(packed.get("message", "Material packing failed")))
 		return
 	var previous_ids := terrain.editor_control_ids
@@ -63,9 +75,12 @@ func _repack() -> void:
 		if not saved.ok:
 			terrain.editor_control_ids = previous_ids
 			terrain.editor_control_weights = previous_weights
-			_reject(target, String(saved.message))
+			if not fresh: _above = above
+			if fresh: _reject(target, String(saved.message))
+			else: push_error(String(saved.message))
 			return
 	_revision = target.procedural_revision
+	_above = above
 	_final_state = _state(target)
 	status = "%d Houdini material masks packed into the terrain's control maps" % target.procedural_fields.size()
 	if Engine.is_editor_hint(): EditorInterface.mark_scene_as_unsaved()

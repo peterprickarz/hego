@@ -430,7 +430,7 @@ func _ensure_controls() -> bool:
 	if layer == null or layer.procedural_fields.is_empty():
 		push_error("No material controls and no cooked MaterialDistribution; run scripts/run_terrain_island.py --cook-materials")
 		return false
-	var packed := HEGoIslandMaterials.pack(layer)
+	var packed := HEGoIslandMaterials.controls(terrain, layer)
 	if not packed.get("ok", false): push_error(String(packed.message)); return false
 	terrain.editor_control_ids = packed.ids; terrain.editor_control_weights = packed.weights
 	return true

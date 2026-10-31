@@ -185,7 +185,10 @@ input's sample budget, described in the [reference](reference.md#limits).
 
 **Manual layers keep their work.** A cook replaces only its target layer. Manual layers
 above it are composed on top of the new result as before: Add layers follow the new ground,
-Replace layers keep their values.
+Replace layers keep their values. The same holds for material distribution: a manual layer
+above the layer that carries the `material_*` masks may paint material weights by hand, and
+the terrain's material controls compose it over the cooked result. The cook itself reads only
+the stack below its target.
 
 **Results go stale, never silently out of date.** A cooked layer is marked stale, with the
 reason in its `procedural_status`, when:
