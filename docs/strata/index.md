@@ -68,7 +68,9 @@ change to the stack marks the bake stale (`runtime_bake_stale`) until you bake a
 **The editor shows the live stack.** With `textured_editor_preview` enabled and materials
 assigned, the editor viewport renders the terrain with the real Forward+ renderer, composed
 from the layers as you paint. Selecting a layer shows the stack up to and including that
-layer, so you always see what you are painting on.
+layer, so you always see what you are painting on. On a large terrain the whole terrain
+appears within about a second at a coarse resolution, then the detail fills in around the
+editor camera, nearest first, and follows the camera as you fly; you need no setting for it.
 
 ## Where the data lives
 

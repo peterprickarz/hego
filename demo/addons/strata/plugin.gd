@@ -166,6 +166,8 @@ func _process(delta: float) -> void:
 			if is_instance_valid(bridge):
 				bridge.sync_configuration()
 				bridge.set_camera(_editor_camera if is_instance_valid(_editor_camera) else viewport.get_camera_3d())
+				# Composition progress (coarse terrain, then regions near the camera) while no stroke is active.
+				if _stroke_layer == null and is_instance_valid(_status) and not bridge.progress_text().is_empty(): _status.text = bridge.progress_text()
 
 func _discover_terrains(node: Node) -> void:
 	if node is StrataTerrain3D and node.textured_editor_preview and not node.editor_materials.is_empty() and not is_instance_valid(node.editor_preview_bridge):
@@ -347,6 +349,8 @@ func _finish_stroke() -> void:
 		_stroke_layer = null
 		_stroke_records = []
 		return
+	# The coarse maps are uploaded throttled while painting; show the final state at once.
+	if _stroke_layer.get_parent() is StrataTerrain3D and is_instance_valid(_stroke_layer.get_parent().editor_preview_bridge): _stroke_layer.get_parent().editor_preview_bridge.flush_coarse()
 	if not _stroke_records.is_empty():
 		# The stroke is already applied; the action only records how to take it back.
 		var undo := get_undo_redo()

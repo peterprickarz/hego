@@ -121,6 +121,9 @@ Options of `StrataBake.bake(terrain, options)` and `StrataBake.compile()`:
 | `nav_profiles` | none | an array of `{"name": StringName, "rule": Dictionary}`; one walkability mask per name, one byte per cell. `default` is reserved: it is always the `nav_exclusion` mask. A rule that is invalid, or reads a channel the bake does not keep, fails the bake |
 | `allow_stale_procedural` | false | bake stale or loaded procedural results as they are; the report lists them |
 | `max_runtime_bytes` | 512 MiB | the bake's size budget, at most 512 MiB |
+| `mip_levels` | 3 | levels per map in every region; raised so the far level and the coarse maps exist |
+| `far_level` | 2 | the level `StrataRegionStreamer` draws distant regions at |
+| `coarse_max_side` | 1024 | longest side, in cells, of the terrain-wide coarse maps every bake stores for the streamer |
 
 `bake()` returns `{ok, data, report}` or `{ok: false, message}`. Options of
 `StrataBake.export_runtime()` and `save_runtime_scene()`: `collision` and `navigation`

@@ -99,7 +99,7 @@ and D; H after E; X last.
 
 ## Phase B: residency
 
-Status: approved 2026-10-31, tracks running. Goal: GPU and CPU memory bounded by what the
+Status: approved 2026-10-31; tracks F2, R2, D2, N2 and E2 landed on 2026-10-31 (island smoke of the streamer pending user review in the editor). Goal: GPU and CPU memory bounded by what the
 camera can see, not by the terrain size, with the island as the first beneficiary (235 MB GPU
 today) and 16 km terrains the design point. Three tiers:
 
@@ -176,7 +176,11 @@ case `near_slots = regions, far_slots = 0, no coarse maps`, which stays the defa
   shown thread-safe (test: concurrent `compose_dense` of every region equals the serial
   result byte for byte); `compose_map` gains a `level` (compose directly on the coarser
   lattice); native fast paths where profiling shows GDScript loops dominate. Targets on this
-  machine: island full editor refresh under 8 s, bake under 8 s.
+  machine: island full editor refresh under 8 s, bake under 8 s. As built: `compose_regions`
+  takes 3.6 s for the island's 256 regions (14 s serial), mips 0.05 s (33 s before).
+  `StrataRegionCompose.capture` is a descriptor set over the layers' live data, not a copy, so
+  a caller that composes on worker threads must keep the layers unchanged until its tasks
+  finish (the preview waits for in-flight tasks before a dab and recaptures afterwards).
 
 ### Tracks
 

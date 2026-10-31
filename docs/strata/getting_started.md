@@ -47,8 +47,15 @@ Bounds that are not a multiple of the region size give a warning; the last regio
 past the bounds. The older `editor_compile_spacing` is an alias of `region_spacing`.
 
 Each 256-cell region at 1 m costs about 0.9 MB of video memory with materials (height,
-material IDs and weights, holes and the tint map), so the 4 km island holds about 235 MB. A
-coarser `region_spacing` shrinks that by the square of the ratio; see
+material IDs and weights, holes and the tint map). A terrain of up to 25 regions shows every
+region in full detail. A larger one, such as the 4 km island, shows the whole terrain at once
+from coarse maps (a few metres per texel, composed first, so it appears within about a second
+of opening the scene or editing the stack) and adds full detail only for the 25 regions nearest
+the editor camera and a quarter-resolution view for the next 256, so video memory stays at
+tens of megabytes however large the terrain is. Flying the camera re-fills the detail around
+it; regions you leave are released. Painting updates all three levels, and the coarse view
+updates a few times a second while you drag, then settles when you release. This needs no
+setting. A coarser `region_spacing` shrinks the cost by the square of the ratio; see
 [limits](reference.md#limits) for what else bounds the terrain size.
 
 Keep the terrain's transform to translation and rotation around Y with unit scale,
@@ -387,6 +394,28 @@ if renderer.configure_runtime(terrain, terrain.runtime_data, terrain.editor_mate
 
 The renderer takes its quality settings, material controls, holes and tint map from the
 bake, and needs Forward+.
+
+That binds every region at once, which is fine for a small terrain. For a large one, add a
+`StrataRegionStreamer`: it draws the whole terrain from the bake's coarse maps straight
+away, and keeps only the regions around the camera at full detail (nearest first, loaded in
+the background from the region files, so frames never wait for the disk):
+
+```gdscript
+var streamer := StrataRegionStreamer.new()
+streamer.renderer = renderer
+streamer.data = terrain.runtime_data
+streamer.camera = get_viewport().get_camera_3d()
+add_child(streamer)
+if streamer.start(terrain, terrain.editor_materials):
+    terrain.set_preview_enabled(false)
+    renderer.set_camera(streamer.camera)
+```
+
+The defaults suit most terrains: full detail within two and a half regions of the camera, a
+cheaper level out to eight. `near_radius`, `far_radius`, `near_slots`, `far_slots` and
+`loads_per_frame` tune that. A runtime scene saved with `StrataBake.save_runtime_scene()`
+carries the coarse maps, so it streams the same way; ship the `regions/` folder with it when
+the bake is too large to embed.
 
 ## Sample heights
 
