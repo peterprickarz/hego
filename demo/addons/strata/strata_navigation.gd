@@ -124,38 +124,70 @@ func _bind_terrain() -> void:
 func _on_terrain_bake() -> void:
 	if not is_instance_valid(_terrain) or _terrain.get("runtime_data") == null: return
 	data = _terrain.get("runtime_data")
-	_tracked_tile = _NO_TILE
+	_tracked = {}
 	_auto_bake.call_deferred()
 
 func _auto_bake() -> void:
-	if not auto_bake or not is_inside_tree() or not track_target.is_empty() or data == null or not data.is_resident() or is_baking() or int(get_stats().resident_tiles) > 0: return
+	if not auto_bake or not is_inside_tree() or _has_track_sources() or data == null or not data.is_resident() or is_baking() or int(get_stats().resident_tiles) > 0: return
 	var grid := get_tile_grid()
 	if grid.x * grid.y > max_tiles:
 		if not _auto_warned:
 			_auto_warned = true
-			push_warning("StrataNavigation: the terrain needs %d tiles but max_tiles is %d; set track_target (the player) or call bake_region() for the areas you need." % [grid.x * grid.y, max_tiles])
+			push_warning("StrataNavigation: the terrain needs %d tiles but max_tiles is %d; set track_target / track_targets (the player) or call bake_region() for the areas you need." % [grid.x * grid.y, max_tiles])
 		return
 	var baked := bake_region(data.bounds)
 	if not baked.get("ok", false) and not baked.get("pending", false): push_warning("StrataNavigation: automatic bake failed: " + String(baked.get("message", "")))
-## Optional gameplay focus (player, vehicle, agent hub); not the camera. While set, the
-## node keeps the tiles within `track_radius` of the target's TILE (so every point of
-## the target's tile has the full radius around it) resident, baking tiles that enter
-## and releasing tiles beyond `track_radius * 1.25`. It re-plans once per tile change
-## in _physics_process; standing still costs one lookup per tick. Tracked tiles are
-## baked per tile (asynchronously when use_async) and published as each arrives; a
-## result for a tile that left the keep range or was evicted is dropped. When more
-## than `max_tiles` would be needed, the tiles farthest from the target are never
-## baked or are released first; the tile under the target is never evicted.
+## Optional gameplay focus (player, vehicle, agent hub); not the camera. It behaves as one
+## more entry of [member track_targets]. While a target is set, the node keeps the tiles
+## within `track_radius` of the target's TILE (so every point of the target's tile has the
+## full radius around it) resident, baking tiles that enter and releasing tiles beyond
+## `track_radius * 1.25`. It re-plans once per tile change in _physics_process; standing
+## still costs one lookup per tick. Tracked tiles are baked per tile (asynchronously when
+## use_async) and published as each arrives; a result for a tile that left the keep range
+## or was evicted is dropped. When more than `max_tiles` would be needed, the tiles
+## farthest from the target are never baked or are released first; the tile under the
+## target is never evicted.
 @export var track_target: NodePath:
 	set(value):
 		track_target = value
-		_tracked_tile = _NO_TILE
-		set_physics_process(not value.is_empty())
+		_tracked = {}
+		_update_processing()
+## Every actor that needs navigation (players, NPC hubs), as paths relative to this node.
+## Invalid or off-tree paths are skipped and duplicates tracked once. The wanted and keep
+## sets are the union over all targets (this array, [member track_target] and
+## [member track_group]); the shared `max_tiles` budget keeps the tiles nearest to ANY
+## target, and every target's own tile is never evicted. A target off the terrain is
+## tracked at the nearest terrain tile.
+@export var track_targets: Array[NodePath] = []:
+	set(value):
+		track_targets = value
+		_tracked = {}
+		_update_processing()
+## Scene group whose Node3D members are tracked as well, so spawned actors only need
+## `add_to_group()`. The group is re-scanned when its node count changes (checked every
+## tick) and in any case every 30 ticks, which also catches one member replaced by another
+## in the same interval.
+@export var track_group: StringName = &"":
+	set(value):
+		track_group = value
+		_group_nodes.clear()
+		_group_count = -1
+		_tracked = {}
+		_update_processing()
 @export var track_radius := 96.0:
 	set(value):
 		if not is_finite(value) or value < 0: return
 		track_radius = value
-		_tracked_tile = _NO_TILE
+		_tracked = {}
+## Seconds of travel to plan ahead: a target's planning point is its position plus its
+## velocity times this. The velocity is `velocity` of a CharacterBody3D, `linear_velocity` of a
+## RigidBody3D, otherwise the position change between ticks over real time. The target's
+## actual tile stays resident too. 0 (default) plans around the position only.
+@export_range(0.0, 10.0, 0.01, "or_greater") var look_ahead := 0.0:
+	set(value):
+		if not is_finite(value) or value < 0: return
+		look_ahead = value
+		_tracked = {}
 
 var _tiles: Dictionary = {}
 ## Bake settings of the published tiles (see _bake_config()).
@@ -163,10 +195,18 @@ var _tiles_config: Dictionary = {}
 var _generation := 0
 var _pending: Dictionary = {}
 var _stats := {"bakes": 0, "tiles_baked": 0, "last_bake_ms": 0.0, "last_source_faces": 0, "discarded_results": 0, "evictions": 0, "releases": 0, "replans": 0, "last_track_ms": 0.0}
-## Tracking state: the tile the last re-plan was made for, in-flight tile bakes
+## Tracking state: per tracked node (instance id) the Vector4i(tile, planning tile) of the
+## last re-plan, in-flight tile bakes
 ## (key -> {epoch, mesh, config}), tiles known to have no walkable polygons, and the
 ## epoch that invalidates every in-flight tracked result (clear, settings change).
-var _tracked_tile := _NO_TILE
+var _tracked: Dictionary = {}
+var _group_nodes: Array[Node3D] = []
+var _group_count := -1
+var _group_ticks := 0
+## Per node (instance id): [last world position, last msec, velocity], for plain nodes.
+var _motion: Dictionary = {}
+var _target_count := 0
+var _budget_warned := false
 var _track_pending: Dictionary = {}
 var _track_empty: Dictionary = {}
 var _track_epoch := 0
@@ -174,7 +214,7 @@ var _track_warned := false
 
 func _ready() -> void:
 	_bind_terrain()
-	set_physics_process(not track_target.is_empty())
+	_update_processing()
 	# Deferred, so a script that bakes a region or sets a target right after adding the node wins.
 	_auto_bake.call_deferred()
 
@@ -184,7 +224,7 @@ func _exit_tree() -> void:
 	_pending.clear()
 	_track_epoch += 1
 	_track_pending.clear()
-	_tracked_tile = _NO_TILE
+	_tracked = {}
 
 func _physics_process(_delta: float) -> void:
 	tick()
@@ -200,25 +240,111 @@ func tile_at_local(position: Vector2) -> Vector2i:
 	var grid := get_tile_grid()
 	return Vector2i(clampi(floori(lattice.x / tile_cells), 0, grid.x - 1), clampi(floori(lattice.y / tile_cells), 0, grid.y - 1))
 
+func _has_track_sources() -> bool:
+	return not track_target.is_empty() or not track_targets.is_empty() or track_group != &""
+
+func _update_processing() -> void:
+	if is_inside_tree(): set_physics_process(_has_track_sources())
+
+## Tracked nodes, deduplicated: `track_target`, then `track_targets`, then the group. Paths
+## that do not resolve to an in-tree Node3D are skipped.
+func _collect_targets(rescan := true) -> Array[Node3D]:
+	var result: Array[Node3D] = []
+	var seen: Dictionary = {}
+	var paths: Array[NodePath] = []
+	if not track_target.is_empty(): paths.append(track_target)
+	paths.append_array(track_targets)
+	for path in paths:
+		if path.is_empty(): continue
+		var node := get_node_or_null(path) as Node3D
+		if node != null and node.is_inside_tree() and not seen.has(node.get_instance_id()):
+			seen[node.get_instance_id()] = true
+			result.append(node)
+	if track_group != &"" and is_inside_tree():
+		if rescan: _refresh_group()
+		for node in _group_nodes:
+			if is_instance_valid(node) and node.is_inside_tree() and not seen.has(node.get_instance_id()):
+				seen[node.get_instance_id()] = true
+				result.append(node)
+	return result
+
+func _refresh_group() -> void:
+	_group_ticks += 1
+	var members := get_tree().get_nodes_in_group(track_group)
+	var stale := members.size() != _group_count or _group_ticks >= 30
+	if not stale:
+		for node in _group_nodes:
+			if not is_instance_valid(node):
+				stale = true
+				break
+	if not stale: return
+	_group_ticks = 0
+	_group_count = members.size()
+	_group_nodes.clear()
+	for member in members:
+		var node := member as Node3D
+		if node != null: _group_nodes.append(node)
+
+## World position a target is planned around (see `look_ahead`).
+func _planning_point(node: Node3D) -> Vector3:
+	var position := node.global_position
+	var velocity := Vector3.ZERO
+	if node is CharacterBody3D: velocity = (node as CharacterBody3D).velocity
+	elif node is RigidBody3D: velocity = (node as RigidBody3D).linear_velocity
+	else:
+		var id := node.get_instance_id()
+		var now := Time.get_ticks_msec()
+		var last: Array = _motion.get(id, [])
+		if last.is_empty():
+			_motion[id] = [position, now, Vector3.ZERO]
+		elif now > last[1]:
+			velocity = (position - last[0]) / maxf((now - last[1]) / 1000.0, 0.001)
+			_motion[id] = [position, now, velocity]
+		else:
+			velocity = last[2]
+	return position + velocity * look_ahead
+
 ## One tracking step (called every physics frame; public so tests can drive it). Does
-## nothing but a lookup unless the target's tile changed since the last re-plan.
+## nothing but a lookup per target unless a target's tile changed since the last re-plan.
 func tick() -> void:
-	if track_target.is_empty() or data == null or not data.is_resident() or not is_inside_tree():
+	if not _has_track_sources() or data == null or not data.is_resident() or not is_inside_tree():
 		return
-	var target := get_node_or_null(track_target) as Node3D
-	if target == null:
+	var targets := _collect_targets()
+	_target_count = targets.size()
+	if targets.is_empty():
 		return
-	var local := _world_to_local_xz(target.global_position)
-	var tile := tile_at_local(local)
-	if tile == _tracked_tile or tile == Vector2i(-1, -1):
+	var plans: Array[Dictionary] = []
+	var signature: Dictionary = {}
+	for node in targets:
+		var local := _world_to_local_xz(node.global_position)
+		var tile := tile_at_local(local)
+		if tile == Vector2i(-1, -1):
+			continue
+		var planning := local
+		var ahead := tile
+		if look_ahead > 0.0:
+			planning = _world_to_local_xz(_planning_point(node))
+			ahead = tile_at_local(planning)
+		signature[node.get_instance_id()] = Vector4i(tile.x, tile.y, ahead.x, ahead.y)
+		plans.append({"tile": tile, "planning_tile": ahead, "point": planning})
+	if plans.is_empty() or _same_signature(signature):
 		return
-	_replan_tracked(tile, local)
+	_replan_tracked(plans, signature)
+
+func _same_signature(signature: Dictionary) -> bool:
+	if signature.size() != _tracked.size():
+		return false
+	for id in signature:
+		if not _tracked.has(id) or _tracked[id] != signature[id]:
+			return false
+	return true
 
 func _tile_center(key: Vector2i) -> Vector2:
 	var cells := get_tile_cells(key)
 	return data.lattice_to_local(Vector2(cells.position) + Vector2(cells.size) * 0.5)
 
-func _replan_tracked(tile: Vector2i, local: Vector2) -> void:
+## `plans`: one {tile, planning_tile, point} per tracked target.
+func _replan_tracked(plans: Array[Dictionary], signature: Dictionary) -> void:
 	var started := Time.get_ticks_usec()
 	var params := _bake_params()
 	if not params.ok:
@@ -227,18 +353,35 @@ func _replan_tracked(tile: Vector2i, local: Vector2) -> void:
 			_track_warned = true
 		return
 	_track_warned = false
-	_tracked_tile = tile
+	_tracked = signature
 	_stats.replans += 1
 	var config: Dictionary = params.config
 	if not _tiles.is_empty() and _tiles_config != config:
 		# One map never mixes bake settings: tiles of older settings are rebaked.
 		for key in _tiles.keys():
 			_release_tile(key)
-	var tile_cells_rect := get_tile_cells(tile)
-	var core := Rect2(data.lattice_to_local(Vector2(tile_cells_rect.position)), Vector2(tile_cells_rect.size) * float(params.spacing))
+	var own: Dictionary = {}
 	var keep_keys: Dictionary = {}
-	for key in tiles_in_local_rect(core.grow(track_radius * 1.25)):
-		keep_keys[key] = true
+	var wanted_keys: Dictionary = {}
+	for plan in plans:
+		own[plan.tile] = true
+		# The planning tile's rectangle (the tile itself without look-ahead) has the full radius
+		# around it; the target's actual tile is always kept and wanted too.
+		for tile in [plan.planning_tile, plan.tile]:
+			var cells := get_tile_cells(tile)
+			var core := Rect2(data.lattice_to_local(Vector2(cells.position)), Vector2(cells.size) * float(params.spacing))
+			for key in tiles_in_local_rect(core.grow(track_radius * 1.25)):
+				keep_keys[key] = true
+			if tile == plan.planning_tile:
+				for key in tiles_in_local_rect(core.grow(track_radius)):
+					wanted_keys[key] = true
+		wanted_keys[plan.tile] = true
+	var budget := max_tiles
+	if own.size() > budget:
+		budget = own.size()
+		if not _budget_warned:
+			_budget_warned = true
+			push_warning("Terrain navigation tracking: %d targets stand on distinct tiles but max_tiles is %d; planning with %d so no target loses its tile." % [own.size(), max_tiles, budget])
 	for key in _tiles.keys():
 		if not keep_keys.has(key):
 			_release_tile(key)
@@ -249,12 +392,15 @@ func _replan_tracked(tile: Vector2i, local: Vector2) -> void:
 		if not keep_keys.has(key):
 			_track_empty.erase(key)
 	var missing: Array[Vector2i] = []
-	for key in tiles_in_local_rect(core.grow(track_radius)):
+	for key in wanted_keys:
 		if not _tiles.has(key) and not _track_pending.has(key) and not _track_empty.has(key):
 			missing.append(key)
-	missing.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return _tile_distance(a, tile, local) < _tile_distance(b, tile, local))
+	var distances: Dictionary = {}
 	for key in missing:
-		if _tiles.size() + _track_pending.size() >= max_tiles and not _evict_farther_than(_tile_distance(key, tile, local), tile, local):
+		distances[key] = _tile_distance(key, plans)
+	missing.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return distances[a] < distances[b])
+	for key in missing:
+		if _tiles.size() + _track_pending.size() >= budget and not _evict_farther_than(distances[key], plans):
 			break
 		var job := _make_job(key, params)
 		if job.is_empty():
@@ -267,22 +413,29 @@ func _replan_tracked(tile: Vector2i, local: Vector2) -> void:
 			_publish_tile(key, job.mesh, config)
 	_stats.last_track_ms = (Time.get_ticks_usec() - started) / 1000.0
 
-## Distance used for eviction order; the target's own tile sorts before everything.
-func _tile_distance(key: Vector2i, target_tile: Vector2i, local: Vector2) -> float:
-	return -1.0 if key == target_tile else _tile_center(key).distance_to(local)
+## Distance used for eviction order: to the NEAREST target; any target's own tile sorts
+## before everything.
+func _tile_distance(key: Vector2i, plans: Array[Dictionary]) -> float:
+	var nearest := INF
+	var center := _tile_center(key)
+	for plan in plans:
+		if key == plan.tile:
+			return -1.0
+		nearest = minf(nearest, center.distance_to(plan.point))
+	return nearest
 
 ## Evicts the farthest resident or pending tile when it is farther than `limit`;
-## false when nothing qualifies (the target's tile never does).
-func _evict_farther_than(limit: float, target_tile: Vector2i, local: Vector2) -> bool:
+## false when nothing qualifies (a target's own tile never does).
+func _evict_farther_than(limit: float, plans: Array[Dictionary]) -> bool:
 	var worst := _NO_TILE
 	var worst_distance := limit
 	for key in _tiles:
-		var distance := _tile_distance(key, target_tile, local)
+		var distance := _tile_distance(key, plans)
 		if distance > worst_distance:
 			worst = key
 			worst_distance = distance
 	for key in _track_pending:
-		var distance := _tile_distance(key, target_tile, local)
+		var distance := _tile_distance(key, plans)
 		if distance > worst_distance:
 			worst = key
 			worst_distance = distance
@@ -505,7 +658,7 @@ func _settings_changed() -> void:
 	_track_epoch += 1
 	_track_pending.clear()
 	_track_empty.clear()
-	_tracked_tile = _NO_TILE
+	_tracked = {}
 	if _pending.is_empty(): return
 	var cancelled := int(_pending.generation)
 	_pending = {}
@@ -519,7 +672,7 @@ func clear() -> void:
 	_track_epoch += 1
 	_track_pending.clear()
 	_track_empty.clear()
-	_tracked_tile = _NO_TILE
+	_tracked = {}
 	var cancelled := int(_pending.get("generation", -1))
 	_pending = {}
 	for region in _tiles.values():
@@ -541,7 +694,8 @@ func get_stats() -> Dictionary:
 	stats.regions = _tiles.size()
 	stats.resident_tiles = _tiles.size()
 	stats.pending_tiles = _track_pending.size() + int(_pending.get("remaining", 0))
-	stats.tracked = not track_target.is_empty() and is_inside_tree() and get_node_or_null(track_target) is Node3D
+	stats.tracked = is_inside_tree() and not _collect_targets(false).is_empty()
+	stats.targets = _target_count
 	stats.profile = profile
 	return stats
 

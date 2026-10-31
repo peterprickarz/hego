@@ -43,27 +43,62 @@ enum ChunkKind { HEIGHTMAP, CONCAVE, EMPTY }
 		for chunk in _chunks.values():
 			if chunk.body != null: chunk.body.physics_material_override = value
 ## Upper bound on simultaneously resident chunks (64 = 1 km² at 1 m, 128 cells).
+## Tracking never leaves a target without ground: when more distinct target chunks than
+## this exist, the budget is raised to that count for planning (one warning).
 @export_range(1, 4096, 1) var max_resident_chunks := 64:
 	set(value):
 		if value < 1 or value > 4096: return
 		max_resident_chunks = value
-		_tracked_chunk = Vector2i(-2147483648, -2147483648)
-## Optional gameplay focus (player, vehicle); not the camera. Its chunk change
-## triggers one re-plan: the chunks within `track_radius` of the target become the
-## resident set (replacing it), built synchronously on that physics tick; standing
-## still costs one lookup per tick. When the radius needs more than
-## `max_resident_chunks`, the chunks farthest from the target are left out (and the
-## farthest resident ones released); the chunk under the target is always resident.
+		_signature = {}
+## Optional gameplay focus (player, vehicle); not the camera. It behaves as one more entry
+## of [member track_targets]. A target's chunk change triggers one re-plan: the chunks
+## within `track_radius` of the target become the resident set (replacing it), built
+## synchronously on that physics tick; standing still costs one lookup per tick. When the
+## radius needs more than `max_resident_chunks`, the chunks farthest from the target are
+## left out (and the farthest resident ones released); the chunk under the target is
+## always resident.
 @export var track_target: NodePath:
 	set(value):
 		track_target = value
-		_tracked_chunk = Vector2i(-2147483648, -2147483648)
-		set_physics_process(not value.is_empty())
+		_signature = {}
+		_update_processing()
+## Every actor that needs ground (players, vehicles, NPC hubs), as paths relative to this
+## node. Invalid or off-tree paths are skipped and duplicates tracked once. The wanted set
+## is the union over all targets (this array, [member track_target] and
+## [member track_group]) of the chunks within `track_radius` of each; the shared
+## `max_resident_chunks` budget keeps the chunks nearest to ANY target, and every
+## target's own chunk is always resident. A target off the terrain is tracked at the
+## nearest terrain point.
+@export var track_targets: Array[NodePath] = []:
+	set(value):
+		track_targets = value
+		_signature = {}
+		_update_processing()
+## Scene group whose Node3D members are tracked as well, so spawned actors only need
+## `add_to_group()`. The group is re-scanned when its node count changes (checked every
+## tick) and in any case every 30 ticks, which also catches one member replaced by another
+## in the same interval.
+@export var track_group: StringName = &"":
+	set(value):
+		track_group = value
+		_group_nodes.clear()
+		_group_count = -1
+		_signature = {}
+		_update_processing()
 @export var track_radius := 96.0:
 	set(value):
 		if not is_finite(value) or value < 0: return
 		track_radius = value
-		_tracked_chunk = Vector2i(-2147483648, -2147483648)
+		_signature = {}
+## Seconds of travel to plan ahead: a target's planning point is its position plus its
+## velocity times this. The velocity is `velocity` of a CharacterBody3D, `linear_velocity` of a
+## RigidBody3D, otherwise the position change between ticks over real time. The target's
+## actual chunk stays resident too. 0 (default) plans around the position only.
+@export_range(0.0, 10.0, 0.01, "or_greater") var look_ahead := 0.0:
+	set(value):
+		if not is_finite(value) or value < 0: return
+		look_ahead = value
+		_signature = {}
 
 ## With a StrataTerrain3D parent and no [member data] of its own, the node uses the parent's
 ## bake and follows it: every new bake rebuilds the resident chunks in place. The terrain's
@@ -77,13 +112,21 @@ var _terrain: Node3D
 var _auto_warned := false
 var _chunks: Dictionary = {}
 var _suppress_clear := false
-var _tracked_chunk := Vector2i(-2147483648, -2147483648)
+## Per tracked node (instance id): Vector4i(chunk, planning chunk) of the last successful re-plan.
+var _signature: Dictionary = {}
+var _group_nodes: Array[Node3D] = []
+var _group_count := -1
+var _group_ticks := 0
+## Per node (instance id): [last world position, last msec, velocity], for plain nodes.
+var _motion: Dictionary = {}
+var _target_count := 0
 var _track_warned := false
+var _budget_warned := false
 var _stats := {"builds": 0, "heightmap_builds": 0, "concave_builds": 0, "last_build_ms": 0.0, "last_prepare_ms": 0.0, "rejections": 0, "evictions": 0}
 
 func _ready() -> void:
 	_bind_terrain()
-	set_physics_process(not track_target.is_empty())
+	_update_processing()
 	# Deferred, so a script that prepares regions or sets a target right after adding the node wins.
 	_auto_prepare.call_deferred()
 
@@ -101,16 +144,16 @@ func _on_terrain_bake() -> void:
 	else:
 		var swapped := replace_data(_terrain.get("runtime_data"))
 		if not swapped.get("ok", false): push_warning("StrataCollision: the new bake could not replace the resident chunks: " + String(swapped.get("message", "")))
-	_tracked_chunk = Vector2i(-2147483648, -2147483648)
+	_signature = {}
 	_auto_prepare.call_deferred()
 
 func _auto_prepare() -> void:
-	if not auto_prepare or not is_inside_tree() or not track_target.is_empty() or data == null or not data.is_resident() or not _chunks.is_empty(): return
+	if not auto_prepare or not is_inside_tree() or _has_track_sources() or data == null or not data.is_resident() or not _chunks.is_empty(): return
 	var grid := get_chunk_grid()
 	if grid.x * grid.y > max_resident_chunks:
 		if not _auto_warned:
 			_auto_warned = true
-			push_warning("StrataCollision: the terrain needs %d chunks but max_resident_chunks is %d; set track_target (the player) or call prepare_region() for the areas you need." % [grid.x * grid.y, max_resident_chunks])
+			push_warning("StrataCollision: the terrain needs %d chunks but max_resident_chunks is %d; set track_target / track_targets (the player) or call prepare_region() for the areas you need." % [grid.x * grid.y, max_resident_chunks])
 		return
 	var prepared := prepare_region(data.bounds)
 	if not prepared.get("ok", false): push_warning("StrataCollision: automatic preparation failed: " + String(prepared.get("message", "")))
@@ -118,30 +161,137 @@ func _auto_prepare() -> void:
 func _physics_process(_delta: float) -> void:
 	tick()
 
-## One tracking step (called every physics frame; public so tests can drive it).
+func _has_track_sources() -> bool:
+	return not track_target.is_empty() or not track_targets.is_empty() or track_group != &""
+
+func _update_processing() -> void:
+	if is_inside_tree(): set_physics_process(_has_track_sources())
+
+## Tracked nodes, deduplicated: `track_target`, then `track_targets`, then the group. Paths
+## that do not resolve to an in-tree Node3D are skipped.
+func _collect_targets(rescan := true) -> Array[Node3D]:
+	var result: Array[Node3D] = []
+	var seen: Dictionary = {}
+	var paths: Array[NodePath] = []
+	if not track_target.is_empty(): paths.append(track_target)
+	paths.append_array(track_targets)
+	for path in paths:
+		if path.is_empty(): continue
+		var node := get_node_or_null(path) as Node3D
+		if node != null and node.is_inside_tree() and not seen.has(node.get_instance_id()):
+			seen[node.get_instance_id()] = true
+			result.append(node)
+	if track_group != &"" and is_inside_tree():
+		if rescan: _refresh_group()
+		for node in _group_nodes:
+			if is_instance_valid(node) and node.is_inside_tree() and not seen.has(node.get_instance_id()):
+				seen[node.get_instance_id()] = true
+				result.append(node)
+	return result
+
+func _refresh_group() -> void:
+	_group_ticks += 1
+	var members := get_tree().get_nodes_in_group(track_group)
+	var stale := members.size() != _group_count or _group_ticks >= 30
+	if not stale:
+		for node in _group_nodes:
+			if not is_instance_valid(node):
+				stale = true
+				break
+	if not stale: return
+	_group_ticks = 0
+	_group_count = members.size()
+	_group_nodes.clear()
+	for member in members:
+		var node := member as Node3D
+		if node != null: _group_nodes.append(node)
+
+## World position a target is planned around (see `look_ahead`).
+func _planning_point(node: Node3D) -> Vector3:
+	var position := node.global_position
+	var velocity := Vector3.ZERO
+	if node is CharacterBody3D: velocity = (node as CharacterBody3D).velocity
+	elif node is RigidBody3D: velocity = (node as RigidBody3D).linear_velocity
+	else:
+		var id := node.get_instance_id()
+		var now := Time.get_ticks_msec()
+		var last: Array = _motion.get(id, [])
+		if last.is_empty():
+			_motion[id] = [position, now, Vector3.ZERO]
+		elif now > last[1]:
+			velocity = (position - last[0]) / maxf((now - last[1]) / 1000.0, 0.001)
+			_motion[id] = [position, now, velocity]
+		else:
+			velocity = last[2]
+	return position + velocity * look_ahead
+
+## One tracking step (called every physics frame; public so tests can drive it). Standing
+## still costs one lookup per target.
 func tick() -> void:
-	if track_target.is_empty() or data == null or not data.is_resident():
+	if not _has_track_sources() or data == null or not data.is_resident():
 		return
-	var target := get_node_or_null(track_target) as Node3D
-	if target == null:
+	var targets := _collect_targets()
+	_target_count = targets.size()
+	if targets.is_empty():
 		return
-	var local := _world_to_local_xz(target.global_position)
-	var chunk := chunk_at_local(local)
-	if chunk == _tracked_chunk or chunk == Vector2i(-1, -1):
+	var plans: Array[Dictionary] = []
+	var signature: Dictionary = {}
+	for node in targets:
+		var local := _world_to_local_xz(node.global_position)
+		var chunk := chunk_at_local(local)
+		if chunk == Vector2i(-1, -1):
+			continue
+		var planning := local
+		var ahead := chunk
+		if look_ahead > 0.0:
+			planning = _world_to_local_xz(_planning_point(node))
+			ahead = chunk_at_local(planning)
+		signature[node.get_instance_id()] = Vector4i(chunk.x, chunk.y, ahead.x, ahead.y)
+		# A target off the terrain is tracked at the nearest terrain point.
+		var focus := Vector2(clampf(planning.x, data.bounds.position.x, data.bounds.end.x), clampf(planning.y, data.bounds.position.y, data.bounds.end.y))
+		plans.append({"chunk": chunk, "focus": focus})
+	if plans.is_empty() or _same_signature(signature):
 		return
-	# A target off the terrain is tracked at the nearest terrain point.
-	var focus := Vector2(clampf(local.x, data.bounds.position.x, data.bounds.end.x), clampf(local.y, data.bounds.position.y, data.bounds.end.y))
-	var wanted := chunks_in_local_rect(Rect2(focus - Vector2.ONE * track_radius, Vector2.ONE * track_radius * 2.0))
-	if wanted.size() > max_resident_chunks:
-		wanted.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return _chunk_distance(a, chunk, focus) < _chunk_distance(b, chunk, focus))
-		wanted.resize(max_resident_chunks)
-	var result := _prepare_keys(wanted, false)
+	var own: Dictionary = {}
+	var wanted_set: Dictionary = {}
+	for plan in plans:
+		own[plan.chunk] = true
+		wanted_set[plan.chunk] = true
+		for key in chunks_in_local_rect(Rect2(plan.focus - Vector2.ONE * track_radius, Vector2.ONE * track_radius * 2.0)):
+			wanted_set[key] = true
+	var budget := max_resident_chunks
+	if own.size() > budget:
+		budget = own.size()
+		if not _budget_warned:
+			_budget_warned = true
+			push_warning("Terrain collision tracking: %d targets stand on distinct chunks but max_resident_chunks is %d; planning with %d so no target loses its ground." % [own.size(), max_resident_chunks, budget])
+	var wanted: Array[Vector2i] = []
+	for key in wanted_set:
+		wanted.append(key)
+	if wanted.size() > budget:
+		var distances: Dictionary = {}
+		for key in wanted:
+			var nearest := INF
+			for plan in plans:
+				nearest = minf(nearest, _chunk_distance(key, plan.chunk, plan.focus))
+			distances[key] = nearest
+		wanted.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return distances[a] < distances[b])
+		wanted.resize(budget)
+	var result := _prepare_keys(wanted, false, budget)
 	if result.ok:
-		_tracked_chunk = chunk
+		_signature = signature
 		_track_warned = false
 	elif not _track_warned:
 		_track_warned = true
 		push_warning("Terrain collision tracking: " + result.message)
+
+func _same_signature(signature: Dictionary) -> bool:
+	if signature.size() != _signature.size():
+		return false
+	for id in signature:
+		if not _signature.has(id) or _signature[id] != signature[id]:
+			return false
+	return true
 
 ## Eviction order: the target's own chunk sorts before everything, then by centre distance.
 func _chunk_distance(key: Vector2i, target_chunk: Vector2i, focus: Vector2) -> float:
@@ -212,7 +362,8 @@ func prepare_region(local_rect: Rect2, keep_existing := false) -> Dictionary:
 		return _reject("Terrain collision supports translation and yaw with unit scale only")
 	return _prepare_keys(chunks_in_local_rect(local_rect), keep_existing)
 
-func _prepare_keys(wanted: Array[Vector2i], keep_existing: bool) -> Dictionary:
+func _prepare_keys(wanted: Array[Vector2i], keep_existing: bool, budget := -1) -> Dictionary:
+	if budget < 0: budget = max_resident_chunks
 	if data == null or not data.validate().ok or not data.is_resident():
 		return _reject("Collision needs valid resident runtime terrain data")
 	if not is_transform_valid():
@@ -224,8 +375,8 @@ func _prepare_keys(wanted: Array[Vector2i], keep_existing: bool) -> Dictionary:
 	if keep_existing:
 		for key in _chunks:
 			keys[key] = true
-	if keys.size() > max_resident_chunks:
-		return _reject("Region needs %d chunks, above max_resident_chunks %d" % [keys.size(), max_resident_chunks])
+	if keys.size() > budget:
+		return _reject("Region needs %d chunks, above max_resident_chunks %d" % [keys.size(), budget])
 	var started := Time.get_ticks_usec()
 	var built: Dictionary = {}
 	for key in keys:
@@ -306,7 +457,7 @@ func clear() -> void:
 		if chunk.body != null and is_instance_valid(chunk.body):
 			chunk.body.free()
 	_chunks.clear()
-	_tracked_chunk = Vector2i(-2147483648, -2147483648)
+	_signature = {}
 	if had:
 		chunks_changed.emit()
 
@@ -455,5 +606,6 @@ func get_stats() -> Dictionary:
 	stats.resident = _chunks.size()
 	stats.resident_chunks = _chunks.size()
 	stats.pending = 0
-	stats.tracked = not track_target.is_empty() and is_inside_tree() and get_node_or_null(track_target) is Node3D
+	stats.tracked = is_inside_tree() and not _collect_targets(false).is_empty()
+	stats.targets = _target_count
 	return stats

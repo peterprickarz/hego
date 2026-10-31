@@ -22,8 +22,18 @@ func local_of(world: Vector3) -> Vector2:
 	return Vector2(world.x, world.z)
 
 func place(local: Vector2) -> void:
+	place_node(target, local)
+
+func place_node(node: Node3D, local: Vector2) -> void:
 	var height := float(data.sample_height(local).get("value", 0.0))
-	target.position = Vector3(local.x, (height if is_finite(height) else 0.0) + 1.0, local.y)
+	node.position = Vector3(local.x, (height if is_finite(height) else 0.0) + 1.0, local.y)
+
+func make_actor(actor_name: String, local: Vector2, body := false) -> Node3D:
+	var actor: Node3D = CharacterBody3D.new() if body else Node3D.new()
+	actor.name = actor_name
+	world.add_child(actor)
+	place_node(actor, local)
+	return actor
 
 func run() -> void:
 	var noise := FastNoiseLite.new()
@@ -45,6 +55,8 @@ func run() -> void:
 	world.add_child(target)
 	await test_collision()
 	await test_navigation()
+	test_multi_collision()
+	await test_multi_navigation()
 	world.queue_free()
 	finish("physics_tracking_test")
 
@@ -245,3 +257,154 @@ func test_navigation() -> void:
 		baked = await navigation.bake_finished
 	check(baked.ok and navigation.get_regions().size() >= 1, "bake_region still bakes a selected area: %s" % [baked])
 	navigation.queue_free()
+
+func make_collision(budget: int, radius: float) -> StrataCollision:
+	var collision := StrataCollision.new()
+	collision.name = "MultiCollision"
+	collision.chunk_cells = REGION_CELLS
+	collision.max_resident_chunks = budget
+	collision.track_radius = radius
+	collision.data = data
+	world.add_child(collision)
+	return collision
+
+func test_multi_collision() -> void:
+	var a := make_actor("ActorA", Vector2(-400.0, -400.0))
+	var b := make_actor("ActorB", Vector2(400.0, 400.0))
+	var collision := make_collision(40, 40.0)
+	collision.track_targets = [collision.get_path_to(a), collision.get_path_to(b), collision.get_path_to(a), NodePath("Missing")]
+	collision.tick()
+	var chunk_a := collision.chunk_at_local(Vector2(-400.0, -400.0))
+	var chunk_b := collision.chunk_at_local(Vector2(400.0, 400.0))
+	var resident := collision.get_resident_chunks()
+	check(resident.has(chunk_a) and resident.has(chunk_b) and resident.size() <= 40, "two far targets each get their chunk within the budget (%d resident)" % resident.size())
+	check(collision.get_stats().targets == 2 and collision.get_stats().tracked, "duplicate and missing paths are skipped: %s" % [collision.get_stats()])
+	var builds: int = collision.get_stats().builds
+	for index in range(100):
+		collision.tick()
+	check(collision.get_stats().builds == builds, "standing still builds nothing with two targets")
+	# Chunks near neither target are not resident.
+	check(not resident.has(collision.chunk_at_local(Vector2(0.0, 0.0))), "chunks near no target are not built")
+
+	# More targets than the budget: the budget is raised to the target count.
+	collision.max_resident_chunks = 1
+	collision.tick()
+	resident = collision.get_resident_chunks()
+	check(resident.size() == 2 and resident.has(chunk_a) and resident.has(chunk_b) and collision._budget_warned, "a budget below the target count is raised so no target loses its ground (%d resident)" % resident.size())
+	collision.queue_free()
+
+	# A group target spawned later gets ground within a tick; leaving the group releases it.
+	collision = make_collision(40, 40.0)
+	collision.track_group = &"strata_test_actors"
+	collision.track_target = collision.get_path_to(a)
+	collision.tick()
+	check(collision.get_stats().targets == 1 and not collision.get_resident_chunks().has(chunk_b), "an empty group tracks only the explicit target")
+	var spawned := make_actor("Spawned", Vector2(-100.0, 300.0))
+	spawned.add_to_group(&"strata_test_actors")
+	collision.tick()
+	var chunk_spawned := collision.chunk_at_local(Vector2(-100.0, 300.0))
+	check(collision.get_resident_chunks().has(chunk_spawned) and collision.get_stats().targets == 2, "a spawned group member gets its chunk on the next tick")
+	check(collision.get_resident_chunks().has(chunk_a), "the explicit target keeps its chunk")
+	spawned.remove_from_group(&"strata_test_actors")
+	collision.tick()
+	check(not collision.get_resident_chunks().has(chunk_spawned) and collision.get_resident_chunks().has(chunk_a) and collision.get_stats().targets == 1, "a member that left the group releases its chunks")
+	# A freed member is dropped too.
+	var doomed := make_actor("Doomed", Vector2(200.0, -200.0))
+	doomed.add_to_group(&"strata_test_actors")
+	collision.tick()
+	var chunk_doomed := collision.chunk_at_local(Vector2(200.0, -200.0))
+	var doomed_resident := collision.get_resident_chunks().has(chunk_doomed)
+	doomed.free()
+	collision.tick()
+	check(doomed_resident and not collision.get_resident_chunks().has(chunk_doomed), "a freed group member releases its chunks")
+	collision.queue_free()
+
+	# look_ahead plans around where a fast mover will be.
+	var mover := make_actor("Mover", Vector2(-300.0, -300.0), true) as CharacterBody3D
+	mover.velocity = Vector3(60.0, 0.0, 0.0)
+	collision = make_collision(40, 10.0)
+	collision.track_target = collision.get_path_to(mover)
+	collision.tick()
+	var ahead_chunk := collision.chunk_at_local(Vector2(-300.0 + 120.0, -300.0))
+	check(not collision.get_resident_chunks().has(ahead_chunk), "without look_ahead the chunk ahead of the mover is not prepared")
+	collision.look_ahead = 2.0
+	collision.tick()
+	check(collision.get_resident_chunks().has(ahead_chunk) and collision.get_resident_chunks().has(collision.chunk_at_local(Vector2(-300.0, -300.0))), "look_ahead prepares the chunk ahead and keeps the current one")
+	mover.velocity = Vector3.ZERO
+	collision.tick()
+	check(not collision.get_resident_chunks().has(ahead_chunk), "the look-ahead chunk is released when the mover stops")
+	collision.queue_free()
+	for node in [a, b, mover]:
+		node.free()
+
+func test_multi_navigation() -> void:
+	var a := make_actor("NavA", Vector2(-400.0, -400.0))
+	var b := make_actor("NavB", Vector2(400.0, 400.0))
+	var navigation := StrataNavigation.new()
+	navigation.name = "MultiNavigation"
+	navigation.tile_cells = 64
+	navigation.max_tiles = 8
+	navigation.track_radius = 40.0
+	navigation.data = data
+	world.add_child(navigation)
+	navigation.track_targets = [navigation.get_path_to(a), navigation.get_path_to(b), NodePath("Missing")]
+	navigation.tick()
+	await wait_navigation_idle(navigation)
+	var tile_a := navigation.tile_at_local(Vector2(-400.0, -400.0))
+	var tile_b := navigation.tile_at_local(Vector2(400.0, 400.0))
+	var keys := resident_keys(navigation)
+	var stats := navigation.get_stats()
+	check(keys.has(tile_a) and keys.has(tile_b) and stats.resident_tiles + stats.pending_tiles <= 8, "two far targets each get their tile within the budget: %s" % [stats])
+	check(stats.targets == 2 and stats.tracked and stats.replans == 1, "navigation stats count the targets: %s" % [stats])
+	for index in range(100):
+		navigation.tick()
+	check(navigation.get_stats().replans == 1, "standing still re-plans nothing with two targets")
+
+	# More targets than max_tiles: raised to the target count.
+	navigation.max_tiles = 1
+	navigation.tick()
+	await wait_navigation_idle(navigation)
+	keys = resident_keys(navigation)
+	check(keys.has(tile_a) and keys.has(tile_b) and navigation._budget_warned, "a budget below the target count is raised (%d resident)" % keys.size())
+	navigation.max_tiles = 8
+
+	# Group members: spawned later are tracked, removed ones released.
+	navigation.track_targets = [navigation.get_path_to(a)]
+	navigation.track_group = &"strata_test_nav_actors"
+	navigation.tick()
+	await wait_navigation_idle(navigation)
+	check(not resident_keys(navigation).has(tile_b), "dropping a target releases its tiles")
+	var spawned := make_actor("NavSpawned", Vector2(-100.0, 300.0))
+	spawned.add_to_group(&"strata_test_nav_actors")
+	navigation.tick()
+	await wait_navigation_idle(navigation)
+	var tile_spawned := navigation.tile_at_local(Vector2(-100.0, 300.0))
+	check(resident_keys(navigation).has(tile_spawned) and navigation.get_stats().targets == 2, "a spawned group member gets its tile")
+	spawned.remove_from_group(&"strata_test_nav_actors")
+	navigation.tick()
+	await wait_navigation_idle(navigation)
+	check(not resident_keys(navigation).has(tile_spawned) and resident_keys(navigation).has(tile_a), "a member that left the group releases its tiles")
+	navigation.queue_free()
+
+	# look_ahead bakes the tile ahead of a fast mover.
+	var mover := make_actor("NavMover", Vector2(-300.0, -300.0), true) as CharacterBody3D
+	mover.velocity = Vector3(60.0, 0.0, 0.0)
+	navigation = StrataNavigation.new()
+	navigation.name = "AheadNavigation"
+	navigation.tile_cells = 64
+	navigation.max_tiles = 8
+	navigation.track_radius = 10.0
+	navigation.data = data
+	world.add_child(navigation)
+	navigation.track_target = navigation.get_path_to(mover)
+	navigation.tick()
+	await wait_navigation_idle(navigation)
+	var ahead_tile := navigation.tile_at_local(Vector2(-300.0 + 120.0, -300.0))
+	check(not resident_keys(navigation).has(ahead_tile), "without look_ahead the tile ahead of the mover is not baked")
+	navigation.look_ahead = 2.0
+	navigation.tick()
+	await wait_navigation_idle(navigation)
+	check(resident_keys(navigation).has(ahead_tile) and resident_keys(navigation).has(navigation.tile_at_local(Vector2(-300.0, -300.0))), "look_ahead bakes the tile ahead and keeps the current one")
+	navigation.queue_free()
+	for node in [a, b, mover]:
+		node.free()

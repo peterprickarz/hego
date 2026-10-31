@@ -64,7 +64,9 @@ A cook sets the composition of each channel it publishes from `hegostrata_compos
 | **Add collision** / **Add navigation** / **Add runtime renderer** | `StrataTerrain3D` | inspector buttons, Runtime group: `add_collision()`, `add_navigation()`, `add_runtime_renderer()` add child nodes that follow the terrain's bake |
 | material channel values | composition | a material channel is coverage: values below 0 count as 0 (a channel painted as a generic signed channel can be mapped later), relative values above 1 are normalized against the other channels; non-finite values fail the bake |
 | `follow_terrain` | `StrataCollision`, `StrataNavigation` | use and follow the parent terrain's bake when `data` is empty (default on) |
-| `auto_prepare` / `auto_bake` | `StrataCollision` / `StrataNavigation` | without a `track_target`, cover the whole terrain when it fits the chunk or tile budget, otherwise warn once (default on) |
+| `track_target` / `track_targets` / `track_group` | `StrataCollision`, `StrataNavigation` | actors that need ground or navigation: one path, an array of paths, and a scene group whose Node3D members are tracked (re-scanned when the group size changes, and every 30 ticks); all are combined, duplicates and invalid paths skipped |
+| `track_radius` / `look_ahead` | `StrataCollision`, `StrataNavigation` | metres kept around each actor (default 96); seconds of velocity added to an actor's planning point (default 0, velocity of a CharacterBody3D or RigidBody3D, else measured between ticks) |
+| `auto_prepare` / `auto_bake` | `StrataCollision` / `StrataNavigation` | without any tracked actor, cover the whole terrain when it fits the chunk or tile budget, otherwise warn once (default on) |
 | `auto_start` | `StrataRegionStreamer` | start on ready from the parent terrain's bake and materials, with a sibling `StrataRenderer` and the viewport camera when unset (default on; never in the editor or headless) |
 
 ## Regions

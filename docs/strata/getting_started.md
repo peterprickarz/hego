@@ -298,10 +298,24 @@ Collision is built in square chunks (`chunk_cells`, default 128 cells) and only 
 - `track_target` follows a node, such as the player or a vehicle, and loads the chunks
   within `track_radius` (default 96 m) whenever it enters a new chunk. The chunks it left
   behind are released, so collision exists only around the target however large the terrain.
+- Give every actor that needs ground a place in `track_targets` (an array of NodePaths:
+  the player, vehicles, NPC groups; `track_target` stays as one more entry). Chunks are
+  kept around each of them, the budget goes to whichever chunks are nearest to any actor,
+  and every actor's own chunk is always built. Actors you spawn at run time only need
+  `add_to_group()`: set `track_group` to the group's name and its Node3D members are
+  tracked too, picked up within a tick of joining and released when they leave or are
+  freed. Invalid paths are skipped.
+- `look_ahead` (seconds, default 0) plans around where a fast actor will be: its position
+  plus its velocity times `look_ahead`, so the chunk it is about to enter exists before it
+  arrives. The velocity is read from a CharacterBody3D or RigidBody3D, otherwise measured
+  from how far the node moved since the last tick.
 - `max_resident_chunks` (default 64) caps how many chunks exist at once. If the radius
   needs more, the chunks farthest from the target are left out; the chunk the target
-  stands on is always built. The cost of entering a chunk is a few milliseconds, paid on
-  that physics frame.
+  stands on is always built. With more actors on distinct chunks than the budget, the
+  budget is raised to that number (with one warning) so nobody falls through. The cost of
+  entering a chunk is a few milliseconds, paid on that physics frame.
+- `get_stats()` reports `tracked`, `targets` (how many actors were tracked on the last
+  tick), `resident_chunks` and `evictions`.
 - `collision_layer`, `collision_mask` and `physics_material` apply to every chunk.
 - After a new bake, `replace_data(terrain.runtime_data)` rebuilds the resident chunks
   and swaps them in together.
@@ -334,7 +348,12 @@ navigation.track_target = navigation.get_path_to(player)
   radius needs more, the tiles farthest from the target are skipped or removed first; the
   tile under the target is never removed. A target that outruns the baking just gets the
   tiles around where it is now: results for tiles it already left are dropped.
-- `get_stats()` reports `tracked`, `resident_tiles`, `pending_tiles` and `evictions`.
+- Several actors work as for collision: list them in `track_targets`, or set `track_group`
+  and `add_to_group()` the spawned ones. Tiles are kept and baked around each actor, the
+  `max_tiles` budget favours the tiles nearest to any actor, each actor's own tile is never
+  removed (the budget is raised, with one warning, if there are more actors than tiles),
+  and `look_ahead` (seconds, default 0) bakes the tiles around where a fast actor will be.
+- `get_stats()` reports `tracked`, `targets`, `resident_tiles`, `pending_tiles` and `evictions`.
 - `bake_region()` and `clear()` still work; use `bake_region()` for areas that should exist
   without a target, such as a level start. A tracked target replaces tiles it does not need
   once it moves away.
