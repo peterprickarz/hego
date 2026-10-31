@@ -177,8 +177,8 @@ the terrain's values, so a default bake has the editor's regions. Explicit value
 
 `StrataEditorPreview` composes the live authoring stack as regions and binds them with
 `set_regions`; it no longer feeds whole-terrain images to the adapters, and it no longer uses the
-4 m material lattice (`StrataMaterialControls`) or `StrataMacro.compose` (both kept, deprecated for
-the editor, for the island binding).
+4 m material lattice (`StrataMaterialControls`) or `StrataMacro.compose` (both kept only as
+deprecated helpers for fixtures and diagnostics).
 
 - Spec: `StrataTerrain3D.region_spec()` = `StrataRegions.standard_spec(base_bounds, region_spacing,
   region_cells)`; material ids/weights only when `editor_material_channels` is not empty (as

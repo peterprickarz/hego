@@ -135,7 +135,7 @@ The island's terrain lives at fixed paths under `demo/island/terrain/` (its
 | `coarse_erosion/<channel>.res`, `detail_erosion/<channel>.res` | the erosion stages' channels | yes |
 | `terrain_tint/<channel>.res` | the tint and AO channels | yes |
 | `material_distribution/material_<name>.res` | the material weight fields | yes |
-| `material_ids.res`, `material_weights.res` | packed material control maps | no, repacked when the material layer commits |
+| `regions/region_<i>_<j>.res` | the bake's regions | no, rebaked with the manifest |
 | `runtime_data.res` | the bake | no, rebaked by the showcase when missing or stale |
 
 The rough base the first cook starts from is `demo/island/cache/base_height.rf32` with its

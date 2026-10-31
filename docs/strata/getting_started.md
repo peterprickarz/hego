@@ -156,10 +156,11 @@ default), keeps the four strongest materials at each sample and normalizes their
 renderer then blends those four using the materials' height maps. Where no material has any
 weight, the terrain is left unassigned.
 
-If you compute material placement elsewhere, you can instead leave
-`editor_material_channels` empty and assign precomputed control maps to
-`editor_control_ids` (an RGBA8 image of four material IDs per texel) and
-`editor_control_weights` (an RGBAF image of the matching weights).
+Material placement computed outside Strata is brought in as weight channels of a layer
+(a Houdini heightfield mask per material, or samples written into a manual layer), so the
+same composition serves the editor, the bake and the brush. The older `editor_control_ids`
+and `editor_control_weights` properties still load from existing scenes but are deprecated
+and no longer drive the preview.
 
 ### Custom shader code per material
 

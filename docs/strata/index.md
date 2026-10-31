@@ -81,7 +81,7 @@ which suits small terrains. Set it to a project folder, for example
 | `<directory>/<layer>.res` | a manual layer's painted samples |
 | `<directory>/<layer>/<channel>.res` | one channel of a procedural layer's last cook |
 | `<directory>/runtime_data.res` | the published bake |
-| `<directory>/material_ids.res`, `material_weights.res` | the terrain's packed material control maps, when it has any |
+| `<directory>/regions/region_<i>_<j>.res` | one region of the published bake |
 
 Layer names become snake_case file names, so `ManualFine` is saved as `manual_fine.res`;
 renaming a layer changes its file. A cook overwrites its layer's channel files in place and
