@@ -5,6 +5,8 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 
+#include <cstring>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -34,6 +36,9 @@ void StrataLayerData::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_owned_samples", "channel"), &StrataLayerData::get_owned_samples);
     ClassDB::bind_method(D_METHOD("sample_channel", "channel", "position"), &StrataLayerData::sample_channel);
     ClassDB::bind_method(D_METHOD("clear_channel", "channel"), &StrataLayerData::clear_channel);
+    ClassDB::bind_method(D_METHOD("set_channel_format", "channel", "format"), &StrataLayerData::set_channel_format);
+    ClassDB::bind_method(D_METHOD("get_channel_format", "channel"), &StrataLayerData::get_channel_format);
+    ClassDB::bind_method(D_METHOD("get_memory_bytes", "channel"), &StrataLayerData::get_memory_bytes, DEFVAL(StringName()));
     ClassDB::bind_method(D_METHOD("get_channel_names"), &StrataLayerData::get_channel_names);
     ClassDB::bind_method(D_METHOD("snapshot"), &StrataLayerData::snapshot);
     ClassDB::bind_method(D_METHOD("restore", "snapshot"), &StrataLayerData::restore);
@@ -46,11 +51,14 @@ void StrataLayerData::_bind_methods() {
     ClassDB::bind_method(D_METHOD("restore_dense", "channel", "index_origin", "image", "ownership"), &StrataLayerData::restore_dense);
     ClassDB::bind_method(D_METHOD("get_owned_rect", "channel"), &StrataLayerData::get_owned_rect);
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("validate_dense", "image", "ownership"), &StrataLayerData::validate_dense, DEFVAL(Ref<Image>()));
-    ClassDB::bind_static_method("StrataLayerData", D_METHOD("pack_material_weights", "images"), &StrataLayerData::pack_material_weights);
-    ClassDB::bind_static_method("StrataLayerData", D_METHOD("pack_material_weights_sparse", "images"), &StrataLayerData::pack_material_weights_sparse);
+    ClassDB::bind_static_method("StrataLayerData", D_METHOD("pack_material_weights", "images", "weights_format"), &StrataLayerData::pack_material_weights, DEFVAL(int64_t(Image::FORMAT_RGBAF)));
+    ClassDB::bind_static_method("StrataLayerData", D_METHOD("pack_material_weights_sparse", "images", "weights_format"), &StrataLayerData::pack_material_weights_sparse, DEFVAL(int64_t(Image::FORMAT_RGBAF)));
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("prepare_control_maps", "ids", "weights", "material_count"), &StrataLayerData::prepare_control_maps);
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("compose_dense", "layers", "channel", "origin", "step_x", "step_y", "resolution", "bounds", "include_coverage", "subtract_datum", "index_offset"), &StrataLayerData::compose_dense, DEFVAL(true), DEFVAL(0.0), DEFVAL(Vector2i()));
     ClassDB::bind_static_method("StrataLayerData", D_METHOD("compile_cell_mask", "layers", "channel", "bounds", "vertex_resolution", "max_work", "max_fragments"), &StrataLayerData::compile_cell_mask, DEFVAL(int64_t(268435456)), DEFVAL(4096));
+    BIND_ENUM_CONSTANT(VALUE_FLOAT32);
+    BIND_ENUM_CONSTANT(VALUE_UNORM8);
+    BIND_ENUM_CONSTANT(VALUE_UNORM16);
     // Godot omits properties equal to their class defaults. Serializing a
     // standalone version=1 property would therefore lose the declaration.
     // Persist one complete snapshot instead: every nondefault payload carries
@@ -63,8 +71,111 @@ void StrataLayerData::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "serialized_data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "restore", "snapshot");
 }
 
+int StrataLayerData::bytes_per_value(int p_format) {
+    return p_format == VALUE_UNORM8 ? 1 : p_format == VALUE_UNORM16 ? 2 : 4;
+}
+
+int64_t StrataLayerData::tile_bytes(int p_format) {
+    return int64_t(TILE_SAMPLE_COUNT) * (bytes_per_value(p_format) + 1);
+}
+
+StrataLayerData::Tile::Tile(int p_format) : format(uint8_t(p_format)), data(size_t(TILE_SAMPLE_COUNT) * bytes_per_value(p_format), 0) {}
+
+float StrataLayerData::Tile::value(int p_offset) const {
+    if (format == VALUE_UNORM8) {
+        return float(data[p_offset]) / 255.0f;
+    }
+    if (format == VALUE_UNORM16) {
+        return float(uint32_t(data[p_offset * 2]) | (uint32_t(data[p_offset * 2 + 1]) << 8)) / 65535.0f;
+    }
+    float result;
+    std::memcpy(&result, data.data() + size_t(p_offset) * 4, 4);
+    return result;
+}
+
+bool StrataLayerData::Tile::store(int p_offset, float p_value) {
+    if (format == VALUE_UNORM8) {
+        const uint8_t q = uint8_t(std::floor(std::clamp(double(p_value), 0.0, 1.0) * 255.0 + 0.5));
+        const bool changed = data[p_offset] != q;
+        data[p_offset] = q;
+        return changed;
+    }
+    if (format == VALUE_UNORM16) {
+        const uint32_t q = uint32_t(std::floor(std::clamp(double(p_value), 0.0, 1.0) * 65535.0 + 0.5));
+        const bool changed = data[p_offset * 2] != (q & 255) || data[p_offset * 2 + 1] != (q >> 8);
+        data[p_offset * 2] = uint8_t(q & 255);
+        data[p_offset * 2 + 1] = uint8_t(q >> 8);
+        return changed;
+    }
+    const bool changed = std::memcmp(data.data() + size_t(p_offset) * 4, &p_value, 4) != 0;
+    std::memcpy(data.data() + size_t(p_offset) * 4, &p_value, 4);
+    return changed;
+}
+
+void StrataLayerData::Tile::clear(int p_offset) {
+    const int width = bytes_per_value(format);
+    std::memset(data.data() + size_t(p_offset) * width, 0, width);
+    ownership[p_offset] = 0;
+}
+
 bool StrataLayerData::Tile::operator==(const Tile &p_other) const {
-    return ownership == p_other.ownership && values == p_other.values;
+    return format == p_other.format && ownership == p_other.ownership && data == p_other.data;
+}
+
+int StrataLayerData::format_of(const String &p_channel) const {
+    const auto found = formats.find(p_channel);
+    return found == formats.end() ? int(VALUE_FLOAT32) : found->second;
+}
+
+StrataLayerData::Tile &StrataLayerData::tile_for(Channel &p_channel, const String &p_name, TileKey p_key) {
+    const auto found = p_channel.find(p_key);
+    if (found != p_channel.end()) {
+        return found->second;
+    }
+    return p_channel.emplace(p_key, Tile(format_of(p_name))).first->second;
+}
+
+int64_t StrataLayerData::retained_bytes(const String &p_except) const {
+    int64_t total = 0;
+    for (const auto &entry : channels) {
+        if (entry.first != p_except) {
+            total += int64_t(entry.second.size()) * tile_bytes(format_of(entry.first));
+        }
+    }
+    return total;
+}
+
+bool StrataLayerData::set_channel_format(StringName p_channel, int64_t p_format) {
+    const String name = p_channel;
+    if (name.is_empty() || p_format < VALUE_FLOAT32 || p_format > VALUE_UNORM16) {
+        return false;
+    }
+    if (format_of(name) == p_format) {
+        return true;
+    }
+    if (channels.find(name) != channels.end()) {
+        return false;
+    }
+    if (p_format == VALUE_FLOAT32) {
+        formats.erase(name);
+    } else {
+        formats[name] = int(p_format);
+    }
+    mark_channel_changed(name);
+    return true;
+}
+
+int64_t StrataLayerData::get_channel_format(StringName p_channel) const {
+    return format_of(String(p_channel));
+}
+
+int64_t StrataLayerData::get_memory_bytes(StringName p_channel) const {
+    const String name = p_channel;
+    if (name.is_empty()) {
+        return retained_bytes();
+    }
+    const auto found = channels.find(name);
+    return found == channels.end() ? 0 : int64_t(found->second.size()) * tile_bytes(format_of(name));
 }
 
 int32_t StrataLayerData::tile_coordinate(int32_t p_index) {
@@ -110,8 +221,8 @@ void StrataLayerData::mark_channel_changed(const String &p_channel) {
 void StrataLayerData::set_format_version(int64_t p_version) {
     // Do not reinterpret data from a future format as version 1. Rejecting the
     // declaration never changes the accepted grid, samples, or revision.
-    serialized_version_supported = p_version == FORMAT_VERSION;
-    ERR_FAIL_COND_MSG(!serialized_version_supported, "Unsupported terrain layer format version; serialized channels will be rejected. Expected version 1.");
+    serialized_version_supported = p_version == 1 || p_version == FORMAT_VERSION;
+    ERR_FAIL_COND_MSG(!serialized_version_supported, "Unsupported terrain layer format version; serialized channels will be rejected. Expected version 1 or 2.");
 }
 
 int64_t StrataLayerData::get_format_version() const { return FORMAT_VERSION; }
@@ -154,16 +265,17 @@ void StrataLayerData::set_sample(StringName p_channel, Vector2i p_index, double 
     ERR_FAIL_COND_MSG(name.is_empty(), "Terrain channel names must not be empty.");
     ERR_FAIL_COND_MSG(!std::isfinite(p_value) || std::abs(p_value) > std::numeric_limits<float>::max(), "Terrain values must be finite float32 values.");
     const float value = static_cast<float>(p_value);
-    Tile &tile = channels[name][tile_key(p_index)];
+    Tile &tile = tile_for(channels[name], name, tile_key(p_index));
     const int offset = tile_offset(p_index);
-    if (tile.ownership[offset] && tile.values[offset] == value) {
+    const bool was_owned = tile.ownership[offset] != 0;
+    const bool changed = tile.store(offset, value);
+    if (was_owned && !changed) {
         return;
     }
-    if (!tile.ownership[offset]) {
+    if (!was_owned) {
         tile.ownership[offset] = 1;
         ++tile.owned_count;
     }
-    tile.values[offset] = value;
     mark_channel_changed(name);
 }
 
@@ -181,8 +293,7 @@ void StrataLayerData::erase_sample(StringName p_channel, Vector2i p_index) {
     if (!tile.ownership[offset]) {
         return;
     }
-    tile.ownership[offset] = 0;
-    tile.values[offset] = 0.0f;
+    tile.clear(offset);
     if (--tile.owned_count == 0) {
         channel_it->second.erase(tile_it);
         if (channel_it->second.empty()) {
@@ -200,7 +311,7 @@ bool StrataLayerData::has_sample(StringName p_channel, Vector2i p_index) const {
 double StrataLayerData::get_sample(StringName p_channel, Vector2i p_index) const {
     const Tile *tile = find_tile(String(p_channel), p_index);
     const int offset = tile_offset(p_index);
-    return tile && tile->ownership[offset] ? tile->values[offset] : 0.0;
+    return tile && tile->ownership[offset] ? double(tile->value(offset)) : 0.0;
 }
 
 Array StrataLayerData::get_owned_samples(StringName p_channel) const {
@@ -274,7 +385,7 @@ Dictionary StrataLayerData::sample_channel(StringName p_channel, Vector2 p_posit
             const Tile *tile = find_tile(name, index);
             const int offset = tile_offset(index);
             if (tile && tile->ownership[offset]) {
-                numerator += weight * tile->values[offset];
+                numerator += weight * tile->value(offset);
                 coverage += weight;
             }
         }
@@ -301,6 +412,7 @@ PackedStringArray StrataLayerData::get_channel_names() const {
 }
 
 Dictionary StrataLayerData::get_channels() const {
+    // Legacy v1 view: every channel as PackedFloat32Array tiles (dequantized for unorm channels).
     Dictionary result;
     for (const auto &channel : channels) {
         Dictionary tiles;
@@ -311,7 +423,9 @@ Dictionary StrataLayerData::get_channels() const {
             ownership.resize(TILE_SAMPLE_COUNT);
             float *value_data = values.ptrw();
             uint8_t *ownership_data = ownership.ptrw();
-            std::copy(entry.second.values.begin(), entry.second.values.end(), value_data);
+            for (int i = 0; i < TILE_SAMPLE_COUNT; ++i) {
+                value_data[i] = entry.second.value(i);
+            }
             std::copy(entry.second.ownership.begin(), entry.second.ownership.end(), ownership_data);
             Dictionary tile;
             tile["values"] = values;
@@ -323,8 +437,9 @@ Dictionary StrataLayerData::get_channels() const {
     return result;
 }
 
-bool StrataLayerData::decode_channels(const Dictionary &p_source, Channels &r_channels) {
+bool StrataLayerData::decode_channels(const Dictionary &p_source, int p_version, const Formats &p_legacy_formats, Channels &r_channels, Formats &r_formats) {
     Channels decoded;
+    Formats decoded_formats;
     std::set<String> seen_names;
     const Array channel_keys = p_source.keys();
     for (int64_t c = 0; c < channel_keys.size(); ++c) {
@@ -334,7 +449,25 @@ bool StrataLayerData::decode_channels(const Dictionary &p_source, Channels &r_ch
         ERR_FAIL_COND_V_MSG(name.is_empty() || !seen_names.insert(name).second, false, "Terrain channel names must be nonempty and unique.");
         const Variant channel_variant = p_source[channel_key];
         ERR_FAIL_COND_V_MSG(channel_variant.get_type() != Variant::DICTIONARY, false, "Terrain channels must contain tile dictionaries.");
-        const Dictionary tiles = channel_variant;
+        Dictionary tiles = channel_variant;
+        int format = VALUE_FLOAT32;
+        if (p_version >= 2) {
+            const Dictionary entry = channel_variant;
+            ERR_FAIL_COND_V_MSG(entry.size() != 2 || !entry.has("format") || !entry.has("tiles"), false, "Version 2 terrain channels require format and tiles.");
+            const Variant format_variant = entry["format"];
+            const Variant tiles_variant = entry["tiles"];
+            ERR_FAIL_COND_V_MSG(format_variant.get_type() != Variant::INT || tiles_variant.get_type() != Variant::DICTIONARY, false, "Version 2 terrain channel format must be an integer and tiles a dictionary.");
+            const int64_t declared = format_variant;
+            ERR_FAIL_COND_V_MSG(declared < VALUE_FLOAT32 || declared > VALUE_UNORM16, false, "Unknown terrain channel value format.");
+            format = int(declared);
+            tiles = tiles_variant;
+        } else {
+            const auto legacy = p_legacy_formats.find(name);
+            format = legacy == p_legacy_formats.end() ? int(VALUE_FLOAT32) : legacy->second;
+        }
+        if (format != VALUE_FLOAT32) {
+            decoded_formats[name] = format;
+        }
         Channel channel;
         const Array keys = tiles.keys();
         for (int64_t t = 0; t < keys.size(); ++t) {
@@ -350,34 +483,72 @@ bool StrataLayerData::decode_channels(const Dictionary &p_source, Channels &r_ch
             ERR_FAIL_COND_V_MSG(tile_dict.size() != 2 || !tile_dict.has("values") || !tile_dict.has("ownership"), false, "Terrain tiles require values and ownership arrays.");
             const Variant values_variant = tile_dict["values"];
             const Variant ownership_variant = tile_dict["ownership"];
-            ERR_FAIL_COND_V_MSG(values_variant.get_type() != Variant::PACKED_FLOAT32_ARRAY || ownership_variant.get_type() != Variant::PACKED_BYTE_ARRAY, false, "Terrain tile arrays must be PackedFloat32Array values and PackedByteArray ownership.");
-            const PackedFloat32Array values = values_variant;
+            ERR_FAIL_COND_V_MSG(ownership_variant.get_type() != Variant::PACKED_BYTE_ARRAY, false, "Terrain tile ownership must be a PackedByteArray.");
             const PackedByteArray ownership = ownership_variant;
-            ERR_FAIL_COND_V_MSG(values.size() != TILE_SAMPLE_COUNT || ownership.size() != TILE_SAMPLE_COUNT, false, "Terrain tile arrays must contain exactly 65536 samples.");
-            Tile tile;
-            for (int i = 0; i < TILE_SAMPLE_COUNT; ++i) {
-                ERR_FAIL_COND_V_MSG(!std::isfinite(values[i]) || ownership[i] > 1, false, "Terrain values must be finite and ownership must be binary.");
-                tile.ownership[i] = ownership[i];
-                tile.values[i] = ownership[i] ? values[i] : 0.0f;
-                tile.owned_count += ownership[i];
+            ERR_FAIL_COND_V_MSG(ownership.size() != TILE_SAMPLE_COUNT, false, "Terrain tile arrays must contain exactly 65536 samples.");
+            Tile tile(format);
+            if (format == VALUE_FLOAT32) {
+                ERR_FAIL_COND_V_MSG(values_variant.get_type() != Variant::PACKED_FLOAT32_ARRAY, false, "Float32 terrain tile values must be a PackedFloat32Array.");
+                const PackedFloat32Array values = values_variant;
+                ERR_FAIL_COND_V_MSG(values.size() != TILE_SAMPLE_COUNT, false, "Terrain tile arrays must contain exactly 65536 samples.");
+                for (int i = 0; i < TILE_SAMPLE_COUNT; ++i) {
+                    ERR_FAIL_COND_V_MSG(!std::isfinite(values[i]) || ownership[i] > 1, false, "Terrain values must be finite and ownership must be binary.");
+                    tile.ownership[i] = ownership[i];
+                    tile.owned_count += ownership[i];
+                    if (ownership[i]) {
+                        tile.store(i, values[i]);
+                    }
+                }
+            } else if (p_version >= 2) {
+                ERR_FAIL_COND_V_MSG(values_variant.get_type() != Variant::PACKED_BYTE_ARRAY, false, "Unorm terrain tile values must be a PackedByteArray.");
+                const PackedByteArray values = values_variant;
+                ERR_FAIL_COND_V_MSG(values.size() != int64_t(tile.data.size()), false, "Unorm terrain tile values have the wrong byte count.");
+                const int width = bytes_per_value(format);
+                for (int i = 0; i < TILE_SAMPLE_COUNT; ++i) {
+                    ERR_FAIL_COND_V_MSG(ownership[i] > 1, false, "Terrain ownership must be binary.");
+                    tile.ownership[i] = ownership[i];
+                    tile.owned_count += ownership[i];
+                    if (ownership[i]) {
+                        std::memcpy(tile.data.data() + size_t(i) * width, values.ptr() + int64_t(i) * width, width);
+                    }
+                }
+            } else {
+                // Legacy float tiles into a channel that already declares a unorm format (set_channels).
+                ERR_FAIL_COND_V_MSG(values_variant.get_type() != Variant::PACKED_FLOAT32_ARRAY, false, "Terrain tile arrays must be PackedFloat32Array values and PackedByteArray ownership.");
+                const PackedFloat32Array values = values_variant;
+                ERR_FAIL_COND_V_MSG(values.size() != TILE_SAMPLE_COUNT, false, "Terrain tile arrays must contain exactly 65536 samples.");
+                for (int i = 0; i < TILE_SAMPLE_COUNT; ++i) {
+                    ERR_FAIL_COND_V_MSG(!std::isfinite(values[i]) || ownership[i] > 1, false, "Terrain values must be finite and ownership must be binary.");
+                    tile.ownership[i] = ownership[i];
+                    tile.owned_count += ownership[i];
+                    if (ownership[i]) {
+                        tile.store(i, values[i]);
+                    }
+                }
             }
             // Empty tiles have no native data and need not consume memory.
             if (tile.owned_count > 0) {
                 channel.emplace(TileKey(tile_index.x, tile_index.y), std::move(tile));
             }
         }
+        // Keep a channel entry only when it has samples; a declared non-default format
+        // survives through decoded_formats.
         if (!channel.empty()) {
             decoded.emplace(name, std::move(channel));
         }
     }
     r_channels = std::move(decoded);
+    r_formats = std::move(decoded_formats);
     return true;
 }
 
 void StrataLayerData::set_channels(const Dictionary &p_channels) {
-    ERR_FAIL_COND_MSG(!serialized_version_supported, "Cannot load terrain channels after an unsupported format version. Declare format version 1 or restore a complete version 1 snapshot.");
+    ERR_FAIL_COND_MSG(!serialized_version_supported, "Cannot load terrain channels after an unsupported format version. Declare format version 1 or 2, or restore a complete snapshot.");
+    // Legacy float-tile form (what get_channels returns). Channel formats already declared on
+    // this resource are kept; their values are quantized on load.
     Channels decoded;
-    if (!decode_channels(p_channels, decoded)) {
+    Formats ignored;
+    if (!decode_channels(p_channels, 1, formats, decoded, ignored)) {
         return;
     }
     if (channels != decoded) {
@@ -387,21 +558,64 @@ void StrataLayerData::set_channels(const Dictionary &p_channels) {
 }
 
 Dictionary StrataLayerData::snapshot() const {
+    // Format 2: channels[name] = {format:int, tiles:{Vector2i: {values, ownership}}}. Float32
+    // tiles carry PackedFloat32Array values; unorm tiles carry little-endian PackedByteArray
+    // values (1 or 2 bytes per sample). Ownership is one byte (0/1) per sample. Channels with a
+    // non-default format but no samples are kept (empty tiles) so the format round-trips.
     Dictionary result;
     result["format_version"] = FORMAT_VERSION;
     result["sample_spacing"] = sample_spacing;
     result["grid_origin"] = grid_origin;
-    result["channels"] = get_channels();
+    Dictionary out_channels;
+    const auto emit = [&](const String &p_name, const Channel *p_channel) {
+        const int format = format_of(p_name);
+        Dictionary tiles;
+        if (p_channel) {
+            for (const auto &entry : *p_channel) {
+                PackedByteArray ownership;
+                ownership.resize(TILE_SAMPLE_COUNT);
+                std::copy(entry.second.ownership.begin(), entry.second.ownership.end(), ownership.ptrw());
+                Dictionary tile;
+                if (format == VALUE_FLOAT32) {
+                    PackedFloat32Array values;
+                    values.resize(TILE_SAMPLE_COUNT);
+                    std::memcpy(values.ptrw(), entry.second.data.data(), entry.second.data.size());
+                    tile["values"] = values;
+                } else {
+                    PackedByteArray values;
+                    values.resize(int64_t(entry.second.data.size()));
+                    std::memcpy(values.ptrw(), entry.second.data.data(), entry.second.data.size());
+                    tile["values"] = values;
+                }
+                tile["ownership"] = ownership;
+                tiles[Vector2i(entry.first.first, entry.first.second)] = tile;
+            }
+        }
+        Dictionary channel;
+        channel["format"] = int64_t(format);
+        channel["tiles"] = tiles;
+        out_channels[p_name] = channel;
+    };
+    for (const auto &channel : channels) {
+        emit(channel.first, &channel.second);
+    }
+    for (const auto &declared : formats) {
+        if (channels.find(declared.first) == channels.end()) {
+            emit(declared.first, nullptr);
+        }
+    }
+    result["channels"] = out_channels;
     return result;
 }
 
 void StrataLayerData::restore(const Dictionary &p_snapshot) {
-    // Snapshots require an explicit integer version. Missing, floating-point,
-    // older and future versions reject the entire snapshot without mutation;
-    // no implicit format conversion is attempted by this prototype.
+    // Snapshots require an explicit integer version. Version 1 (every channel float32 tiles) and
+    // version 2 (per-channel format) are accepted; missing, floating-point and other versions
+    // reject the entire snapshot without mutation.
     ERR_FAIL_COND_MSG(!p_snapshot.has("format_version") || !p_snapshot.has("sample_spacing") || !p_snapshot.has("grid_origin") || !p_snapshot.has("channels"), "Terrain snapshot requires format_version, sample_spacing, grid_origin and channels.");
     const Variant version_variant = p_snapshot["format_version"];
-    ERR_FAIL_COND_MSG(version_variant.get_type() != Variant::INT || static_cast<int64_t>(version_variant) != FORMAT_VERSION, "Unsupported terrain snapshot format_version; expected integer version 1.");
+    ERR_FAIL_COND_MSG(version_variant.get_type() != Variant::INT || (static_cast<int64_t>(version_variant) != 1 && static_cast<int64_t>(version_variant) != FORMAT_VERSION), "Unsupported terrain snapshot format_version; expected integer version 1 or 2.");
+    const int version = int(static_cast<int64_t>(version_variant));
     const Variant spacing_variant = p_snapshot["sample_spacing"];
     const Variant origin_variant = p_snapshot["grid_origin"];
     const Variant channels_variant = p_snapshot["channels"];
@@ -410,14 +624,16 @@ void StrataLayerData::restore(const Dictionary &p_snapshot) {
     const Vector2 origin = origin_variant;
     ERR_FAIL_COND_MSG(!valid_spacing(spacing) || !valid_origin(origin), "Terrain snapshot spacing and origin must be finite, and spacing positive.");
     Channels decoded;
-    if (!decode_channels(channels_variant, decoded)) {
+    Formats decoded_formats;
+    if (!decode_channels(channels_variant, version, Formats(), decoded, decoded_formats)) {
         return;
     }
     serialized_version_supported = true;
-    if (sample_spacing != spacing || grid_origin != origin || channels != decoded) {
+    if (sample_spacing != spacing || grid_origin != origin || channels != decoded || formats != decoded_formats) {
         sample_spacing = spacing;
         grid_origin = origin;
         channels = std::move(decoded);
+        formats = std::move(decoded_formats);
         mark_changed();
     }
 }

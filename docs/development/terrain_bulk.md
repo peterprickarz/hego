@@ -104,6 +104,74 @@ requests a 1x1 zero-owner footprint for empty overlay inputs. The default empty
 raw snapshot retains its established full-bounds behavior. Exported images and
 imported native data cannot alias caller-owned image mutations.
 
+## Channel value formats and serialization
+
+`StrataLayerData` stores each channel's values in one of three formats, declared per channel
+with `set_channel_format(channel, format) -> bool` (`VALUE_FLOAT32` 0, the default;
+`VALUE_UNORM8` 1; `VALUE_UNORM16` 2) and read with `get_channel_format(channel)`. A format can
+be set only while the channel has no samples; otherwise (or for an invalid format) the call
+returns false and changes nothing. The declaration persists across `clear_channel`, sample
+erasure and serialization. Per sample a tile retains the value bytes plus one ownership byte:
+5 bytes for float32, 2 for unorm8, 3 for unorm16 (`get_memory_bytes(channel="")` reports the
+retained tile bytes of one channel, or all channels when empty).
+
+Every API keeps its float contract. Unorm channels clamp written values to 0..1, quantize to
+nearest (`floor(v * 255 + 0.5)` or `* 65535`) and return `q / 255` or `q / 65535`. This
+covers `set_sample`, `patch_dense`, `restore_dense` and `replace_dense` (a value outside 0..1 is
+clamped, not rejected); `get_sample`, `sample_channel`, `read_dense`, `get_owned_rect`,
+`compose_dense` and `compile_cell_mask` read the dequantized values. A write that quantizes to
+the stored byte is a no-op and does not advance the revision. `get_channels()` stays the
+legacy float-tile view (dequantized); `set_channels()` keeps the formats already declared on
+the resource and quantizes into them.
+
+The 512 MiB dense-import budget of `replace_dense`/`patch_dense` is now counted in retained
+bytes (value plus ownership bytes per tile) instead of tiles, so unorm channels fit
+proportionally more tiles. For float32 it is the same 1638-tile limit as before.
+
+`serialized_data` is format version 2:
+`channels[name] = {format:int, tiles:{Vector2i:{values, ownership}}}`. Float32 tiles carry a
+65536-element `PackedFloat32Array`; unorm tiles a little-endian `PackedByteArray` (65536 or
+131072 bytes); ownership is a 65536-byte 0/1 `PackedByteArray`. Tiles without owned samples are
+dropped; a channel with a non-default format and no samples is kept (empty `tiles`) so its
+format round-trips. `restore()` accepts version 1 (channels map straight to float32 tile
+dictionaries, every channel is float32 and previously declared formats are reset) and version
+2, rejecting anything else atomically; `snapshot()` always writes version 2, so committed
+version 1 resources keep loading and are upgraded on the next save. `get_format_version()`
+returns 2.
+
+## Material packing
+
+`pack_material_weights(images, weights_format=Image.FORMAT_RGBAF)` and
+`pack_material_weights_sparse(images, weights_format=Image.FORMAT_RGBAF)` accept 1 to 32
+RF/RH images of one lattice of up to 20 Mi samples (the old 1025 per-side cap is gone), at most
+256 Mi input samples in total. `weights_format` is `Image.FORMAT_RGBAF` (normalized top-4
+weights) or `Image.FORMAT_RGBA8`: bytes whose four values sum to exactly 255 on every assigned
+texel and are all zero on unassigned texels. The bytes use largest-remainder apportionment of
+`w * 255` (floor every slot, give the remaining units to the largest fractional remainders, ties
+to the lower slot), so each byte stays within 1/255 of the RGBAF weight and equals
+round-to-nearest wherever that already sums to 255. (Rounding to nearest with the largest slot
+absorbing the difference can deviate by up to 1.5/255.) IDs are identical for both formats.
+Other formats are rejected.
+
+`prepare_control_maps(ids, weights, material_count)` accepts RGBA8 weights as well. RGBA8
+input is validated for IDs and returned as RGBA8 with every texel whose bytes sum to something
+other than 0 or 255 renormalized to sum to 255 by the same apportionment; zero-sum texels are
+kept. RGBAF/RGBAH input is normalized and returned as RGBAF as before.
+
+## Windowed composition at region scale
+
+`compose_dense(..., index_offset)` composes a window of a lattice of any size up to the 20 Mi
+sample cap per window; offsets are nonnegative and `offset + size` is bounded by 20 Mi, so a
+4097 lattice (offset up to 4096) works. A 261 x 261 window equals the matching rectangle of the
+4097 x 4097 composition bit for bit for Replace and Add layers, values and coverage.
+
+`compile_cell_mask` needs no window argument: pass the window's `bounds` (its first and last
+vertex positions) and its vertex resolution; the result equals the matching cells of the full
+mask because cell rectangles are computed as `bounds.position + cell * (bounds.size / cells)`.
+Keep the cell size exactly representable (for example a whole number of metres, or dyadic
+fractions) so window and full cell corners are identical doubles; the cost scales with the
+cells inside the window, not with the whole terrain.
+
 ## Allocation and work limits
 
 Each dense RF image is limited to 20*1024*1024 samples. A snapshot has a default
@@ -113,7 +181,7 @@ including ownership companions and all targets, is limited to 128*1024*1024 samp
 Tile lookup acceleration is independently bounded at 262144 pointers per source.
 
 `replace_dense` rejects a resulting resource with more than 512 MiB of retained
-tile value/ownership storage, including other channels and thin-image padding.
+tile value/ownership storage (counted in bytes, per channel format), including other channels and thin-image padding.
 It checks occupied tile count before allocating replacement tiles. This is a
 dense-import guard; legacy `set_sample` and `restore` do not enforce this ceiling.
 Atomic replacement keeps the old and new channels until publication, plus RF

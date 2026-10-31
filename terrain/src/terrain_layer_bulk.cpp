@@ -12,7 +12,8 @@ using namespace godot;
 
 namespace Strata {
 namespace {
-constexpr int64_t MAX_RESOURCE_TILES = (512LL * 1024 * 1024) / (65536 * 5);
+constexpr int64_t MAX_RESOURCE_BYTES = 512LL * 1024 * 1024;
+constexpr int64_t MAX_PACK_INPUT_SAMPLES = 256LL * 1024 * 1024;
 
 Dictionary failure(const String &message) {
     Dictionary result;
@@ -53,20 +54,71 @@ bool image_bytes(const Ref<Image> &image, PackedByteArray &bytes) {
     bytes = image->get_data();
     return bytes.size() >= int64_t(image->get_width()) * image->get_height() * int64_t(sizeof(float));
 }
+
+// Apportions 255 across four slots proportionally to exact[] (which sum to 255): every slot is
+// floored, then the remaining units go to the largest fractional remainders (lowest slot wins
+// ties). The bytes sum to exactly 255 and each stays within 1 of its exact value; where the
+// rounded values already sum to 255 this equals round-to-nearest.
+void apportion_255(const double exact[4], uint8_t out[4]) {
+    int total = 0;
+    double remainder[4];
+    for (int slot = 0; slot < 4; ++slot) {
+        const double floored = std::floor(exact[slot] + 1e-9);
+        const int whole = int(std::clamp(floored, 0.0, 255.0));
+        out[slot] = uint8_t(whole);
+        remainder[slot] = exact[slot] - whole;
+        total += whole;
+    }
+    while (total < 255) {
+        int best = 0;
+        for (int slot = 1; slot < 4; ++slot) if (remainder[slot] > remainder[best]) best = slot;
+        ++out[best]; remainder[best] = -1.0; ++total;
+    }
+    while (total > 255) {
+        int best = 0;
+        for (int slot = 1; slot < 4; ++slot) if (out[slot] > out[best]) best = slot;
+        --out[best]; --total;
+    }
+}
 } // namespace
 
-Dictionary StrataLayerData::pack_material_weights(const Array &images) {
-    return pack_material_weights_impl(images, false);
+Dictionary StrataLayerData::pack_material_weights(const Array &images, int64_t weights_format) {
+    return pack_material_weights_impl(images, false, weights_format);
 }
 
-Dictionary StrataLayerData::pack_material_weights_sparse(const Array &images) {
-    return pack_material_weights_impl(images, true);
+Dictionary StrataLayerData::pack_material_weights_sparse(const Array &images, int64_t weights_format) {
+    return pack_material_weights_impl(images, true, weights_format);
 }
 
 Dictionary StrataLayerData::prepare_control_maps(const Ref<Image> &p_ids, const Ref<Image> &p_weights, int64_t p_material_count) {
     if (p_ids.is_null() || p_weights.is_null() || p_ids->is_compressed() || p_weights->is_compressed() || p_ids->get_size() != p_weights->get_size() || p_ids->get_width() < 1 || p_ids->get_height() < 1)
         return failure("Control maps need matching uncompressed images; previous maps retained.");
     if (p_ids->get_format() != Image::FORMAT_RGBA8) return failure("Control IDs must use categorical RGBA8 bytes; previous maps retained.");
+    if (p_weights->get_format() == Image::FORMAT_RGBA8) {
+        // Byte weights: validate IDs, then renormalize each assigned texel so its four bytes sum
+        // to 255 (largest-remainder apportionment, identity when they already sum to 255).
+        // Zero-sum texels are kept as they are. The result stays RGBA8.
+        const int64_t count = int64_t(p_ids->get_width()) * p_ids->get_height();
+        const PackedByteArray id_bytes = p_ids->get_data();
+        PackedByteArray weight_bytes = p_weights->get_data();
+        if (id_bytes.size() < count * 4 || weight_bytes.size() < count * 4) return failure("Control map payload has an invalid byte count; previous maps retained.");
+        const uint8_t *ids = id_bytes.ptr();
+        uint8_t *out = weight_bytes.ptrw();
+        for (int64_t i = 0; i < count * 4; ++i)
+            if (int64_t(ids[i]) >= p_material_count) return failure("Control maps require valid pool IDs and finite nonnegative weights; previous maps retained.");
+        for (int64_t pixel = 0; pixel < count; ++pixel) {
+            const int total = int(out[pixel * 4]) + out[pixel * 4 + 1] + out[pixel * 4 + 2] + out[pixel * 4 + 3];
+            if (total == 0 || total == 255) continue;
+            double exact[4];
+            for (int slot = 0; slot < 4; ++slot) exact[slot] = double(out[pixel * 4 + slot]) * 255.0 / total;
+            apportion_255(exact, out + pixel * 4);
+        }
+        Dictionary result;
+        result["ok"] = true;
+        result["message"] = String();
+        result["weights"] = Image::create_from_data(p_weights->get_width(), p_weights->get_height(), false, Image::FORMAT_RGBA8, weight_bytes);
+        return result;
+    }
     Ref<Image> weights = p_weights->duplicate();
     weights->convert(Image::FORMAT_RGBAF);
     const int64_t count = int64_t(weights->get_width()) * weights->get_height();
@@ -97,9 +149,11 @@ Dictionary StrataLayerData::prepare_control_maps(const Ref<Image> &p_ids, const 
     return result;
 }
 
-Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool allow_unassigned) {
+Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool allow_unassigned, int64_t weights_format) {
     const int count_ids = int(images.size());
     if (count_ids < 1 || count_ids > 32) return failure("Material packing requires 1 to 32 registry-order scalar images.");
+    if (weights_format != Image::FORMAT_RGBAF && weights_format != Image::FORMAT_RGBA8) return failure("Material weights format must be Image.FORMAT_RGBAF or Image.FORMAT_RGBA8.");
+    const bool bytes_out = weights_format == Image::FORMAT_RGBA8;
     PackedByteArray fields[32];
     Vector2i size;
     for (int id = 0; id < count_ids; ++id) {
@@ -108,8 +162,10 @@ Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool
                 (image->get_format() != Image::FORMAT_RF && image->get_format() != Image::FORMAT_RH))
             return failure("Material fields must be uncompressed RF or RH images without mipmaps.");
         if (id == 0) size = image->get_size();
-        if (size.x < 1 || size.y < 1 || size.x > 1025 || size.y > 1025 || image->get_size() != size)
-            return failure("Material fields must share one nonempty lattice with each side at most 1025.");
+        if (!valid_size(size) || image->get_size() != size)
+            return failure("Material fields must share one nonempty lattice of at most 20 Mi samples.");
+        if (int64_t(size.x) * size.y * count_ids > MAX_PACK_INPUT_SAMPLES)
+            return failure("Material packing accepts at most 256 Mi input samples in total.");
         if (image->get_format() == Image::FORMAT_RH) {
             Ref<Image> converted = image->duplicate();
             converted->convert(Image::FORMAT_RF);
@@ -119,7 +175,7 @@ Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool
     }
     const int64_t count = int64_t(size.x) * size.y;
     PackedByteArray ids, weights;
-    ids.resize(count * 4); weights.resize(count * 16);
+    ids.resize(count * 4); weights.resize(count * (bytes_out ? 4 : 16));
     uint8_t *out_ids = ids.ptrw(), *out_weights = weights.ptrw();
     const uint8_t *inputs[32] = {};
     for (int id = 0; id < count_ids; ++id) inputs[id] = fields[id].ptr();
@@ -131,6 +187,7 @@ Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool
         double values[32], total = 0.0;
         int top_ids[4] = {0, 0, 0, 0};
         double top[4] = {-1.0, -1.0, -1.0, -1.0};
+        double exact[4] = {0.0, 0.0, 0.0, 0.0};
         for (int id = 0; id < count_ids; ++id) {
             const double value = load_float(inputs[id], pixel);
             if (!std::isfinite(value) || value < 0.0) return failure("Material weights must be finite and nonnegative; previous controls retained.");
@@ -147,7 +204,7 @@ Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool
         }
         if (allow_unassigned && total == 0.0) {
             // Unassigned editor texel: exact zero weights, ID 0, outside every diagnostic.
-            for (int slot = 0; slot < 4; ++slot) { out_ids[pixel * 4 + slot] = 0; store_float(out_weights, pixel * 4 + slot, 0.0f); }
+            for (int slot = 0; slot < 4; ++slot) { out_ids[pixel * 4 + slot] = 0; if (bytes_out) out_weights[pixel * 4 + slot] = 0; else store_float(out_weights, pixel * 4 + slot, 0.0f); }
             ++unassigned;
             continue;
         }
@@ -162,9 +219,11 @@ Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool
             const int id = top_ids[slot];
             out_ids[pixel * 4 + slot] = uint8_t(id);
             const float normalized = top[slot] > 0.0 ? float(top[slot] / kept) : 0.0f;
-            store_float(out_weights, pixel * 4 + slot, normalized);
+            if (!bytes_out) store_float(out_weights, pixel * 4 + slot, normalized);
             if (top[slot] > 0.0) { retained[id]++; retained_mass[id] += normalized; }
+            exact[slot] = double(normalized) * 255.0;
         }
+        if (bytes_out) apportion_255(exact, out_weights + pixel * 4);
     }
     Array coverage;
     for (int id = 0; id < count_ids; ++id) {
@@ -176,7 +235,7 @@ Dictionary StrataLayerData::pack_material_weights_impl(const Array &images, bool
     }
     Dictionary result;
     result["ok"] = true; result["ids"] = Image::create_from_data(size.x, size.y, false, Image::FORMAT_RGBA8, ids);
-    result["weights"] = Image::create_from_data(size.x, size.y, false, Image::FORMAT_RGBAF, weights);
+    result["weights"] = Image::create_from_data(size.x, size.y, false, bytes_out ? Image::FORMAT_RGBA8 : Image::FORMAT_RGBAF, weights);
     result["coverage"] = coverage; result["samples"] = count;
     result["discarded_weight_max"] = discarded_max; result["discarded_weight_mean"] = discarded_sum / count;
     if (allow_unassigned) { result["unassigned"] = unassigned; result["empty"] = unassigned == count; }
@@ -224,8 +283,8 @@ bool StrataLayerData::replace_dense(StringName channel_name, Vector2i origin, co
     const TileKey first = tile_key(origin);
     const TileKey last = tile_key(Vector2i(int64_t(origin.x) + size.x - 1, int64_t(origin.y) + size.y - 1));
     std::vector<TileKey> occupied;
-    int64_t other_tiles = 0;
-    for (const auto &entry : channels) if (entry.first != name) other_tiles += entry.second.size();
+    const int64_t other_bytes = retained_bytes(name);
+    const int64_t bytes_per_tile = tile_bytes(format_of(name));
     // Check tile memory before allocating. A thin or sparse 20M-sample image
     // must not silently allocate tens of gigabytes of mostly empty tiles.
     for (int64_t ty = first.second; ty <= last.second; ++ty) {
@@ -239,12 +298,12 @@ bool StrataLayerData::replace_dense(StringName channel_name, Vector2i origin, co
                 for (int64_t x = x0; x < x1; ++x) if (load_float(o, (y - origin.y) * size.x + x - origin.x) == 1.0f) { any = true; break; }
             }
             if (any) occupied.emplace_back(tx, ty);
-            ERR_FAIL_COND_V_MSG(other_tiles + int64_t(occupied.size()) > MAX_RESOURCE_TILES, false, "Dense import exceeds the 512 MiB native tile budget for this resource.");
+            ERR_FAIL_COND_V_MSG(other_bytes + int64_t(occupied.size()) * bytes_per_tile > MAX_RESOURCE_BYTES, false, "Dense import exceeds the 512 MiB native tile budget for this resource.");
         }
     }
     Channel replacement;
     for (const TileKey &key : occupied) {
-        Tile &tile = replacement[key];
+        Tile &tile = replacement.emplace(key, Tile(format_of(name))).first->second;
         const int64_t x0 = std::max<int64_t>(origin.x, int64_t(key.first) * TILE_SIZE);
         const int64_t y0 = std::max<int64_t>(origin.y, int64_t(key.second) * TILE_SIZE);
         const int64_t x1 = std::min<int64_t>(int64_t(origin.x) + size.x, (int64_t(key.first) + 1) * TILE_SIZE);
@@ -254,7 +313,7 @@ bool StrataLayerData::replace_dense(StringName channel_name, Vector2i origin, co
                 const int64_t source = (y - origin.y) * size.x + x - origin.x;
                 if (o && load_float(o, source) == 0.0f) continue;
                 const int offset = (y - int64_t(key.second) * TILE_SIZE) * TILE_SIZE + x - int64_t(key.first) * TILE_SIZE;
-                tile.values[offset] = load_float(v, source);
+                tile.store(offset, load_float(v, source));
                 tile.ownership[offset] = 1;
                 ++tile.owned_count;
             }
@@ -294,12 +353,11 @@ bool StrataLayerData::edit_dense(const String &name, Vector2i origin, Vector2i s
     const uint8_t *v = values.is_empty() ? nullptr : values.ptr();
     const uint8_t *m = selection.is_empty() ? nullptr : selection.ptr();
     // Count the tiles the edit can create before touching anything, as replace_dense does.
-    int64_t tiles_total = 0;
-    for (const auto &entry : channels) tiles_total += entry.second.size();
+    const int64_t bytes_total = retained_bytes();
     const TileKey first = tile_key(origin);
     const TileKey last = tile_key(Vector2i(int64_t(origin.x) + size.x - 1, int64_t(origin.y) + size.y - 1));
     const int64_t new_tiles = (int64_t(last.first) - first.first + 1) * (int64_t(last.second) - first.second + 1);
-    ERR_FAIL_COND_V_MSG(write_selected && tiles_total + new_tiles > MAX_RESOURCE_TILES, false, "Dense edit could exceed the 512 MiB native tile budget for this resource.");
+    ERR_FAIL_COND_V_MSG(write_selected && bytes_total + new_tiles * tile_bytes(format_of(name)) > MAX_RESOURCE_BYTES, false, "Dense edit could exceed the 512 MiB native tile budget for this resource.");
     bool changed = false;
     auto channel_it = channels.find(name);
     if (channel_it == channels.end()) {
@@ -317,16 +375,16 @@ bool StrataLayerData::edit_dense(const String &name, Vector2i origin, Vector2i s
             if (selected ? !write_selected : erase_unselected) {
                 auto tile_it = channel.find(key);
                 if (tile_it == channel.end() || !tile_it->second.ownership[offset]) continue;
-                tile_it->second.ownership[offset] = 0;
-                tile_it->second.values[offset] = 0.0f;
+                tile_it->second.clear(offset);
                 if (--tile_it->second.owned_count == 0) channel.erase(tile_it);
                 changed = true;
             } else if (selected) {
                 const float value = load_float(v, source);
-                Tile &tile = channel[key];
-                if (tile.ownership[offset] && tile.values[offset] == value) continue;
-                if (!tile.ownership[offset]) { tile.ownership[offset] = 1; ++tile.owned_count; }
-                tile.values[offset] = value;
+                Tile &tile = tile_for(channel, name, key);
+                const bool was_owned = tile.ownership[offset] != 0;
+                const bool value_changed = tile.store(offset, value);
+                if (was_owned && !value_changed) continue;
+                if (!was_owned) { tile.ownership[offset] = 1; ++tile.owned_count; }
                 changed = true;
             }
         }
@@ -388,7 +446,7 @@ Dictionary StrataLayerData::read_dense(StringName channel_name, Vector2i origin,
             const int offset = (y - int64_t(entry.first.second) * TILE_SIZE) * TILE_SIZE + x - int64_t(entry.first.first) * TILE_SIZE;
             if (!entry.second.ownership[offset]) continue;
             const int64_t target = (y - origin.y) * size.x + x - origin.x;
-            store_float(value_out, target, entry.second.values[offset]);
+            store_float(value_out, target, entry.second.value(offset));
             store_float(owner_out, target, 1.0f);
             ++owned;
         }
@@ -455,7 +513,7 @@ struct StrataLayerData::GridSampler {
             const int32_t sample_x = fx + ix, sample_y = fy + iy;
             const Tile *tile = tile_at(sample_x, sample_y);
             const int index = tile_offset(Vector2i(sample_x, sample_y));
-            if (tile && tile->ownership[index]) { numerator += weight * tile->values[index]; coverage += weight; }
+            if (tile && tile->ownership[index]) { numerator += weight * tile->value(index); coverage += weight; }
         }
         if (coverage > 0) value = numerator / coverage + offset;
     }
@@ -606,7 +664,7 @@ struct StrataLayerData::MaskSampler {
             if (!budget.take(TILE_SAMPLE_COUNT)) { error = "Categorical source validation exceeds the mask work budget."; return false; }
             for (int offset = 0; offset < TILE_SAMPLE_COUNT; ++offset) {
                 if (!entry.second.ownership[offset]) continue;
-                const float value = entry.second.values[offset];
+                const float value = entry.second.value(offset);
                 if (!threshold_mapping && (grid.offset != 0 || (value != 0 && value != 1))) {
                     error = "Categorical authoring requires binary Hole/Solid values; choose explicit threshold mapping for continuous procedural fields.";
                     return false;
@@ -634,7 +692,7 @@ struct StrataLayerData::MaskSampler {
         const Tile *tile = grid.tile_at(x, y);
         const int index = tile_offset(Vector2i(x, y));
         if (!tile || !tile->ownership[index]) return false;
-        hole = mapped(tile->values[index]);
+        hole = mapped(tile->value(index));
         return true;
     }
 
