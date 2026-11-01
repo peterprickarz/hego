@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoMergeNode" inherits="HEGoInputReceiverNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Wrapper around a Houdini Merge SOP node.
+</brief_description>
+<description>
+Creates a merge node and connects multiple upstream HEGo nodes into it.
+
+This is the standard way to combine several [HEGoInputNode] and/or generator outputs before feeding an HDA input.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="instantiate">
+<return type="HEGoTask" />
+<description>
+Submits a task to create a Houdini Merge SOP node and store its id in this wrapper.
+
+This method always instantiates a merge operator for the current wrapper and then registers the wrapper with the active session manager.
+</description>
+</method>
+<method name="connect_inputs">
+<return type="HEGoTask" />
+<param index="0" name="inputs" type="Array" />
+<param index="1" name="force" type="bool" default="false" />
+<description>
+Submits a task to connect all nodes in [code]inputs[/code] to this merge node in array order.
+
+Each array item should be an [HEGoBaseNode]. Invalid entries are ignored.
+
+Array order maps directly to merge input index order.
+
+The source list is cached internally. If the same set of source node ids is already connected the call returns a no-op task unless [code]force[/code] is [code]true[/code].
+</description>
+</method>
+</methods>
+</class>

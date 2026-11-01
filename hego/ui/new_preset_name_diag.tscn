@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://cp1r122h8krl"]
+
+[node name="NewPresetNameDiag" type="ConfirmationDialog"]
+auto_translate_mode = 1
+title = "Set Preset Name"
+
+[node name="LineEdit" type="LineEdit" parent="."]
+unique_name_in_owner = true
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 192.0
+offset_bottom = 51.0

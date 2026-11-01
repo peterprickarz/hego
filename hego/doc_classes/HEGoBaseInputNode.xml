@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoBaseInputNode" inherits="HEGoTransformableNamedNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Base class for nodes that send source data from Godot to Houdini.
+</brief_description>
+<description>
+This is a virtual helper layer for concrete input nodes such as [HEGoInputNode], [HEGoCurveInputNode], and [HEGoHeightfieldInputNode].
+
+The default [method set_prim_attr] implementation is a no-op placeholder.
+
+Attribute-writing behavior is implemented by specialized subclasses and utilities, not by this base class itself.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="set_prim_attr">
+<return type="void" />
+<param index="0" name="name" type="String" />
+<param index="1" name="value" type="Variant" />
+<description>
+Sets a primitive attribute on the input node.
+
+In the current base implementation this function is intentionally empty and exists for API consistency.
+
+Use subclass-specific APIs (for example layer attrs in [HEGoHeightfieldInputNode]) for effective attribute authoring.
+</description>
+</method>
+</methods>
+</class>

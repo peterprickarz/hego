@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoTrackableNode" inherits="RefCounted" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Abstract base interface for HEGo nodes tracked by session manager.
+</brief_description>
+<description>
+Session-managed node wrappers derive from this type so their internal node ids can be reset when sessions are recreated or destroyed.
+
+This class is abstract and intended for inheritance, not direct use.
+
+Implementers must provide reset behavior that leaves the wrapper in a safe non-instantiated state.
+</description>
+<tutorials>
+</tutorials>
+</class>

@@ -1,0 +1,98 @@
+[gd_scene load_steps=2 format=3 uid="uid://bo41metlftc8d"]
+
+[ext_resource type="Script" path="res://addons/hego/ui/library_control.gd" id="1_gdscript"]
+
+[node name="Library" type="HBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_gdscript")
+metadata/_tab_index = 2
+
+[node name="AvialablePanel" type="PanelContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="AvialablePanel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="AvialablePanel/VBoxContainer"]
+clip_contents = true
+layout_mode = 2
+text = "Available in Houdini:"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="AvialablePanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="ScanButton" type="Button" parent="AvialablePanel/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Refresh Libraries"
+
+[node name="Control" type="MarginContainer" parent="AvialablePanel/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/margin_left = 10
+
+[node name="AvailableTree" type="Tree" parent="AvialablePanel/VBoxContainer/Control"]
+unique_name_in_owner = true
+layout_mode = 2
+hide_root = true
+allow_reselect = true
+allow_rmb_select = true
+select_mode = 2
+
+[node name="AddRemovePanel" type="PanelContainer" parent="."]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="AddRemovePanel"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="Remove" type="Button" parent="AddRemovePanel/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "<<"
+
+[node name="HSeparator" type="HSeparator" parent="AddRemovePanel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Add" type="Button" parent="AddRemovePanel/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = ">>"
+
+[node name="InstalledPanel" type="PanelContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer" type="VBoxContainer" parent="InstalledPanel"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="InstalledPanel/VBoxContainer"]
+clip_contents = true
+layout_mode = 2
+text = "Can Use In HEGo:"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="InstalledPanel/VBoxContainer"]
+layout_mode = 2
+
+[node name="Control" type="MarginContainer" parent="InstalledPanel/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/margin_left = 10
+
+[node name="CachedTree" type="Tree" parent="InstalledPanel/VBoxContainer/Control"]
+unique_name_in_owner = true
+layout_mode = 2
+hide_root = true
+allow_reselect = true
+allow_rmb_select = true
+select_mode = 2

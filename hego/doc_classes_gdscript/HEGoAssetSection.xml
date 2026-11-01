@@ -1,0 +1,54 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoAssetSection" inherits="VBoxContainer" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		One collapsible block of parameters in the bottom panel, for one HDA.
+	</brief_description>
+	<description>
+		A node that puts several HDAs in the panel gets one of these per HDA. A node with a single HDA gets its parameters directly and no header, so the common case looks exactly as it did.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="setup">
+			<return type="void" />
+			<param index="0" name="p_asset_label" type="String" />
+			<param index="1" name="operator_name" type="String" />
+			<param index="2" name="is_open" type="bool" />
+			<description>
+				Builds the section for [param operator_name], titled with [param p_asset_label].
+			</description>
+		</method>
+		<method name="get_container">
+			<return type="VBoxContainer" />
+			<description>
+				Where this section's parameter widgets go.
+			</description>
+		</method>
+		<method name="open">
+			<return type="void" />
+			<description>
+				Opens the section without reporting it, for when a script asked for it rather than the user. The panel's remembered state is the user's, and highlighting should not overwrite it.
+			</description>
+		</method>
+		<method name="mark_highlighted">
+			<return type="void" />
+			<description>
+				Draws attention to the section a script highlighted.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="asset_label" type="String" setter="" getter="">
+			The label the node gave this HDA. The panel remembers the open state by it.
+		</member>
+	</members>
+	<signals>
+		<signal name="open_changed">
+			<param index="0" name="asset_label" type="String" />
+			<param index="1" name="is_open" type="bool" />
+			<description>
+				Emitted when the user opens or closes the section, so the panel can remember it.
+			</description>
+		</signal>
+	</signals>
+</class>

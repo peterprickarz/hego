@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/hego/graph_input/editor/graph_attrib_panel.gd" id="1"]
+
+[node name="HEGoGraphAttribPanel" type="VBoxContainer"]
+script = ExtResource("1")

@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoFetchSurfacesConfig" inherits="Resource" deprecated="Use HEGoAssetNode.get_surface_output() instead. Fetch configs are kept" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Attributes, filters and splits for a surface fetch, saved as a resource.
+	</brief_description>
+	<description>
+		only so existing projects can move across, and will be removed. The code API takes the same arguments, shares the same implementation and cache, and can decide what to read at runtime.
+	</description>
+	<tutorials>
+	</tutorials>
+	<members>
+		<member name="normal" type="bool" setter="" getter="">
+			Whether to read the [code]N[/code] attribute into the surface's normals.
+		</member>
+		<member name="color" type="bool" setter="" getter="">
+			Whether to read the [code]Cd[/code] attribute into the surface's vertex colours.
+		</member>
+		<member name="uv" type="bool" setter="" getter="">
+			Whether to read the first UV set.
+		</member>
+		<member name="uv2" type="bool" setter="" getter="">
+			Whether to read the second UV set.
+		</member>
+		<member name="tangents" type="bool" setter="" getter="">
+			Whether to read tangents.
+		</member>
+		<member name="read_attribs" type="PackedStringArray" setter="" getter="">
+			Further attribute names to read from the cook, beyond the toggles above.
+		</member>
+		<member name="filter_attribs" type="PackedStringArray" setter="" getter="">
+			Attribute names to filter the primitives on, one per entry of [member filter_attrib_values].
+		</member>
+		<member name="filter_attrib_values" type="Array" setter="@filter_attrib_values_setter" getter="">
+			The value each attribute in [member filter_attribs] has to carry for a primitive to be kept.
+		</member>
+		<member name="split_attribs" type="PackedStringArray" setter="" getter="">
+			Attribute names to group the kept primitives by, applied in order, one nesting level each.
+		</member>
+	</members>
+</class>

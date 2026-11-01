@@ -1,0 +1,13 @@
+[configuration]
+
+entry_symbol = "strata_library_init"
+compatibility_minimum = "4.7"
+
+[libraries]
+
+macos.debug = "res://addons/strata/bin/libstrata.macos.template_debug.dylib"
+macos.release = "res://addons/strata/bin/libstrata.macos.template_release.dylib"
+linux.debug.x86_64 = "res://addons/strata/bin/libstrata.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://addons/strata/bin/libstrata.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://addons/strata/bin/strata.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/strata/bin/strata.windows.template_release.x86_64.dll"
