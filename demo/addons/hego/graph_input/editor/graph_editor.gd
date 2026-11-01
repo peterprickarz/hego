@@ -83,6 +83,8 @@ func edit(object: Object) -> void:
 	_cancel_pointer()
 	if graph != null and graph.graph_changed.is_connected(_on_graph_changed):
 		graph.graph_changed.disconnect(_on_graph_changed)
+	if graph != null and graph.snap_all_requested.is_connected(_on_snap_all_requested):
+		graph.snap_all_requested.disconnect(_on_snap_all_requested)
 	graph = object as HEGoGraphInput3D
 	selected_points = PackedInt32Array()
 	selected_connections = PackedInt32Array()
@@ -94,6 +96,8 @@ func edit(object: Object) -> void:
 	if graph != null:
 		if not graph.graph_changed.is_connected(_on_graph_changed):
 			graph.graph_changed.connect(_on_graph_changed)
+		if not graph.snap_all_requested.is_connected(_on_snap_all_requested):
+			graph.snap_all_requested.connect(_on_snap_all_requested)
 		graph.update_gizmos()
 	_refresh_attrib_panel()
 
@@ -838,6 +842,12 @@ func _commit_state(action: String, before: Dictionary) -> void:
 	ur.add_undo_method(graph, "apply_state", before)
 	ur.commit_action(false)
 	graph.update_gizmos()
+
+
+func _on_snap_all_requested() -> void:
+	if graph == null:
+		return
+	_mutate("Snap graph points to surface", func() -> void: graph.snap_all_to_surface())
 
 
 func _on_graph_changed() -> void:

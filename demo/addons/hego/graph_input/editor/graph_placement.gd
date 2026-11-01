@@ -94,6 +94,16 @@ static func _walk_geometry(node: Node, origin: Vector3, direction: Vector3, excl
 				best = terrain_hit
 				best_dist = dist
 
+	# Likewise any node with raycast_surface(origin, direction) -> {"position": Vector3},
+	# such as a heightfield terrain that has no colliders in the editor.
+	if node != null and node.has_method("raycast_surface") and not node.is_class("Terrain3D"):
+		var surface_hit: Variant = node.call("raycast_surface", origin, direction)
+		if surface_hit is Dictionary and surface_hit.get("position") is Vector3:
+			var dist: float = origin.distance_to(surface_hit.position)
+			if dist < best_dist:
+				best = surface_hit.position
+				best_dist = dist
+
 	for child in node.get_children():
 		var walked: Variant = _walk_geometry(child, origin, direction, exclude, best, best_dist)
 		if walked != null:

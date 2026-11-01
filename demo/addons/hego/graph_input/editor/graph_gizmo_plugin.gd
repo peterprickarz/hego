@@ -72,6 +72,12 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		elif editor.selected_points.size() > 0:
 			selected_pts = editor.selected_points
 
+	# Path mode: ribbon or tube with its outline, as gizmo geometry so that View > Gizmos
+	# hides it and it never exists outside the editor.
+	var path_mesh := node.get_path_mesh()
+	if path_mesh != null and path_mesh.get_surface_count() > 0:
+		gizmo.add_mesh(path_mesh)
+
 	var lines := PackedVector3Array()
 	var hover_lines := PackedVector3Array()
 	var selected_lines := PackedVector3Array()

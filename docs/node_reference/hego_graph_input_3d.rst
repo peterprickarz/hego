@@ -151,6 +151,60 @@ their owner (point or connection) is selected, and greyed out otherwise.
 A mixed selection shows an empty control. Committing a value writes it onto every
 selected element of that owner.
 
+Path visualization
+------------------
+
+Turn on **Path Mode** (inspector group *Visualization*) to see the graph as a path
+instead of thin lines: a translucent ribbon or tube along every connection, scaled by
+a width attribute, with an outline. It is part of the graph's editor gizmo: it never
+reaches Houdini, is never drawn in the running game or saved, and **View > Gizmos**
+hides it. The mesh is rebuilt only when the graph, its attributes or these properties
+change.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Property
+     - Meaning
+   * - ``path_mode``
+     - Draws the path.
+   * - ``path_width_attribute``
+     - Attribute that gives the width in metres (default ``path_width``). A connection
+       attribute of that name wins; a point attribute is interpolated along the
+       connection. Missing or zero values use ``path_default_width``.
+   * - ``path_shape``
+     - ``Ribbon``: a flat band lying on the surface. ``Tube``: a cylinder per
+       connection (the width is the diameter) with a sphere at each point.
+   * - ``path_color``, ``path_outline``, ``path_outline_color``
+     - Translucent fill, and the boundary: both ribbon edges and the end caps, or the
+       tube's silhouette lines and end rings.
+   * - ``path_drape``, ``path_sample_spacing``, ``path_lift``
+     - Follow the surface between points (every ``path_sample_spacing`` metres),
+       orient the ribbon to the surface normal, and lift it ``path_lift`` metres to
+       avoid z-fighting. Without a surface the path is straight and faces up.
+   * - ``path_tube_sides``
+     - Segments around a tube.
+
+Where connections meet, every ribbon is cut back until its edges meet its neighbours
+and the gap is filled around the point, so crossings do not double the transparency.
+
+Surface and snapping
+--------------------
+
+The *Surface* group tells the graph where the ground is, for snapping and for draping
+the path. ``surface_provider`` is an optional node with
+``sample_height(Vector2) -> float`` (local x/z in, local height out) and optionally
+``contains_position(Vector2) -> bool``; a heightfield terrain without colliders can
+plug in this way, and HEGo depends on none. Without a provider a physics ray from above
+is used. The *Geometry* placement mode also asks any node that has
+``raycast_surface(origin, direction) -> {"position": Vector3}``.
+
+* ``snap_to_surface``: every point added or moved in the editor lands on the surface,
+  plus ``surface_offset`` metres.
+* **Snap all points to surface** (button): moves every point onto the surface as one
+  undoable step. ``snap_all_to_surface()`` does the same from code.
+
 Feeding an HDA
 --------------
 
