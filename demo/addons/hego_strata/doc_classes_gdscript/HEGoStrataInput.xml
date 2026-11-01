@@ -1,0 +1,75 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoStrataInput" inherits="HEGoInputHandler" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Sends Strata layers to HDA inputs as heightfield volumes.
+	</brief_description>
+	<description>
+		HEGo finds this handler because it extends [HEGoInputHandler]; neither HEGo nor the terrain addon names the other. A layer is sent either cumulatively (the composed terrain through that layer) or raw (its own values plus separate binary ownership), with the channels and spacing set in the input's settings: terrain_mode, terrain_channels, terrain_spacing, terrain_channel_spacings, terrain_max_samples, terrain_compact_empty and terrain_bounds (a Rect2 in terrain-local metres: the lattice covers it instead of the terrain's bounds, as a tiled cook sends one tile at a time). A host with a terrain input cooks only on request, and strictly: an input that cannot be sent fails the cook.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="handles">
+			<return type="bool" />
+			<param index="0" name="node" type="Node" />
+			<description>
+			</description>
+		</method>
+		<method name="sync">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="existing_node" type="Variant" />
+			<param index="2" name="node" type="Node" />
+			<param index="3" name="settings" type="Dictionary" />
+			<description>
+				Takes a snapshot of [param node] and uploads it. The snapshot is recorded in the cook dictionary ([constant HEGoStrataOutput.COOK_KEY]), so the cook's terrain publication can tell whether this input changed while Houdini cooked.
+			</description>
+		</method>
+		<method name="claims_settings">
+			<return type="bool" />
+			<param index="0" name="settings" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="requires_explicit_cook">
+			<return type="bool" />
+			<param index="0" name="_settings" type="Dictionary" />
+			<description>
+				Terrain stages are expensive and publish into layers, so they cook only on request.
+			</description>
+		</method>
+		<method name="requires_strict_cook">
+			<return type="bool" />
+			<param index="0" name="_settings" type="Dictionary" />
+			<description>
+				A terrain result is published all-or-nothing, so no input may be silently skipped.
+			</description>
+		</method>
+		<method name="create_settings_editor">
+			<return type="Control" />
+			<description>
+			</description>
+		</method>
+		<method name="snapshot" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="layer" type="StrataLayer" />
+			<param index="1" name="settings" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="upload" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="existing" type="Variant" />
+			<param index="2" name="layer" type="StrataLayer" />
+			<param index="3" name="source" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="SETTINGS_MARKER" value="&quot;terrain_input&quot;">
+			Marks stored input settings as belonging to a terrain input, so its options and explicit cook rule stay in force while the source layer is missing.
+		</constant>
+	</constants>
+</class>

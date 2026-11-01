@@ -1,0 +1,66 @@
+[
+  {
+    "id": 0,
+    "material_id": 0,
+    "name": "coastal_sand",
+    "channel": "material_coastal_sand",
+    "ambientcg_id": "Ground093C",
+    "resource": "res://island/materials/resources/coastal_sand.tres",
+    "role": "sand",
+    "description": "Light eroded coastal dune and beach ground",
+    "tiling": {
+      "basis": "preserved_artist_resource",
+      "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+    },
+    "source_url": "https://ambientcg.com/a/Ground093C",
+    "license": "Creative Commons CC0 1.0 Universal"
+  },
+  {
+    "id": 1,
+    "material_id": 1,
+    "name": "island_grass",
+    "channel": "material_island_grass",
+    "ambientcg_id": "Grass004",
+    "resource": "res://island/materials/resources/island_grass.tres",
+    "role": "grass",
+    "description": "Lush short grass on lower and sheltered slopes",
+    "tiling": {
+      "basis": "preserved_artist_resource",
+      "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+    },
+    "source_url": "https://ambientcg.com/a/Grass004",
+    "license": "Creative Commons CC0 1.0 Universal"
+  },
+  {
+    "id": 2,
+    "material_id": 2,
+    "name": "scree_gravel",
+    "channel": "material_scree_gravel",
+    "ambientcg_id": "Gravel043",
+    "resource": "res://island/materials/resources/scree_gravel.tres",
+    "role": "gravel",
+    "description": "Fine grey granular gravel for scree and rough shore",
+    "tiling": {
+      "basis": "preserved_artist_resource",
+      "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+    },
+    "source_url": "https://ambientcg.com/a/Gravel043",
+    "license": "Creative Commons CC0 1.0 Universal"
+  },
+  {
+    "id": 3,
+    "material_id": 3,
+    "name": "dark_cliff",
+    "channel": "material_dark_cliff",
+    "ambientcg_id": "Rock016",
+    "resource": "res://island/materials/resources/dark_cliff.tres",
+    "role": "cliff",
+    "description": "Dark grey rock faces and coastal stone",
+    "tiling": {
+      "basis": "preserved_artist_resource",
+      "note": "Existing user-authored scale is retained; provider dimensions do not override the resource."
+    },
+    "source_url": "https://ambientcg.com/a/Rock016",
+    "license": "Creative Commons CC0 1.0 Universal"
+  }
+]

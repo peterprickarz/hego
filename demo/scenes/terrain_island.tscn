@@ -1,0 +1,390 @@
+[gd_scene load_steps=64 format=4 uid="uid://dgirr7lofrano"]
+
+[ext_resource type="Script" uid="uid://bi8r4ieqeir4b" path="res://island/authoring_level.gd" id="1_xvlrx"]
+[ext_resource type="Script" uid="uid://be5gtust1fosq" path="res://addons/strata/strata_terrain_3d.gd" id="2_esx07"]
+[ext_resource type="Script" uid="uid://bnqa30opt1txq" path="res://addons/strata/strata_render_settings.gd" id="3_y7qpp"]
+[ext_resource type="Script" uid="uid://wburwgbfdl88" path="res://addons/strata/strata_material.gd" id="4_vjccx"]
+[ext_resource type="Resource" path="res://island/materials/resources/coastal_sand.tres" id="5_r7006"]
+[ext_resource type="Resource" path="res://island/materials/resources/island_grass.tres" id="6_kntf0"]
+[ext_resource type="Resource" path="res://island/materials/resources/dark_cliff.tres" id="8_8c1ro"]
+[ext_resource type="Resource" path="res://island/materials/resources/scree_gravel.tres" id="9_xav4f"]
+[ext_resource type="Script" uid="uid://ba4qefl6lc5v1" path="res://addons/strata/strata_layer.gd" id="40_088s2"]
+[ext_resource type="StrataLayerData" path="res://island/terrain/rough_base.res" id="41_co56g"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/debris.res" id="42_aui3i"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/erosion_delta.res" id="43_24wlv"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/flow.res" id="44_omc3g"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/grass.res" id="45_rb7xf"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/height.res" id="46_ijmix"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/rock.res" id="47_0227a"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/sand.res" id="48_3jk0b"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/scree.res" id="49_s82hw"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/sediment.res" id="50_qojdi"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/material_coastal_sand.res" id="coarse_erosion_coastal_sand"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/material_island_grass.res" id="coarse_erosion_island_grass"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/material_scree_gravel.res" id="coarse_erosion_scree_gravel"]
+[ext_resource type="Resource" path="res://island/terrain/coarse_erosion/material_dark_cliff.res" id="coarse_erosion_dark_cliff"]
+[ext_resource type="StrataLayerData" path="res://island/terrain/manual_fine.res" id="52_pp17k"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/debris.res" id="53_e56s8"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/erosion_delta.res" id="54_82oju"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/flow.res" id="55_i4xrh"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/grass.res" id="56_m8t8m"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/height.res" id="57_pvoi4"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/rock.res" id="58_hbsss"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/sand.res" id="59_lfdpt"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/scree.res" id="60_y2gv7"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/sediment.res" id="61_5ulx2"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/material_coastal_sand.res" id="detail_erosion_coastal_sand"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/material_island_grass.res" id="detail_erosion_island_grass"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/material_scree_gravel.res" id="detail_erosion_scree_gravel"]
+[ext_resource type="Resource" path="res://island/terrain/detail_erosion/material_dark_cliff.res" id="detail_erosion_dark_cliff"]
+[ext_resource type="StrataLayerData" path="res://island/terrain/building_flatten.res" id="63_1baja"]
+[ext_resource type="Resource" path="res://island/terrain/terrain_tint/terrain_ao.res" id="64_l7iht"]
+[ext_resource type="Resource" path="res://island/terrain/terrain_tint/terrain_tint_b.res" id="65_waqvu"]
+[ext_resource type="Resource" path="res://island/terrain/terrain_tint/terrain_tint_g.res" id="66_t5yk6"]
+[ext_resource type="Resource" path="res://island/terrain/terrain_tint/terrain_tint_r.res" id="67_f0dp8"]
+[ext_resource type="Script" uid="uid://blnvgo8r28r5p" path="res://addons/hego/HEGoNode3D.gd" id="102_nlj40"]
+[ext_resource type="Script" uid="uid://k5yujyonxs8a" path="res://island/island_camera.gd" id="103_jafaw"]
+[ext_resource type="Shader" uid="uid://cd11o64i1h22m" path="res://island/shaders/ocean.gdshader" id="104_ffoo6"]
+[ext_resource type="Resource" path="res://island/terrain/material_distribution/material_coastal_sand.res" id="300_mat_coastal_sand"]
+[ext_resource type="Resource" path="res://island/terrain/material_distribution/material_island_grass.res" id="300_mat_island_grass"]
+[ext_resource type="Resource" path="res://island/terrain/material_distribution/material_scree_gravel.res" id="300_mat_scree_gravel"]
+[ext_resource type="Resource" path="res://island/terrain/material_distribution/material_dark_cliff.res" id="300_mat_dark_cliff"]
+
+[sub_resource type="Resource" id="Resource_8b1gp"]
+script = ExtResource("3_y7qpp")
+quality = 2
+screen_relative = true
+cells_per_patch = 64
+min_patch_size = 8.0
+split_ratio = 3.0
+max_patches = 1024
+distance_uv_enabled = true
+far_uv_factor = 0.19
+uv_near_distance = 16.0
+uv_far_distance = 256.0
+terrain_tint_strength = 0.97
+terrain_ao_strength = 1.0
+displacement_refinement_enabled = true
+displacement_vertex_spacing = 0.0625
+displacement_refinement_radius = 32.0
+displacement_refinement_budget = 1024
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
+sky_top_color = Color(0.18, 0.35, 0.49, 1)
+sky_horizon_color = Color(0.7, 0.78, 0.78, 1)
+ground_bottom_color = Color(0.14, 0.23, 0.24, 1)
+ground_horizon_color = Color(0.7, 0.75, 0.73, 1)
+sun_angle_max = 4.0
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMaterial")
+
+[sub_resource type="Environment" id="Environment"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_energy = 0.28
+tonemap_mode = 2
+fog_enabled = true
+fog_light_color = Color(0.55, 0.68, 0.72, 1)
+fog_density = 1.2e-05
+fog_sky_affect = 0.5
+
+[sub_resource type="ShaderMaterial" id="OceanMaterial"]
+render_priority = 0
+shader = ExtResource("104_ffoo6")
+
+[sub_resource type="PlaneMesh" id="OceanMesh"]
+size = Vector2(80000, 80000)
+subdivide_width = 128
+subdivide_depth = 128
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_63ssj"]
+albedo_color = Color(0.341176, 0.290196, 0.211765, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_drwqc"]
+size = Vector3(11, 6, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_8hqm1"]
+albedo_color = Color(0.14902, 0.227451, 0.239216, 1)
+roughness = 0.8
+
+[sub_resource type="PrismMesh" id="PrismMesh_jgix1"]
+size = Vector3(13, 4, 10)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rgv7k"]
+albedo_color = Color(0.341176, 0.290196, 0.211765, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="BoxMesh_3sxle"]
+size = Vector3(11, 6, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_nu13n"]
+albedo_color = Color(0.14902, 0.227451, 0.239216, 1)
+roughness = 0.8
+
+[sub_resource type="PrismMesh" id="PrismMesh_t5qgt"]
+size = Vector3(13, 4, 10)
+
+[node name="BrackenIsle" type="Node3D"]
+script = ExtResource("1_xvlrx")
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("2_esx07")
+render_settings = SubResource("Resource_8b1gp")
+textured_editor_preview = true
+storage_directory = "res://island/terrain"
+editor_materials = Array[ExtResource("4_vjccx")]([ExtResource("5_r7006"), ExtResource("6_kntf0"), ExtResource("9_xav4f"), ExtResource("8_8c1ro")])
+editor_material_channels = PackedStringArray("material_coastal_sand", "material_island_grass", "material_scree_gravel", "material_dark_cliff")
+base_bounds = Rect2(-2048, -2048, 4096, 4096)
+preview_spacing = 8.0
+
+[node name="RoughBase" type="Node" parent="Terrain"]
+script = ExtResource("40_088s2")
+layer_id = "bracken-isle-rough-base-v1"
+procedural_stale = false
+procedural_status = "Saved manual ownership"
+data = ExtResource("41_co56g")
+
+[node name="CoarseErosion" type="Node" parent="Terrain"]
+script = ExtResource("40_088s2")
+procedural = true
+layer_id = "bracken-isle-coarse-erosion-v1"
+producer_id = "HDA/CoarseCook"
+producer_path = NodePath("../../HDA/CoarseCook")
+procedural_fields = {
+"debris": ExtResource("42_aui3i"),
+"erosion_delta": ExtResource("43_24wlv"),
+"flow": ExtResource("44_omc3g"),
+"grass": ExtResource("45_rb7xf"),
+"height": ExtResource("46_ijmix"),
+"rock": ExtResource("47_0227a"),
+"sand": ExtResource("48_3jk0b"),
+"scree": ExtResource("49_s82hw"),
+"sediment": ExtResource("50_qojdi"),
+"material_coastal_sand": ExtResource("coarse_erosion_coastal_sand"),
+"material_island_grass": ExtResource("coarse_erosion_island_grass"),
+"material_scree_gravel": ExtResource("coarse_erosion_scree_gravel"),
+"material_dark_cliff": ExtResource("coarse_erosion_dark_cliff")
+}
+procedural_revision = 2
+procedural_status = "Cached procedural result; explicit recook required"
+composition_modes = {
+"debris": 0.0,
+"erosion_delta": 0.0,
+"flow": 0.0,
+"grass": 0.0,
+"height": 0.0,
+"rock": 0.0,
+"sand": 0.0,
+"scree": 0.0,
+"sediment": 0.0,
+"material_coastal_sand": 0.0,
+"material_island_grass": 0.0,
+"material_scree_gravel": 0.0,
+"material_dark_cliff": 0.0
+}
+
+[node name="ManualFine" type="Node" parent="Terrain"]
+script = ExtResource("40_088s2")
+layer_id = "bracken-isle-manual-fine-v1"
+procedural_stale = false
+procedural_status = "Saved manual ownership"
+data = ExtResource("52_pp17k")
+composition_modes = {
+"height": 1.0
+}
+
+[node name="DetailErosion" type="Node" parent="Terrain"]
+script = ExtResource("40_088s2")
+procedural = true
+layer_id = "bracken-isle-detail-erosion-v1"
+producer_id = "HDA/DetailCook"
+producer_path = NodePath("../../HDA/DetailCook")
+procedural_fields = {
+"debris": ExtResource("53_e56s8"),
+"erosion_delta": ExtResource("54_82oju"),
+"flow": ExtResource("55_i4xrh"),
+"grass": ExtResource("56_m8t8m"),
+"height": ExtResource("57_pvoi4"),
+"rock": ExtResource("58_hbsss"),
+"sand": ExtResource("59_lfdpt"),
+"scree": ExtResource("60_y2gv7"),
+"sediment": ExtResource("61_5ulx2"),
+"material_coastal_sand": ExtResource("detail_erosion_coastal_sand"),
+"material_island_grass": ExtResource("detail_erosion_island_grass"),
+"material_scree_gravel": ExtResource("detail_erosion_scree_gravel"),
+"material_dark_cliff": ExtResource("detail_erosion_dark_cliff")
+}
+procedural_revision = 3
+procedural_status = "Cached procedural result; explicit recook required"
+composition_modes = {
+"debris": 0.0,
+"erosion_delta": 0.0,
+"flow": 0.0,
+"grass": 0.0,
+"height": 0.0,
+"rock": 0.0,
+"sand": 0.0,
+"scree": 0.0,
+"sediment": 0.0,
+"material_coastal_sand": 0.0,
+"material_island_grass": 0.0,
+"material_scree_gravel": 0.0,
+"material_dark_cliff": 0.0
+}
+
+[node name="BuildingFlatten" type="Node" parent="Terrain"]
+script = ExtResource("40_088s2")
+layer_id = "bracken-isle-building-flatten-v1"
+procedural_stale = false
+procedural_status = "Saved manual ownership"
+data = ExtResource("63_1baja")
+
+[node name="TerrainTint" type="Node" parent="Terrain"]
+script = ExtResource("40_088s2")
+procedural = true
+layer_id = "bracken-isle-terrain-tint-v1"
+producer_id = "HDA/TintCook"
+producer_path = NodePath("../../HDA/TintCook")
+procedural_fields = {
+"terrain_ao": ExtResource("64_l7iht"),
+"terrain_tint_b": ExtResource("65_waqvu"),
+"terrain_tint_g": ExtResource("66_t5yk6"),
+"terrain_tint_r": ExtResource("67_f0dp8")
+}
+procedural_revision = 1
+procedural_status = "Cached procedural result; explicit recook required"
+composition_modes = {
+"terrain_ao": 0,
+"terrain_tint_b": 0,
+"terrain_tint_g": 0,
+"terrain_tint_r": 0
+}
+producer_intent_revision = 1
+
+[node name="MaterialDistribution" type="Node" parent="Terrain"]
+script = ExtResource("40_088s2")
+procedural = true
+layer_id = "bracken-isle-material-distribution-v1"
+producer_id = "HDA/MaterialCook"
+producer_path = NodePath("../../HDA/MaterialCook")
+procedural_fields = {
+"material_coastal_sand": ExtResource("300_mat_coastal_sand"),
+"material_dark_cliff": ExtResource("300_mat_dark_cliff"),
+"material_island_grass": ExtResource("300_mat_island_grass"),
+"material_scree_gravel": ExtResource("300_mat_scree_gravel")
+}
+procedural_revision = 1
+procedural_status = "Saved result loaded from storage; explicit recook to refresh"
+composition_modes = {
+"material_coastal_sand": 0,
+"material_dark_cliff": 0,
+"material_island_grass": 0,
+"material_scree_gravel": 0
+}
+
+[node name="HDA" type="Node3D" parent="."]
+
+[node name="CoarseCook" type="Node3D" parent="HDA"]
+script = ExtResource("102_nlj40")
+asset_name = "Sop/HEGo_IslandErosion"
+parm_stash = PackedByteArray("I1BTSV9QUkVTRVQKdmVyc2lvbiAyLjBhCm9wdmFsdWVzCnsKdmVyc2lvbiAwLjgKdGFyZ2V0X2xheWVyX3BhdGgJWyAwCWxvY2tzPTAgXQkoCS4uLy4uL1RlcnJhaW4vQ29hcnNlRXJvc2lvbgkpCmRldGFpbF9zdGFnZQlbIDAJbG9ja3M9MCBdCSgJIm9mZiIJKQpzZWVkCVsgMAlsb2Nrcz0wIF0JKAkxOQkpCmZyZWV6ZV9mcmFtZQlbIDAJbG9ja3M9MCBdCSgJMjQJKQpmZWF0dXJlX3NpemUJWyAwCWxvY2tzPTAgXQkoCTI0CSkKb3V0cHV0X3NwYWNpbmcJWyAwCWxvY2tzPTAgXQkoCTgJKQptYXNrX3NwYWNpbmcJWyAwCWxvY2tzPTAgXQkoCTgJKQplcm9zaW9uX3N0cmVuZ3RoCVsgMAlsb2Nrcz0wIF0JKAkxLjE3OTk5OTk0NzU0NzkxMjYJKQpjb25zdHJhaW50X2NoYW5uZWwJWyAwCWxvY2tzPTAgXQkoCWNvbnN0cmFpbnQJKQpzZWFfbGV2ZWwJWyAwCWxvY2tzPTAgXQkoCTAJKQphZHZhbmNlZAlbIDAJbG9ja3M9MCBdCSgJMAkpCmh5ZHJvX3NjYWxlCVsgMAlsb2Nrcz0wIF0JKAkxCSkKdGhlcm1hbF9zY2FsZQlbIDAJbG9ja3M9MCBdCSgJMQkpCn0K")
+input_stash = [{
+"inputs": ["../../Terrain/RoughBase"],
+"settings": {
+"terrain_channels": "height",
+"terrain_mode": "cumulative"
+}
+}]
+
+[node name="DetailCook" type="Node3D" parent="HDA"]
+script = ExtResource("102_nlj40")
+asset_name = "Sop/HEGo_IslandErosion"
+parm_stash = PackedByteArray("I1BTSV9QUkVTRVQKdmVyc2lvbiAyLjBhCm9wdmFsdWVzCnsKdmVyc2lvbiAwLjgKdGFyZ2V0X2xheWVyX3BhdGgJWyAwCWxvY2tzPTAgXQkoCS4uLy4uL1RlcnJhaW4vRGV0YWlsRXJvc2lvbgkpCmRldGFpbF9zdGFnZQlbIDAJbG9ja3M9MCBdCSgJIm9uIgkpCnNlZWQJWyAwCWxvY2tzPTAgXQkoCTcJKQpmcmVlemVfZnJhbWUJWyAwCWxvY2tzPTAgXQkoCTE2CSkKZmVhdHVyZV9zaXplCVsgMAlsb2Nrcz0wIF0JKAk2CSkKb3V0cHV0X3NwYWNpbmcJWyAwCWxvY2tzPTAgXQkoCTIJKQptYXNrX3NwYWNpbmcJWyAwCWxvY2tzPTAgXQkoCTQJKQplcm9zaW9uX3N0cmVuZ3RoCVsgMAlsb2Nrcz0wIF0JKAkxCSkKY29uc3RyYWludF9jaGFubmVsCVsgMAlsb2Nrcz0wIF0JKAljb25zdHJhaW50CSkKc2VhX2xldmVsCVsgMAlsb2Nrcz0wIF0JKAkwCSkKbWFudWFsX3RyYW5zaXRpb24JWyAwCWxvY2tzPTAgXQkoCSJvbiIJKQptYW51YWxfdHJhbnNpdGlvbl93aWR0aAlbIDAJbG9ja3M9MCBdCSgJMzIJKQptYW51YWxfaGVpZ2h0X2NoYW5uZWwJWyAwCWxvY2tzPTAgXQkoCWhlaWdodAkpCmFkdmFuY2VkCVsgMAlsb2Nrcz0wIF0JKAkwCSkKaHlkcm9fc2NhbGUJWyAwCWxvY2tzPTAgXQkoCTEJKQp0aGVybWFsX3NjYWxlCVsgMAlsb2Nrcz0wIF0JKAkxCSkKfQo=")
+input_stash = [{
+"inputs": ["../../Terrain/ManualFine"],
+"settings": {
+"terrain_channels": "height",
+"terrain_mode": "cumulative"
+}
+}, {
+"inputs": ["../../Terrain/BuildingFlatten"],
+"settings": {
+"terrain_channels": "height,constraint",
+"terrain_compact_empty": true,
+"terrain_mode": "raw"
+}
+}]
+
+[node name="TintCook" type="Node3D" parent="HDA"]
+script = ExtResource("102_nlj40")
+asset_name = "Sop/HEGo_TerrainTint"
+parm_stash = PackedByteArray("I1BTSV9QUkVTRVQKdmVyc2lvbiAyLjBhCm9wdmFsdWVzCnsKdmVyc2lvbiAwLjgKdGFyZ2V0X2xheWVyX3BhdGgJWyAwCWxvY2tzPTAgXQkoCS4uLy4uL1RlcnJhaW4vVGVycmFpblRpbnQJKQpyZWxpZWZfcmFkaXVzCVsgMAlsb2Nrcz0wIF0JKAk5NgkpCnJpZGdlX3JhdGlvCVsgMAlsb2Nrcz0wIF0JKAkwLjM0OTk5OTk5NDAzOTUzNTUJKQpyaWRnZV9zdHJlbmd0aAlbIDAJbG9ja3M9MCBdCSgJMC4xMTk5OTk5OTczMTc3OTA5OQkpCmFvX3JhZGl1cwlbIDAJbG9ja3M9MCBdCSgJMjQJKQphb19yYXRpbwlbIDAJbG9ja3M9MCBdCSgJMC4yNQkpCmFvX3N0cmVuZ3RoCVsgMAlsb2Nrcz0wIF0JKAkwLjQ0OTk5OTk4ODA3OTA3MTA0CSkKdmFyaWF0aW9uX3NjYWxlCVsgMAlsb2Nrcz0wIF0JKAkzMjAJKQp2YXJpYXRpb25fc3RyZW5ndGgJWyAwCWxvY2tzPTAgXQkoCTAuMDU5OTk5OTk4NjU4ODk1NDkJKQpzZWVkCVsgMAlsb2Nrcz0wIF0JKAkxMQkpCn0K")
+input_stash = [{
+"inputs": ["../../Terrain/BuildingFlatten"],
+"settings": {
+"terrain_channels": "height",
+"terrain_mode": "cumulative",
+"terrain_spacing": 4.0
+}
+}]
+
+[node name="MaterialCook" type="Node3D" parent="HDA"]
+script = ExtResource("102_nlj40")
+asset_name = "Sop/HEGo_MaterialDistribution"
+parm_stash = PackedByteArray("I1BTSV9QUkVTRVQKdmVyc2lvbiAyLjBhCm9wdmFsdWVzCnsKdmVyc2lvbiAwLjgKdGFyZ2V0X2xheWVyX3BhdGgJWyAwCWxvY2tzPTAgXQkoCS4uLy4uL1RlcnJhaW4vTWF0ZXJpYWxEaXN0cmlidXRpb24JKQpzZWFfbGV2ZWwJWyAwCWxvY2tzPTAgXQkoCTAJKQpiZWFjaF9oZWlnaHQJWyAwCWxvY2tzPTAgXQkoCTYJKQpzaG9yZV93aWR0aAlbIDAJbG9ja3M9MCBdCSgJNjAJKQpjbGlmZl9zbG9wZQlbIDAJbG9ja3M9MCBdCSgJNDAJKQp0cmVlX2xpbmUJWyAwCWxvY2tzPTAgXQkoCTI0MAkpCnNub3dfbGluZQlbIDAJbG9ja3M9MCBdCSgJMzMwCSkKc3VuX2F6aW11dGgJWyAwCWxvY2tzPTAgXQkoCTEyOAkpCnZhcmlhdGlvbl9zY2FsZQlbIDAJbG9ja3M9MCBdCSgJNDIwCSkKc2hhcnBuZXNzCVsgMAlsb2Nrcz0wIF0JKAkyLjUJKQpzZWVkCVsgMAlsb2Nrcz0wIF0JKAkzMgkpCn0K")
+input_stash = [{
+"inputs": ["../../Terrain/TerrainTint"],
+"settings": {
+"terrain_channels": "height",
+"terrain_mode": "cumulative",
+"terrain_spacing": 4.0
+}
+}]
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(0.839253, 0.224739, -0.495123, 0, 0.910586, 0.41332, 0.543741, -0.34688, 0.764212, -3000, 2000, 3300)
+current = true
+fov = 54.0
+near = 0.2
+far = 22000.0
+script = ExtResource("103_jafaw")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.788011, 0.326251, -0.522111, 0, 0.848048, 0.529919, 0.615662, -0.417582, 0.668271, 0, 0, 0)
+light_color = Color(1, 0.94, 0.83, 1)
+light_energy = 1.15
+shadow_enabled = true
+directional_shadow_max_distance = 2600.0
+
+[node name="Ocean" type="MeshInstance3D" parent="."]
+material_override = SubResource("OceanMaterial")
+cast_shadow = 0
+mesh = SubResource("OceanMesh")
+
+[node name="BuildingLandmarks" type="Node3D" parent="."]
+
+[node name="@MeshInstance3D@2" type="MeshInstance3D" parent="BuildingLandmarks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1016, 47.7669, 592)
+material_override = SubResource("StandardMaterial3D_63ssj")
+mesh = SubResource("BoxMesh_drwqc")
+
+[node name="@MeshInstance3D@3" type="MeshInstance3D" parent="BuildingLandmarks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1016, 52.7669, 592)
+material_override = SubResource("StandardMaterial3D_8hqm1")
+mesh = SubResource("PrismMesh_jgix1")
+
+[node name="@MeshInstance3D@4" type="MeshInstance3D" parent="BuildingLandmarks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1000, 47.7669, 592)
+material_override = SubResource("StandardMaterial3D_rgv7k")
+mesh = SubResource("BoxMesh_3sxle")
+
+[node name="@MeshInstance3D@5" type="MeshInstance3D" parent="BuildingLandmarks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1000, 52.7669, 592)
+material_override = SubResource("StandardMaterial3D_nu13n")
+mesh = SubResource("PrismMesh_t5qgt")

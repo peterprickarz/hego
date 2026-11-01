@@ -1,7 +1,8 @@
 HEGo Class Reference
 ====================
 
-Every class HEGo registers. The C++ pages come from the class reference XML in
+Every class HEGo registers, and those of the two bridge addons, HEGo Strata and HEGo
+Terrain3D. The C++ pages come from the class reference XML in
 ``demo/addons/hego/doc_classes``; the GDScript pages are generated from the scripts'
 own ``##`` comments, so a class page and the editor's built-in help say the same thing.
 
@@ -58,6 +59,9 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
 - :ref:`HEGoOutputContext<class_HEGoOutputContext>`
 - :ref:`HEGoNodeUtil<class_HEGoNodeUtil>`
 - :ref:`HEGoInputNodes<class_HEGoInputNodes>`
+- :ref:`HEGoInputHandler<class_HEGoInputHandler>`
+- :ref:`HEGoCookExtension<class_HEGoCookExtension>`
+- :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`
 - :ref:`HEGoCookTimings<class_HEGoCookTimings>`
 - :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`
 - :ref:`HEGoGraphAttributes<class_HEGoGraphAttributes>`
@@ -76,16 +80,6 @@ What turns a cook's geometry into Godot nodes, one class per output type, plus t
 - :ref:`HEGoPointUtil<class_HEGoPointUtil>`
 - :ref:`HEGoPropertyUtil<class_HEGoPropertyUtil>`
 
-Terrain3D
----------
-
-Heightfields in both directions, for projects using the optional Terrain3D addon. None of it refers to Terrain3D's types directly, so HEGo runs without the addon installed.
-
-- :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
-- :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
-- :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`
-- :ref:`HEGoTerrain3DUtil<class_HEGoTerrain3DUtil>`
-
 Resources
 ---------
 
@@ -95,6 +89,24 @@ What HEGo saves to disk.
 - :ref:`HEGoHDAPreset<class_HEGoHDAPreset>`
 - :ref:`HEGoFetchPointsConfig<class_HEGoFetchPointsConfig>`
 - :ref:`HEGoFetchSurfacesConfig<class_HEGoFetchSurfacesConfig>`
+
+HEGo Strata bridge
+------------------
+
+The separate ``addons/hego_strata`` addon, which depends on HEGo and Strata: Strata layers as HDA inputs, and a cook's heightfields published into Strata layers. It plugs into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`.
+
+- :ref:`HEGoStrataInput<class_HEGoStrataInput>`
+- :ref:`HEGoStrataOutput<class_HEGoStrataOutput>`
+
+HEGo Terrain3D bridge
+---------------------
+
+The separate ``addons/hego_terrain3d`` addon, which depends on HEGo and on the Terrain3D addon: heightfields in both directions, and Terrain3D instancing. It plugs into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`, and reaches Terrain3D only through ``ClassDB``, so its scripts still load without Terrain3D installed.
+
+- :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
+- :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
+- :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`
+- :ref:`HEGoTerrain3DUtil<class_HEGoTerrain3DUtil>`
 
 .. toctree::
    :maxdepth: 2
@@ -106,5 +118,6 @@ What HEGo saves to disk.
    reading_output
    writing_a_node
    output_handlers
-   terrain3d
    resources
+   hego_strata
+   terrain3d

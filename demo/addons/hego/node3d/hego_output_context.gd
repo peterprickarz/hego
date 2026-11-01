@@ -12,9 +12,9 @@ extends RefCounted
 ## The node this cook belongs to.
 ##
 ## Output normally goes under [method outputs_root] rather than directly here. A handler
-## that must parent somewhere else needs the host itself, which is why it is exposed:
-## [HEGoTerrain3DOutput] deliberately builds outside the subtree a cook rebuilds, so the
-## terrain it spawns survives recooking.
+## that must parent somewhere else needs the host itself, which is why it is exposed: the
+## HEGo Terrain3D bridge's terrain output deliberately builds outside the subtree a cook
+## rebuilds, so the terrain it spawns survives recooking.
 var host: Node
 
 ## The Houdini node whose cook this is.
@@ -25,6 +25,10 @@ var asset: HEGoAssetNode
 ## This is the same dictionary the handler's [code]should_handle()[/code] was asked about,
 ## so [method handle] can read what it was selected for rather than working it out again.
 var summary: Dictionary
+## The dictionary the host's [HEGoCookExtension]s and input handlers share for this one
+## cook, or empty when the cook was not run through [method HEGoNode3D.cook]. Besides their
+## own keys it holds what the cook started from; see [HEGoCookExtension].
+var cook_state: Dictionary = {}
 
 
 ## Builds a context for [param host_node]'s cook of [param asset_node].

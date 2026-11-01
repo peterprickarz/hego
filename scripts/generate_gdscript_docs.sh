@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 #
-# Regenerates the class reference XML for HEGo's GDScript classes from their ## doc
-# comments, into demo/addons/hego/doc_classes_gdscript.
+# Regenerates the class reference XML for the GDScript classes of HEGo and its two bridge
+# addons from their ## doc comments, into each addon's own doc_classes_gdscript directory:
+# demo/addons/hego/doc_classes_gdscript, demo/addons/hego_strata/doc_classes_gdscript and
+# demo/addons/hego_terrain3d/doc_classes_gdscript. Each addon carries the documentation of
+# its own classes only, so no package describes classes it does not depend on.
 #
 # The XML is committed, exactly like the hand-written C++ XML next to it, because
 # scripts/generate_docs.sh runs on Read the Docs where there is no Godot to run. Run this
@@ -15,7 +18,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="$ROOT_DIR/demo"
-OUT_DIR="$ROOT_DIR/demo/addons/hego/doc_classes_gdscript"
+# Keep in step with GDSCRIPT_ADDONS in scripts/generate_docs.sh.
+ADDONS=(hego hego_strata hego_terrain3d)
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -34,12 +38,15 @@ if [[ -z "$GODOT_BIN" ]]; then
   exit 1
 fi
 
-echo "Generating GDScript class XML with $GODOT_BIN ..."
-"$GODOT_BIN" --headless --path "$PROJECT_DIR" \
-  --doctool "$TMP_DIR" --gdscript-docs "res://addons/hego" >/dev/null
+for addon in "${ADDONS[@]}"; do
+  out_dir="$ROOT_DIR/demo/addons/$addon/doc_classes_gdscript"
+  echo "Generating GDScript class XML for addons/$addon with $GODOT_BIN ..."
+  mkdir -p "$TMP_DIR/$addon"
+  "$GODOT_BIN" --headless --path "$PROJECT_DIR" \
+    --doctool "$TMP_DIR/$addon" --gdscript-docs "res://addons/$addon" >/dev/null
 
-echo "Cleaning and installing into $OUT_DIR ..."
-python3 - "$TMP_DIR" "$OUT_DIR" <<'PY'
+  echo "Cleaning and installing into $out_dir ..."
+  python3 - "$TMP_DIR/$addon" "$out_dir" <<'PY'
 import os, re, shutil, sys
 import xml.etree.ElementTree as ET
 
@@ -83,5 +90,6 @@ for name in sorted(os.listdir(source_dir)):
 print("  " + "\n  ".join(written))
 print(f"{len(written)} classes")
 PY
+done
 
-echo "Done. Commit the changes under $OUT_DIR."
+echo "Done. Commit the changes under each addon's doc_classes_gdscript directory."

@@ -1,0 +1,55 @@
+{
+  "contract_version": 1,
+  "operator": "Sop/HEGo_TerrainTint",
+  "hda_file": "otls/HEGo_TerrainTint.hda",
+  "source_script": "scripts/houdini/build_tint_hda.py",
+  "houdini_version": "22.0.429",
+  "units": "metres; terrain-local XZ; height Y relative to the StrataTerrain3D origin",
+  "inputs": [
+    {
+      "index": 0,
+      "label": "Cumulative final terrain height",
+      "required": true,
+      "hego_strata_mode": "cumulative",
+      "hego_settings": {"terrain_mode": "cumulative", "terrain_channels": "height", "terrain_spacing": 4.0},
+      "volumes": {
+        "height": "required scalar volume, any dense orthogonal horizontal lattice up to 4097 samples per axis (absolute terrain-local metres). Send the complete stack (cumulative through the last height layer) resampled with terrain_spacing, e.g. 4 m = 1025^2 over 4 km, never a fine manual layer's native 0.25 m lattice.",
+        "other volumes": "ignored (height__ownership coverage included)"
+      }
+    }
+  ],
+  "outputs": {
+    "lattice": "exactly the input height lattice (same resolution, origin and steps); no resampling",
+    "volumes": {
+      "terrain_tint_r": "linear albedo multiplier, neutral 1, clamped 0..2",
+      "terrain_tint_g": "linear albedo multiplier, neutral 1, clamped 0..2",
+      "terrain_tint_b": "linear albedo multiplier, neutral 1, clamped 0..2",
+      "terrain_ao": "ambient/indirect occlusion multiplier, neutral 1, clamped 0..1"
+    },
+    "routing": "prim attributes hegostrata_layer_path = target_layer_path, hegostrata_role = value, hegostrata_channel = name, hegostrata_composition = replace",
+    "diagnostics": "detail attributes hego_tint_{operator, seconds, samples, spacing_a, spacing_b, seed, min[4], max[4], mean[4]} (r, g, b, ao); never routed"
+  },
+  "algorithm": {
+    "gaussian": "G_s(h): three box-filter passes per axis approximating a Gaussian of sigma s metres on each axis's physical step; boundary samples extend outward",
+    "ridge": "smoothstep(0, ridge_ratio, (h - G_relief_radius(h)) / relief_radius)",
+    "cavity": "0.65 * smoothstep(0, ao_ratio, (G_r(h) - h) / r) + 0.35 * smoothstep(0, ao_ratio, (G_4r(h) - h) / 4r), r = ao_radius",
+    "terrain_ao": "1 - ao_strength * cavity. A cavity-derived approximation from the local mean height, not ray-traced visibility or horizon occlusion.",
+    "validation": "every float parameter must be finite and inside its documented range, seed 0..100000, steps finite and nonzero (node error otherwise; values set through HAPI are re-checked inside the cook)",
+    "variation": "n = 3-octave value-noise fBm on world XZ (variation_scale, seed), w = 0.5 * variation_strength * fBm(1.7 * variation_scale, seed + 1); identical at a world point for any lattice",
+    "tint": "b = (1 + ridge_strength * ridge) * (1 + variation_strength * n); tint = (b * (1 + w), b, b * (1 - w))",
+    "no_double_darkening": "Cavities are darkened only through terrain_ao; the tint never depends on concavity (ridge >= 0 only brightens). No directional or baked sun lighting."
+  },
+  "parameters": {
+    "target_layer_path": {"type": "string", "default": "", "required": true, "notes": "Scene path of the mask-only procedural StrataLayer; empty -> node error"},
+    "relief_radius": {"type": "float", "default": 96.0, "notes": "metres (Gaussian sigma)"},
+    "ridge_ratio": {"type": "float", "default": 0.35, "notes": "about the land p95 of the 4 km island at 4 m"},
+    "ridge_strength": {"type": "float", "default": 0.12},
+    "ao_radius": {"type": "float", "default": 24.0, "notes": "metres (Gaussian sigma); second scale 4x"},
+    "ao_ratio": {"type": "float", "default": 0.25, "notes": "about the land p95 cavity depth ratio of the eroded island"},
+    "ao_strength": {"type": "float", "default": 0.45},
+    "variation_scale": {"type": "float", "default": 320.0, "notes": "metres"},
+    "variation_strength": {"type": "float", "default": 0.06},
+    "seed": {"type": "int", "default": 11}
+  },
+  "cook_policy": "Explicit cook only (no auto cook). The tint stage never changes height; it is a mask-only layer above the height stages."
+}

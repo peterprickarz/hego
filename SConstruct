@@ -10,17 +10,20 @@ import shutil
 default_hfs = {
     "Windows": r"C:\Program Files\Side Effects Software\Houdini 22.0.429",
     "Linux":   "/opt/hfs22.0",  # the symlink, so a new production build needs no change
-    "Darwin":  "/Applications/Houdini/Houdini22.0.429/Houdini.framework/Versions/Current/Resources"
+    "Darwin":  "/Applications/Houdini/Houdini22.0.429/Frameworks/Houdini.framework/Versions/Current/Resources"
 }
 
 sys_name = platform.system()
-HFS = os.environ.get("HFS", default_hfs.get(sys_name, ""))
+# Share header validation and installation discovery with the binding generator.
+# Only headers are needed here: HFS may also point at an SDK-only directory on a
+# cross-build host. Houdini's executable and libraries are loaded only at runtime.
+sys.path.insert(0, os.path.join(Dir("#").abspath, "hapi_generator"))
+from generate_houdini_api import resolve_hfs
 
-if not HFS or not os.path.isdir(HFS):
-    print("Error: HFS not found and no valid default for this OS.")
-    print("Please set environment variable HFS to your Houdini installation folder.")
-    print(f"Typical locations:\n  Windows → {default_hfs['Windows']}\n  Linux   → {default_hfs['Linux']}")
-    sys.exit(1)
+if GetOption("help"):
+    HFS = os.environ.get("HFS", default_hfs.get(sys_name, ""))
+else:
+    HFS, _ = resolve_hfs(None, auto_detect=False)
 
 print(f"Using HFS = {HFS}")
 
@@ -39,13 +42,43 @@ HB = os.path.join(HFS, "bin")
 # defined. The platform is read from the command line rather than from env, which does not
 # exist yet; the fallback matches godot-cpp's own default of building for the host.
 # ───────────────────────────────────────────────
-_target_platform = ARGUMENTS.get("platform", ARGUMENTS.get("p", sys_name.lower()))
+_host_platform = {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get(sys_name, sys_name.lower())
+_target_platform = ARGUMENTS.get("platform", ARGUMENTS.get("p", _host_platform))
 SConsignFile(f".sconsign-{_target_platform}.dblite")
+
+# godot-cpp v10 is versioned independently of Godot and bundles several API dumps;
+# build against the 4.7 API, the minimum Godot version HEGo and Strata support.
+ARGUMENTS.setdefault("api_version", "4.7")
+
+if _target_platform == "macos":
+    # macOS 11 is the first release with Apple Silicon support. Apply the same
+    # target to godot-cpp and HEGo, including builds made with OSXCross on Linux.
+    ARGUMENTS.setdefault("macos_deployment_target", "11.0")
 
 # ───────────────────────────────────────────────
 # Load godot-cpp environment
 # ───────────────────────────────────────────────
-env = SConscript("godot-cpp/SConstruct")
+if _target_platform == "linux":
+    # Configure the toolchain before godot-cpp creates its build targets, so the
+    # bindings and HEGo always use the same compiler (including cross-compilers).
+    # Prefer GCC 14 to match Houdini 22 when available; explicit tools win.
+    env = Environment(tools=["default"], PLATFORM="")
+    env["CC"] = os.environ.get("CC") or ("gcc-14" if shutil.which("gcc-14") else "gcc")
+    env["CXX"] = os.environ.get("CXX") or ("g++-14" if shutil.which("g++-14") else "g++")
+    for tool in ("AR", "RANLIB"):
+        if os.environ.get(tool):
+            env[tool] = os.environ[tool]
+    env = SConscript("godot-cpp/SConstruct", exports={"env": env})
+else:
+    env = SConscript("godot-cpp/SConstruct")
+
+# godot-cpp v10 archives about a thousand generated objects. Spawned through `sh -c`, the
+# whole ar command is one argument, and Linux caps a single argument at 128 KiB; the long
+# container/profile build paths push the static-library link over that. Hand GNU ar a
+# response file instead (GNU ar on Linux and MinGW accepts @file; Apple's ar does not).
+if env["platform"] in ("linux", "windows"):
+    env["MAXLINELENGTH"] = 64 * 1024
+    env["ARCOM"] = "${TEMPFILE('$AR $ARFLAGS $TARGET $SOURCES', '$ARCOMSTR')}"
 
 # godot-cpp links libstdc++ and libgcc statically by default. That is what lets a binary
 # load on distributions older than the machine that built it, and it is the same choice
@@ -113,12 +146,6 @@ if env["platform"] == "windows":
         env.Append(CCFLAGS=["/std:c++17", "/EHsc"])
 
 elif env["platform"] == "linux":
-    # Houdini 22.0 on Linux is built with GCC 14, so prefer gcc-14/g++-14 to match its
-    # toolchain when those binaries are available. Distros that ship a different GCC and
-    # don't provide versioned gcc-14 binaries (e.g. Fedora) fall back to the default gcc/g++.
-    # An explicit CC/CXX in the environment always wins, e.g. `CC=gcc CXX=g++ scons`.
-    env["CC"] = os.environ.get("CC") or ("gcc-14" if shutil.which("gcc-14") else "gcc")
-    env["CXX"] = os.environ.get("CXX") or ("g++-14" if shutil.which("g++-14") else "g++")
     env.Append(CCFLAGS=["-std=c++17", "-fPIC"])
 
     env.Append(LINKFLAGS=[
@@ -134,9 +161,16 @@ elif env["platform"] == "linux":
     env.Append(LIBS=["dl", "pthread"])
     env.Append(LIBPATH=[os.path.join(HFS, "dsolib")])
 
-elif env["platform"] == "macos" or sys_name == "Darwin":
-    env.Append(CCFLAGS=["-std=c++17"])
-    env.Append(LINKFLAGS=["-Wl,-rpath,@loader_path/../Frameworks/Houdini.framework/Versions/Current/Resources/dsolib"])
+elif env["platform"] == "macos":
+    # SCons defaults to its host's shared-library rules. Override them explicitly
+    # so Linux + OSXCross produces the same Mach-O dylib as native Apple Clang.
+    env["SHLIBPREFIX"] = "lib"
+    env["SHLIBSUFFIX"] = ".dylib"
+    env["SHLINKFLAGS"] = ["$LINKFLAGS", "-dynamiclib"]
+    if "-s" in env["LINKFLAGS"]:
+        env["LINKFLAGS"].remove("-s")
+        env.Append(LINKFLAGS=["-Wl,-S", "-Wl,-x", "-Wl,-dead_strip"])
+    env.Append(LINKFLAGS=[f"-Wl,-install_name,@rpath/libhego.macos.{env['target']}.dylib"])
 
 # Build machine info (optional, but matches setup script)
 if env["platform"] == "linux":
@@ -179,13 +213,18 @@ env.Append(CPPPATH=[src_dir])
 # Output library
 # ───────────────────────────────────────────────
 if env["platform"] == "macos":
-    library = env.SharedLibrary(
-        f"demo/addons/hego/bin/hego.{env['platform']}.{env['target']}.framework/hego.{env['platform']}.{env['target']}",
-        source=cpp_sources,
+    # Keep each architecture's build separate, then install the selected one at
+    # the stable path used by Godot. Use arch=universal to ship both Mac CPUs.
+    # Explicit per-CPU manifest entries cannot fall back to a universal file.
+    compiled_library = env.SharedLibrary(
+        f"{build_dir}/hego{env['suffix']}.dylib", source=cpp_sources,
+    )
+    library = env.InstallAs(
+        f"demo/addons/hego/bin/libhego.macos.{env['target']}.dylib", compiled_library,
     )
 else:
     library = env.SharedLibrary(
-        f"demo/addons/hego/bin/hego{env['suffix']}{env['SHLIBSUFFIX']}",
+        ARGUMENTS.get("terrain_integration_output") or f"demo/addons/hego/bin/hego{env['suffix']}{env['SHLIBSUFFIX']}",
         source=cpp_sources,
     )
 

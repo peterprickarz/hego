@@ -1,8 +1,10 @@
 Terrain3D Output
 ================
 
-HEGo supports two different Terrain3D output modes: terrain generation and instancing on terrain.
-You can use either mode independently or together in the same HDA.
+The HEGo Terrain3D bridge addon (``addons/hego_terrain3d``) supports two different Terrain3D
+output modes: terrain generation and instancing on terrain. You can use either mode
+independently or together in the same HDA. Install the bridge next to HEGo and the Terrain3D
+addon (``addons/terrain_3d``); HEGo on its own does not produce Terrain3D output.
 
 If you are new to Terrain3D, read
 `their documentation <https://terrain3d.readthedocs.io/en/stable/docs/introduction.html>`_
@@ -17,7 +19,7 @@ replaced at the target path on each cook.
 Required Setup
 ~~~~~~~~~~~~~~
 
-- Terrain3D addon must be installed
+- Terrain3D addon and the HEGo Terrain3D bridge addon must be installed
 - Height layer must exist
 - Height layer attribute ``hegot3d_spawn_terrain`` must be 1
 - Height layer attribute ``hegot3d_data_directory`` must be a non-empty path

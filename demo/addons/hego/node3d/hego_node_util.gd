@@ -17,17 +17,71 @@ const OUTPUTS_ROOT_NAME := "Outputs"
 
 
 ## Waits for [param task] to finish and returns its result, or [code]null[/code]
-## if it failed. [param host] is only needed for its scene tree, to yield a frame.
+## if it failed or the host leaves the tree. This does not cancel the native task.
 static func await_task(host: Node, task: HEGoTask) -> Variant:
 	if task == null:
 		HEGoLog.get_singleton().error(LOG_CATEGORY, "Task was null, the session is probably not running.")
 		return null
-	while task.get_status() < HEGoTask.COMPLETED:
+	while true:
+		if not is_instance_valid(host) or host.is_queued_for_deletion() or not host.is_inside_tree():
+			return null
+		if task.get_status() >= HEGoTask.COMPLETED:
+			break
 		await host.get_tree().process_frame
 	if task.get_status() == HEGoTask.FAILED:
 		HEGoLog.get_singleton().error(LOG_CATEGORY, "Task failed: " + task.get_error_message())
 		return null
 	return task.get_result()
+
+
+## Waits for [param task] like [method await_task], but reports the outcome rather than
+## logging it: [code]{ok: true, value}[/code], or [code]{ok: false, message}[/code] when the
+## task failed, was null, or [param host] left the scene tree while it waited.
+##
+## Use this where failure has to be told apart from a task that legitimately completed with
+## null, which is what HEGo returns for work it could skip.
+static func checked_task(host: Variant, task: HEGoTask) -> Dictionary:
+	if task == null:
+		return {"ok": false, "message": "No task was returned; the session is probably not running"}
+	if not is_instance_valid(host) or not host.is_inside_tree():
+		return {"ok": false, "message": "The node waiting for this task is no longer in the scene"}
+	var tree: SceneTree = host.get_tree()
+	while task.get_status() < HEGoTask.COMPLETED:
+		if not is_instance_valid(host) or not host.is_inside_tree():
+			return {"ok": false, "message": "The node waiting for this task was removed while waiting"}
+		await tree.process_frame
+		if not is_instance_valid(host) or not host.is_inside_tree():
+			return {"ok": false, "message": "The node waiting for this task was removed while waiting"}
+	if task.get_status() != HEGoTask.COMPLETED:
+		return {"ok": false, "message": task.get_error_message()}
+	return {"ok": true, "value": task.get_result()}
+
+
+## Every global class that extends [param base], directly or through other global classes,
+## as a dictionary from class name to script path. [param base] itself is not included.
+##
+## Reads [method ProjectSettings.get_global_class_list], which exported games have too. This
+## is how HEGo finds the [HEGoInputHandler]s and [HEGoOutputHandler]s other addons provide.
+static func global_subclasses(base: StringName) -> Dictionary:
+	# Class names are StringNames from Godot 4.7 on; StringName ordering is by identity, not
+	# text, so callers that sort the result must sort Strings. Key everything by String.
+	var bases := {}
+	var paths := {}
+	for entry in ProjectSettings.get_global_class_list():
+		bases[String(entry["class"])] = String(entry["base"])
+		paths[String(entry["class"])] = String(entry["path"])
+	var found := {}
+	for name in bases:
+		var ancestor: Variant = bases[name]
+		var target := String(base)
+		# Bounded, so a malformed class cache cannot loop forever.
+		for _depth in range(64):
+			if ancestor == target or not bases.has(ancestor):
+				break
+			ancestor = bases[ancestor]
+		if name != target and ancestor == target:
+			found[name] = paths[name]
+	return found
 
 
 ## Whether the cook produced the kind of geometry a handler needs.

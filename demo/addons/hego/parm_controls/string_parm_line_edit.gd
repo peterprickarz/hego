@@ -25,7 +25,7 @@ func _drop_data(position: Vector2, data) -> void:
 			var scene_root = get_tree().edited_scene_root
 			if scene_root:
 				var node_path = scene_root.get_path_to(node)
-				text = str(node)
+				text = str(node_path)
 			else:
 				text = "Error: No scene root"
 		else:

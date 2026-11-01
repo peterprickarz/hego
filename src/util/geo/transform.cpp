@@ -6,11 +6,20 @@ namespace Util
 {
 namespace Geo
 {
-void set_object_transform(HEGoSessionManager *session_mgr, const HAPI_NodeId node_id, const godot::Transform3D &transform)
+bool set_object_transform(HEGoSessionManager *session_mgr, const HAPI_NodeId node_id, const godot::Transform3D &transform)
 {
+	if (!session_mgr || !session_mgr->get_session() || node_id < 0 ||
+			HoudiniApi::IsSessionValid(session_mgr->get_session()) != HAPI_RESULT_SUCCESS)
+	{
+		return false;
+	}
+	HAPI_NodeInfo info = HoudiniApi::NodeInfo_Create();
+	if (HoudiniApi::GetNodeInfo(session_mgr->get_session(), node_id, &info) != HAPI_RESULT_SUCCESS || info.parentId < 0)
+	{
+		return false;
+	}
 	HAPI_TransformEuler houdini_transform = godot_to_houdini_transform(transform);
-	HAPI_NodeId parent_id = HEGo::Util::Hapi::get_parent_node_id(session_mgr->get_session(), node_id);
-	HOUDINI_CHECK_ERROR(HoudiniApi::SetObjectTransform(session_mgr->get_session(), parent_id, &houdini_transform));
+	return HoudiniApi::SetObjectTransform(session_mgr->get_session(), info.parentId, &houdini_transform) == HAPI_RESULT_SUCCESS;
 }
 
 HAPI_TransformEuler godot_to_houdini_transform(const godot::Transform3D &transform)

@@ -34,6 +34,12 @@ one to see how an output type is built. Writing a node of your own around them i
      - Applying ``hego_custom_properties`` to a spawned object
    * - :ref:`HEGoInputNodes<class_HEGoInputNodes>`
      - Turning a Godot node into the right HEGo input node
+   * - :ref:`HEGoInputHandler<class_HEGoInputHandler>`
+     - Base class another addon extends to add a kind of input node
+   * - :ref:`HEGoCookExtension<class_HEGoCookExtension>`
+     - Base class for a child node that takes part in its HEGo node's cooks
+   * - :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`
+     - Base class another addon extends to add a kind of output
    * - :ref:`HEGoOutputContext<class_HEGoOutputContext>`
      - What one handler is given: the host node, the HDA, the cook summary, and the node
        building it needs
@@ -42,17 +48,33 @@ one to see how an output type is built. Writing a node of your own around them i
    * - :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`
      - The tedious parts of driving an HDA, for a node writing its own ``cook()``. See
        :doc:`custom_nodes/index`
+
+Terrain3D support is not part of HEGo. It is the separate HEGo Terrain3D bridge addon,
+``addons/hego_terrain3d``, which depends on HEGo and on the
+`Terrain3D <https://github.com/TokisanGames/Terrain3D>`_ addon (installed at
+``addons/terrain_3d``); neither of those depends on it. Its classes plug into the extension
+points below:
+
+.. list-table::
+   :widths: 32 68
+   :header-rows: 1
+
+   * - Class (HEGo Terrain3D bridge)
+     - Responsibility
    * - :ref:`HEGoTerrain3DUtil<class_HEGoTerrain3DUtil>`
      - Terrain3D helpers shared by input, output and instancing
    * - :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
-     - Heightfield layers to a Terrain3D node
+     - An :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`: heightfield layers to a
+       Terrain3D node
    * - :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`
-     - Points to Terrain3D instancer transforms
+     - An :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`: points to Terrain3D instancer
+       transforms
    * - :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
-     - An existing Terrain3D to heightfield layers for Houdini
+     - An :ref:`HEGoInputHandler<class_HEGoInputHandler>`: an existing Terrain3D to
+       heightfield layers for Houdini
 
 Each has a page of its own in the class reference, under
-:doc:`/classes/writing_a_node`, :doc:`/classes/output_handlers` and
+:doc:`/classes/writing_a_node`, :doc:`/classes/output_handlers` and, for the bridge,
 :doc:`/classes/terrain3d`; what follows here is what they are for and how they fit
 together.
 
@@ -61,7 +83,10 @@ timed under; ``should_handle(summary)``, which decides from
 :ref:`get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` whether the cook
 produced anything it cares about; and ``handle(context)``, which does the work.
 :doc:`HEGoNode3D </node_reference/hego_node_3d>` asks for the summary once, then calls each
-handler that wants it and times them all.
+handler that wants it and times them all. ``output_handlers()`` decides which handlers that
+is: HEGo's mesh, multimesh and object output, then every
+:ref:`HEGoOutputHandler<class_HEGoOutputHandler>` other addons provide, sorted by class name,
+then curve output.
 
 ``context`` is the :ref:`HEGoOutputContext<class_HEGoOutputContext>` that
 ``agent.output_context(asset)`` builds, and is a handler's only argument. It carries the three
@@ -91,26 +116,28 @@ plumbing every handler would otherwise repeat:
 Writing your own output handler
 -------------------------------
 
-The shape to copy, in a script of your own:
+The shape to copy, in a script of your own. Extending
+:ref:`HEGoOutputHandler<class_HEGoOutputHandler>` with a ``class_name`` is all it takes for
+every HEGo node to run it; there is nothing to register:
 
 .. code-block:: gdscript
 
     @tool
     class_name MyScatterOutput
-    extends RefCounted
+    extends HEGoOutputHandler
 
     const LOG_CATEGORY := "output"
     const POINT_ATTRIBS := ["N", "up", "pscale"]
     const FILTER_ATTRIB := "my_scatter"
 
-    static func should_handle(summary: Dictionary) -> bool:
+    func should_handle(summary: Dictionary) -> bool:
         return HEGoNodeUtil.output_has(summary, "has_points") \
             and HEGoNodeUtil.output_has_attribute(summary, "point_attributes", FILTER_ATTRIB)
 
-    static func output_phase() -> String:
+    func output_phase() -> String:
         return "my_scatter_output"
 
-    static func handle(context: HEGoOutputContext) -> void:
+    func handle(context: HEGoOutputContext) -> void:
         var selection = await context.select_points(FILTER_ATTRIB, PackedStringArray(POINT_ATTRIBS))
         if selection == null:
             return
@@ -122,6 +149,11 @@ The shape to copy, in a script of your own:
                 var node := context.place(str(group_name) + "/scatter", "scatter",
                     Node3D.new, true) as Node3D
                 node.position = points["P"][i]
+
+A handler is created once and reused for every cook, so it keeps nothing of one cook on
+itself. To run a handler on one kind of node only, override ``output_handlers()`` in an
+:ref:`HEGoNode3D<class_HEGoNode3D>` subclass instead, which can also drop or reorder
+HEGo's own.
 
 Four things matter here:
 
@@ -136,6 +168,79 @@ Four things matter here:
   without an owner silently disappears.
 - **Log through** :ref:`HEGoLog<class_HEGoLog>` so your messages show up in the
   session panel next to HEGo's. See :doc:`logging`.
+
+Extending HEGo from another addon
+---------------------------------
+
+Three base classes let another *addon* add to HEGo without HEGo knowing it exists, so the
+dependency only ever points from that addon to HEGo:
+
+- :ref:`HEGoInputHandler<class_HEGoInputHandler>` adds a kind of Godot node that can feed
+  an HDA input. Extend it with a ``class_name``: HEGo finds every global class that
+  extends it, in the editor and in exported games, and asks each through ``handles(node)``
+  before trying its own input kinds. ``sync()`` sends the node and returns
+  ``{ok, node}`` or ``{ok: false, message}``. A handler can also supply a settings editor
+  for the bottom panel's input row, ask for explicit recooks through
+  ``requires_explicit_cook(settings)``, and make the cook *strict* through
+  :ref:`requires_strict_cook(settings)<class_HEGoInputHandler_method_requires_strict_cook>`,
+  so an input that is missing or cannot be sent fails the whole cook rather than being
+  skipped. HEGo asks both for every input row of the node.
+- :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` adds a kind of output, found the same
+  way through the project's global class list. It has the three entry points above,
+  ``output_phase()``, ``should_handle(summary)`` and ``handle(context)``, as instance
+  methods. Several handlers may look at the same kind of output, such as heightfield
+  volumes; each acts only on the parts that carry its own attributes and leaves the rest
+  alone, so they need no rule about which of them goes first or owns the heightfields.
+  ``context.cook_state`` is the dictionary the cook shares with the input handlers and cook
+  extensions; it also records what the cook started from (``input_stash``, ``transform``
+  and ``parm_stash``), so a handler can tell whether the node changed while Houdini cooked.
+- :ref:`HEGoCookExtension<class_HEGoCookExtension>` is the per-node hook: a node you add as
+  a direct child of one :ref:`HEGoNode3D<class_HEGoNode3D>`. Its hooks run at each step of
+  the cook: ``cook_prepare()`` before anything reaches Houdini, ``cook_before()`` before the
+  HDA cooks, ``cook_commit()`` before ``Outputs`` is replaced, and ``cook_failed()`` when the
+  cook stops early. Any hook returning ``ok: false`` stops the cook with every previous
+  output left in place. An extension can also make the cook strict. To turn a kind of cook
+  result into something, write an output handler instead; it needs no child node.
+
+When a node's inputs or parameters change, it emits
+:ref:`cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>`. The bottom panel
+triggers it on every edit, and so does ``hego_set_input_stash()``; a script that sets
+parameters on the asset node itself calls ``hego_notify_cook_inputs_changed()``. Another addon can connect
+to it to react at once, for example by marking what the last cook produced as out of date.
+
+.. code-block:: gdscript
+
+    @tool
+    class_name MyStampInput
+    extends HEGoInputHandler
+
+    func handles(node: Node) -> bool:
+        return node is MyStamp
+
+    func sync(host: Node, existing_node: Variant, node: Node, settings: Dictionary) -> Dictionary:
+        var input: HEGoInputNode = existing_node if existing_node is HEGoInputNode else HEGoInputNode.new()
+        var created := await HEGoNodeUtil.checked_task(host, input.instantiate())
+        if not created.ok:
+            return created
+        var sent := await HEGoNodeUtil.checked_task(host, input.set_geo_from_mesh(node.to_mesh(), []))
+        if not sent.ok:
+            return sent
+        return {"ok": true, "node": input}
+
+The two bridge addons are the worked examples, and both have the same shape: input and
+output handlers, no cook extension. The HEGo Strata bridge (``addons/hego_strata``) uses
+:ref:`HEGoStrataInput<class_HEGoStrataInput>` to send terrain layers and
+:ref:`HEGoStrataOutput<class_HEGoStrataOutput>` to publish the heightfield volumes that
+carry ``hegostrata_layer_path`` into Strata layers, all targets of one cook in one
+transaction. Its terrain inputs make the cook explicit and strict, and its editor plugin
+listens to ``cook_inputs_changed`` to mark published layers stale. See
+:doc:`/strata/houdini`. The HEGo Terrain3D bridge
+(``addons/hego_terrain3d``) uses
+:ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>` to send a Terrain3D node, and
+:ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>` and
+:ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>` to build terrains and instances
+from output that carries ``hegot3d_*`` attributes. A heightfield the Strata bridge publishes
+lacks those, so the two coexist without either naming the other.
 
 Shared helpers
 --------------
@@ -186,24 +291,25 @@ curve dictionary's type; ``build_linear_curve()``, ``build_nurbs_curve()`` and
 ``build_bezier_curve()`` are there individually, along with the spline evaluation
 they use.
 
-``HEGoTerrain3DUtil``
-~~~~~~~~~~~~~~~~~~~~~
-
-Everything the Terrain3D paths share: ``is_available()`` before anything else, then
-layer and attribute lookups (``get_layer_by_name()``, ``get_attr_value()``),
-texture layer collection and validation, control map encoding, and the heightfield
-image rotation Houdini and Terrain3D disagree about.
-
-Terrain3D is an optional addon, so none of this refers to its types directly;
-everything goes through ``ClassDB`` and ``Object.call()``, and degrades to a warning
-when the addon or a method is missing.
-
 ``HEGoCookTimings``
 ~~~~~~~~~~~~~~~~~~~
 
 ``begin_phase()`` / ``end_phase(name)`` around each phase, ``format_summary()`` at
 the end. Phases print in the order they were recorded, so adding a handler needs no
 change here.
+
+``HEGoTerrain3DUtil``
+~~~~~~~~~~~~~~~~~~~~~
+
+Part of the HEGo Terrain3D bridge addon (``addons/hego_terrain3d``), not of HEGo.
+Everything the bridge's Terrain3D paths share: ``is_available()`` before anything else,
+then layer and attribute lookups (``get_layer_by_name()``, ``get_attr_value()``),
+texture layer collection and validation, control map encoding, and the heightfield
+image rotation Houdini and Terrain3D disagree about.
+
+None of this refers to Terrain3D's types directly; everything goes through ``ClassDB``
+and ``Object.call()``, and degrades to a warning when Terrain3D or a method is missing, so
+the bridge's scripts still load, and HEGo keeps cooking, in a project without it.
 
 Reusable pieces of the output handlers
 --------------------------------------

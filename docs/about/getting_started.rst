@@ -78,7 +78,8 @@ Session Types
    * - Type
      - When to use it
    * - **Named Pipe**
-     - The default. HEGo starts a Houdini Engine server and talks to it over a pipe.
+     - The default. HEGo connects to an existing server on the named pipe,
+       including Houdini Session Sync, or starts a server if needed.
    * - **TCP Socket**
      - The same, over a socket. The connection data is the port number.
    * - **In Process**
@@ -86,14 +87,17 @@ Session Types
 
 A session outlives a single cook, so cooking several HDAs reuses it. Stopping the
 session resets every HEGo node's Houdini state; the next cook re-instantiates from the
-parameters stashed in the scene.
+parameters stashed in the scene. When attached to an existing server, stopping
+HEGo only closes its connection and preserves the Houdini scene. Servers started
+by HEGo are cleaned up when it disconnects.
 
 Examples
 --------
 
 The ``demo`` folder in the repo contains the project used for testing and development. Even if you
 only download the binaries, it is still recommended to look at this demo project. The demo project
-also comes with `Terrain3D <https://github.com/TokisanGames/Terrain3D>`_ installed and contains
+also comes with `Terrain3D <https://github.com/TokisanGames/Terrain3D>`_ installed, together with
+the HEGo Terrain3D bridge addon (``addons/hego_terrain3d``) that connects it to HEGo, and contains
 examples for generating terrains using Terrain3D.
 
 Troubleshooting

@@ -1,0 +1,42 @@
+{
+  "format": "RF32",
+  "byte_order": "little-endian",
+  "dtype": "float32",
+  "layout": "row-major; row index steps +Z, column index steps +X",
+  "width": 513,
+  "height": 513,
+  "sample_spacing": 8.0,
+  "sample_origin": [
+    -2048.0,
+    0.0,
+    -2048.0
+  ],
+  "sample_step_x": [
+    8.0,
+    0.0,
+    0.0
+  ],
+  "sample_step_y": [
+    0.0,
+    0.0,
+    8.0
+  ],
+  "extent": [
+    4096.0,
+    4096.0
+  ],
+  "sample_centres": "first and last samples lie on the extent corners (-2048 and +2048)",
+  "units": "metres, Y relative to the StrataTerrain3D origin, sea level 0",
+  "channel": "height",
+  "role": "rough manual base (uneroded); edit freely, erosion is applied by Sop/HEGo_IslandErosion",
+  "generator": "scripts/houdini/island_base.py",
+  "generator_version": 1,
+  "seed": 20261028,
+  "stats": {
+    "min": -200.18731689453125,
+    "max": 480.7156066894531,
+    "land_fraction": 0.2656619890640615,
+    "land_area_km2": 4.474496
+  },
+  "byte_size": 1052676
+}

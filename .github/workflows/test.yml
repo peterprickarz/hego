@@ -1,0 +1,50 @@
+name: 🧪 Build and test
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # The island's cooked data is Git LFS; the runner skips the tests that read it,
+          # which keeps CI off the LFS bandwidth quota.
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install SCons and the HAPI headers
+        run: |
+          python -m pip install --upgrade pip 'scons>=4.5,<5'
+          python scripts/fetch_hapi_headers.py
+
+      - name: Build HEGo (debug, host toolchain)
+        # A CI build loads on this runner only; release binaries come from the glibc 2.28
+        # container (scripts/build.sh linux-compat), so the floor is the runner's own glibc
+        # rather than a pinned version that ubuntu-latest outgrows.
+        run: HFS="$PWD/build/deps/houdini" GLIBC_FLOOR="$(ldd --version | head -1 | grep -oE '[0-9]+\.[0-9]+$')" scripts/build.sh linux template_debug
+
+      - name: Build Strata (debug, host toolchain)
+        run: scripts/build-terrain.sh linux template_debug
+
+      - name: Install Godot 4.7.2
+        run: |
+          curl -sSL -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q godot.zip
+          chmod +x Godot_v4.7.2-stable_linux.x86_64
+          echo "GODOT_BIN=$PWD/Godot_v4.7.2-stable_linux.x86_64" >> "$GITHUB_ENV"
+
+      - name: Run the test suites
+        run: TEST_LOG_DIR="$PWD/test-logs" scripts/run_tests.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-logs
+          path: test-logs

@@ -117,38 +117,84 @@ HAPI_NodeId create_merge_sop(HEGoSessionManager *session_mgr, HAPI_NodeId node_i
 	return HEGo::Util::Node::instantiate_hda_from_name(session_mgr, "Sop/merge", node_id);
 }
 
-void connect_node_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id, int input_index, HAPI_NodeId source_node_id, int output_index)
+bool connect_node_input(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id, int input_index, HAPI_NodeId source_node_id, int output_index)
 {
-	HOUDINI_CHECK_ERROR(HoudiniApi::ConnectNodeInput(session_mgr->get_session(), target_node_id, input_index, source_node_id, output_index));
+	if (!session_mgr || !session_mgr->get_session() || target_node_id < 0 || source_node_id < 0 || input_index < 0 || output_index < 0 ||
+			HoudiniApi::IsSessionValid(session_mgr->get_session()) != HAPI_RESULT_SUCCESS)
+	{
+		return false;
+	}
+	HAPI_NodeInfo target = HoudiniApi::NodeInfo_Create();
+	HAPI_NodeInfo source = HoudiniApi::NodeInfo_Create();
+	if (HoudiniApi::GetNodeInfo(session_mgr->get_session(), target_node_id, &target) != HAPI_RESULT_SUCCESS ||
+			HoudiniApi::GetNodeInfo(session_mgr->get_session(), source_node_id, &source) != HAPI_RESULT_SUCCESS)
+	{
+		return false;
+	}
+	return HoudiniApi::ConnectNodeInput(session_mgr->get_session(), target_node_id, input_index, source_node_id, output_index) == HAPI_RESULT_SUCCESS;
 }
 
-void disconnect_node_inputs(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id)
+bool disconnect_node_inputs(HEGoSessionManager *session_mgr, HAPI_NodeId target_node_id)
 {
+	if (!session_mgr || !session_mgr->get_session() || target_node_id < 0 || HoudiniApi::IsSessionValid(session_mgr->get_session()) != HAPI_RESULT_SUCCESS)
+	{
+		return false;
+	}
 	HAPI_NodeInfo node_info = HoudiniApi::NodeInfo_Create();
-	HOUDINI_CHECK_ERROR(HoudiniApi::GetNodeInfo(session_mgr->get_session(), target_node_id, &node_info));
+	if (HoudiniApi::GetNodeInfo(session_mgr->get_session(), target_node_id, &node_info) != HAPI_RESULT_SUCCESS)
+	{
+		return false;
+	}
 	// Merge SOPs compact their inputs when a wire is removed. Disconnect from
 	// the end so no remaining source shifts into a slot already visited.
 	for (int i = node_info.inputCount - 1; i >= 0; --i)
 	{
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "Disconnecting node slot " + godot::String::num(i));
 		HAPI_NodeId input_id = -1;
-		HOUDINI_CHECK_ERROR(HoudiniApi::QueryNodeInput(session_mgr->get_session(), target_node_id, i, &input_id));
+		if (HoudiniApi::QueryNodeInput(session_mgr->get_session(), target_node_id, i, &input_id) != HAPI_RESULT_SUCCESS)
+		{
+			return false;
+		}
 		if (input_id == -1)
 		{
 			continue;
 		}
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::INPUT, "disconnecting node id " + godot::String::num(input_id));
-		HOUDINI_CHECK_ERROR(HoudiniApi::DisconnectNodeInput(session_mgr->get_session(), target_node_id, i));
+		if (HoudiniApi::DisconnectNodeInput(session_mgr->get_session(), target_node_id, i) != HAPI_RESULT_SUCCESS)
+		{
+			return false;
+		}
 	}
+	return true;
 }
 
-void connect_to_merge(HEGoSessionManager *session_mgr, HAPI_NodeId merge_node_id, godot::PackedInt32Array sources)
+bool connect_to_merge(HEGoSessionManager *session_mgr, HAPI_NodeId merge_node_id, godot::PackedInt32Array sources)
 {
-	disconnect_node_inputs(session_mgr, merge_node_id);
+	if (!session_mgr || !session_mgr->get_session() || merge_node_id < 0)
+	{
+		return false;
+	}
+	// Validate every source before touching the old connection list.
+	for (int i = 0; i < sources.size(); ++i)
+	{
+		HAPI_NodeInfo info = HoudiniApi::NodeInfo_Create();
+		if (sources[i] < 0 || HoudiniApi::GetNodeInfo(session_mgr->get_session(), sources[i], &info) != HAPI_RESULT_SUCCESS)
+		{
+			return false;
+		}
+	}
+	if (!disconnect_node_inputs(session_mgr, merge_node_id))
+	{
+		return false;
+	}
 	for (int i = 0; i < sources.size(); i++)
 	{
-		connect_node_input(session_mgr, merge_node_id, i, sources[i], 0);
+		if (!connect_node_input(session_mgr, merge_node_id, i, sources[i], 0))
+		{
+			return false;
+		}
 	}
+	return true;
 }
 
 HAPI_NodeId create_input_from_curve3d(HEGoSessionManager *session_mgr, const godot::PackedVector3Array &positions, HAPI_NodeId node_id)

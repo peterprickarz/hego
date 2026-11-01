@@ -1,7 +1,7 @@
-Terrain3D
-=========
+HEGo Terrain3D bridge
+=====================
 
-Heightfields in both directions, for projects using the optional Terrain3D addon. None of it refers to Terrain3D's types directly, so HEGo runs without the addon installed.
+The separate ``addons/hego_terrain3d`` addon, which depends on HEGo and on the Terrain3D addon: heightfields in both directions, and Terrain3D instancing. It plugs into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`, and reaches Terrain3D only through ``ClassDB``, so its scripts still load without Terrain3D installed.
 
 .. list-table::
    :widths: 34 66
@@ -10,7 +10,7 @@ Heightfields in both directions, for projects using the optional Terrain3D addon
    * - Class
      - Description
    * - :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
-     - Reads an existing Terrain3D node into heightfield layers Houdini can consume.
+     - Sends an existing Terrain3D node to an HDA input as heightfield layers.
    * - :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
      - Builds a Terrain3D node from the heightfield layers of a cooked HDA.
    * - :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`

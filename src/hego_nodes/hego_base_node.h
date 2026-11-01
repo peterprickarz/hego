@@ -13,6 +13,9 @@
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
+#include <atomic>
+#include <cstdint>
+#include <mutex>
 
 namespace HEGo
 {
@@ -21,14 +24,18 @@ class HEGoBaseNode : public HEGoTrackableNode
 	GDCLASS(HEGoBaseNode, HEGoTrackableNode)
 protected:
 	HAPI_NodeId node_id;
+	std::atomic<uint64_t> node_generation{0};
 
 	HEGoSessionManager *get_session_manager();
+	// The current session's identity, for cache checks on the main thread.
+	bool current_session(int64_t &session_id, int &session_type);
 
 public:
 	HEGoBaseNode();
 	~HEGoBaseNode();
 
 	HAPI_NodeId get_id() const;
+	uint64_t get_generation() const;
 
 	void reset_node_id() override;
 
@@ -47,10 +54,16 @@ struct InputConnection
 {
 	HAPI_NodeId source_node_id = -1;
 	int output_index = 0;
+	uint64_t source_generation = 0;
+	int source_unique_id = -1;
+	int target_unique_id = -1;
+	int64_t session_id = 0;
+	int session_type = -1;
 
 	bool operator==(const InputConnection &other) const
 	{
-		return source_node_id == other.source_node_id && output_index == other.output_index;
+		return source_node_id == other.source_node_id && output_index == other.output_index && source_generation == other.source_generation &&
+				source_unique_id == other.source_unique_id && target_unique_id == other.target_unique_id && session_id == other.session_id && session_type == other.session_type;
 	}
 };
 
@@ -60,6 +73,8 @@ class HEGoInputReceiverNode : public HEGoBaseNode
 
 protected:
 	godot::HashMap<int, InputConnection> cached_connections;
+	std::mutex connection_cache_mutex;
+	bool cached_connection_current(int input_index, const InputConnection &wanted, uint64_t generation);
 
 public:
 	HEGoInputReceiverNode();
@@ -78,6 +93,11 @@ class HEGoTransformableNode : public HEGoBaseNode
 protected:
 	godot::Transform3D last_transform;
 	bool has_cached_transform = false;
+	std::mutex transform_cache_mutex;
+	int transform_unique_id = -1;
+	int64_t transform_session_id = 0;
+	int transform_session_type = -1;
+	bool cached_transform_current(const godot::Transform3D &xform, uint64_t generation);
 
 public:
 	HEGoTransformableNode();
@@ -125,6 +145,8 @@ class HEGoTransformableInputReceiverNode : public HEGoTransformableNode
 
 protected:
 	godot::HashMap<int, InputConnection> cached_connections;
+	std::mutex connection_cache_mutex;
+	bool cached_connection_current(int input_index, const InputConnection &wanted, uint64_t generation);
 
 public:
 	HEGoTransformableInputReceiverNode();

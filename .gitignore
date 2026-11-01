@@ -1,11 +1,33 @@
 build
 /log/
 .venv
+__pycache__/
 demo/.godot
 *.TMP
 .sconsign*.dblite
 docs/_build/
 docs/.tmp_rst/
+docs/.tmp_gdscript_xml/
 docs/.tmp_stub_xml/
 docs/.tools/
 docs/tools/godot-master/
+# Strata native build and disposable test artifacts.
+terrain/build/
+.sconsign-terrain-*.dblite
+demo/generated/
+terrain/integration_bin/
+/demo/island/screenshots/
+/scripts/houdini/__pycache__/
+/demo/tests/__pycache__/
+/scripts/__pycache__/
+/scripts/tests/__pycache__/
+
+# The island terrain lives at fixed paths under demo/island/terrain (see StrataStorage).
+# Layers and cooked channels are committed; the region bake (manifest + regions/) is rebuilt on open.
+/demo/island/terrain/runtime_data.res
+/demo/island/terrain/regions/
+/demo/island/terrain/*~.res
+/demo/island/terrain/*/*~.res
+
+# Workstation-specific Godot MCP server entry (see docs/development/godot_mcp.md)
+/.mcp.json

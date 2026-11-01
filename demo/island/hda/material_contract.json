@@ -1,0 +1,244 @@
+{
+  "contract_version": 3,
+  "operator": "Sop/HEGo_MaterialDistribution",
+  "hda_file": "otls/HEGo_MaterialDistribution.hda",
+  "source_script": "scripts/houdini/build_material_distribution_hda.py",
+  "test_script": "scripts/houdini/test_material_distribution.py",
+  "actual_fixture": "test --actual takes the saved-scene final cumulative height as RF32 (1025^2, row-major [row][column]) with a sibling .json (width, height, sample_origin, sample_step_x, sample_step_y, height_sha256) exported by the scene owner; the test only reads it",
+  "houdini_version": "22.0.429",
+  "units": "metres; terrain-local XZ; height Y relative to the StrataTerrain3D origin",
+  "registry": {
+    "file": "demo/island/materials/material_registry.json",
+    "sha256": "1d6de50122508d2041c69668e5520e95e84f8ed894c4e7c82212477264eb7e87",
+    "rule": "1 to 32 entries (currently 4); id == material_id == list index; channel == 'material_' + name. The builder refuses a registry that breaks the rule, differs from this sha256, or names a material the habitat rules do not produce. The HDA embeds the registry (section hego_material_registry.json) and records the sha256 in detail attribute hego_material_registry_sha256."
+  },
+  "inputs": [
+    {
+      "index": 0,
+      "label": "Cumulative final height (+ optional flow, sediment, debris, erosion_delta, stage material_* fields)",
+      "required": true,
+      "hego_strata_mode": "cumulative",
+      "hego_settings": {
+        "terrain_mode": "cumulative",
+        "terrain_channels": "height",
+        "terrain_spacing": 4.0
+      },
+      "hego_settings_with_erosion_masks": {
+        "terrain_mode": "cumulative",
+        "terrain_channels": "height,flow,sediment,debris,erosion_delta",
+        "terrain_spacing": 4.0
+      },
+      "volumes": {
+        "height": "REQUIRED. Exactly one 2D scalar Volume primitive named 'height' (not VDB): the complete stack cumulative through the last height layer, absolute terrain-local metres, finite. Any dense orthogonal horizontal lattice from 3x3 up to 4097 samples per axis (the terrain's own lattice, 16.8 M samples at most; the HDA enforces MAX_SAMPLES = 4097). Transitional: the Godot island composition still sends the 4 km island at 4 m = 1025x1025, origin (-2048, 0, -2048); the Godot packer cap is lifted by another track.",
+        "flow": "optional; 0..1 (heightfield_erode log-scaled flow as published by Sop/HEGo_IslandErosion). Missing = 0.",
+        "sediment": "optional; >= 0 metres. Missing = 0.",
+        "debris": "optional; >= 0 metres. Missing = 0.",
+        "erosion_delta": "optional; signed metres (<0 eroded, >0 deposited). Missing = 0.",
+        "lattice_rule": "Every optional mask present must be a single Volume with exactly the height resolution and the same sample positions at the origin, the first step along each axis and the far end of each axis (|difference| <= 1e-4 m). Nothing is resampled; a mismatch is a node error.",
+        "other volumes": "ignored, including <name>__ownership companions, unknown material_* names and the legacy grass/rock/sand/scree biome masks; never passed through",
+        "material_<name>": "optional, all registry channels or none: the stage materials authored by Sop/HEGo_IslandErosion (contract v2), cumulative. Each a single Volume on the exact height lattice (same rule as the masks), finite, >= -1e-6 (clamped to 0). A sample whose 32 values sum to more than 1e-6 is covered. Duplicates, a partial set, another lattice or negative/nonfinite values are node errors; unknown material_* names are ignored.",
+        "masks_unavailable": "A mask that is missing OR declared but zero everywhere is reported in hego_material_unavailable_masks (all-zero ones also in hego_material_all_zero_masks). The habitat model then has no evidence for it, exactly as if absent; nothing is synthesised in its place."
+      },
+      "hego_settings_with_stage_materials": {
+        "terrain_mode": "cumulative",
+        "terrain_channels": "height,flow,sediment,debris,erosion_delta,<the registry material channels>",
+        "terrain_spacing": 4.0,
+        "notes": "all 37 fields on the common 4 m lattice (1025x1025 for the island)"
+      }
+    }
+  ],
+  "outputs": {
+    "lattice": "exactly the input height lattice (same resolution, origin and steps); no resampling",
+    "volumes": "exactly 4 scalar volumes (one per registry material) in registry id order, named by the registry channel; nothing else (no height, no input masks)",
+    "channels": [
+      "material_coastal_sand",
+      "material_island_grass",
+      "material_scree_gravel",
+      "material_dark_cliff"
+    ],
+    "ranges": {
+      "weight": "float32, finite, 0 <= w <= 1",
+      "sum": "the 4 weights sum to 1 at every sample (|sum - 1| <= 1e-5), including sea floor, coastline and every low area",
+      "authoring": "All registry fields remain in registry ID order. Generated habitat fields use the shared soft limiter (subtract fifth-largest, clamp and normalize, explicit tie fallback). Valid normalized <=4 inherited mixtures remain byte-exact; other covered mixtures use the shared soft limiter with redistribution/tie diagnostics. Native packing remains a mechanical safety cap."
+    },
+    "routing": "prim attributes only: name, hegostrata_layer_path = target_layer_path, hegostrata_role = value, hegostrata_channel = name, hegostrata_composition = replace",
+    "target_layer": "the existing mask-only procedural MaterialDistribution StrataLayer, named by target_layer_path (Godot publishes every channel emitted; emit every registry channel)",
+    "diagnostics": "detail hego_material_{operator,registry_sha256,seconds,samples,spacing_a,spacing_b,seed,optional_masks,unavailable_masks,all_zero_masks,mode,prior_status(absent|all_zero|inherited|ignored),prior_covered_fraction,inherited_exact_fraction,generated_fraction,inherit_truncated_samples,max_sum_error,max_nonzero,top4_retained_mean/min,raw_max_nonzero,raw_top4_retained_mean/min,mean_weight[32],dominant_fraction[32],zones,zone_mean[10],limit_maximum,limit_assigned_voxels,limit_zero_voxels,limit_tie_fallback_voxels,limit_pre_max_nonzero,limit_post_max_nonzero,limit_pre_topk_retained_mean/min,limit_post_topk_retained_mean/min,limit_redistributed_mass_mean/max}; raw_* and limit_pre_* describe internal uncapped fields; all other weights describe limited output; never routed Inherit paths expose inherit_limited_samples, inherit_renormalized_samples, inherit_redistributed_mass_max and inherit_tie_fallback_voxels. inherit_truncated_samples is a compatibility alias counting samples handled by the shared soft limiter; it does not mean hard pruning.",
+    "weight_limit": {
+      "algorithm": "q_i = max(w_i - fifth_largest(w), 0); output_i = q_i / sum(q)",
+      "maximum": 4,
+      "ties": "If five or more equal maxima make every residual zero, retain original top four with ascending stable registry ID tie breaking, then normalize. hego_material_limit_tie_fallback_voxels reports these degenerate samples. This fallback does not guarantee continuity at such ties.",
+      "coverage": "Generic utility preserves all-zero samples. The island generator remains fully assigned, including sea floor.",
+      "source": "scripts/houdini/material_weight_limit.py is embedded in this HDA and the standalone Sop/util_MaterialWeightLimit; neither imports project files at cook time.",
+      "scope": "This limits each published sample. Bilinear interpolation of neighboring controls can still contain more than four IDs and requires separate renderer selection."
+    }
+  },
+  "lattice_contract": "For the island the input and every output is the +X/+Z world grid: 1025 x 1025, sample_origin (-2048, 0, -2048), sample_step_x (4, 0, 0) (column / Houdini index0), sample_step_y (0, 0, 4) (row / index1); value [row][column] is the sample at origin + column * step_x + row * step_y. The HDA reuses whatever basis it receives and never transposes or resamples.",
+  "mask_only": "The HDA never outputs height, never edits manual or other layers and never synthesises height. The cumulative input is read-only.",
+  "parameters": {
+    "target_layer_path": {
+      "type": "string",
+      "default": "",
+      "required": true,
+      "notes": "Scene path of the procedural MaterialDistribution layer, written verbatim to hegostrata_layer_path; empty -> node error"
+    },
+    "sea_level": {
+      "type": "float",
+      "default": 0.0,
+      "range": [
+        -500.0,
+        500.0
+      ],
+      "notes": "absolute shoreline height (m); samples at or below are sea floor"
+    },
+    "beach_height": {
+      "type": "float",
+      "default": 6.0,
+      "range": [
+        0.5,
+        50.0
+      ],
+      "notes": "m above sea level; shore habitat fades out between 1x and 2x"
+    },
+    "shore_width": {
+      "type": "float",
+      "default": 60.0,
+      "range": [
+        4.0,
+        1000.0
+      ],
+      "notes": "m from the coastline; shore fades between 0.5x and 1x, sea cliffs to 2.5x, coastal turf to 3x"
+    },
+    "cliff_slope": {
+      "type": "float",
+      "default": 40.0,
+      "range": [
+        15.0,
+        80.0
+      ],
+      "notes": "degrees; bare rock exposure ramps from cliff_slope-8 to cliff_slope+4"
+    },
+    "tree_line": {
+      "type": "float",
+      "default": 240.0,
+      "range": [
+        0.0,
+        5000.0
+      ],
+      "notes": "m above sea level; forest fades over -50..+30, alpine heath over -20..+60"
+    },
+    "snow_line": {
+      "type": "float",
+      "default": 330.0,
+      "range": [
+        0.0,
+        9000.0
+      ],
+      "notes": "m above sea level on unshaded ground; shaded faces up to 30 m lower, +-15 m smooth variation; calibrated so the 436 m summit massif of this island carries snow"
+    },
+    "sun_azimuth": {
+      "type": "float",
+      "default": 128.0,
+      "range": [
+        -360.0,
+        360.0
+      ],
+      "notes": "degrees from +X toward +Z of the horizontal direction toward the sun; 128 matches the island showcase Sun (rotation -32, -38, 0)"
+    },
+    "variation_scale": {
+      "type": "float",
+      "default": 420.0,
+      "range": [
+        32.0,
+        16384.0
+      ],
+      "notes": "m; base wavelength of the smooth world-space geology/vegetation fields"
+    },
+    "sharpness": {
+      "type": "float",
+      "default": 2.5,
+      "range": [
+        1.0,
+        8.0
+      ],
+      "notes": "exponent on variant affinities inside a habitat"
+    },
+    "seed": {
+      "type": "int",
+      "default": 32,
+      "range": [
+        0,
+        100000
+      ],
+      "notes": "seeds only the plane-wave directions/phases/wavelengths of the variation fields"
+    },
+    "prior_materials": {
+      "type": "menu",
+      "default": "inherit",
+      "items": [
+        "inherit",
+        "regenerate"
+      ],
+      "labels": [
+        "Keep Stage Materials (fill gaps)",
+        "Regenerate From Final Height"
+      ],
+      "notes": "inherit (default): valid normalized covered mixtures with at most four positive weights retain their float32 values exactly; uncovered samples are generated from final height and available masks. Other covered mixtures use the shared soft limiter with explicit redistribution and tie diagnostics. Erosion evidence is not applied twice. regenerate: ignore prior materials and classify every sample explicitly."
+    }
+  },
+  "errors": [
+    "empty target_layer_path",
+    "no 'height' volume, more than one, a VDB, or a non-2D/3D volume",
+    "height smaller than 3x3 or larger than 4097 samples per axis",
+    "nonfinite, zero, non-horizontal or non-orthogonal lattice steps",
+    "nonfinite height samples",
+    "a float parameter that is nonfinite or outside its range, or seed outside 0..100000 (values set through HAPI are re-checked inside the cook)",
+    "an optional mask that is duplicated, not a Volume, on another lattice, nonfinite, flow outside 0..1, or negative sediment/debris",
+    "prior material channels: a partial set of the registry channels, a duplicate, a non-Volume, another lattice, or nonfinite/negative values"
+  ],
+  "algorithm": {
+    "summary": "A deterministic heuristic habitat model (not a physical simulation, scripts/houdini/material_habitat.py): smooth terrain signals -> stick-breaking habitat partition -> per-habitat variant shares -> 32 full normalized weight fields, used for samples without stage materials (all samples in standalone/regenerate). Pure numpy in one Python SOP; about 2 s for 1025^2 and about 75 s (12 GB peak) for 4097^2.",
+    "gaussian": "G_s: three box passes per axis approximating a Gaussian of s metres on each axis's physical step; edges extend the boundary sample",
+    "signals": {
+      "z": "height - sea_level",
+      "slope": "degrees from central differences on physical steps, smoothed G_8",
+      "sunny": "G_12 of (downslope direction . direction toward the sun) * smoothstep(4, 14, slope); -1 shaded .. +1 sun-facing",
+      "concave_fine": "(G_12(h) - G_4(h)) / 12 (+ hollow, - crest)",
+      "concave_broad": "(G_48(h) - G_8(h)) / 48; crest = smoothstep(0.04, 0.14, -concave_broad)",
+      "shore": "exact 8-neighbour chamfer distance (m) to the sea-level contour, + inland, - offshore, smoothed G_4",
+      "shelter": "G_150 of the land indicator: > 0.5 in bays, < 0.5 on headlands",
+      "drainage": "max(smoothstep(0.03, 0.08, G_6(flow) - G_40(flow)), smoothstep(0.09, 0.16, concave_fine) * smoothstep(-0.02, 0.05, concave_broad)). heightfield_erode flow tracks water speed and rises with slope, so drainage uses flow concentration relative to its surroundings; with no flow mask the fine-valley term alone remains",
+      "sediment, debris, erosion_delta": "G_8 of the optional masks (0 when absent)",
+      "moist": "clamp(0.45 drainage + 0.3 broad hollow + 0.25 shade + 0.3 sediment)",
+      "steep": "smoothstep(cliff_slope - 8, cliff_slope + 4, slope); cliff_near = G_24(steep)",
+      "variation": "litho_a/litho_b (2.2 x variation_scale), vegetation (1x), coast_var (0.6x), seabed_var (1.5x), snow_var (0.5x), grass_var (0.8x): each a sum of 6 seeded plane waves (wavelengths 0.6..1.6 x scale) on world XZ with one shared smooth domain warp. Band-limited, identical at a world point for any lattice; no per-sample or per-cell randomness"
+    },
+    "habitats": {
+      "partition": "sea = 1 - smoothstep(-2.5, -0.5, z); the land remainder is split by steepness, then coastal band, snow, talus, channel, forest, alpine, grass. Every habitat weight is >= 0 and they sum to exactly 1",
+      "sea": "wet_sand (0-6 m deep), fine_sand (shelf), mud_flat (deep floor and muddy shelf patches), shore_rock / dark_cliff (steep sea floor), pebble_beach (exposed shallows)",
+      "shore": "wet_sand (swash), coastal_sand, fine_sand (backshore), gravel_beach / pebble_beach (exposed coast), shore_rock (steeper shore), mud_flat (flat sheltered flats), river_gravel (stream mouths), short_grass (top of the band)",
+      "sea_cliff": "shore_rock at the foot, inland cliff lithology above",
+      "cliff": "grey (upper cliffs), pale (litho_a province), dark (lower cliffs), rust (litho_b province, sunny), layered (60-330 m strata band), weathered (crests), mossy (shaded, lower, moist)",
+      "snow": "alpine_snow (steeper, wind-exposed), clean_snow (highest ground, shaded hollows)",
+      "talus": "scree_gravel (below rock, debris), fine_scree (distal, gullies, deposits), ochre_gravel (litho_b province), rocky_soil (stabilising)",
+      "channel": "damp_soil, river_gravel (strong drainage), mud_flat (low gentle), moss_floor (shaded)",
+      "forest": "forest_loam (moist), leaf_litter (low, sunny), pine_floor (higher, drier, steeper), moss_floor (shaded, moist)",
+      "alpine": "thin_grass, short_grass (crests), rocky_soil, fine_scree, patchy_grass, dry_soil",
+      "grass": "island_grass, meadow_grass (gentle, low, moist), short_grass (coast, crests), patchy_grass (steep), thin_grass (near the tree line), dry_soil (sunny, eroded), damp_soil (wet hollows), rocky_soil (steep convex/eroded)"
+    },
+    "variants": "share_i = a_i^sharpness / sum_j a_j^sharpness inside each habitat; weight_m = sum over habitats of habitat * share, divided by the 32-field sum (which is already 1 up to rounding). No capping or sparsification occurs in this internal raw habitat stage; the shared soft weight limiter then produces the published fields described by outputs.weight_limit.",
+    "determinism": "no clock, RNG state or lattice-order dependence; identical input and parameters cook bit-identically"
+  },
+  "cook_policy": "Explicit cook only (no auto cook). A mask-only stage above the height and tint stages; it never changes height.",
+  "final_pass": {
+    "role": "The erosion stages author materials from their own simulation (Sop/HEGo_IslandErosion contract v2, outputs.materials). MaterialCook is the final publication pass: it must not erase stage results or apply the same erosion evidence again.",
+    "modes": {
+      "standalone": "no stage materials (absent or all zero): habitat model everywhere, identical to contract v2",
+      "inherit": "stage materials present and Prior Stage Materials = inherit",
+      "regenerate": "stage materials present but ignored (Prior Stage Materials = regenerate)"
+    },
+    "limitation": "Height edited after the last erosion stage (for example a later Replace overlay) keeps the materials that stage authored unless the stage itself saw the edit (the detail stage receives BuildingFlatten through its manual transition). Use regenerate, or recook the stage, to re-derive them."
+  },
+  "inheritance_coverage": "Optional material_<name>__ownership companions must share exact height lattice. Values >=0.5 are owned; any unowned present companion makes that sample uncovered. Gaps regenerate locally. Missing companion means owned.",
+  "inheritance_limiter": "Covered <=4 normalized mixtures keep float32 bytes. Other covered mixtures use shared soft top4 with scalar inherit_limited_samples / inherit_redistributed_mass_max / inherit_tie_fallback_voxels diagnostics."
+}

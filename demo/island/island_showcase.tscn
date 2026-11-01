@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/terrain_island.tscn" id="1_island"]
+[ext_resource type="Script" path="res://island/island_showcase.gd" id="2_showcase"]
+
+[node name="BrackenIsle" instance=ExtResource("1_island")]
+script = ExtResource("2_showcase")

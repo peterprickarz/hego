@@ -8,11 +8,20 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="Demo"
-config/features=PackedStringArray("4.4", "Forward Plus")
+run/main_scene="res://scenes/terrain_island.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
+
+[autoload]
+
+MCPGameBridge="res://addons/godot_mcp/game_bridge/mcp_game_bridge.gd"
 
 [dotnet]
 
@@ -20,7 +29,14 @@ project/assembly_name="Demo"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/hego/plugin.cfg", "res://addons/terrain_3d/plugin.cfg")
+enabled=PackedStringArray("res://addons/hego/plugin.cfg", "res://addons/strata/plugin.cfg", "res://addons/hego_strata/plugin.cfg", "res://addons/terrain_3d/plugin.cfg", "res://addons/hego_terrain3d/plugin.cfg", "res://addons/godot_mcp/plugin.cfg")
+
+[godot_mcp]
+
+bind_mode=0
+custom_bind_ip=""
+port_override_enabled=true
+port_override=6560
 
 [hego]
 
@@ -58,3 +74,7 @@ sprint={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194325,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
+
+[navigation]
+
+3d/merge_rasterizer_cell_scale=0.01

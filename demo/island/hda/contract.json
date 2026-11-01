@@ -1,0 +1,559 @@
+{
+  "contract_version": 2,
+  "operator": "Sop/HEGo_IslandErosion",
+  "hda_file": "otls/HEGo_IslandErosion.hda",
+  "source_script": "scripts/houdini/build_island_hda.py",
+  "houdini_version": "22.0.429",
+  "erosion_node": "Sop/heightfield_erode::3.0 (OPlibTerrain.hda, built-in), frozen simulation",
+  "units": "metres; world Y is height relative to the StrataTerrain3D origin; sea level is Y=0",
+  "inputs": [
+    {
+      "index": 0,
+      "label": "Cumulative terrain (height + optional prior materials and simulation masks)",
+      "required": true,
+      "hego_strata_mode": "cumulative",
+      "volumes": {
+        "height": "required scalar RF volume, any dense orthogonal horizontal lattice (column +X/row +Z or column +Z/row +X). Value = height in metres.",
+        "height__ownership": "optional coverage companion; read-only, not used for erosion and never output",
+        "material_<registry name>": "Optional all registry channels or none. Finite nonnegative scalar weights; each may use its own valid dense orthogonal horizontal lattice. Sampled at mask centres by physical position. All-zero samples are unassigned.",
+        "material_<registry name>__ownership": "Optional finite companion sharing that material lattice. Samples >=0.5 are owned. Coverage-weighted bilinear samples with total coverage >=0.5 are assigned; outside the prior bounds is unowned. All channels must be covered."
+      },
+      "other_volumes": "Previous-stage simulation masks and footpath are accepted but deliberately not used: they are not new material evidence and the footpath is recomputed from this pass's final height; other volumes are discarded."
+    },
+    {
+      "index": 1,
+      "label": "Raw manual constraints and target height (optional)",
+      "required": false,
+      "hego_strata_mode": "raw",
+      "volumes": {
+        "<constraint_channel>": "scalar protection weight, clamped to 0..1 (default channel name 'constraint')",
+        "<constraint_channel>__ownership": "binary ownership; samples with ownership < 0.5 contribute no protection",
+        "<manual_height_channel>": "absolute terrain-local height in metres of a later Replace manual layer (default channel 'height'), sent raw, e.g. BuildingFlatten with terrain_channels 'constraint,height'. Its own lattice (any origin, spacing, orthogonal orientation; compact owned rectangle).",
+        "<manual_height_channel>__ownership": "REQUIRED binary ownership of the target height. Without it the target is ignored (node warning), so an unowned dense background can never pull terrain."
+      },
+      "semantics": "Constraint: w = clamp(value,0,1) * (ownership >= 0.5), bilinearly sampled at output sample centers, 0 outside the raw field bounds. heightfield_erode erodabilitymask is multiplied by (1-w); eroded height E = lerp(eroded, pre_erosion, w). If the constraint ownership volume is absent every constraint sample counts as owned.",
+      "manual_transition": {
+        "enabled_when": "manual_transition=1 and input 1 has <manual_height_channel> with __ownership and at least one output sample with coverage >= 0.5. Otherwise the HDA output is bit-identical to the network without the transition (status attribute says why).",
+        "sampling": "At each output sample center: bilinear weights of the four surrounding raw samples times binary ownership (>= 0.5); coverage c = sum(w*o), target t = sum(w*o*value)/c (the HEGo runtime compositor's rule). Raw samples outside the field are unowned; centers within 1e-4 of a raw sample snap to it. Owned 0 m counts; unowned values never count.",
+        "anchors": "Output samples with c >= 0.5 are anchors. Interior anchors (all eight neighbours are anchors) take t exactly. Manual features that cover no output sample center (narrower than output_spacing) do not anchor and are ignored.",
+        "edge_fit": "Sub-grid edge fit (when manual_transition_width > the output cell diagonal): nodes of output cells that straddle the anchor boundary (anchors with a non-anchor 8-neighbour, non-anchors with an anchor 8-neighbour) take the manual surface's local plane at the nearest owned raw edge sample (owned with an unowned 4-neighbour; exact distance ties resolve by world x then z): value there plus a least-squares gradient over owned raw samples within max(0.75 m, 2 raw steps). Under an owned Replace layer these nodes only affect interpolation across its ownership edge, so the interpolated surface just outside the edge continues the manual surface's local slope.",
+        "band": "d = exact Euclidean distance (m) on the output lattice to the nearest anchor (measured from the output anchors, not from the exact raw boundary). Non-fixed samples with d < manual_transition_width get E + w(d) * X, where X is the harmonic extension (red-black SOR until every sample is within 0.1 mm of its neighbour mean, anchors and fitted nodes Dirichlet, band edge Neumann, initialised with the nearest anchor) of the discrepancy (fixed value - E), and w = 1 - smoothstep(diag, W, d) with diag = output cell diagonal (w = 1 - smoothstep(0, W, d) without edge fit). The weight w has zero derivative at both ends, but the 2 m output and every later resample (1 m runtime compile, 0.25 m overlay) are sampled surfaces, so exact C1 continuity is not guaranteed; seams are measured instead (docs/island-hda.md).",
+        "support": "Only anchors and samples with d < manual_transition_width change. Every sample with d >= manual_transition_width is bit-identical to E, as are all samples when the transition is inactive.",
+        "guards": "Node error if the target has hegostrata_snapshot_mode other than 'raw', hegostrata_composition other than 'replace' (Add values are offsets, not absolute heights), an ownership role other than 'ownership', or ownership on a different lattice.",
+        "order": "Applied after erosion and constraint blending, before mask computation: erosion_delta and the biome masks describe the final height.",
+        "diagnostics": "Detail attributes hego_island_transition_{status,anchor_samples,band_samples,fitted_samples,max_abs_discrepancy_m,max_abs_correction_m,relax_iterations,relax_residual_m,width_m,seconds}; never routed. status is one of disabled, no_raw_input, no_target_channel, ignored_no_ownership (also a warning on the internal manual_transition node), no_owned_samples, no_overlap, no_anchor_samples, applied."
+      }
+    }
+  ],
+  "parameters": {
+    "target_layer_path": {
+      "type": "string",
+      "default": "",
+      "required": true,
+      "notes": "Scene path of the procedural StrataLayer, written verbatim to hegostrata_layer_path. Empty -> node error (no output)."
+    },
+    "detail_stage": {
+      "type": "toggle",
+      "default": 0,
+      "notes": "0 = coarse preset (strong hydraulic carving, moderate thermal). 1 = detail preset (gentler hydraulic, finer thermal talus, preserves coarse landforms). Does not change spacing; the caller sets output_spacing/feature_size/freeze_frame."
+    },
+    "seed": {
+      "type": "int",
+      "default": 7,
+      "notes": "heightfield_erode Random Seed; also the footpath waypoint seed (outputs.footpath)."
+    },
+    "freeze_frame": {
+      "type": "int",
+      "default": 24,
+      "range": [
+        1,
+        400
+      ],
+      "notes": "Number of simulated frames; heightfield_erode Do Freeze is always on, so the frozen frame-N state is output at every timeline frame. Clamped to 1..400."
+    },
+    "feature_size": {
+      "type": "float",
+      "default": 24.0,
+      "notes": "heightfield_erode Erosion Feature Size (m). Effective = max(feature_size, 3 * output_spacing)."
+    },
+    "output_spacing": {
+      "type": "float",
+      "default": 8.0,
+      "notes": "Height output sample spacing (m). The HDA resamples the input height to this lattice before erosion (Catmull-Rom on input sample centers, exact at coincident centers)."
+    },
+    "mask_spacing": {
+      "type": "float",
+      "default": 4.0,
+      "notes": "Spacing (m) of every non-height output channel. Effective = max(mask_spacing, output_spacing), snapped to an integer multiple of output_spacing. Masks are tent-filtered from the height-resolution fields."
+    },
+    "erosion_strength": {
+      "type": "float",
+      "default": 1.0,
+      "range": [
+        0.0,
+        3.0
+      ],
+      "notes": "Multiplies the stage preset's hydraulic flow force, hydraulic erosion rate and thermal weathering. 0 runs the frozen simulation with no forces and returns the resampled input height unchanged (sediment/debris 0)."
+    },
+    "constraint_channel": {
+      "type": "string",
+      "default": "constraint",
+      "notes": "Name of the raw protection channel on input 1."
+    },
+    "sea_level": {
+      "type": "float",
+      "default": 0.0,
+      "notes": "Shoreline for the erode input-1 masks (sea floor erodability 0.03, deposition 0.02, sediment removal on) and for sand classification; never shifts heights."
+    },
+    "manual_transition": {
+      "type": "toggle",
+      "default": 1,
+      "notes": "Enable the manual-height transition. Has no effect unless input 1 carries an owned <manual_height_channel>. Caller presets: coarse 0, detail 1."
+    },
+    "manual_transition_width": {
+      "type": "float",
+      "default": 32.0,
+      "range": [
+        0.0,
+        256.0
+      ],
+      "notes": "Width (m) of the procedural band around the anchored manual samples, measured on the output lattice from the anchors. 0 = anchors only (no edge fit). Samples at or beyond this distance are unchanged. Upper bound soft. Detail preset 32."
+    },
+    "manual_height_channel": {
+      "type": "string",
+      "default": "height",
+      "notes": "Raw absolute target height channel on input 1; requires <name>__ownership."
+    },
+    "hydro_scale": {
+      "type": "float",
+      "default": 1.0,
+      "range": [
+        0.0,
+        2.0
+      ],
+      "folder": "Advanced",
+      "notes": "Ablation/art control: multiplies hydraulic flow force and erosion rate only."
+    },
+    "thermal_scale": {
+      "type": "float",
+      "default": 1.0,
+      "range": [
+        0.0,
+        2.0
+      ],
+      "folder": "Advanced",
+      "notes": "Ablation/art control: multiplies thermal weathering only."
+    },
+    "slump_repose_angle": {
+      "type": "float",
+      "default": 32.0,
+      "range": [
+        10.0,
+        60.0
+      ],
+      "notes": "Steepest angle (degrees) at which loose thermal debris rests; steeper debris slides downhill."
+    },
+    "slump_iterations": {
+      "type": "int",
+      "default": 30,
+      "range": [
+        0,
+        200
+      ],
+      "notes": "HeightField Slump spread iterations; more iterations let debris travel farther."
+    },
+    "slump_spread_rate": {
+      "type": "float",
+      "default": 0.5,
+      "range": [
+        0.0,
+        1.0
+      ],
+      "notes": "HeightField Slump spread rate per iteration."
+    },
+    "material_evidence_depth": {
+      "type": "float",
+      "default": 0.5,
+      "range": [
+        0.01,
+        20.0
+      ],
+      "notes": "Depth (m) of simulated height change, sediment or debris that fully opens the depth-evidence term. That term is exactly zero below10% of this depth; concentrated flow can still open the gate when enabled. Manual protection closes the gate."
+    },
+    "material_flow_evidence": {
+      "type": "float",
+      "default": 1.0,
+      "range": [
+        0.0,
+        1.0
+      ],
+      "notes": "Weight of concentrated flow (drainage lines) as evidence; 0 counts only height change, sediment and debris."
+    },
+    "slump_enable": {
+      "type": "toggle",
+      "default": 1,
+      "notes": "Native HeightField Slump redistributes this pass's loose thermal debris; off reproduces original erode behavior."
+    },
+    "beach_height": {
+      "type": "float",
+      "default": 6.0,
+      "range": [
+        0.5,
+        50.0
+      ],
+      "notes": "Top (m above sea level) of beach sand; coastal materials fade out by twice this height."
+    },
+    "shore_width": {
+      "type": "float",
+      "default": 60.0,
+      "range": [
+        4.0,
+        1000.0
+      ],
+      "notes": "Horizontal distance (m) from the coastline over which beach and shore rock fade out (sea cliffs reach 2.5x)."
+    },
+    "cliff_slope": {
+      "type": "float",
+      "default": 40.0,
+      "range": [
+        15.0,
+        80.0
+      ],
+      "notes": "Slope (degrees) where bare rock is half exposed; the transition spans -8..+4 degrees."
+    },
+    "tree_line": {
+      "type": "float",
+      "default": 240.0,
+      "range": [
+        0.0,
+        5000.0
+      ],
+      "notes": "Height (m above sea level) of the upper forest limit; alpine heath above it."
+    },
+    "snow_line": {
+      "type": "float",
+      "default": 330.0,
+      "range": [
+        0.0,
+        9000.0
+      ],
+      "notes": "Height (m above sea level) where snow starts on unshaded slopes; shaded slopes hold snow up to 30 m lower."
+    },
+    "sun_azimuth": {
+      "type": "float",
+      "default": 128.0,
+      "range": [
+        -360.0,
+        360.0
+      ],
+      "notes": "Horizontal direction TOWARD the sun in degrees from +X toward +Z (128 = the island showcase Sun). Faces turned away from it are shaded: moister, mossier and colder."
+    },
+    "variation_scale": {
+      "type": "float",
+      "default": 420.0,
+      "range": [
+        32.0,
+        16384.0
+      ],
+      "notes": "Base wavelength (m) of the smooth world-space geology/vegetation fields that choose between variants."
+    },
+    "sharpness": {
+      "type": "float",
+      "default": 2.5,
+      "range": [
+        1.0,
+        8.0
+      ],
+      "notes": "Exponent applied to variant affinities inside a habitat; higher gives crisper, larger variant regions."
+    },
+    "material_seed": {
+      "type": "int",
+      "default": 32,
+      "range": [
+        0,
+        100000
+      ],
+      "notes": "World-space habitat variation seed."
+    },
+    "footpaths": {
+      "type": "toggle",
+      "default": 1,
+      "folder": "Footpaths",
+      "notes": "Compute the footpath channel. 0: the footpath channel is still output (same lattice and routing), every sample 0."
+    },
+    "footpath_count": {
+      "type": "int",
+      "default": 8,
+      "range": [
+        2,
+        64
+      ],
+      "folder": "Footpaths",
+      "notes": "Number of waypoints joined into the network: the highest walkable sample, interior high points and about half coast landings (outputs.footpath.waypoints)."
+    },
+    "footpath_width": {
+      "type": "float",
+      "default": 3.0,
+      "range": [
+        0.0,
+        32.0
+      ],
+      "folder": "Footpaths",
+      "notes": "Trail width (m) at full mask value 1 around the centreline samples; the value then falls linearly to 0 over one mask sample spacing. Centreline samples are always 1."
+    },
+    "footpath_max_slope": {
+      "type": "float",
+      "default": 30.0,
+      "range": [
+        5.0,
+        60.0
+      ],
+      "folder": "Footpaths",
+      "notes": "Steepest walkable slope (degrees), measured as in outputs.footpath.walkable. Steeper samples are impassable and always 0."
+    }
+  },
+  "lattice": {
+    "rule": "first_center = the minimum world-X and minimum world-Z input height sample centers; N_axis = floor(input_span_axis / spacing + 1e-3) + 1; centers = first_center + i * spacing. The input's far edge is kept exactly when its span is divisible by spacing (true for 4096 m with 8, 4 and 2 m).",
+    "orientation": "Houdini built-in heightfield output: volume index 0 (image column) steps +Z, volume index 1 (image row) steps +X. HEGo reports sample_origin and both step vectors explicitly; consumers must use them, not assume an orientation.",
+    "sample_alignment": "Output lattices for 8, 4 and 2 m all share the 4096 m extent corners; every 8 m sample coincides with a 4 m and 2 m sample. 1 m runtime compilation is a consumer-side resample; this HDA does not author 1 m detail."
+  },
+  "outputs": {
+    "volume_primitive_attributes": {
+      "name": "channel name",
+      "hegostrata_layer_path": "target_layer_path parameter",
+      "hegostrata_role": "value",
+      "hegostrata_channel": "same as name",
+      "hegostrata_composition": "replace"
+    },
+    "channels": [
+      {
+        "name": "height",
+        "grid": "output_spacing",
+        "range": "signed metres (ocean bed < 0 < land)",
+        "notes": "Frozen eroded height including deposited sediment and debris, constraint-blended, then manual-transition blended."
+      },
+      {
+        "name": "erosion_delta",
+        "grid": "mask",
+        "range": "signed metres",
+        "notes": "Final height minus the resampled pre-erosion height of THIS pass (<0 eroded, >0 deposited)."
+      },
+      {
+        "name": "sediment",
+        "grid": "mask",
+        "range": ">= 0 metres",
+        "notes": "heightfield_erode hydraulic sediment layer of this pass."
+      },
+      {
+        "name": "debris",
+        "grid": "mask",
+        "range": ">= 0 metres",
+        "notes": "This pass's native thermal debris after optional native HeightField Slump redistribution and protection. Debris is added to bedrock exactly once."
+      },
+      {
+        "name": "flow",
+        "grid": "mask",
+        "range": "0..1",
+        "notes": "clamp(log(1 + flow) / log(1 + 100), 0, 1) of the heightfield_erode flow layer; drainage channels approach 1."
+      },
+      {
+        "name": "grass",
+        "grid": "mask",
+        "range": "0..1",
+        "notes": "Biome weight. grass+rock+sand+scree = 1 at every sample."
+      },
+      {
+        "name": "rock",
+        "grid": "mask",
+        "range": "0..1",
+        "notes": "Steep slopes / exposed cliffs."
+      },
+      {
+        "name": "sand",
+        "grid": "mask",
+        "range": "0..1",
+        "notes": "Beaches, shallow sea floor and flat sediment fans near sea level."
+      },
+      {
+        "name": "scree",
+        "grid": "mask",
+        "range": "0..1",
+        "notes": "Thermal debris and talus on mid slopes."
+      },
+      {
+        "name": "footpath",
+        "grid": "mask",
+        "range": "0..1, finite; exactly 0 on water and on every non-walkable sample",
+        "notes": "Walkable trail network for navigation baking (NPCs walk only on footpaths): least-cost paths over the final height joining seeded waypoints into one connected network. Centreline samples are 1. Recomputed by every stage on its own mask lattice. See outputs.footpath."
+      }
+    ],
+    "footpath": {
+      "node": "footpath_network, a Python SOP (numpy + heapq): early-exit multi-source Dijkstra, waypoint selection and rasterisation in one pass on the mask lattice. Houdini 22 has no heightfield path SOP; the native Find Shortest Path SOP would need a polygon graph of the whole lattice and a loop per waypoint.",
+      "grid": "mask lattice (stride k of the height lattice, coincident centres); coarse preset 513x513 @ 8 m, detail preset 1025x1025 @ 4 m",
+      "walkable": "Mask sample s is walkable when every final-height sample within its tent footprint (|offset| <= k-1 height samples) is above sea_level + 1 m and their maximum slope is below footpath_max_slope. Slope = atan(|grad h|) in degrees, central differences on the height lattice (one-sided at the border), as in the masks stage.",
+      "graph": "8-neighbour mask lattice restricted to walkable samples; a diagonal move needs at least one walkable corner sample, so reachability equals 4-connectivity. Edge cost = step length (m) * mean of the two samples' cost, cost = 1 + 4 * (slope / footpath_max_slope)^2. Water and steep ground are impassable.",
+      "waypoints": "Only the largest 4-connected walkable component is used. Waypoint 1 is its highest sample. Then up to footpath_count - 1 - floor(footpath_count / 2) interior high points (local height maxima within 64 m, more than 16 m from water) and floor(footpath_count / 2) coast landings (within 16 m of water), each drawn with probability proportional to the squared distance to the waypoints so far (numpy default_rng(seed)), never closer than 48 m; short candidate sets are topped up from the whole component. Fewer waypoints result only when the component is too small for the separation.",
+      "network": "Prim-style: repeatedly a multi-source Dijkstra from every sample of the network so far reaches the cheapest unconnected waypoint, and that path joins the network. Every waypoint is therefore connected to every other. Diagonal steps also mark their cheaper walkable corner, so the centreline is 4-connected.",
+      "rasterisation": "value = clamp(1 - (d - footpath_width / 2) / spacing, 0, 1) with d = distance (m) to the nearest centreline sample and spacing = the larger mask step; 0 on every non-walkable sample and on samples not 4-connected to the centreline through nonzero samples. The nonzero mask is therefore one 4-connected (and 8-connected) component.",
+      "stages": "Coarse and detail stages both recompute the network on their own mask lattice from their own final height with the same algorithm (no upsampling); the footpath of a previous stage on input 0 is ignored. The detail stage uses its own seed parameter.",
+      "determinism": "Pure function of the final height, sea_level, seed and the footpath parameters: identical inputs give byte-identical output; a different seed generally moves the waypoints.",
+      "diagnostics": "Detail attributes hego_island_footpath_{status,seconds,waypoints,connected_waypoints,centreline_samples,nonzero_samples,walkable_fraction,component_fraction}; never routed. status is disabled, no_walkable_land, connected or partial."
+    },
+    "removed": "Every other volume and input ownership companion is deleted. Internal material_refine_gate is diagnostic only. No vector volumes.",
+    "detail_attributes": "Diagnostic detail attributes prefixed hego_island_ (stage, effective feature size, freeze frame, grids). They are not routed to terrain layers. Material statistics use hego_island_material_* including inherited_exact_fraction, inherited_unrefined_fraction, prior_outside_fraction, inherit_limited_samples, inherit_redistributed_mass_max and inherit_tie_fallback_voxels. Footpath statistics use hego_island_footpath_* (outputs.footpath.diagnostics).",
+    "materials": {
+      "channels": [
+        "material_coastal_sand",
+        "material_island_grass",
+        "material_scree_gravel",
+        "material_dark_cliff"
+      ],
+      "registry_sha256": "1d6de50122508d2041c69668e5520e95e84f8ed894c4e7c82212477264eb7e87",
+      "grid": "mask lattice, after the nine original channels and footpath",
+      "range": "finite >=0, normalized sum1, at most4 positive weights",
+      "algorithm": "Base habitat on pre-simulation height; evolved habitat on protected post-simulation height with only this pass sediment/debris/flow and simulation-only delta (before manual transition). Prior + evidence gate * (evolved-base), nonnegative normalized shared soft top4. Protection closes gate; uncovered samples initialize from base.",
+      "inheritance": "Valid normalized <=4 prior mixtures are byte-exact at gate0. Resampled >4 mixtures use shared soft limiter; tie fallback and redistributed mass diagnostics are explicit. Prior simulation fields are never reapplied.",
+      "gate": "Smooth depth evidence from abs(delta), sediment and debris; plus concentrated log-normalized flow. Below10% of material_evidence_depth yields exact0. Protection scales by1-mask. No public gate/slump channel."
+    }
+  },
+  "caller_presets": {
+    "coarse": {
+      "detail_stage": 0,
+      "output_spacing": 8.0,
+      "mask_spacing": 8.0,
+      "feature_size": 24.0,
+      "freeze_frame": 24,
+      "input": "cumulative base, 513x513 at 8 m",
+      "expected_height_grid": "513x513, origin (-2048, 0, -2048), 8 m",
+      "expected_mask_grid": "513x513, 8 m",
+      "manual_transition": 0
+    },
+    "detail": {
+      "detail_stage": 1,
+      "output_spacing": 2.0,
+      "mask_spacing": 4.0,
+      "feature_size": 6.0,
+      "freeze_frame": 16,
+      "input": "cumulative stack through the manual fine layer (any lattice, e.g. 513x513 at 8 m)",
+      "expected_height_grid": "2049x2049, origin (-2048, 0, -2048), 2 m",
+      "expected_mask_grid": "1025x1025, 4 m",
+      "manual_transition": 1,
+      "manual_transition_width": 32.0,
+      "manual_height_channel": "height",
+      "raw_input": "BuildingFlatten raw, terrain_channels 'constraint,height', terrain_compact_empty true"
+    }
+  },
+  "base_height_cache": {
+    "data": "demo/island/cache/base_height.rf32",
+    "metadata": "demo/island/cache/base_height.json",
+    "format": "little-endian float32, row-major; see metadata for the exact lattice. Rough, uneroded editable manual base."
+  },
+  "opencl": "heightfield_erode is OpenCL. With no GPU OpenCL platform Houdini falls back to its bundled Intel CPU driver (HOUDINI_USE_HFS_OCL); the build script logs the device. Erosion is never skipped: if the erode node errors the HDA errors.",
+  "erosion_setup": {
+    "node": "heightfield_erode::3.0, dofreeze=1, startframe=1, iterations per frame=1, cacheenabled=0, addsediment=1. adddebris=0 when slump_enable=1: native HeightField Slump redistributes debris and adds it to bedrock exactly once. adddebris=1 when slump_enable=0: original erode branch.",
+    "presets": {
+      "coarse (detail_stage=0)": {
+        "flow": "0.7*s*hydro_scale",
+        "erosion": "0.2*s*hydro_scale",
+        "deposition": 0.5,
+        "removal": 0.5,
+        "coverage": 0.2,
+        "weathering": "0.3*s*thermal_scale",
+        "cutangle": 35,
+        "reposeangle": 22
+      },
+      "detail (detail_stage=1)": {
+        "flow": "0.5*s*hydro_scale",
+        "erosion": "0.12*s*hydro_scale",
+        "deposition": 0.6,
+        "removal": 0.5,
+        "coverage": 0.25,
+        "weathering": "0.45*s*thermal_scale",
+        "cutangle": 38,
+        "reposeangle": 28
+      },
+      "s": "erosion_strength"
+    },
+    "input1_masks": {
+      "mask (erodabilitymask)": "(1 - w) * lerp(0.03, 1, smooth(sea-2, sea+10, h))",
+      "depositmask": "lerp(0.02, 1, smooth(sea-1.5, sea+3, h))",
+      "removalmask": "lerp(1, 0.02, smooth(sea-1.5, sea+3, h))"
+    }
+  },
+  "verified": {
+    "date": "2026-10-29",
+    "how": "scripts/houdini/build_island_hda.py --cook smoke|full in fresh hython 22.0.429 sessions that install only the saved .hda; CPU OpenCL fallback (Intel driver on Ryzen 7 5800X3D)",
+    "coarse": {
+      "height_grid": {
+        "resolution": [
+          513,
+          513
+        ],
+        "sample_origin": [
+          -2048.0,
+          0.0,
+          -2048.0
+        ],
+        "step_index0": [
+          0.0,
+          0.0,
+          8.0
+        ],
+        "step_index1": [
+          8.0,
+          0.0,
+          0.0
+        ]
+      },
+      "mask_grid": {
+        "resolution": [
+          513,
+          513
+        ],
+        "spacing": 8.0
+      },
+      "cook_seconds": 15.4,
+      "peak_rss_mib": 1196
+    },
+    "detail": {
+      "height_grid": {
+        "resolution": [
+          2049,
+          2049
+        ],
+        "sample_origin": [
+          -2048.0,
+          0.0,
+          -2048.0
+        ],
+        "step_index0": [
+          0.0,
+          0.0,
+          2.0
+        ],
+        "step_index1": [
+          2.0,
+          0.0,
+          0.0
+        ]
+      },
+      "mask_grid": {
+        "resolution": [
+          1025,
+          1025
+        ],
+        "sample_origin": [
+          -2048.0,
+          0.0,
+          -2048.0
+        ],
+        "spacing": 4.0
+      },
+      "cook_seconds": 172.3,
+      "peak_rss_mib": 2801
+    },
+    "note": "index0/index1 are Houdini volume indices; HEGo reports the same lattice as sample_origin + sample_step_x/sample_step_y",
+    "stage_materials": "Saved-definition regressions on actual whole island at16m and512m building crop at2m/4m; dedicated artificial coverage/malformed-prior fixtures. See test_island_stage_materials.py and test_material_inheritance.py. Draft/test cooks only, no saved island adoption."
+  },
+  "graph_conventions": "Six top-down dependency stages with fitted automatic boxes, local relative OUT_/IN_ handoffs, default native names, green VEX and pink handoffs. Output SOP last."
+}

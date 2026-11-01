@@ -68,11 +68,19 @@ godot::Ref<HEGoTask> HEGoAssetNode::set_parm(godot::String parm_name, godot::Var
 		return make_failed("Cannot set parameter - HDA not instantiated or license issue", "Set parm");
 	}
 
-	HAPI_NodeId nid = node_id;
-
-	return submit("Set parm " + parm_name, nid, [nid, parm_name, value](HEGoSessionManager *mgr) -> godot::Variant {
-		godot::Variant val = value;
-		HEGo::Util::Parm::set_parm(mgr, nid, parm_name, &val);
+	const HAPI_NodeId nid = node_id;
+	HEGoSessionManager *manager = get_session_manager();
+	if (!manager || !manager->get_session()) return make_failed("No Houdini session is available.", "Set parm", nid);
+	const HAPI_Session expected = *manager->get_session();
+	const uint64_t generation = get_generation();
+	godot::Ref<HEGoAssetNode> self = this;
+	return submit_failable("Set parm " + parm_name, nid, [self, nid, parm_name, value, expected, generation](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
+		godot::String error;
+		if (!session || session->id != expected.id || session->type != expected.type || self->get_id() != nid || self->get_generation() != generation || !HEGo::Util::Parm::set_parm(mgr, nid, parm_name, value, error)) {
+			fail(task, error.is_empty() ? godot::String("Node or session changed before setting the parameter.") : error);
+			return godot::Variant();
+		}
 		return 0;
 	});
 }
@@ -84,17 +92,20 @@ godot::Ref<HEGoTask> HEGoAssetNode::set_parms_batch(godot::Dictionary parms)
 		return make_failed("Cannot set parameters - HDA not instantiated or license issue", "Set parms batch");
 	}
 
-	HAPI_NodeId nid = node_id;
-
-	return submit("Set parms batch", nid, [nid, parms](HEGoSessionManager *mgr) -> godot::Variant {
-		godot::Array keys = parms.keys();
-		for (int i = 0; i < keys.size(); i++)
-		{
-			godot::String name = keys[i];
-			godot::Variant val = parms[keys[i]];
-			HEGo::Util::Parm::set_parm_no_wait(mgr, nid, name, &val);
+	const HAPI_NodeId nid = node_id;
+	HEGoSessionManager *manager = get_session_manager();
+	if (!manager || !manager->get_session()) return make_failed("No Houdini session is available.", "Set parms batch", nid);
+	const HAPI_Session expected = *manager->get_session();
+	const uint64_t generation = get_generation();
+	godot::Ref<HEGoAssetNode> self = this;
+	const godot::Dictionary captured = parms.duplicate(true);
+	return submit_failable("Set parms batch", nid, [self, nid, captured, expected, generation](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
+		godot::String error;
+		if (!session || session->id != expected.id || session->type != expected.type || self->get_id() != nid || self->get_generation() != generation || !HEGo::Util::Parm::set_parms(mgr, nid, captured, error)) {
+			fail(task, error.is_empty() ? godot::String("Node or session changed before setting parameters.") : error);
+			return godot::Variant();
 		}
-		mgr->wait_for_ready();
 		return 0;
 	});
 }
@@ -106,10 +117,19 @@ godot::Ref<HEGoTask> HEGoAssetNode::set_preset(godot::PackedByteArray preset)
 		return make_failed("Cannot set preset - HDA not instantiated or license issue", "Set preset");
 	}
 
-	HAPI_NodeId nid = node_id;
-
-	return submit("Set preset", nid, [nid, preset](HEGoSessionManager *mgr) -> godot::Variant {
-		HEGo::Util::Parm::set_preset(mgr, nid, preset);
+	const HAPI_NodeId nid = node_id;
+	HEGoSessionManager *manager = get_session_manager();
+	if (!manager || !manager->get_session()) return make_failed("No Houdini session manager is available.", "Set preset", nid);
+	const HAPI_Session expected = *manager->get_session();
+	const uint64_t generation = get_generation();
+	godot::Ref<HEGoAssetNode> self = this;
+	return submit_failable("Set preset", nid, [self, nid, preset, expected, generation](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		godot::String error;
+		const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
+		if (!session || session->id != expected.id || session->type != expected.type || self->get_id() != nid || self->get_generation() != generation || !HEGo::Util::Parm::write_preset(mgr, nid, preset, error)) {
+			fail(task, error.is_empty() ? godot::String("Houdini session changed before setting the preset.") : error);
+			return godot::Variant();
+		}
 		return 0;
 	});
 }
@@ -141,10 +161,21 @@ godot::Ref<HEGoTask> HEGoAssetNode::get_preset()
 		return make_failed("Cannot get preset - HDA not instantiated or license issue", "Get preset");
 	}
 
-	HAPI_NodeId nid = node_id;
-
-	return submit("Get preset", nid, [nid](HEGoSessionManager *mgr) -> godot::Variant {
-		return HEGo::Util::Parm::get_preset(mgr, nid);
+	const HAPI_NodeId nid = node_id;
+	HEGoSessionManager *manager = get_session_manager();
+	if (!manager || !manager->get_session()) return make_failed("No Houdini session manager is available.", "Get preset", nid);
+	const HAPI_Session expected = *manager->get_session();
+	const uint64_t generation = get_generation();
+	godot::Ref<HEGoAssetNode> self = this;
+	return submit_failable("Get preset", nid, [self, nid, expected, generation](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		godot::PackedByteArray preset;
+		godot::String error;
+		const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
+		if (!session || session->id != expected.id || session->type != expected.type || self->get_id() != nid || self->get_generation() != generation || !HEGo::Util::Parm::read_preset(mgr, nid, preset, error)) {
+			fail(task, error.is_empty() ? godot::String("Houdini session changed before reading the preset.") : error);
+			return godot::Variant();
+		}
+		return preset;
 	});
 }
 
@@ -349,7 +380,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::get_surface_output(godot::PackedStringArray 
 				// Reads the primitive and vertex lists here, on the worker thread, so
 				// the queries the caller makes afterwards are pure in-memory work.
 				surfaces->setup(cache, nid, point_attribs);
-				surfaces->load_attributes(preload_attribs);
+				surfaces->load_attributes_now(preload_attribs);
 
 				return surfaces;
 			});
@@ -402,6 +433,32 @@ godot::Ref<HEGoTask> HEGoAssetNode::fetch_heightfield_layer_image(int part_id)
 	});
 }
 
+godot::Ref<HEGoTask> HEGoAssetNode::get_heightfield_fields(godot::PackedStringArray read_prim_attribs)
+{
+	if (get_id() < 0) {
+		return make_failed("Cannot fetch explicit fields: asset is not instantiated.", "Get heightfield fields");
+	}
+	const HAPI_NodeId nid = node_id;
+	HEGoSessionManager *manager = get_session_manager();
+	if (!manager || !manager->get_session()) return make_failed("No Houdini session manager is available.", "Get heightfield fields", nid);
+	const HAPI_Session expected = *manager->get_session();
+	return HEGo::Util::Task::submit_failable("Get heightfield fields", nid,
+			[nid, read_prim_attribs, expected](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+				const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
+				if (!session || session->id != expected.id || session->type != expected.type) {
+					HEGo::Util::Task::fail(task, "Houdini session changed before the field fetch ran.");
+					return godot::Variant();
+				}
+				godot::Array fields;
+				godot::String error;
+				if (!HEGo::Util::Geo::fetch_heightfield_fields(mgr, nid, read_prim_attribs, fields, error, true)) {
+					HEGo::Util::Task::fail(task, error);
+					return godot::Variant();
+				}
+				return fields;
+			});
+}
+
 godot::Ref<HEGoTask> HEGoAssetNode::fetch_curves(godot::PackedStringArray read_prim_attribs, godot::PackedStringArray read_point_attribs)
 {
 	if (get_id() < 0)
@@ -443,6 +500,7 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(
 			godot::D_METHOD("get_heightfield_layers", "read_prim_attribs"), &HEGoAssetNode::get_heightfield_layers, DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_heightfield_layer_image", "part_id"), &HEGoAssetNode::fetch_heightfield_layer_image);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_heightfield_fields", "read_prim_attribs"), &HEGoAssetNode::get_heightfield_fields, DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("fetch_curves", "read_prim_attribs", "read_point_attribs"), &HEGoAssetNode::fetch_curves,
 			DEFVAL(godot::PackedStringArray()), DEFVAL(godot::PackedStringArray()));
 	godot::ClassDB::bind_method(godot::D_METHOD("reset_node_id"), &HEGoAssetNode::reset_node_id);

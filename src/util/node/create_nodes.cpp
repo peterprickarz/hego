@@ -89,7 +89,7 @@ HAPI_NodeId create_and_cook_input_node(HEGoSessionManager *session_mgr, const go
 	RETURN_IF_VALID_NODE_ID(node_id, session_mgr->get_session());
 	HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Creating input node");
 
-	HOUDINI_CHECK_ERROR(HoudiniApi::CreateInputNode(session_mgr->get_session(), -1, &node_id, name.utf8()));
+	HOUDINI_CHECK_ERROR(HoudiniApi::CreateInputNode(session_mgr->get_session(), -1, &node_id, name.utf8().get_data()));
 	HOUDINI_CHECK_ERROR(HoudiniApi::CookNode(session_mgr->get_session(), node_id, session_mgr->get_cook_options()));
 	session_mgr->wait_for_ready();
 	return node_id;
@@ -99,7 +99,7 @@ HAPI_NodeId create_and_cook_input_curve_node(HEGoSessionManager *session_mgr, co
 {
 	RETURN_IF_VALID_NODE_ID(node_id, session_mgr->get_session());
 	HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Creating input curve node");
-	HOUDINI_CHECK_ERROR(HoudiniApi::CreateInputCurveNode(session_mgr->get_session(), -1, &node_id, name.utf8()));
+	HOUDINI_CHECK_ERROR(HoudiniApi::CreateInputCurveNode(session_mgr->get_session(), -1, &node_id, name.utf8().get_data()));
 	session_mgr->wait_for_ready();
 	return node_id;
 }

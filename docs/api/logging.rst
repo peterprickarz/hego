@@ -41,7 +41,8 @@ Categories
 
 Every entry names the subsystem it came from, which the panel can filter by:
 ``session``, ``node``, ``cook``, ``input``, ``output``, ``attrib``, ``parm``,
-``terrain3d``, ``platform``. Your own scripts may use any string.
+``platform``, and ``terrain3d`` from the HEGo Terrain3D bridge addon. Your own scripts may
+use any string.
 
 Logging from GDScript
 ---------------------

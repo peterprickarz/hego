@@ -4,6 +4,7 @@
 #include "hego_task.h"
 #include "util/geo/geo_cache.h"
 
+#include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -51,7 +52,7 @@ public:
 
 	HEGoPointOutput() = default;
 
-	/// Built by HEGoAssetNode::get_point_output(); not meant to be constructed by hand.
+	/// Built by HEGoAssetNode::get_point_output() on the worker; reads P and attribute names.
 	void setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id);
 
 	/// Whether this output has geometry with loose points to query.
@@ -191,6 +192,9 @@ public:
 
 	/// Reads primitive attributes so filtering, splitting and get_surface() can use them.
 	godot::Ref<HEGoTask> load_attributes(const godot::PackedStringArray &names);
+
+	/// Synchronous worker-only preload, for use inside an existing task.
+	void load_attributes_now(const godot::PackedStringArray &names);
 
 	/// The values of a loaded primitive attribute, one per primitive.
 	godot::Array get_attribute(const godot::String &name) const;

@@ -15,9 +15,13 @@ dest_files=["res://.godot/imported/test_grass.glb-77265019a9154f9be98277bf61f456
 
 nodes/root_type=""
 nodes/root_name=""
+nodes/root_script=null
+mesh_library/use_node_names_as_mesh_names=false
+array_mesh/deduplicate_surfaces=true
 nodes/apply_root_scale=true
 nodes/root_scale=1.0
 nodes/import_as_skeleton_bones=false
+nodes/use_name_suffixes=true
 nodes/use_node_type_suffixes=true
 meshes/ensure_tangents=true
 meshes/generate_lods=true
@@ -32,6 +36,9 @@ animation/trimming=false
 animation/remove_immutable_tracks=true
 animation/import_rest_as_RESET=false
 import_script/path=""
+materials/extract=0
+materials/extract_format=0
+materials/extract_path=""
 _subresources={
 "meshes": {
 "test_grass_subnet1": {
@@ -41,10 +48,12 @@ _subresources={
 "lods/normal_merge_angle": 60.0,
 "lods/normal_split_angle": 25.0,
 "save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://models/test_grass_subnet1.res",
 "save_to_file/make_streamable": "",
-"save_to_file/path": "res://models/test_grass_subnet1.res"
+"save_to_file/path": "uid://ba7qojj01ou8"
 }
 }
 }
 gltf/naming_version=1
 gltf/embedded_image_handling=1
+gltf/texture_map_mode=0

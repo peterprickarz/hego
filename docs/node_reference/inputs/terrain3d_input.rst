@@ -4,6 +4,9 @@ Terrain3D Input
 Terrain3D nodes are sent to Houdini as heightfield layers. Each layer represents a different
 aspect of the terrain (height, hole mask, region map, and textures).
 
+This input is provided by the HEGo Terrain3D bridge addon (``addons/hego_terrain3d``), not
+by HEGo itself: install it next to HEGo and the Terrain3D addon (``addons/terrain_3d``).
+
 Layer Conversion
 ----------------
 

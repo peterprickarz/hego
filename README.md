@@ -30,6 +30,39 @@ git submodule update --init --recursive
 
 > **Note**: The `release` branch is automatically updated with each commit to `main` and contains only the addon files, making it perfect for submodule use.
 
+### Strata, Terrain3D and the HEGo bridges
+
+HEGo ships with three more addons that are developed in this repository but installed
+separately, each with a one-way dependency:
+
+| Addon | Folder | Depends on | What it does |
+| --- | --- | --- | --- |
+| **HEGo** | `addons/hego` | – | Houdini Engine integration (this addon) |
+| **Strata** | `addons/strata` | – | Layered terrain: paint layers in the editor or cook them in Houdini, then bake for collision and navigation. Works without Houdini. |
+| **HEGo Strata** | `addons/hego_strata` | HEGo + Strata | Lets a `HEGoNode3D` read Strata layers and cook its result into one |
+| **HEGo Terrain3D** | `addons/hego_terrain3d` | HEGo + [Terrain3D](https://github.com/TokisanGames/Terrain3D) | Sends Terrain3D nodes to HDAs as heightfield inputs, and turns heightfields and points carrying `hegot3d_*` attributes into Terrain3D terrains and instances |
+
+Terrain3D is TokisanGames' addon, not part of this repository: install it yourself at
+`addons/terrain_3d` (the demo vendors and is tested with 1.0.1). Neither HEGo nor
+Terrain3D depends on HEGo Terrain3D, and it contains no native code.
+
+Strata documentation:
+
+- [Strata terrain](docs/strata/index.md): what it is and how it works
+- [Getting started](docs/strata/getting_started.md): install, paint, materials, bake, collision and navigation
+- [Strata and Houdini](docs/strata/houdini.md): cook layers with an HDA through a `HEGoNode3D`
+- [Example: Bracken Isle](docs/strata/example_island.md): the demo island
+- [Reference](docs/strata/reference.md): channels, attributes, files and bake options
+
+The `next` channel publishes the addons as `release-next` (HEGo), `strata-release-next`,
+`hego-strata-release-next`, `hego-terrain3d-release-next` and `release-next-bundle`
+(all four of ours).
+
+> **Note**: The demo island's cooked terrain data and textures are stored with
+> [Git LFS](https://git-lfs.com). Run `git lfs install` once before cloning (or
+> `git lfs pull` afterwards), otherwise `demo/scenes/terrain_island.tscn` finds pointer
+> files instead of its layers.
+
 ## Features
 
 - **Scriptable API**: Built with GDScript integration in mind for maximum flexibility
@@ -38,33 +71,54 @@ git submodule update --init --recursive
 - **Bidirectional Data Flow**: Convert between Godot and Houdini geometry formats
 - **Parameter Management**: Automatic type conversion between Godot Variant and HAPI types
 - **Mesh Generation**: Generate Godot meshes, instances, and scene nodes from Houdini
-- **[Terrain3D](https://tokisan.com/terrain3d/) Bridge**: Generate Terrain3D terrains, use Terrain3D instancing, Terrain3D heightfield inputs
+- **[Terrain3D](https://tokisan.com/terrain3d/) Bridge**: Generate Terrain3D terrains, use Terrain3D instancing, Terrain3D heightfield inputs. This is the separate `hego_terrain3d` addon, installed next to HEGo and Terrain3D
 
 ## Requirements
 
 - **Houdini 22.0.429** - No license needed for building, active commercial(FX,Core or Houdini Engine) license required for runtime
-- **Godot 4.4+** - Stable or newer versions supported  
+- **Godot 4.7+** - tested on 4.7.2; stable or newer versions supported  
 
 ## Developer Setup
 > If you're interested in contributing read on, otherwise check out the Releases section for the latest version
 
+### Terrain island in the main demo
+
+Open `demo/project.godot`; its main scene, `res://scenes/terrain_island.tscn`, is the
+Strata demo island, which opens and plays without Houdini. See
+[Example: Bracken Isle](docs/strata/example_island.md), and
+[Testing and maintenance](docs/development/testing.md) for the test suites, HDA rebuilds and
+headless island commands. Artificial prototype scenes remain under
+`demo/scenes/terrain_prototype/`.
+
 ### Testing HEGo in another project
 
 `next` is the development source branch. The **Publish next addon** workflow
-publishes its committed `demo/addons/hego` contents to `release-next`, with
-README, license, and a `SOURCE_COMMIT` file identifying the source revision.
-Each publication is a child of the previous publication: old submodule pins stay
-reachable. The initial publication creates an independent root commit. Publication
-uses ordinary pushes, never force-pushes, and does not modify the source checkout.
-It packages checked-in binaries; it does **not** build them. Include matching
-binaries when publishing native-code changes.
+stages five matched refs: `release-next` (HEGo), `strata-release-next`
+(Strata, the standalone terrain), `hego-strata-release-next` (the bridge that cooks HDAs
+into terrain layers), `hego-terrain3d-release-next` (the Terrain3D bridge), and
+`release-next-bundle` (all four in a consumer layout).
+HEGo and Strata each stand alone; only the bridges' package manifests declare
+dependencies: HEGo Strata on the other two, HEGo Terrain3D on HEGo, each at the same
+source revision. HEGo Terrain3D also names Terrain3D as an external requirement.
+Every package records `SOURCE_COMMIT`; native build receipts must match the
+selected source revision before staging. Each publication is a child of its
+previous publication, uses an atomic non-force push, and does not
+modify the source checkout. See [the package layout and build guide](docs/development/packaging.md).
 
-After the first publication, a new consumer can install it with:
+The HEGo-only submodule package can be installed with:
 
 ```bash
 cd /path/to/godot-project
 git submodule add -b release-next https://github.com/peterprickarz/hego.git addons/hego
 ```
+
+That is all HEGo needs. To cook HDAs into Strata layers, also install
+`strata-release-next` at `addons/strata` and `hego-strata-release-next`
+at `addons/hego_strata`. For Terrain3D, install `hego-terrain3d-release-next` at
+`addons/hego_terrain3d` and Terrain3D itself at `addons/terrain_3d`. Or use
+`release-next-bundle` and place its four directories in the project's `addons/`
+directory (Terrain3D is not in it). Strata can also be installed alone, without
+HEGo or Houdini.
 
 For an existing, genuine submodule, change its tracking branch from the consumer's
 repository root, then deliberately update and commit the tested pin:
@@ -117,8 +171,14 @@ python3 scripts/tests/test_distribution.py
 ### Prerequisites
 
 - **Python 3.8+** with SCons: `python -m pip install scons`
-- **Visual Studio 2022** Community edition or higher
+- **C++17 compiler**: Xcode Command Line Tools on macOS, GCC on Linux, or Visual Studio 2022 on Windows
 - **Git** for cloning and submodules
+
+See [Building on macOS and Linux](BUILDING.md) for native builds, Apple Silicon/Intel
+binaries, and cross-compiling from Linux to macOS with OSXCross. Only HAPI headers
+are required to compile; Houdini itself is needed when running a session.
+Experimental Linux ARM64 builds and an isolated runtime test are documented in
+[Linux ARM64 testing](BUILDING.md#linux-arm64-testing).
 
 ### Quick Setup
 
@@ -140,10 +200,26 @@ python3 scripts/tests/test_distribution.py
 
 ### Building
 
-**Option 1: VS Code (Recommended)**
+**macOS / Linux**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install 'scons>=4.5,<5'
+scripts/build.sh              # native debug + release; discovers Houdini via HFS
+scripts/build.sh all          # redistributable Linux x86_64 (container) + Windows (MinGW)
+ARCH=arm64 scripts/build.sh linux-compat                      # Linux ARM64 (supported, not shipped; slow under qemu)
+OSXCROSS_ROOT=~/osxcross ARCH=universal scripts/build.sh macos  # universal macOS from Linux
+scripts/build-terrain.sh ...  # the same platforms for the Strata extension, no Houdini needed
+```
+
+For a build without a Houdini installation, first run
+`python scripts/fetch_hapi_headers.py` and set `HFS="$PWD/build/deps/houdini"`.
+See [BUILDING.md](BUILDING.md) for the complete commands and runtime setup.
+
+**Windows — Option 1: VS Code**
 - Use Ctrl+Shift+P → "Tasks: Run Task" → "build"
 
-**Option 2: Command Line**
+**Windows — Option 2: Command Line**
 - From VS2022 Developer Command Prompt: `scons`
 - Or any terminal: `scons` (if VS2022 is in PATH)
 
@@ -188,8 +264,10 @@ scripts/generate_docs.sh            # rewrites docs/classes from the class refer
 python -m sphinx -W -b html docs docs/_build/html
 ```
 
-`generate_gdscript_docs.sh` needs Godot (set `GODOT` to pick the binary) and writes
-`demo/addons/hego/doc_classes_gdscript/`, which is committed so the site builds without it.
+`generate_gdscript_docs.sh` needs Godot (set `GODOT` to pick the binary) and writes the
+`doc_classes_gdscript/` directory of HEGo and of both bridge addons (`hego_strata`,
+`hego_terrain3d`), each documenting its own classes; they are committed so the site builds
+without Godot.
 A class with no place in the tree fails `generate_docs.sh`; add it to a group in
 `scripts/class_tree.py`.
 

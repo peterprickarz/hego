@@ -19,6 +19,12 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
      - Shared plumbing for :ref:`HEGoNode3D<class_HEGoNode3D>` and its output handlers.
    * - :ref:`HEGoInputNodes<class_HEGoInputNodes>`
      - Turns the Godot nodes wired into a :ref:`HEGoNode3D<class_HEGoNode3D>` into HEGo input nodes.
+   * - :ref:`HEGoInputHandler<class_HEGoInputHandler>`
+     - Teaches HEGo to send another kind of Godot node to an HDA input.
+   * - :ref:`HEGoCookExtension<class_HEGoCookExtension>`
+     - A child of an :ref:`HEGoNode3D<class_HEGoNode3D>` that takes part in its cooks.
+   * - :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`
+     - Teaches HEGo to turn another kind of cook result into Godot nodes.
    * - :ref:`HEGoCookTimings<class_HEGoCookTimings>`
      - Collects the per-phase timings of a ``cook()`` call.
    * - :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`
@@ -37,6 +43,9 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
    class_hegooutputcontext
    class_hegonodeutil
    class_hegoinputnodes
+   class_hegoinputhandler
+   class_hegocookextension
+   class_hegooutputhandler
    class_hegocooktimings
    class_hegographinput3d
    class_hegographattributes

@@ -35,7 +35,8 @@ static func world_plane(axis: Axis, origin: Vector3, offset: float) -> Plane:
 			return Plane(Vector3.UP, origin + Vector3(0, offset, 0))
 
 
-## Nearest hit against physics, meshes, CSG, and Terrain3D under [param root].
+## Nearest hit against physics, meshes, CSG, and any terrain node that offers a ray query
+## under [param root].
 ## [param exclude] and its descendants are skipped. Returns a Vector3 or null.
 static func intersect_scene(root: Node, origin: Vector3, direction: Vector3, exclude: Node = null) -> Variant:
 	var best: Variant = null
@@ -83,6 +84,8 @@ static func _walk_geometry(node: Node, origin: Vector3, direction: Vector3, excl
 					best = hit
 					best_dist = dist
 
+	# An optional probe, not a dependency: a Terrain3D node, when that addon happens to be
+	# installed, is recognised by class name string and queried through Object.call().
 	if node.is_class("Terrain3D") and node.has_method("get_intersection"):
 		var terrain_hit: Variant = node.call("get_intersection", origin, direction, true)
 		if terrain_hit is Vector3 and not is_nan(terrain_hit.y) and terrain_hit.z < 3.4e38:

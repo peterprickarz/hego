@@ -8,7 +8,12 @@ copyright = "2026, HEGo Contributors"
 extensions = [
     "sphinx_rtd_theme",
     "sphinxcontrib.youtube",
+    "myst_parser",
 ]
+
+# The Strata and island documents are Markdown.
+source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
+myst_heading_anchors = 3
 
 templates_path = ["_templates"]
 exclude_patterns = [
@@ -16,6 +21,7 @@ exclude_patterns = [
     "Thumbs.db",
     ".DS_Store",
     ".tmp_rst/**",
+    ".tmp_gdscript_xml/**",
     "tools/**",
 ]
 

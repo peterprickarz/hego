@@ -1,0 +1,66 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoTerrain3DInput" inherits="HEGoInputHandler" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Sends an existing Terrain3D node to an HDA input as heightfield layers.
+	</brief_description>
+	<description>
+		Terrain3D stores terrain as independent square regions; Houdini wants one rectangular heightfield. The regions are stitched into a single image, and the control map is unpacked into one weight layer per texture used, plus masks marking which pixels belong to a region at all and which are holes.  HEGo finds this handler because it extends [HEGoInputHandler]; HEGo never names it.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="handles">
+			<return type="bool" />
+			<param index="0" name="node" type="Node" />
+			<description>
+				Whether [param node] is a Terrain3D, and the addon is there to read it.
+			</description>
+		</method>
+		<method name="sync">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="existing_node" type="Variant" />
+			<param index="2" name="node" type="Node" />
+			<param index="3" name="settings" type="Dictionary" />
+			<description>
+				Uploads [param node]'s regions into a heightfield input, reusing [param existing_node] when it already is one. A terrain without regions still yields an empty input, so the HDA input stays connected.
+			</description>
+		</method>
+		<method name="read_layers" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="terrain3d_node" type="Node" />
+			<param index="1" name="input_node_path" type="String" default="&quot;&quot;" />
+			<description>
+				Reads [param terrain3d_node] into a layer dictionary for [method HEGoHeightfieldInputNode.set_layers], or an empty dictionary on failure.  [param input_node_path] is stored on every layer so the HDA can tell which Godot node the heightfield came from.
+			</description>
+		</method>
+		<method name="get_vertex_spacing" qualifiers="static">
+			<return type="float" />
+			<param index="0" name="terrain3d_node" type="Node" />
+			<description>
+				World size of one terrain vertex. Convenience wrapper so callers only need this class.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;terrain3d&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="MAP_TYPE_HEIGHT" value="0">
+			Terrain3DData.get_maps() map types.
+		</constant>
+		<constant name="MAP_TYPE_CONTROL" value="1">
+		</constant>
+		<constant name="REGION_MAP_LAYER" value="&quot;hegot3d_region_map&quot;">
+			Layer names produced for the heightfield input.
+		</constant>
+		<constant name="HOLE_LAYER" value="&quot;hegot3d_hole&quot;">
+		</constant>
+		<constant name="NODE_PATH_ATTRIB" value="&quot;_hego_node_path&quot;">
+			Attribute carrying the Godot node path back to Houdini.
+		</constant>
+		<constant name="TEXTURE_NAME_ATTRIB" value="&quot;_hego_texture_name&quot;">
+			Attribute carrying a texture layer's Terrain3D texture name.
+		</constant>
+	</constants>
+</class>

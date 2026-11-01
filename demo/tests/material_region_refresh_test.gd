@@ -1,0 +1,198 @@
+extends SceneTree
+## Per-dab material work of the editor preview, on small artificial layers only (no saved
+## island, asset writes, HAPI or cook). A manual layer above the material producer that
+## also holds material samples must not recompose the material controls when a dab paints
+## another channel, and a material dab must patch only its rectangle, with exactly the IDs
+## and weights a complete composition gives.
+var checks := 0
+var failures := 0
+
+func _initialize() -> void: run.call_deferred()
+
+func check(value: bool, message: String) -> void:
+	checks += 1
+	if not value: failures += 1; push_error("MATERIAL_REGION: " + message)
+
+## A partial procedural field: covers only the lattice's lower-left part, so packed maps
+## have unassigned texels (the sparse case every editor map has).
+func field(channel: StringName, origin: Vector3, size: Vector2i, value: float) -> StrataFieldData:
+	var image := Image.create(size.x, size.y, false, Image.FORMAT_RF)
+	for y in range(size.y):
+		for x in range(size.x):
+			image.set_pixel(x, y, Color(value * (0.5 + 0.5 * sin(x * 0.7 + y * 0.3)), 0, 0))
+	return StrataFieldData.from_field({"name": channel, "image": image, "sample_origin": origin, "sample_step_x": Vector3(3, 0, 0), "sample_step_y": Vector3(0, 0, 3)})
+
+func same_maps(a: Dictionary, b: Dictionary) -> bool:
+	return a.get("ok", false) and b.get("ok", false) and a.ids.get_data() == b.ids.get_data() and a.weights.get_data() == b.weights.get_data()
+
+func run() -> void:
+	var channels := PackedStringArray(["material_a", "material_b", "material_c", "material_d"])
+	var terrain := StrataTerrain3D.new()
+	# Non-dyadic bounds: the 4 m lattice step is not exactly representable, so a window
+	# must reproduce the full lattice's sample positions bit for bit.
+	terrain.base_bounds = Rect2(-10.3, 5.7, 50.6, 50.6)
+	terrain.set_preview_enabled(false)
+	var base := StrataLayer.new(); base.name = "Base"; terrain.add_child(base)
+	base.data.set_sample(&"height", Vector2i.ZERO, 1.0)
+	var distribution := StrataLayer.new(); distribution.name = "Distribution"; distribution.procedural = true; terrain.add_child(distribution)
+	distribution.procedural_fields = {"material_a": field(&"material_a", Vector3(-10.3, 0, 5.7), Vector2i(10, 9), 0.7), "material_c": field(&"material_c", Vector3(-4.3, 0, 8.7), Vector2i(8, 10), 0.4)}
+	var hand := StrataLayer.new(); hand.name = "Hand"; hand.data.sample_spacing = 1.0; terrain.add_child(hand)
+	hand.set_composition(&"material_b", StrataLayer.Composition.ADD)
+	root.add_child(terrain)
+	await process_frame
+	terrain.editor_material_channels = channels
+	for index in range(4): terrain.editor_materials.append(StrataMaterial.new())
+
+	# Per-channel revisions: an edit to one channel leaves the others' revisions alone.
+	var data := StrataLayerData.new()
+	data.set_sample(&"height", Vector2i.ZERO, 1.0)
+	data.set_sample(&"material_b", Vector2i.ZERO, 0.5)
+	var material_revision: int = data.get_channel_revision(&"material_b")
+	var whole_revision := data.get_revision()
+	data.set_sample(&"height", Vector2i.ONE, 2.0)
+	check(data.get_channel_revision(&"material_b") == material_revision and data.get_revision() > whole_revision, "a height edit advances the layer revision but not a material channel's")
+	data.patch_dense(&"material_b", Vector2i(2, 2), Image.create(2, 2, false, Image.FORMAT_RF))
+	check(data.get_channel_revision(&"material_b") > material_revision, "a material edit advances its own channel revision")
+	material_revision = data.get_channel_revision(&"material_b")
+	data.clear_channel(&"height")
+	check(data.get_channel_revision(&"material_b") == material_revision and data.get_channel_revision(&"height") > material_revision, "clearing one channel changes only that channel")
+	var restored := StrataLayerData.new()
+	restored.restore(data.snapshot())
+	check(restored.get_channel_revision(&"material_b") == restored.get_revision() and restored.get_revision() > 0, "a whole-resource restore advances every channel")
+
+	# The editor's material cache key ignores dabs on channels it does not map.
+	hand.data.set_sample(&"material_b", Vector2i(3, 12), 0.3)
+	var signature := StrataMaterialControls.signature(terrain, channels, hand)
+	check(StrataBrush.apply_brush(hand, Vector2(4.0, 20.0), 3.0, 0.6, "raise", &"height") > 0, "height dab on the material-holding hand layer applies")
+	check(signature == StrataMaterialControls.signature(terrain, channels, hand), "a height dab on a layer holding material samples leaves the material signature unchanged")
+	hand.data.set_sample(&"hole", Vector2i(5, 15), 1.0)
+	check(signature == StrataMaterialControls.signature(terrain, channels, hand), "a mask edit leaves the material signature unchanged")
+	check(StrataBrush.apply_brush(hand, Vector2(4.0, 20.0), 3.0, 0.4, "raise", &"material_b") > 0, "material dab applies")
+	check(signature != StrataMaterialControls.signature(terrain, channels, hand), "a material dab changes the material signature")
+
+	# A window of the lattice composes and packs exactly like the same rectangle of the
+	# whole map, including unassigned texels and the lattice edges.
+	var full := StrataMaterialControls.compose(terrain, channels, hand)
+	check(full.ok and not full.get("empty", false) and full.ids.get_size() == Vector2i(14, 14), "complete composition covers the endpoint aligned 4 m lattice")
+	var unassigned := 0
+	for y in range(14):
+		for x in range(14):
+			if full.weights.get_pixel(x, y) == Color(0, 0, 0, 0): unassigned += 1
+	check(unassigned > 0 and unassigned < 196, "the fixture has both assigned and unassigned texels")
+	for window in [Rect2i(0, 0, 3, 4), Rect2i(3, 2, 5, 5), Rect2i(9, 10, 5, 4), Rect2i(11, 0, 9, 20), Rect2i(-2, -3, 6, 6)]:
+		var region := StrataMaterialControls.compose_region(terrain, channels, hand, window)
+		var clipped: Rect2i = window.intersection(Rect2i(0, 0, 14, 14))
+		check(region.get("ok", false) and region.window == clipped, "window %s composes, clipped to the lattice" % window)
+		if region.get("ok", false):
+			check(region.ids.get_data() == full.ids.get_region(clipped).get_data() and region.weights.get_data() == full.weights.get_region(clipped).get_data(), "window %s equals the same rectangle of the complete map" % window)
+	check(not StrataMaterialControls.compose_region(terrain, channels, base, Rect2i(0, 0, 4, 4)).get("ok", true), "a cutoff with no material channel has no lattice to patch")
+
+	# Native sparse pack and the GDScript compatibility pack give identical maps, and
+	# packing only the mapped channels equals the former 32-plane padding.
+	var planes: Array[Image] = []
+	for channel in channels:
+		var composed: Dictionary = StrataLayerData.compose_dense(StrataProcedural._capture_layers(terrain, StringName(channel), hand), StringName(channel), Vector3(-10.3, 0, 5.7), Vector3(50.6 / 13.0, 0, 0), Vector3(0, 0, 50.6 / 13.0), Vector2i(14, 14), terrain.base_bounds, false, 0.0)
+		planes.append(composed.image)
+	var native := StrataMaterialControls._pack_sparse(planes)
+	var compat := StrataMaterialControls._pack_sparse_compat(planes)
+	check(same_maps(native, compat) and native.get("empty") == compat.get("empty") and not native.has("coverage"), "native sparse pack equals the compatibility pack")
+	var padded := planes.duplicate()
+	while padded.size() < 32: padded.append(Image.create(14, 14, false, Image.FORMAT_RF))
+	check(same_maps(native, StrataMaterialControls._pack_sparse_compat(padded)), "packing the four mapped channels equals the 32-plane padded pack")
+	var two: Array[Image] = [planes[0], planes[2]]
+	var two_packed := StrataMaterialControls._pack_sparse(two)
+	var two_padded: Array[Image] = [planes[0], planes[2]]
+	while two_padded.size() < 32: two_padded.append(Image.create(14, 14, false, Image.FORMAT_RF))
+	var reference := StrataMaterialControls._pack_sparse_compat(two_padded)
+	var reference_ids: PackedByteArray = reference.ids.get_data()
+	for index in range(reference_ids.size()):
+		if reference_ids[index] >= 2: reference_ids[index] = 0
+	check(two_packed.ok and two_packed.ids.get_data() == reference_ids and two_packed.weights.get_data() == reference.weights.get_data(), "a two-material pool keeps valid IDs without padding")
+	var strict: Dictionary = StrataLayerData.pack_material_weights([Image.create(2, 2, false, Image.FORMAT_RF)])
+	check(not strict.ok, "the strict producer pack still rejects unassigned texels")
+
+	# The editor bridge on regions (no renderer): a height dab reuses the cached materials; a
+	# material dab patches its rectangles of the touched regions, matching a complete composition.
+	terrain.preview_through_layer = hand
+	terrain.region_cells = 16
+	var bridge := StrataEditorPreview.new()
+	terrain.add_child(bridge)
+	bridge.terrain = terrain
+	check(bridge.compose_cache() and bridge.get_stats().regions == 16 and bridge.get_stats().material_compositions == 1, "bridge composes every region once")
+	var compositions: int = bridge.get_stats().material_compositions
+	StrataBrush.apply_brush(hand, Vector2(20.0, 30.0), 4.0, 0.6, "lower", &"height")
+	check(bridge.compose_cache() and bridge.get_stats().material_compositions == compositions, "a height dab does not recompose material controls")
+	for dab in range(3):
+		var point := Vector2(12.0 + dab * 6.0, 26.0 + dab * 3.0)
+		check(bridge.can_patch_region(), "regions are current before material dab %d" % dab)
+		check(StrataBrush.apply_brush(hand, point, 4.0, 0.7, "raise", &"material_d") > 0, "material dab %d applies" % dab)
+		bridge.refresh_region(point, 4.0, hand.data.sample_spacing, &"material_d", true)
+	check(bridge.get_stats().material_regions == 3 and bridge.get_stats().material_compositions == compositions, "every material dab patched its rectangle without recomposing the class")
+	check(StrataBrush.apply_brush(hand, Vector2(24.0, 32.0), 3.0, 1.0, "erase", &"material_d") > 0, "material erase applies")
+	check(bridge.compose_cache() and bridge.get_stats().material_compositions == compositions + 1, "a change the dab path did not see recomposes the class")
+	StrataBrush.apply_brush(hand, Vector2(36.0, 12.0), 4.0, 0.7, "raise", &"material_c")
+	check(bridge.compose_cache() and bridge.get_stats().material_compositions == compositions + 2, "a material dab the dab path did not see recomposes the class")
+	var spec := terrain.region_spec()
+	var equal := true
+	for y in range(StrataRegions.grid_size(spec).y):
+		for x in range(StrataRegions.grid_size(spec).x):
+			var fresh := StrataRegions.compose_region(terrain, hand, Vector2i(x, y), spec)
+			for name in ["material_ids", "material_weights", "height"]:
+				equal = equal and fresh.ok and bridge.get_region(Vector2i(x, y)).get_image(name).get_data() == fresh.region.get_image(name).get_data()
+	check(equal, "patched cached regions equal a complete composition")
+	bridge.free()
+	terrain.free()
+	control_prepare_checks()
+	await process_frame
+	print("MATERIAL_REGION checks=%d failures=%d" % [checks, failures])
+	quit(1 if failures else 0)
+
+## The native control-map preparation must equal the per-texel GDScript fallback bit for bit.
+func control_prepare_checks() -> void:
+	if not ClassDB.class_has_method(&"StrataLayerData", &"prepare_control_maps"):
+		print("MATERIAL_REGION native prepare_control_maps unavailable; skipped")
+		return
+	var size := 1025
+	var ids := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var weights := Image.create(size, size, false, Image.FORMAT_RGBAF)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for y in range(size):
+		for x in range(size):
+			ids.set_pixel(x, y, Color8(rng.randi() % 32, rng.randi() % 32, rng.randi() % 32, rng.randi() % 32))
+			var kind := (x * 7 + y * 3) % 5
+			if kind == 0: weights.set_pixel(x, y, Color(0, 0, 0, 0)) # zero-sum, left alone
+			elif kind == 1: weights.set_pixel(x, y, Color(0.25, 0.25, 0.25, 0.25)) # already normalized
+			else: weights.set_pixel(x, y, Color(rng.randf() * 3.0, rng.randf(), rng.randf() * 1e6, 0.0 if kind == 2 else rng.randf() * 0.01))
+	var start := Time.get_ticks_usec()
+	var native: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32)
+	var native_ms := (Time.get_ticks_usec() - start) / 1000.0
+	start = Time.get_ticks_usec()
+	var script := StrataRenderer._prepare_control_weights_script(ids, weights, 32)
+	var script_ms := (Time.get_ticks_usec() - start) / 1000.0
+	check(native.get("ok", false) and script != null, "an in-range 1025 map is accepted by both paths")
+	if native.get("ok", false) and script != null:
+		check(native.weights.get_format() == Image.FORMAT_RGBAF and native.weights.get_data() == script.get_data(), "native normalized weights equal the GDScript path bit for bit")
+	print("MATERIAL_REGION control maps 1025x1025: native %.1f ms, GDScript %.1f ms" % [native_ms, script_ms])
+	var half := weights.get_region(Rect2i(0, 0, size, size))
+	for x in range(size): half.set_pixel(x, 0, Color(0.3, 0.2, 0.1, 40000.0)) # large but finite in half precision
+	for y in range(size):
+		for x in range(size):
+			var c := half.get_pixel(x, y)
+			half.set_pixel(x, y, Color(minf(c.r, 60000.0), minf(c.g, 60000.0), minf(c.b, 60000.0), minf(c.a, 60000.0)))
+	half.convert(Image.FORMAT_RGBAH)
+	var native_half: Dictionary = ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, half, 32)
+	var script_half := StrataRenderer._prepare_control_weights_script(ids, half, 32)
+	check(native_half.get("ok", false) and script_half != null and native_half.weights.get_data() == script_half.get_data(), "half-float weights match too")
+	# Rejections: out-of-range ID, negative weight, non-RGBA8 IDs.
+	ids.set_pixel(1024, 1024, Color8(0, 0, 32, 0))
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32).ok and StrataRenderer._prepare_control_weights_script(ids, weights, 32) == null, "an ID at the pool size is rejected by both paths")
+	ids.set_pixel(1024, 1024, Color8(0, 0, 31, 0))
+	check(ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32).ok, "the highest valid ID is accepted")
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 31).ok and StrataRenderer._prepare_control_weights_script(ids, weights, 31) == null, "a smaller material pool rejects it in both paths")
+	weights.set_pixel(3, 4, Color(-0.1, 0.5, 0.5, 0.5))
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32).ok and StrataRenderer._prepare_control_weights_script(ids, weights, 32) == null, "a negative weight is rejected by both paths")
+	weights.set_pixel(3, 4, Color(INF, 0, 0, 0))
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", ids, weights, 32).ok and StrataRenderer._prepare_control_weights_script(ids, weights, 32) == null, "an infinite weight is rejected by both paths")
+	var wrong := Image.create(size, size, false, Image.FORMAT_RGBAF)
+	check(not ClassDB.class_call_static(&"StrataLayerData", &"prepare_control_maps", wrong, weights, 32).ok and StrataRenderer._prepare_control_weights_script(wrong, weights, 32) == null, "RGBAF IDs are rejected by both paths")
