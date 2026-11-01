@@ -1,9 +1,17 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
+// STRATA_PIXEL_SAMPLING (StrataRenderSettings.pixel_sampling) switches colour and
+// ORMH to nearest-mipmap filtering; the dispatch functions then also snap the
+// UV to texel centres. Normals always stay bilinear.
+#ifdef STRATA_PIXEL_SAMPLING
+uniform sampler2D color_maps[32] : source_color, filter_nearest_mipmap, repeat_enable;
+uniform sampler2D ormh_maps[32] : filter_nearest_mipmap, repeat_enable;
+#else
 uniform sampler2D color_maps[32] : source_color, filter_linear_mipmap, repeat_enable;
-uniform sampler2D normal_maps[32] : filter_linear_mipmap, repeat_enable;
 uniform sampler2D ormh_maps[32] : filter_linear_mipmap, repeat_enable;
+#endif
+uniform sampler2D normal_maps[32] : filter_linear_mipmap, repeat_enable;
 uniform float uv_scales[32];
 // Per-material axis-weight exponent, shared by color, normal and ORMH (1-64).
 uniform float triplanar_sharpnesses[32];

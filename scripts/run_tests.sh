@@ -42,7 +42,7 @@ fi
 # terrain_cache_standalone_test and the runtime_* suites run in their own staged projects
 # (addon split and runtime runners).
 GODOT_TESTS=(
-    brush_radius_test displacement_refinement_settings_test
+    brush_radius_test displacement_refinement_settings_test pixel_sampling_test
     hego_asset_agent_test hego_await_task_test hego_extension_points_test hego_geo_output_test
     hego_graph_input_test hego_input_children_test hego_input_ui_test hego_log_test
     hego_mesh_copy_lod_test hego_mesh_output_test hego_output_skip_test hego_panel_async_test

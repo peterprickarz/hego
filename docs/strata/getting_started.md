@@ -213,6 +213,15 @@ the camera for material displacement (*Near displacement geometry*). These setti
 only what you see; collision, navigation and the stored heights are unaffected. A bake keeps
 a copy of them for the runtime renderer.
 
+**Pixel sampling** (`pixel_sampling`, under *Material sampling*, off by default) gives
+low-resolution pixel-art materials a crisp look. Colour and ORMH textures are sampled with
+nearest filtering (still mipmapped, so distant terrain stays stable) at texel centres, and the
+height blend between materials follows the same texel grid, so blend boundaries are stair-stepped
+instead of smooth. Normal maps stay bilinear. Turning it on switches to a separate cached shader
+variant (a compile-time `STRATA_PIXEL_SAMPLING` define), so the default look and cost are
+unchanged when it is off. Nearest filtering is best with textures that are authored at their
+intended pixel size and imported with mipmaps.
+
 ## Bake
 
 Collision, navigation and runtime queries read the bake, so bake whenever you want them to
