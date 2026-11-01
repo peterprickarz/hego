@@ -2,6 +2,7 @@
 
 #include "hego_api.h"
 #include "hego_base_node.h"
+#include "util/geo/geo_cache.h"
 #include "util/geo/input.h"
 #include "util/geo/transform.h"
 #include "util/task/task_helpers.h"
@@ -75,7 +76,80 @@ godot::Ref<HEGoTask> HEGoBaseNode::instantiate()
 	return task;
 }
 
-void HEGoBaseNode::_bind_methods() { godot::ClassDB::bind_method(godot::D_METHOD("instantiate"), &HEGoBaseNode::instantiate); }
+namespace
+{
+// The node to delete for [param node_id]: the top-level object under /obj that holds it.
+// HEGo creates every node it owns with parent -1, so Houdini wraps it in an object node of
+// its own; deleting only the SOP would leave that object, and its cook caches, behind.
+HAPI_NodeId owning_object(const HAPI_Session *session, HAPI_NodeId node_id)
+{
+	HAPI_NodeId obj_manager = -1;
+	if (HoudiniApi::GetManagerNodeId(session, HAPI_NODETYPE_OBJ, &obj_manager) != HAPI_RESULT_SUCCESS) return node_id;
+	HAPI_NodeId current = node_id;
+	for (int depth = 0; depth < 64; ++depth)
+	{
+		HAPI_NodeInfo info = HoudiniApi::NodeInfo_Create();
+		if (HoudiniApi::GetNodeInfo(session, current, &info) != HAPI_RESULT_SUCCESS) break;
+		if (info.parentId < 0 || info.parentId == obj_manager) return current;
+		HAPI_NodeInfo parent = HoudiniApi::NodeInfo_Create();
+		// A parent without a parent of its own is a manager or the root: stop below it.
+		if (HoudiniApi::GetNodeInfo(session, info.parentId, &parent) != HAPI_RESULT_SUCCESS || parent.parentId < 0) return current;
+		current = info.parentId;
+	}
+	return node_id;
+}
+} // namespace
+
+godot::Ref<HEGoTask> HEGoBaseNode::delete_node()
+{
+	const HAPI_NodeId nid = node_id;
+	if (nid < 0)
+	{
+		return make_noop("Delete node", nid);
+	}
+	HEGoSessionManager *manager = get_session_manager();
+	if (!manager || !manager->get_session())
+	{
+		// No session: the node is already gone with it. Forget the stale id.
+		reset_node_id();
+		return make_noop("Delete node", nid);
+	}
+	const HAPI_Session expected = *manager->get_session();
+	const uint64_t generation = get_generation();
+	// A reference, not a raw pointer, as in instantiate(): the task outlives a freed owner.
+	godot::Ref<HEGoBaseNode> self = this;
+	return submit_failable("Delete node", nid, [self, nid, expected, generation](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
+		if (!session || session->id != expected.id || session->type != expected.type || HoudiniApi::IsSessionValid(session) != HAPI_RESULT_SUCCESS)
+		{
+			// The session this node lived in is gone, and the node with it.
+			HEGo::Util::Geo::GeoCache::invalidate(nid);
+			if (self->get_id() == nid && self->get_generation() == generation) self->reset_node_id();
+			return godot::Variant();
+		}
+		if (self->get_id() != nid || self->get_generation() != generation)
+		{
+			fail(task, "Node was re-instantiated or reset before it could be deleted");
+			return godot::Variant();
+		}
+		const HAPI_NodeId target = owning_object(session, nid);
+		const HAPI_Result result = HoudiniApi::DeleteNode(session, target);
+		HEGo::Util::Geo::GeoCache::invalidate(nid);
+		self->reset_node_id();
+		if (result != HAPI_RESULT_SUCCESS)
+		{
+			fail(task, "HAPI could not delete node " + godot::String::num_int64(target));
+			return godot::Variant();
+		}
+		return target;
+	});
+}
+
+void HEGoBaseNode::_bind_methods()
+{
+	godot::ClassDB::bind_method(godot::D_METHOD("instantiate"), &HEGoBaseNode::instantiate);
+	godot::ClassDB::bind_method(godot::D_METHOD("delete_node"), &HEGoBaseNode::delete_node);
+}
 
 // HEGoInputReceiverNode
 HEGoInputReceiverNode::HEGoInputReceiverNode() {}
