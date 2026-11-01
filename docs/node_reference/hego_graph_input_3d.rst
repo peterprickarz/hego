@@ -151,6 +151,14 @@ their owner (point or connection) is selected, and greyed out otherwise.
 A mixed selection shows an empty control. Committing a value writes it onto every
 selected element of that owner.
 
+Marker size
+-----------
+
+Point markers and connection lines keep a constant size on screen at any distance.
+The size is in the editor settings: ``hego/graph/point_size`` (default 10 px) and
+``hego/graph/line_width`` (default 2.5 px). Picking uses the same pixel sizes plus a
+margin. Hovered and selected markers are drawn larger.
+
 Path visualization
 ------------------
 

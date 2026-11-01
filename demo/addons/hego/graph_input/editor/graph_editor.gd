@@ -799,11 +799,11 @@ func _update_hover(camera: Camera3D, mouse: Vector2) -> void:
 		else:
 			projected[i] = camera.unproject_position(global_pt)
 			visible[i] = 1
-	hover_point = HEGoGraphPicking.closest_point(mouse, projected)
+	hover_point = HEGoGraphPicking.closest_point(mouse, projected, HEGoGraphPicking.point_radius())
 	if hover_point >= 0 and visible[hover_point] == 0:
 		hover_point = -1
 	if hover_point < 0:
-		hover_connection = HEGoGraphPicking.closest_connection(mouse, projected, graph.connections)
+		hover_connection = HEGoGraphPicking.closest_connection(mouse, projected, graph.connections, HEGoGraphPicking.connection_radius())
 
 
 func _hit(camera: Camera3D, mouse: Vector2) -> Variant:
