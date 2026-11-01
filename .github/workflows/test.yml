@@ -26,8 +26,9 @@ jobs:
 
       - name: Build HEGo (debug, host toolchain)
         # A CI build loads on this runner only; release binaries come from the glibc 2.28
-        # container (scripts/build.sh linux-compat), so the floor is relaxed here.
-        run: HFS="$PWD/build/deps/houdini" GLIBC_FLOOR=2.40 scripts/build.sh linux template_debug
+        # container (scripts/build.sh linux-compat), so the floor is the runner's own glibc
+        # rather than a pinned version that ubuntu-latest outgrows.
+        run: HFS="$PWD/build/deps/houdini" GLIBC_FLOOR="$(ldd --version | head -1 | grep -oE '[0-9]+\.[0-9]+$')" scripts/build.sh linux template_debug
 
       - name: Build Strata (debug, host toolchain)
         run: scripts/build-terrain.sh linux template_debug
