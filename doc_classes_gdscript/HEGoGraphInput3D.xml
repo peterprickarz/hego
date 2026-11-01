@@ -37,6 +37,14 @@
 				Moves point [param index] to [param position].
 			</description>
 		</method>
+		<method name="set_point_position_live">
+			<return type="void" />
+			<param index="0" name="index" type="int" />
+			<param index="1" name="position" type="Vector3" />
+			<description>
+				Sets a point during a live gizmo drag without emitting [signal graph_changed].
+			</description>
+		</method>
 		<method name="remove_points">
 			<return type="void" />
 			<param index="0" name="indices" type="PackedInt32Array" />

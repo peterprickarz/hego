@@ -4,7 +4,7 @@
 		Point attribute maths shared by every handler that scatters something.
 	</brief_description>
 	<description>
-		Multimesh instancing, object spawning and Terrain3D instancing all turn the same four point attributes - [code]N[/code], [code]up[/code], [code]pscale[/code] and [code]scale[/code] - into the same orientation. Having it in one place is what keeps an HDA's points landing identically whichever of the three reads them, and is where to look when they do not.
+		Multimesh instancing, object spawning and the instancing output handlers other addons add all turn the same four point attributes - [code]N[/code], [code]up[/code], [code]pscale[/code] and [code]scale[/code] - into the same orientation. Having it in one place is what keeps an HDA's points landing identically whichever handler reads them, and is where to look when they do not.
 	</description>
 	<tutorials>
 	</tutorials>

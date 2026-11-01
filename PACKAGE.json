@@ -1,0 +1,7 @@
+{
+  "format_version": 1,
+  "package": "hego",
+  "addon_path": "addons/hego",
+  "source_commit": "e09d823b11dd14f76f6a8e89f9efccb8e86edffe",
+  "requires": []
+}

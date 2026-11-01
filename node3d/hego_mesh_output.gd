@@ -106,7 +106,9 @@ static func fetch_meshes(context: HEGoOutputContext) -> Dictionary:
 	var groups := await fetch_surface_groups(context)
 	var meshes := {}
 	for mesh_instance_key in groups:
-		meshes[mesh_instance_key] = build_array_mesh(groups[mesh_instance_key])
+		var mesh := build_array_mesh(groups[mesh_instance_key])
+		if mesh != null:
+			meshes[mesh_instance_key] = mesh
 	return meshes
 
 
@@ -128,11 +130,13 @@ static func handle(context: HEGoOutputContext) -> void:
 
 	var processing_start_usec := Time.get_ticks_usec()
 	for mesh_instance_key in groups:
-		mesh_instance_count += 1
 		var surfaces: Dictionary = groups[mesh_instance_key]
 
 		var array_mesh := build_array_mesh(surfaces)
-		surface_count += surfaces.size()
+		if array_mesh == null:
+			continue
+		mesh_instance_count += 1
+		surface_count += array_mesh.get_surface_count()
 
 		# The output-wide settings are detail attributes, so they are identical on
 		# every surface of this mesh; read them off the first one.
@@ -183,26 +187,54 @@ static func handle(context: HEGoOutputContext) -> void:
 
 ## Builds one [ArrayMesh] from a { material path: surface data } dictionary,
 ## adding a surface per material and wiring up LODs and materials.
+## Returns null if empty or any surface is invalid; partial meshes are never published.
 static func build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
+	if surfaces.is_empty():
+		return null
 	var array_mesh := ArrayMesh.new()
 	var surface_id := 0
 	for material_key in surfaces:
+		if not surfaces[material_key] is Dictionary:
+			return _invalid_surface(material_key, "expected a surface dictionary")
 		var surface: Dictionary = surfaces[material_key]
-		var surface_array: Array = surface["surface_array"]
+		if not surface.get("surface_array") is Array or surface["surface_array"].size() != Mesh.ARRAY_MAX:
+			return _invalid_surface(material_key, "invalid surface array")
+		var surface_array: Array = surface["surface_array"].duplicate()
+		var vertices = surface_array[Mesh.ARRAY_VERTEX]
+		if not vertices is PackedVector3Array or vertices.is_empty():
+			return _invalid_surface(material_key, "no 3D vertices")
+		var indices = surface_array[Mesh.ARRAY_INDEX]
+		if indices != null:
+			if not indices is PackedInt32Array or indices.size() % 3 != 0:
+				return _invalid_surface(material_key, "invalid triangle indices")
+			for index in indices:
+				if index < 0 or index >= vertices.size():
+					return _invalid_surface(material_key, "index outside the vertex array")
+		if (indices == null or indices.is_empty()) and vertices.size() % 3 != 0:
+			return _invalid_surface(material_key, "incomplete unindexed triangles")
 
 		# An HDA that sets no LOD attribute simply has no such key here.
+		if not surface.get("hego_lod", []) is Array:
+			return _invalid_surface(material_key, "invalid LOD attribute")
 		var hego_lod_array: Array = surface.get("hego_lod", [])
 
-		if not hego_lod_array.is_empty() and hego_lod_array[0] != null:
+		if not hego_lod_array.is_empty():
 			# hego_lod holds one screen-space distance per LOD, and the index array
 			# holds the triangles of all LODs back to back. Group the triangles by
 			# distance; distance 0.0 is the base surface, the rest become Godot LODs.
+			if indices == null or indices.is_empty():
+				return _invalid_surface(material_key, "LODs require triangle indices")
 			var lod_dict := _group_indices_by_lod_distance(hego_lod_array, surface_array[Mesh.ARRAY_INDEX])
+			if not lod_dict.has(0.0):
+				return _invalid_surface(material_key, "LOD counts/distances are invalid or base LOD 0.0 is missing")
 			surface_array[Mesh.ARRAY_INDEX] = lod_dict[0.0]
 			lod_dict.erase(0.0)
 			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], lod_dict)
 		else:
 			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array)
+
+		if array_mesh.get_surface_count() != surface_id + 1:
+			return _invalid_surface(material_key, "Godot rejected the surface arrays")
 
 		if material_key != null:
 			var material: Resource = load(material_key)
@@ -210,6 +242,11 @@ static func build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
 				array_mesh.surface_set_material(surface_id, material)
 		surface_id += 1
 	return array_mesh
+
+
+static func _invalid_surface(material_key: Variant, reason: String) -> ArrayMesh:
+	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Mesh rejected: surface %s: %s." % [str(material_key), reason])
+	return null
 
 
 ## Adds the mesh to the scene at the path the HDA asked for and returns the instance.
@@ -273,7 +310,10 @@ static func _group_indices_by_lod_distance(lod_distances: Array, indices: Array)
 		return result
 
 	for i in range(lod_distances.size()):
-		var distance: float = lod_distances[i]
+		var value = lod_distances[i]
+		if not (value is float or value is int) or not is_finite(float(value)) or float(value) < 0.0:
+			return {}
+		var distance: float = value
 		var triangle: PackedInt32Array = [indices[3 * i], indices[3 * i + 1], indices[3 * i + 2]]
 		if result.has(distance):
 			result[distance].append_array(triangle)
@@ -288,6 +328,13 @@ static func _group_indices_by_lod_distance(lod_distances: Array, indices: Array)
 ## Returns { ok, error, fallback_to_instance, message }; [code]message[/code] and
 ## [code]error[/code] only carry meaning when [code]ok[/code] is false.
 static func save_mesh_resource(mesh: ArrayMesh, save_path: String) -> Dictionary:
+	if mesh == null or mesh.get_surface_count() == 0:
+		return {
+			"ok": false,
+			"error": ERR_INVALID_DATA,
+			"fallback_to_instance": false,
+			"message": "Cannot save an empty or invalid mesh.",
+		}
 	if save_path.is_empty():
 		return {
 			"ok": false,
@@ -350,34 +397,39 @@ static func save_mesh_resource(mesh: ArrayMesh, save_path: String) -> Dictionary
 ## identity, and everything already pointing at it sees the update.
 static func copy_array_mesh_contents(target_mesh: ArrayMesh, source_mesh: ArrayMesh) -> void:
 	target_mesh.clear_surfaces()
-	# Use the resource serialization format on versions without surface_get_lods.
-	# Godot 4.4's RenderingServer.mesh_get_surface has a broken LOD-array wrapper.
-	var saved_surfaces: Array = source_mesh.get("_surfaces") if not source_mesh.has_method("surface_get_lods") else []
 	for surface_index in range(source_mesh.get_surface_count()):
 		var primitive_type := source_mesh.surface_get_primitive_type(surface_index)
 		var arrays := source_mesh.surface_get_arrays(surface_index)
 		var blend_shape_arrays := []
 		if source_mesh.has_method("surface_get_blend_shape_arrays"):
 			blend_shape_arrays = source_mesh.surface_get_blend_shape_arrays(surface_index)
-		var lods := {}
-		if source_mesh.has_method("surface_get_lods"):
-			lods = source_mesh.surface_get_lods(surface_index)
-		else:
-			# Serialized LODs alternate edge length and packed index bytes.
-			var saved_lods: Array = saved_surfaces[surface_index].get("lods", [])
-			var vertex_count: int = arrays[Mesh.ARRAY_VERTEX].size()
-			var stride := 2 if vertex_count <= 65536 else 4
-			for lod_index in range(0, saved_lods.size(), 2):
-				var bytes: PackedByteArray = saved_lods[lod_index + 1]
-				var indices := PackedInt32Array()
-				indices.resize(bytes.size() / stride)
-				for i in indices.size():
-					indices[i] = bytes.decode_u16(i * stride) if stride == 2 else bytes.decode_u32(i * stride)
-				lods[float(saved_lods[lod_index])] = indices
+		var lods := _surface_lods(source_mesh, surface_index, arrays)
 		target_mesh.add_surface_from_arrays(primitive_type, arrays, blend_shape_arrays, lods)
 		var surface_material := source_mesh.surface_get_material(surface_index)
 		if surface_material != null:
 			target_mesh.surface_set_material(surface_index, surface_material)
+
+
+## The LODs of one surface of [param mesh], keyed by edge length, from the public getter
+## where it exists. Godot (through 4.7) has none, and RenderingServer.mesh_get_surface returns broken
+## LOD arrays there, so the resource serialization is read instead: it alternates edge
+## length and packed index bytes, with the index width of the base surface.
+static func _surface_lods(mesh: ArrayMesh, surface_index: int, arrays: Array) -> Dictionary:
+	if mesh.has_method("surface_get_lods"):
+		return mesh.surface_get_lods(surface_index)
+	var stored_surface: Dictionary = mesh.get("_surfaces")[surface_index]
+	var stored_lods: Array = stored_surface.get("lods", [])
+	var vertex_count: int = arrays[Mesh.ARRAY_VERTEX].size()
+	var stride := 2 if vertex_count <= 65536 else 4
+	var lods := {}
+	for lod_index in range(0, stored_lods.size(), 2):
+		var bytes: PackedByteArray = stored_lods[lod_index + 1]
+		var indices := PackedInt32Array()
+		indices.resize(bytes.size() / stride)
+		for i in range(indices.size()):
+			indices[i] = bytes.decode_u16(i * stride) if stride == 2 else bytes.decode_u32(i * stride)
+		lods[float(stored_lods[lod_index])] = indices
+	return lods
 
 
 ## Loads a saved mesh bypassing the resource cache, so the instance in the scene

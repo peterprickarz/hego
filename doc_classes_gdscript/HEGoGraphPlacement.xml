@@ -32,7 +32,7 @@
 			<param index="2" name="direction" type="Vector3" />
 			<param index="3" name="exclude" type="Node" default="null" />
 			<description>
-				Nearest hit against physics, meshes, CSG, and Terrain3D under [param root]. [param exclude] and its descendants are skipped. Returns a Vector3 or null.
+				Nearest hit against physics, meshes, CSG, and any terrain node that offers a ray query under [param root]. [param exclude] and its descendants are skipped. Returns a Vector3 or null.
 			</description>
 		</method>
 		<method name="intersect_ray" qualifiers="static">

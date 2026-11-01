@@ -5,10 +5,11 @@ extends RefCounted
 ## Turns the Godot nodes wired into a [HEGoNode3D] into HEGo input nodes.
 ##
 ## Which input node a Godot node needs depends on its type: paths become curve
-## inputs, meshes and CSG shapes become geometry inputs, a [HEGoGraphInput3D]
-## becomes points and polyline primitives, and a Terrain3D becomes a heightfield
-## input. The node path of the source is always sent along as
-## [code]_hego_node_path[/code] so an HDA can tell its inputs apart.
+## inputs, meshes and CSG shapes become geometry inputs, and a [HEGoGraphInput3D]
+## becomes points and polyline primitives. Other addons add kinds of their own, such as
+## terrains, through [HEGoInputHandler], which is consulted first. The node path of the
+## source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its
+## inputs apart.
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "input"
@@ -23,6 +24,67 @@ const NO_MATERIAL := "empty"
 
 ## Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
 const CURVE_SAMPLE_LENGTH := 1.0
+
+## Key under which [method sync] passes an [HEGoInputHandler] the input path it resolved,
+## as stored in the input stash, so the handler can send it as [constant NODE_PATH_ATTRIB].
+const INPUT_PATH_KEY := "_input_path"
+
+## Class every extension input handler extends.
+const HANDLER_BASE := &"HEGoInputHandler"
+
+# Script paths of the handlers found last time, and one instance of each.
+static var _handler_paths := PackedStringArray()
+static var _handlers: Array[HEGoInputHandler] = []
+
+
+## The input handlers other addons provide: one instance of every global class that extends
+## [HEGoInputHandler]. Rescanned whenever the project's class list changes, so an addon
+## installed in an open editor is picked up without a restart.
+static func extension_handlers() -> Array[HEGoInputHandler]:
+	var found := PackedStringArray(HEGoNodeUtil.global_subclasses(HANDLER_BASE).values())
+	found.sort()
+	if found == _handler_paths:
+		return _handlers
+	_handler_paths = found
+	_handlers.clear()
+	for path in found:
+		# A handler whose own dependencies are missing fails to load. That is reported once,
+		# here, rather than on every lookup.
+		var script := load(path) as Script
+		var handler: Variant = script.new() if script != null and script.can_instantiate() else null
+		if handler is HEGoInputHandler:
+			_handlers.append(handler)
+		else:
+			HEGoLog.get_singleton().error(LOG_CATEGORY, "Input handler %s could not be loaded; check that the addons it needs are installed." % path)
+	return _handlers
+
+
+## The extension handler that sends [param node], or null when HEGo handles it itself.
+static func handler_for(node: Node) -> HEGoInputHandler:
+	if node == null:
+		return null
+	for handler in extension_handlers():
+		if handler.handles(node):
+			return handler
+	return null
+
+
+## The extension handlers input row [param row] of [param host] uses: those that send one of
+## the nodes it names, and those whose kind of settings it stores, so a row keeps its
+## handler's rules while its node is renamed or deleted. [param row] is one entry of the
+## input stash, [code]{inputs, settings}[/code].
+static func row_handlers(host: Node, row: Dictionary) -> Array[HEGoInputHandler]:
+	var result: Array[HEGoInputHandler] = []
+	for path in row.get("inputs", []):
+		var handler := handler_for(resolve_input_node(host, path))
+		if handler != null and not result.has(handler):
+			result.append(handler)
+	var settings: Variant = row.get("settings", {})
+	if settings is Dictionary:
+		for handler in extension_handlers():
+			if not result.has(handler) and handler.claims_settings(settings):
+				result.append(handler)
+	return result
 
 
 ## Expands input roots when settings.include_children is enabled. The stored paths
@@ -57,6 +119,8 @@ static func resolve_paths(host: Node, paths: Array, settings: Dictionary) -> Arr
 ## Whether a node supplies one of HEGo's supported input kinds. CSG assemblies
 ## bake from their root shape, including all of their Boolean children.
 static func is_compatible_source(node: Node) -> bool:
+	if handler_for(node) != null:
+		return true
 	if node is HEGoGraphInput3D:
 		return not node.points.is_empty()
 	if node is Path3D:
@@ -65,7 +129,7 @@ static func is_compatible_source(node: Node) -> bool:
 		return node.mesh != null
 	if node is CSGShape3D:
 		return node.is_root_shape()
-	return HEGoTerrain3DUtil.is_available() and node.is_class("Terrain3D")
+	return false
 
 
 static func _collect_sources(host: Node, node: Node, outputs: Node, visited: Dictionary, resolved: Array) -> void:
@@ -101,12 +165,29 @@ static func _source_path(host: Node, node: Node) -> String:
 ##
 ## [param settings] is the per-input settings dictionary from the input stash.
 ## curve_sample_length optionally controls Path3D upload spacing in metres.
-## Missing, non-finite or non-positive values use the one-metre default.
+## Missing, non-finite or non-positive values use the one-metre default. During a strict
+## cook it also carries [code]_strict[/code] and the [code]_errors[/code] array failures are
+## collected in; see [method HEGoAssetAgent.sync_inputs].
 static func sync(host: Node, existing_node: Variant, input_node_path: Variant, settings: Dictionary) -> Variant:
 	var input := _resolve_input_node(host, input_node_path)
 	if input == null:
 		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input node %s could not be found, skipping it." % str(input_node_path))
+		if settings.get("_strict", false):
+			settings["_errors"].append("A required cook input disappeared: " + String(input_node_path))
+			return null
 		return existing_node
+
+	var handler := handler_for(input)
+	if handler != null:
+		settings[INPUT_PATH_KEY] = str(input_node_path)
+		var result: Dictionary = await handler.sync(host, existing_node, input, settings)
+		if result.get("ok", false):
+			return result.node
+		var message := String(result.get("message", "Input %s could not be sent" % str(input_node_path)))
+		HEGoLog.get_singleton().error(LOG_CATEGORY, message)
+		if settings.has("_errors"):
+			settings["_errors"].append(message)
+		return null
 
 	var attrs := [{
 		"name": NODE_PATH_ATTRIB,
@@ -133,18 +214,18 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 			})
 		graph_attrs.append_array(_graph_attribs(input))
 		var graph_node: HEGoInputNode = existing_node if existing_node is HEGoInputNode else HEGoInputNode.new()
-		await HEGoNodeUtil.await_task(host, graph_node.instantiate())
-		await HEGoNodeUtil.await_task(host, graph_node.set_geo(input.points, "polyline", input.connections, counts, graph_attrs))
-		await HEGoNodeUtil.await_task(host, graph_node.set_transform(input.global_transform))
+		await _input_task(host, graph_node.instantiate(), settings)
+		await _input_task(host, graph_node.set_geo(input.points, "polyline", input.connections, counts, graph_attrs), settings)
+		await _input_task(host, graph_node.set_transform(input.global_transform), settings)
 		return graph_node
 
 	if input is Path3D:
 		var curve_node: HEGoCurveInputNode = existing_node if existing_node is HEGoCurveInputNode else HEGoCurveInputNode.new()
-		await HEGoNodeUtil.await_task(host, curve_node.instantiate())
+		await _input_task(host, curve_node.instantiate(), settings)
 		var spacing := float(settings.get("curve_sample_length", CURVE_SAMPLE_LENGTH))
 		if not is_finite(spacing) or spacing <= 0.0:
 			spacing = CURVE_SAMPLE_LENGTH
-		await HEGoNodeUtil.await_task(host, curve_node.set_curve_from_path_3d(input, maxf(0.01, spacing)))
+		await _input_task(host, curve_node.set_curve_from_path_3d(input, maxf(0.01, spacing)), settings)
 		return curve_node
 
 	if input is MeshInstance3D:
@@ -158,28 +239,28 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 		})
 		attrs.append_array(_material_attribs(input))
 		var mesh_node: HEGoInputNode = existing_node if existing_node is HEGoInputNode else HEGoInputNode.new()
-		await HEGoNodeUtil.await_task(host, mesh_node.instantiate())
-		await HEGoNodeUtil.await_task(host, mesh_node.set_geo_from_mesh(input.mesh, attrs))
-		await HEGoNodeUtil.await_task(host, mesh_node.set_transform(input.global_transform))
+		await _input_task(host, mesh_node.instantiate(), settings)
+		await _input_task(host, mesh_node.set_geo_from_mesh(input.mesh, attrs), settings)
+		await _input_task(host, mesh_node.set_transform(input.global_transform), settings)
 		return mesh_node
 
 	if input is CSGShape3D:
 		var csg_node: HEGoInputNode = existing_node if existing_node is HEGoInputNode else HEGoInputNode.new()
-		await HEGoNodeUtil.await_task(host, csg_node.instantiate())
-		await HEGoNodeUtil.await_task(host, csg_node.set_geo_from_mesh(input.bake_static_mesh(), attrs))
-		await HEGoNodeUtil.await_task(host, csg_node.set_transform(input.global_transform))
+		await _input_task(host, csg_node.instantiate(), settings)
+		await _input_task(host, csg_node.set_geo_from_mesh(input.bake_static_mesh(), attrs), settings)
+		await _input_task(host, csg_node.set_transform(input.global_transform), settings)
 		return csg_node
 
-	if HEGoTerrain3DUtil.is_available() and input.is_class("Terrain3D"):
-		var terrain_node: HEGoHeightfieldInputNode = existing_node if existing_node is HEGoHeightfieldInputNode else HEGoHeightfieldInputNode.new()
-		await HEGoNodeUtil.await_task(host, terrain_node.instantiate())
-		var layers := HEGoTerrain3DInput.read_layers(input, str(input_node_path))
-		if not layers.is_empty():
-			await HEGoNodeUtil.await_task(host, terrain_node.set_layers(layers, HEGoTerrain3DInput.get_vertex_spacing(input), 1.0, true))
-		return terrain_node
-
-	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s is not a Path3D, HEGoGraphInput3D, MeshInstance3D, CSGShape3D or Terrain3D." % str(input_node_path))
+	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s is not a Path3D, HEGoGraphInput3D, MeshInstance3D or CSGShape3D, and no input handler accepts it." % str(input_node_path))
 	return existing_node
+
+
+## The node [param input_node_path] names, resolved the way input paths are: against the
+## edited scene in the editor, against the running scene at runtime, and finally relative to
+## [param host]. Null when nothing is there. Extensions use this to resolve paths an HDA
+## writes into its output, so those behave exactly like the paths in the input stash.
+static func resolve_input_node(host: Node, input_node_path: Variant) -> Node:
+	return _resolve_input_node(host, input_node_path)
 
 
 ## Resolves an input path against the edited scene in the editor and against the
@@ -188,7 +269,7 @@ static func _resolve_input_node(host: Node, input_node_path: Variant) -> Node:
 	if input_node_path == null or str(input_node_path).is_empty():
 		return null
 
-	var tree := host.get_tree()
+	var tree := host.get_tree() if host.is_inside_tree() else null
 	if tree != null:
 		if tree.edited_scene_root != null:
 			var edited_node := tree.edited_scene_root.get_node_or_null(input_node_path)
@@ -235,3 +316,14 @@ static func _material_attribs(mesh_instance: MeshInstance3D) -> Array:
 			"value": material.resource_path if material != null else NO_MATERIAL,
 		})
 	return attrs
+
+## A strict cook also rejects a failed mesh, curve or graph upload, rather than cooking
+## against whatever geometry the reused input node held before.
+static func _input_task(host: Node, native_task: HEGoTask, settings: Dictionary) -> Variant:
+	if settings.get("_strict", false):
+		var completed := await HEGoNodeUtil.checked_task(host, native_task)
+		if not completed.ok:
+			settings["_errors"].append(completed.message)
+			return null
+		return completed.value
+	return await HEGoNodeUtil.await_task(host, native_task)
