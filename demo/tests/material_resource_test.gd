@@ -13,6 +13,12 @@ func run() -> void:
 	check(material.height_blend_contrast == 0.0 and material.height_blend_bias == 0.0, "Legacy/default resources preserve the original blend")
 	check(material.roughness_scale == 1.0 and material.roughness_bias == 0.0, "Default roughness remap is identity")
 	check(material.triplanar_sharpness == 4.0, "Default triplanar transition sharpness is four")
+	check(material.projection == StrataMaterial.ProjectionMode.TRIPLANAR, "Default projection is triplanar")
+	var projection_material := StrataMaterial.new()
+	var projection_changes := [0]
+	projection_material.changed.connect(func() -> void: projection_changes[0] += 1)
+	projection_material.projection = StrataMaterial.ProjectionMode.SIDES; projection_material.projection = StrataMaterial.ProjectionMode.SIDES
+	check(projection_changes[0] == 1 and projection_material.projection == StrataMaterial.ProjectionMode.SIDES, "Projection emits changed once per change")
 	material.changed.connect(changed)
 	material.height_blend_contrast = 12.0
 	material.height_blend_bias = 0.11

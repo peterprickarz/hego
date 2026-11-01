@@ -132,6 +132,11 @@ you paint or cook like any other.
      displacement.
    - `uv_scale`: texture repeats per metre (0.25 repeats once every 4 m).
 
+   `projection` chooses the axes the textures are projected along: `TRIPLANAR` (default),
+   `BIPLANAR` (the two dominant axes per fragment, cheaper), `SIDES` (X and Z only, for cliffs,
+   never from above or below; a nearly flat surface uses a single side axis) or `TOP` (planar
+   along Y, for ground).
+
    The remaining settings tune the look: `triplanar_sharpness`, `displacement_strength`,
    `height_blend_contrast` and `height_blend_bias` (let one material's peaks push through
    another), and `roughness_scale` and `roughness_bias`. Material edits show immediately and

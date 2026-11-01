@@ -527,6 +527,7 @@ func _bind_material_pool() -> void:
 	var packed: Array[Texture2D] = []
 	var scales := PackedFloat32Array()
 	var sharpnesses := PackedFloat32Array()
+	var projections := PackedInt32Array()
 	var displacements := PackedFloat32Array()
 	var contrasts := PackedFloat32Array()
 	var biases := PackedFloat32Array()
@@ -543,6 +544,7 @@ func _bind_material_pool() -> void:
 		packed.append(source.ormh_texture if source.ormh_texture != null else default_ormh)
 		scales.append(maxf(0.001, source.uv_scale))
 		sharpnesses.append(source.triplanar_sharpness)
+		projections.append(clampi(int(source.projection), 0, 3))
 		displacements.append(maxf(0.0, source.displacement_strength))
 		contrasts.append(source.height_blend_contrast)
 		biases.append(source.height_blend_bias)
@@ -554,6 +556,7 @@ func _bind_material_pool() -> void:
 	_shader_material.set_shader_parameter("ormh_maps", packed)
 	_shader_material.set_shader_parameter("uv_scales", scales)
 	_shader_material.set_shader_parameter("triplanar_sharpnesses", sharpnesses)
+	_shader_material.set_shader_parameter("projection_modes", projections)
 	_shader_material.set_shader_parameter("material_displacement", displacements)
 	_shader_material.set_shader_parameter("height_blend_contrasts", contrasts)
 	_shader_material.set_shader_parameter("height_blend_biases", biases)

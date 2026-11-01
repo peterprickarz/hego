@@ -15,6 +15,8 @@ uniform sampler2D normal_maps[32] : filter_linear_mipmap, repeat_enable;
 uniform float uv_scales[32];
 // Per-material axis-weight exponent, shared by color, normal and ORMH (1-64).
 uniform float triplanar_sharpnesses[32];
+// Per-material projection: 0 triplanar, 1 biplanar, 2 sides (X+Z), 3 top (Y).
+uniform int projection_modes[32];
 uniform float material_displacement[32];
 uniform float height_blend_contrasts[32];
 uniform float height_blend_biases[32];
@@ -161,7 +163,7 @@ float material_height_offset(vec3 base_point, vec3 projection_normal) {
 	for (int slot = 0; slot < 4; slot++) {
 		if (weights[slot] > 0.0) {
 			int id = ids[slot];
-			vec3 axis_weights = terrain_triplanar_weights(projection_normal, triplanar_sharpnesses[id]);
+			vec3 axis_weights = terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id]);
 			blend_heights[slot] = 0.0; heights[slot] = 0.0;
 			for (int axis = 0; axis < 3; axis++) {
 				float axis_weight = axis_weights[axis];
@@ -238,7 +240,7 @@ void fragment() {
 		packed_samples[slot] = vec4(0.0); slot_axis_weights[slot] = vec3(0.0);
 		if (weights[slot] > 0.0) {
 			int id = ids[slot]; float scale = uv_scales[id];
-			vec3 axis_weights = terrain_triplanar_weights(projection_normal, triplanar_sharpnesses[id]);
+			vec3 axis_weights = terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id]);
 			slot_axis_weights[slot] = axis_weights;
 			for (int axis = 0; axis < 3; axis++) {
 				float axis_weight = axis_weights[axis];

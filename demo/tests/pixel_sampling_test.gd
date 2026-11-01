@@ -39,5 +39,10 @@ func run() -> void:
 	var dispatch := FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_texture_dispatch.gdshaderinc")
 	check(not dispatch.contains("textureGrad(color_maps[0], uv") and dispatch.contains("terrain_pixel_uv(uv, textureSize(ormh_maps[31], 0))"), "colour and ORMH fetches snap through terrain_pixel_uv")
 	check(dispatch.contains("textureGrad(normal_maps[0], uv, dx, dy)"), "normal fetches are not snapped")
+	check(source.contains("uniform int projection_modes[32]") and source.count("terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id])") == 2, "fragment and vertex paths use the per-material projection")
+	var material := StrataMaterial.new()
+	material.projection = StrataMaterial.ProjectionMode.SIDES
+	var variant := material.make_variant(2.0)
+	if variant != null: check(variant.projection == StrataMaterial.ProjectionMode.SIDES, "UV variants inherit the projection")
 	print("PIXEL_SAMPLING checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)

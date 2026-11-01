@@ -1,0 +1,6 @@
+[mcp_servers.godot]
+command = "/home/peter/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
+args = ["/home/peter/.local/share/the-network-godot-mcp/node_modules/@satelliteoflove/godot-mcp/dist/cli.js"]
+
+[mcp_servers.godot.env]
+GODOT_PORT = "6560"
