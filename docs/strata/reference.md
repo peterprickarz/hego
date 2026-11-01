@@ -178,6 +178,7 @@ Runtime API:
 | `StrataTerrain3D.runtime_surface_type(world_position)` | the dominant material's `surface_type` under a point, or empty |
 | `StrataCollision.surface_type_at(world_position)` | the same through the collision body a ray or contact reported |
 | `StrataMaterial.surface_type` | the material's gameplay tag (footsteps, impacts), the analogue of a physical material; rendering ignores it |
+| `StrataMaterial.projection` | `TRIPLANAR` (default), `BIPLANAR`, `SIDES` (X and Z only) or `TOP` (Y only): the axes this material's textures project along |
 | `StrataNavigation.profile` | the profile this node bakes; default `default`. A profile missing from the data is reported by the bake |
 | `StrataNavigation.navigation_layers` | the layer bits of this node's regions; agents choose a population with them |
 
