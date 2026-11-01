@@ -1,0 +1,10 @@
+{
+  "format_version": 1,
+  "package": "strata",
+  "addon_path": "addons/strata",
+  "source_commit": "e09d823b11dd14f76f6a8e89f9efccb8e86edffe",
+  "requires": [],
+  "build_requires": ["godot-cpp submodule"],
+  "requires_hego": false,
+  "requires_houdini_sdk_for_build": false
+}
