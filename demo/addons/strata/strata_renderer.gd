@@ -142,6 +142,12 @@ var _runtime_mode := false
 var _camera: Camera3D
 var _mesher: RefCounted
 var _shader_material: ShaderMaterial
+## Rain wetness 0-1 for the terrain shader's surface_wetness uniform (darker, smoother
+## ground). Runtime state, not saved; kept when the material is rebuilt.
+var surface_wetness := 0.0:
+	set(value):
+		surface_wetness = clampf(value, 0.0, 1.0)
+		if _shader_material != null: _shader_material.set_shader_parameter("surface_wetness", surface_wetness)
 var _variant_shaders := {}
 var pixel_sampling := false
 var _active_crease_variant := false
@@ -758,6 +764,7 @@ func _update_material_settings() -> void:
 	_shader_material.set_shader_parameter("height_blend_enabled", height_blend_enabled)
 	_shader_material.set_shader_parameter("terrain_tint_strength", render_settings.terrain_tint_strength if render_settings != null else 1.0)
 	_shader_material.set_shader_parameter("terrain_ao_strength", render_settings.terrain_ao_strength if render_settings != null else 1.0)
+	_shader_material.set_shader_parameter("surface_wetness", surface_wetness)
 	_shader_material.set_shader_parameter("distance_uv_enabled", distance_uv_enabled)
 	_shader_material.set_shader_parameter("far_uv_factor", far_uv_factor)
 	_shader_material.set_shader_parameter("uv_near_distance", uv_near_distance)
