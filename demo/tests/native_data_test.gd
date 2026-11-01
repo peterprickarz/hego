@@ -489,12 +489,15 @@ func _run_serialization_v2_checks() -> void:
 	var back := StrataLayerData.new()
 	back.restore(upgraded)
 	check(back.snapshot() == upgraded, "v1 -> v2 round-trip is stable")
-	# The committed island resources still load.
+	# The committed island resources still load (skipped when the checkout holds LFS pointers).
+	var LfsData := preload("res://tests/lfs_data.gd")
 	var island := ["res://island/terrain/rough_base.res", "res://island/terrain/manual_fine.res"]
 	for path in island:
-		if ResourceLoader.exists(path):
+		if LfsData.present(path):
 			var res = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE)
 			check(res != null, "committed resource loads: " + path)
+		else:
+			print("NATIVE_DATA: %s is absent or a Git LFS pointer; load check skipped" % path)
 
 func _unit_images(count: int, size: Vector2i, seed_value: int) -> Array:
 	var rng := RandomNumberGenerator.new()

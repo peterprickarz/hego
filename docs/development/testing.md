@@ -29,7 +29,7 @@ of the same project never shows the problem.
 | Group | What runs | Needs |
 | --- | --- | --- |
 | `python` | `python3 -m unittest discover -s scripts/tests`: addon boundaries, terrain build script, distribution publisher, material preparation, launchers | Python |
-| `godot` | the headless Godot tests listed in `GODOT_TESTS`, run against the imported demo project; `island_storage_test` and `terrain_demo_scene_test` only when the island data is present rather than Git LFS pointers | Godot |
+| `godot` | the headless Godot tests listed in `GODOT_TESTS`, run against the imported demo project; `island_storage_test` and `terrain_demo_scene_test` only when the island data is present rather than Git LFS pointers. Tests that read island textures or layers in passing (`material_resource_test`, `material_distribution_test`, `native_data_test`) detect pointers through `tests/lfs_data.gd` and skip that section with a printed note | Godot |
 | `split` | `demo/tests/addon_split_runner.py`: HEGo alone, and all addons together, in disposable projects | Godot |
 | `runtime` | `demo/tests/runtime_test_runner.py`: the runtime suites below | Godot |
 | `houdini` (opt-in) | real HAPI sessions (`HOUDINI_GODOT_TESTS`) and the hython HDA regressions (`HYTHON_TESTS`, material inheritance, weight limiter) | Houdini 22.0 and a licence |

@@ -82,7 +82,9 @@ func run() -> void:
 	var reopened := ResourceLoader.load(settings_path, "", ResourceLoader.CACHE_MODE_IGNORE)
 	check(HEGoIslandMaterials.resource_state_hash(reopened) == settings_hash, "complete settings hash survives resource reopen")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(settings_path))
-	if FileAccess.file_exists(entries[count - 1].resource):
+	if not preload("res://tests/lfs_data.gd").island_textures_present():
+		print("MATERIAL_DISTRIBUTION: island textures are Git LFS pointers; the installed pool check is skipped")
+	elif FileAccess.file_exists(entries[count - 1].resource):
 		var pool := HEGoIslandMaterialRegistry.pool()
 		var source_paths := {}; var color_paths := {}
 		for material in pool:

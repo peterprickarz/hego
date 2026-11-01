@@ -112,6 +112,9 @@ func run() -> void:
 	check(exported_material.triplanar_sharpness == 12.0, "Triplanar sharpness survives scene export")
 	exported.free()
 	# The island's real material profiles, whichever the registry lists.
+	if not preload("res://tests/lfs_data.gd").island_textures_present():
+		print("MATERIAL_RESOURCE_TEST: island textures are Git LFS pointers; the registry profile checks are skipped")
+		finish(); return
 	var profiles: Array[StrataMaterial] = []
 	for entry in HEGoIslandMaterialRegistry.registry().get("entries", []):
 		var source := load(String(entry.resource)) as StrataMaterial
