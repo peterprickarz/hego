@@ -499,6 +499,30 @@ func sample_runtime_channel(name: StringName, world_position: Vector3, interpola
 		return {"ok": false, "status": StrataRuntimeData.Status.NOT_RESIDENT, "value": NAN, "coverage": 0.0}
 	return runtime_data.sample_channel_world(name, world_position, global_transform, interpolation)
 
+## The blended materials of the published bake at a world position: the result of
+## StrataRuntimeData.sample_materials() ({ok, status, ids, weights, channels, dominant,
+## coverage}) plus materials (the StrataMaterial of each id from [member editor_materials],
+## null when the list is shorter), material (the dominant one or null) and surface_type (its
+## StrataMaterial.surface_type, empty when unresolved or untagged).
+func sample_runtime_materials(world_position: Vector3, interpolation: int = StrataRuntimeData.Interpolation.BILINEAR) -> Dictionary:
+	var result := {"ok": false, "status": StrataRuntimeData.Status.NOT_RESIDENT, "ids": PackedInt32Array(), "weights": PackedFloat32Array(), "channels": PackedStringArray(), "dominant": -1, "coverage": 0.0}
+	if runtime_data != null:
+		result = runtime_data.sample_materials_world(world_position, global_transform, interpolation)
+	var materials: Array[StrataMaterial] = []
+	for id in result.ids:
+		materials.append(editor_materials[id] if id >= 0 and id < editor_materials.size() else null)
+	var dominant: StrataMaterial = materials[0] if not materials.is_empty() else null
+	result["materials"] = materials
+	result["material"] = dominant
+	result["surface_type"] = dominant.surface_type if dominant != null else &""
+	return result
+
+## The StrataMaterial.surface_type under a world position, for footsteps, impacts and
+## similar effects. Empty without a bake, where it is not resident, outside the terrain, where
+## no material is assigned, or when the dominant material carries no tag.
+func runtime_surface_type(world_position: Vector3) -> StringName:
+	return sample_runtime_materials(world_position).surface_type
+
 func _validate_property(property: Dictionary) -> void:
 	if property.name == "editor_compile_spacing":
 		property.usage = PROPERTY_USAGE_STORAGE

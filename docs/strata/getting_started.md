@@ -480,6 +480,23 @@ the bake is too large to embed.
   returns a float. It is meant for tools and editor scripts; pass a layer as the second
   argument to sample the stack only up to that layer.
 
+## Surface types for footsteps and impacts
+
+Each `StrataMaterial` has a `surface_type` tag, the counterpart of a physical material in
+other engines. Set it on the material resource (`sand`, `rock`, `grass`) and read it back
+from the bake at any world position:
+
+```gdscript
+var tag := terrain.runtime_surface_type(player.global_position)   # &"sand", or &"" when unknown
+var hit := collision.surface_type_at(ray.get_collision_point())   # the same through a StrataCollision body
+var detail := terrain.sample_runtime_materials(player.global_position)
+# detail.materials, detail.weights: every blended material at the point, heaviest first
+```
+
+The tag is empty outside the terrain, where no material is assigned, where the regions are
+not resident, or when the dominant material is untagged. The query reads the baked material
+maps on the CPU, so it matches what the renderer blends, and it never composes layers.
+
 ## Ship a runtime-only scene
 
 `StrataBake.save_runtime_scene()` writes the bake as a standalone scene without the

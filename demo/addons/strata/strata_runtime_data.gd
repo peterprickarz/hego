@@ -55,6 +55,9 @@ const LOD_REGION_FILE := "region_%d_%d.lod.res"
 @export var mip_levels := 1
 ## Channels retained by the bake: each has a map of that name (and maybe "<name>__coverage").
 @export var channel_names := PackedStringArray()
+## The terrain's material channel names in material id order (id i is channel i and
+## editor_materials[i]) when the bake composed material_ids / material_weights; empty otherwise.
+@export var material_channels := PackedStringArray()
 ## Embedded regions, Vector2i -> StrataRegionData, the whole grid or none.
 @export var regions: Dictionary = {}:
 	set(value):
@@ -619,7 +622,7 @@ func get_manifest() -> Dictionary:
 	var channel_entries: Array = []
 	for name in channel_names:
 		channel_entries.append({"name": name, "bytes": int(map_entries.get(name, 0)) + int(map_entries.get(name + StrataRegions.COVERAGE_SUFFIX, 0))})
-	return {"format_version": format_version, "bake_revision": bake_revision, "bounds": bounds, "spacing": spacing, "resolution": resolution, "cells": cells, "apron": apron, "grid": grid, "region_count": grid.x * grid.y, "region_bytes": per_region, "mip_levels": mip_levels, "total_bytes": per_region * grid.x * grid.y, "map_bytes": map_entries, "embedded": not regions.is_empty(), "coarse_level": coarse_level, "coarse_bytes": coarse_bytes(), "coarse_maps": coarse_entries, "region_directory": region_directory, "lod_level": lod_level, "channels": channel_entries, "nav_profiles": profile_entries, "has_macro": has_macro(), "height_min": height_min, "height_max": height_max}
+	return {"format_version": format_version, "bake_revision": bake_revision, "bounds": bounds, "spacing": spacing, "resolution": resolution, "cells": cells, "apron": apron, "grid": grid, "region_count": grid.x * grid.y, "region_bytes": per_region, "mip_levels": mip_levels, "total_bytes": per_region * grid.x * grid.y, "map_bytes": map_entries, "embedded": not regions.is_empty(), "coarse_level": coarse_level, "coarse_bytes": coarse_bytes(), "coarse_maps": coarse_entries, "region_directory": region_directory, "lod_level": lod_level, "channels": channel_entries, "material_channels": material_channels, "nav_profiles": profile_entries, "has_macro": has_macro(), "height_min": height_min, "height_max": height_max}
 
 ## Independent copy. Embedded regions are copied; an external directory is shared (the files
 ## are the data). With [param embed] every region is loaded and embedded instead; returns null
@@ -641,6 +644,7 @@ func duplicate_runtime(embed: bool = false) -> StrataRuntimeData:
 	copy.height_max = height_max
 	copy.region_extrema = region_extrema.duplicate()
 	copy.channel_names = channel_names.duplicate()
+	copy.material_channels = material_channels.duplicate()
 	copy.nav_profile_rules = nav_profile_rules.duplicate(true)
 	copy.render_settings = render_settings.duplicate(true) if render_settings != null else null
 	if not regions.is_empty() or embed:
@@ -958,16 +962,11 @@ func sample_channel(name: StringName, position: Vector2, interpolation: int = In
 	if region == null:
 		return {"ok": false, "status": Status.NOT_RESIDENT, "value": NAN, "coverage": 0.0}
 	var f := (lattice - Vector2(cell)).clamp(Vector2.ZERO, Vector2.ONE)
-	# Corner weights of a, b, c, d.
-	var wa := (1.0 - f.x) * (1.0 - f.y)
-	var wb := f.x * (1.0 - f.y)
-	var wc := (1.0 - f.x) * f.y
-	var wd := f.x * f.y
-	if interpolation == Interpolation.TRIANGLE:
-		if f.x + f.y <= 1.0:
-			wa = 1.0 - f.x - f.y; wb = f.x; wc = f.y; wd = 0.0
-		else:
-			wa = 0.0; wb = 1.0 - f.y; wc = 1.0 - f.x; wd = f.x + f.y - 1.0
+	var corner_weights := _corner_weights(f, interpolation)
+	var wa := corner_weights[0]
+	var wb := corner_weights[1]
+	var wc := corner_weights[2]
+	var wd := corner_weights[3]
 	var key := String(name)
 	var coverage_key := key + StrataRegions.COVERAGE_SUFFIX
 	var values := region.level_bytes(key)
@@ -997,6 +996,90 @@ func sample_channel(name: StringName, position: Vector2, interpolation: int = In
 func sample_channel_world(name: StringName, world_position: Vector3, terrain_transform: Transform3D, interpolation: int = Interpolation.BILINEAR) -> Dictionary:
 	var local := terrain_transform.affine_inverse() * world_position
 	return sample_channel(name, Vector2(local.x, local.z), interpolation)
+
+## Weights of the cell corners a (0, 0), b (1, 0), c (0, 1), d (1, 1) at cell fraction f.
+static func _corner_weights(f: Vector2, interpolation: int) -> PackedFloat64Array:
+	if interpolation == Interpolation.TRIANGLE:
+		if f.x + f.y <= 1.0: return PackedFloat64Array([1.0 - f.x - f.y, f.x, f.y, 0.0])
+		return PackedFloat64Array([0.0, 1.0 - f.y, 1.0 - f.x, f.x + f.y - 1.0])
+	return PackedFloat64Array([(1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y])
+
+# Materials -----------------------------------------------------------------------------
+
+## True when the bake composed material maps, so sample_materials() can return OK.
+func has_materials() -> bool:
+	return maps.has(StrataRegions.MAP_MATERIAL_IDS) and maps.has(StrataRegions.MAP_MATERIAL_WEIGHTS)
+
+## The blended materials at a terrain-local XZ position: {ok, status, ids: PackedInt32Array,
+## weights: PackedFloat32Array, channels: PackedStringArray, dominant: int, coverage}. ids are
+## material ids (indices into [member material_channels] and the terrain's editor_materials),
+## heaviest first, with weights that sum to 1; channels are their names and dominant is ids[0].
+## The four corner texels blend like sample_channel(); coverage is the blended assigned
+## fraction. A position no material is assigned to is ABSENT (dominant -1), a missing map
+## ABSENT as well.
+func sample_materials(position: Vector2, interpolation: int = Interpolation.BILINEAR) -> Dictionary:
+	var result := {"ok": false, "status": Status.OUTSIDE, "ids": PackedInt32Array(), "weights": PackedFloat32Array(), "channels": PackedStringArray(), "dominant": -1, "coverage": 0.0}
+	if not position.is_finite() or not contains_local(position):
+		return result
+	if not has_materials():
+		result.status = Status.ABSENT
+		return result
+	var lattice := local_to_lattice(position)
+	var size := get_cell_resolution()
+	var cell := Vector2i(clampi(floori(lattice.x), 0, size.x - 1), clampi(floori(lattice.y), 0, size.y - 1))
+	var region := get_region(cell / cells)
+	if region == null:
+		result.status = Status.NOT_RESIDENT
+		return result
+	var corner_weights := _corner_weights((lattice - Vector2(cell)).clamp(Vector2.ZERO, Vector2.ONE), interpolation)
+	var ids_bytes := region.level_bytes(StrataRegions.MAP_MATERIAL_IDS)
+	var weights_bytes := region.level_bytes(StrataRegions.MAP_MATERIAL_WEIGHTS)
+	var stride := cells + 1 + 2 * apron
+	var local := cell % cells
+	var a := (local.y + apron) * stride + local.x + apron
+	var corners := PackedInt32Array([a, a + 1, a + stride, a + stride + 1])
+	if ids_bytes.size() < (corners[3] + 1) * 4 or weights_bytes.size() < (corners[3] + 1) * 4:
+		result.status = Status.ABSENT
+		return result
+	var blended := {}
+	var covered := 0.0
+	for corner in range(4):
+		var weight := corner_weights[corner]
+		if weight <= 0.0: continue
+		var base := corners[corner] * 4
+		for slot in range(4):
+			var share := float(weights_bytes[base + slot]) / 255.0 * weight
+			if share <= 0.0: continue
+			var id := int(ids_bytes[base + slot])
+			blended[id] = float(blended.get(id, 0.0)) + share
+			covered += share
+	if covered <= 0.0:
+		result.status = Status.ABSENT
+		return result
+	var order := blended.keys()
+	order.sort_custom(func(left: int, right: int) -> bool:
+		var difference: float = float(blended[left]) - float(blended[right])
+		return difference > 0.0 or (difference == 0.0 and left < right))
+	var ids := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	var channels := PackedStringArray()
+	for id in order:
+		ids.append(id)
+		weights.append(float(blended[id]) / covered)
+		channels.append(material_channels[id] if id < material_channels.size() else "")
+	result.ok = true
+	result.status = Status.OK
+	result.ids = ids
+	result.weights = weights
+	result.channels = channels
+	result.dominant = ids[0]
+	result.coverage = minf(covered, 1.0)
+	return result
+
+## World-space sample_materials() through the terrain's global transform.
+func sample_materials_world(world_position: Vector3, terrain_transform: Transform3D, interpolation: int = Interpolation.BILINEAR) -> Dictionary:
+	var local := terrain_transform.affine_inverse() * world_position
+	return sample_materials(Vector2(local.x, local.z), interpolation)
 
 # Macro tint / AO -------------------------------------------------------------------------
 

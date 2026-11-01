@@ -592,6 +592,13 @@ func get_chunk_info(key: Vector2i) -> Dictionary:
 	return {"kind": chunk.kind, "body": chunk.body, "cells": chunk.cells}
 
 ## Status of collision at a terrain-local XZ point, without a physics query.
+## The terrain's surface tag under a world position (StrataTerrain3D.runtime_surface_type()),
+## for the body a ray or contact reported; empty without a terrain parent or a tag.
+func surface_type_at(world_position: Vector3) -> StringName:
+	var terrain: Node = _terrain if _terrain != null else get_parent()
+	if terrain == null or not terrain.has_method(&"runtime_surface_type"): return &""
+	return terrain.runtime_surface_type(world_position)
+
 func collision_status_at(position: Vector2) -> int:
 	if data == null or not data.contains_local(position):
 		return StrataRuntimeData.Status.OUTSIDE

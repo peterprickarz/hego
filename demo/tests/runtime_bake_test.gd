@@ -168,6 +168,25 @@ func run() -> void:
 	var centre_texel := (2 + 8) * 21 + 2 + 3
 	check(sums_ok and ids_bytes[centre_texel * 4] == 0 and ids_bytes[centre_texel * 4 + 1] == 1 and weights_bytes.slice(centre_texel * 4, centre_texel * 4 + 4) == PackedByteArray([146, 109, 0, 0]), "material maps compose from editor_material_channels and sum to 255 where assigned (%s)" % [weights_bytes.slice(centre_texel * 4, centre_texel * 4 + 4)])
 
+	# Blended materials and surface tags at a point.
+	check(data.has_materials() and data.material_channels == PackedStringArray(["mat_a", "mat_b"]), "the bake records the material channel order (%s)" % [data.material_channels])
+	var centre_local := data.lattice_to_local(Vector2(16 + 3, 8))
+	var mats := data.sample_materials(centre_local)
+	check(mats.ok and mats.status == S.OK and mats.ids == PackedInt32Array([0, 1]) and mats.dominant == 0 and mats.channels == PackedStringArray(["mat_a", "mat_b"]) and absf(mats.weights[0] - 146.0 / 255.0) < 0.000001 and absf(mats.weights[0] + mats.weights[1] - 1.0) < 0.000001 and absf(mats.coverage - 1.0) < 0.000001, "sample_materials blends the texel's ids heaviest first (%s)" % [mats])
+	var between := data.sample_materials(centre_local + Vector2(0.5, 0.0) * data.spacing, StrataRuntimeData.Interpolation.TRIANGLE)
+	check(between.ok and between.ids[0] == 0 and between.weights[0] > 0.5, "sample_materials interpolates between texels (%s)" % [between])
+	check(data.sample_materials(Vector2(1000.0, 1000.0)).status == S.OUTSIDE and data.sample_materials(Vector2(NAN, 0.0)).status == S.OUTSIDE, "sample_materials reports OUTSIDE beyond the bounds")
+	var sand := StrataMaterial.new()
+	sand.surface_type = &"sand"
+	var tagged: Array[StrataMaterial] = [sand, StrataMaterial.new()]
+	terrain.editor_materials = tagged
+	var centre_world: Vector3 = terrain.global_transform * Vector3(centre_local.x, 3.0, centre_local.y)
+	var resolved := terrain.sample_runtime_materials(centre_world)
+	check(resolved.ok and resolved.material == sand and resolved.materials.size() == 2 and resolved.materials[1] == terrain.editor_materials[1] and resolved.surface_type == &"sand" and terrain.runtime_surface_type(centre_world) == &"sand", "the terrain resolves the dominant material and its surface_type (%s)" % [resolved.surface_type])
+	check(terrain.runtime_surface_type(terrain.global_transform * Vector3(1000.0, 0.0, 0.0)) == &"" and terrain.runtime_surface_type(terrain.global_transform * Vector3(centre_local.x + 20.0 * data.spacing, 0.0, centre_local.y)) == &"", "runtime_surface_type is empty outside and for untagged materials")
+	terrain.editor_materials = []
+	check(terrain.runtime_surface_type(centre_world) == &"" and terrain.sample_runtime_materials(centre_world).material == null, "runtime_surface_type is empty without resolvable materials")
+
 	# Static navigation profiles: per-region cell maps (255 = blocked), rules, default.
 	var D := StrataRuntimeData.DEFAULT_NAV_PROFILE
 	check(data.get_nav_profile_names() == [D, &"flat_dry", &"wet"] and data.maps.has("nav_wet") and data.maps.has("nav_flat_dry") and not data.maps.has("nav_default"), "profiles are cell maps by name; default is the nav_exclusion map: %s" % [data.get_nav_profile_names()])
@@ -204,7 +223,7 @@ func run() -> void:
 	check(profile_manifest.map_bytes.nav_wet == 20 * 20 + 12 * 12 + 8 * 8 and profile_manifest.nav_profiles.size() == 3 and profile_manifest.nav_profiles[0].name == D, "manifest lists default + both profiles with their mip bytes: %s" % [profile_manifest.nav_profiles])
 	check(baked.report.nav_profiles.has(&"wet") and baked.report.nav_profiles[&"flat_dry"].terms == 3 and baked.report.nav_profiles[&"wet"].blocked_cells == wet_expected.count(255), "bake report lists profile evaluation: %s" % [baked.report.nav_profiles])
 	var copied := data.duplicate_runtime()
-	check(copied.nav_profile_rules == data.nav_profile_rules and payload_hashes(copied) == payload_hashes(data) and copied.regions[Vector2i(0, 0)] != data.regions[Vector2i(0, 0)], "duplicate_runtime copies profiles, rules and regions independently")
+	check(copied.nav_profile_rules == data.nav_profile_rules and copied.material_channels == data.material_channels and payload_hashes(copied) == payload_hashes(data) and copied.regions[Vector2i(0, 0)] != data.regions[Vector2i(0, 0)], "duplicate_runtime copies profiles, rules, material channels and regions independently")
 	var unavailable := StrataNavProfiles.evaluate_region_checked(data.get_region(Vector2i(0, 0)), {"channel": "water", "min": 0.5}, PackedStringArray(["water"]))
 	check(not unavailable.ok and "not in the region" in unavailable.message, "evaluating a channel the region lacks is an error: %s" % unavailable.get("message"))
 

@@ -220,6 +220,8 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 	data.mip_levels = mip_levels
 	data.lod_level = lod_level
 	data.channel_names = requested_channels
+	if (region_spec.maps as Dictionary).has(StrataRegions.MAP_MATERIAL_IDS):
+		data.material_channels = terrain.editor_material_channels.duplicate()
 	var embedded := {}
 	var extrema := PackedFloat64Array()
 	var nav_report := {}

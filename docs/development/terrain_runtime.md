@@ -28,6 +28,7 @@ The bake is a grid of regions (see [Strata regions plan](strata_regions_plan.md)
 | `maps` | the spec maps, `name -> {format, kind, scale, apron}`; every region file holds exactly these |
 | `mip_levels` | levels per map the bake computed, level 0 included (capped per map by `StrataRegions.max_level`) |
 | `channel_names` | retained custom channels; each has a sample map of that name and optionally `<name>__coverage` |
+| `material_channels` | the terrain's material channel names in id order when the bake composed `material_ids` / `material_weights` (id `i` is channel `i`); `sample_materials()` blends them at a point |
 | `nav_profile_rules` | `StringName -> rule`, always including `default` (`{"exclusion": true}`); bytes in the file |
 | `render_settings` | the baked `StrataRenderSettings` copy |
 | `height_min`, `height_max`, `region_extrema` | extrema over the terrain's own samples, global and per region (`[min, max]` pairs, row-major over the grid) |

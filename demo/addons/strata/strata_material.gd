@@ -97,6 +97,14 @@ var _source_uv_multiplier := 1.0
 		roughness_bias = value
 		emit_changed()
 
+## Gameplay surface tag of this material, the analogue of a physical material: footsteps,
+## impacts and similar effects read it through StrataTerrain3D.runtime_surface_type() or
+## StrataCollision.surface_type_at(). Rendering ignores it; empty means untagged.
+@export var surface_type: StringName = &"":
+	set(value):
+		if surface_type == value: return
+		surface_type = value
+		emit_changed()
 @export_group("Custom Shader", "custom_")
 ## Optional GLSL statements that adjust this material in the terrain's fragment
 ## shader, for example a fresnel rim. They become the body of

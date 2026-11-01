@@ -173,6 +173,11 @@ Runtime API:
 | `StrataRuntimeData.is_nav_blocked_cell(cell, profile)` | whether the cell is a hole or blocked for that profile |
 | `StrataRuntimeData.sample_channel(name, position, interpolation)` | `{ok, status, value, coverage}` for a retained channel; `has_channel(name)` tests for one |
 | `StrataTerrain3D.sample_runtime_channel(name, world_position)` | the same, in world space |
+| `StrataRuntimeData.sample_materials(position, interpolation)` | `{ok, status, ids, weights, channels, dominant, coverage}`: the blended material ids at a position, heaviest first, with their channel names from `material_channels`; `has_materials()` tests for the maps |
+| `StrataTerrain3D.sample_runtime_materials(world_position)` | the same in world space, plus `materials` (the `StrataMaterial` of each id), `material` (the dominant one) and its `surface_type` |
+| `StrataTerrain3D.runtime_surface_type(world_position)` | the dominant material's `surface_type` under a point, or empty |
+| `StrataCollision.surface_type_at(world_position)` | the same through the collision body a ray or contact reported |
+| `StrataMaterial.surface_type` | the material's gameplay tag (footsteps, impacts), the analogue of a physical material; rendering ignores it |
 | `StrataNavigation.profile` | the profile this node bakes; default `default`. A profile missing from the data is reported by the bake |
 | `StrataNavigation.navigation_layers` | the layer bits of this node's regions; agents choose a population with them |
 
