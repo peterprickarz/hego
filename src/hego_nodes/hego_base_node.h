@@ -40,6 +40,9 @@ public:
 	void reset_node_id() override;
 
 	virtual godot::Ref<HEGoTask> instantiate();
+	/// Deletes this node from the Houdini session, together with the object node HEGo
+	/// created to hold it, and forgets its id. See the definition.
+	godot::Ref<HEGoTask> delete_node();
 
 	static void _bind_methods();
 };

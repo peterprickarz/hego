@@ -83,6 +83,8 @@ func edit(object: Object) -> void:
 	_cancel_pointer()
 	if graph != null and graph.graph_changed.is_connected(_on_graph_changed):
 		graph.graph_changed.disconnect(_on_graph_changed)
+	if graph != null and graph.snap_all_requested.is_connected(_on_snap_all_requested):
+		graph.snap_all_requested.disconnect(_on_snap_all_requested)
 	graph = object as HEGoGraphInput3D
 	selected_points = PackedInt32Array()
 	selected_connections = PackedInt32Array()
@@ -94,6 +96,8 @@ func edit(object: Object) -> void:
 	if graph != null:
 		if not graph.graph_changed.is_connected(_on_graph_changed):
 			graph.graph_changed.connect(_on_graph_changed)
+		if not graph.snap_all_requested.is_connected(_on_snap_all_requested):
+			graph.snap_all_requested.connect(_on_snap_all_requested)
 		graph.update_gizmos()
 	_refresh_attrib_panel()
 
@@ -795,11 +799,11 @@ func _update_hover(camera: Camera3D, mouse: Vector2) -> void:
 		else:
 			projected[i] = camera.unproject_position(global_pt)
 			visible[i] = 1
-	hover_point = HEGoGraphPicking.closest_point(mouse, projected)
+	hover_point = HEGoGraphPicking.closest_point(mouse, projected, HEGoGraphPicking.point_radius())
 	if hover_point >= 0 and visible[hover_point] == 0:
 		hover_point = -1
 	if hover_point < 0:
-		hover_connection = HEGoGraphPicking.closest_connection(mouse, projected, graph.connections)
+		hover_connection = HEGoGraphPicking.closest_connection(mouse, projected, graph.connections, HEGoGraphPicking.connection_radius())
 
 
 func _hit(camera: Camera3D, mouse: Vector2) -> Variant:
@@ -838,6 +842,12 @@ func _commit_state(action: String, before: Dictionary) -> void:
 	ur.add_undo_method(graph, "apply_state", before)
 	ur.commit_action(false)
 	graph.update_gizmos()
+
+
+func _on_snap_all_requested() -> void:
+	if graph == null:
+		return
+	_mutate("Snap graph points to surface", func() -> void: graph.snap_all_to_surface())
 
 
 func _on_graph_changed() -> void:

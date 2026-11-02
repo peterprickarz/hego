@@ -275,6 +275,43 @@ func panel_assets() -> Array:
 	return entries
 
 
+## Whether the loaded HEGo binary can delete nodes from the session, which
+## [method release] needs. Binaries older than [method HEGoBaseNode.delete_node] cannot.
+static func can_release() -> bool:
+	return ClassDB.class_has_method(&"HEGoBaseNode", &"delete_node")
+
+
+## Deletes every Houdini node this agent made - the HDAs, and the merge and input nodes
+## behind their inputs - and forgets them. True when all of them are gone.
+##
+## Houdini keeps a node's cooked geometry, and HEGo a copy of its output, for as long as
+## the node exists, so a host that cooks a large asset once and keeps the result as Godot
+## nodes can let them go. The next cook creates everything again: the HDA from the
+## owner's stashed parameters and the inputs by a full upload. The bottom panel shows no
+## parameters for a released host until then.
+##
+## Returns false, and deletes nothing, when [method can_release] is false.
+func release() -> bool:
+	if not can_release():
+		return false
+	var ok := true
+	for label in _input_nodes:
+		var chains: Dictionary = _input_nodes[label]
+		for index in chains:
+			var chain: Dictionary = chains[index]
+			for input in chain.get("inputs", []):
+				if input is HEGoBaseNode:
+					ok = await _delete(input) and ok
+			if chain.get("merge") is HEGoBaseNode:
+				ok = await _delete(chain["merge"]) and ok
+	_input_nodes.clear()
+	for label in assets:
+		ok = await _delete(assets[label]) and ok
+	assets.clear()
+	highlighted_label = ""
+	return ok
+
+
 ## Fetches what [param asset]'s cook produced and wraps it for the output handlers.
 ##
 ## Needed by anything in the output library: [method HEGoMeshOutput.fetch_meshes],
@@ -355,6 +392,15 @@ func _update_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: 
 	if not await _chain_task(asset.connect_input(merge_node, index), settings): return false
 	chain["inputs"] = input_array
 	return true
+
+func _delete(node: HEGoBaseNode) -> bool:
+	if node.get_id() == UNINSTANTIATED_NODE_ID:
+		return true
+	var deleted := await HEGoNodeUtil.checked_task(owner_node, node.call(&"delete_node"))
+	if not deleted.ok:
+		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Could not release a Houdini node: " + str(deleted.message))
+	return deleted.ok
+
 
 func _chain_task(native_task: HEGoTask, settings: Dictionary) -> bool:
 	if settings.get("_strict", false):

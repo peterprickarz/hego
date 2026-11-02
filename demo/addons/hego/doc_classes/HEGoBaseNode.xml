@@ -13,6 +13,16 @@ Most derived methods assume [method instantiate] has already produced a valid id
 <tutorials>
 </tutorials>
 <methods>
+<method name="delete_node">
+<return type="HEGoTask" />
+<description>
+Submits a task that deletes this node from the Houdini session and resets the stored id to [code]-1[/code].
+
+HEGo creates every node with no parent, so Houdini wraps it in an object node of its own under [code]/obj[/code]; that object is what gets deleted, together with the node's cook caches and HEGo's cached copy of its output geometry. Nodes a session no longer holds are only forgotten. Call it once the node's output has been read, for example through [method HEGoAssetAgent.release], to keep a long editor session from accumulating Houdini memory. A later [method instantiate] creates the node again.
+
+Returns an [HEGoTask] whose result is the id of the deleted object node, or [code]null[/code] when there was nothing to delete. It fails when the node was re-instantiated or reset before the task ran, or when Houdini refuses the deletion.
+</description>
+</method>
 <method name="get_id" qualifiers="const">
 <return type="int" />
 <description>
