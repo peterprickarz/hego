@@ -1,6 +1,6 @@
 # HEGo Terrain3D package
 
-This package is built from source commit e09d823b11dd14f76f6a8e89f9efccb8e86edffe. It sends Terrain3D nodes to HDAs
+This package is built from source commit e6a02e0d2b694438f1f51962ce1579915ec4922f. It sends Terrain3D nodes to HDAs
 as heightfield inputs and turns cooked heightfields and points into Terrain3D
 terrains and instances. It requires HEGo from the same source revision at
 `addons/hego`, and the Terrain3D addon by TokisanGames (tested with 1.0.1),
