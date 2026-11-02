@@ -11,29 +11,31 @@ const POINT_HOVER := Color(1.0, 1.0, 1.0)
 const POINT_SELECTED := Color(1.0, 0.38, 0.08)
 const PREVIEW := Color(0.55, 0.85, 1.0, 0.85)
 
-var _sphere: SphereMesh
-var _sphere_selected: SphereMesh
+## Size multipliers for highlighted markers, relative to the editor settings.
+const POINT_HOVER_SCALE := 1.3
+const POINT_SELECTED_SCALE := 1.6
+const LINE_HOVER_SCALE := 1.5
+const LINE_SELECTED_SCALE := 2.0
+
+var _point_material: ShaderMaterial
+var _line_material: ShaderMaterial
 
 
 func _init() -> void:
-	create_material("lines", LINE, false, true)
-	create_material("lines_hover", LINE_HOVER, false, true)
-	create_material("lines_selected", LINE_SELECTED, false, true)
-	create_material("preview", PREVIEW, false, true)
-	create_material("point", POINT, false, true)
-	create_material("point_hover", POINT_HOVER, false, true)
-	create_material("point_selected", POINT_SELECTED, false, true)
-	_sphere = _make_sphere(0.07)
-	_sphere_selected = _make_sphere(0.11)
+	HEGoGraphPicking.register_settings()
+	_point_material = ShaderMaterial.new()
+	_point_material.shader = preload("graph_point.gdshader")
+	_point_material.render_priority = 10
+	_line_material = ShaderMaterial.new()
+	_line_material.shader = preload("graph_line.gdshader")
+	_line_material.render_priority = 9
 
 
-func _make_sphere(radius: float) -> SphereMesh:
-	var mesh := SphereMesh.new()
-	mesh.radius = radius
-	mesh.height = radius * 2.0
-	mesh.radial_segments = 12
-	mesh.rings = 6
-	return mesh
+## Point markers and connection lines keep a constant size in screen pixels. Sizes come
+## from the editor settings hego/graph/point_size and hego/graph/line_width.
+func _apply_sizes() -> void:
+	_point_material.set_shader_parameter("point_px", HEGoGraphPicking.point_size())
+	_line_material.set_shader_parameter("line_px", HEGoGraphPicking.line_width())
 
 
 func _get_gizmo_name() -> String:
@@ -72,44 +74,124 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		elif editor.selected_points.size() > 0:
 			selected_pts = editor.selected_points
 
-	var lines := PackedVector3Array()
-	var hover_lines := PackedVector3Array()
-	var selected_lines := PackedVector3Array()
+	# Path mode: ribbon or tube with its outline, as gizmo geometry so that View > Gizmos
+	# hides it and it never exists outside the editor.
+	var path_mesh := node.get_path_mesh()
+	if path_mesh != null and path_mesh.get_surface_count() > 0:
+		gizmo.add_mesh(path_mesh)
+
+	_apply_sizes()
+	var line_quads := _ScreenLines.new()
 	for c in node.connection_count():
 		var a: int = node.connections[c * 2]
 		var b: int = node.connections[c * 2 + 1]
 		if a < 0 or b < 0 or a >= node.points.size() or b >= node.points.size():
 			continue
 		if selected_conns.has(c):
-			selected_lines.append(node.points[a])
-			selected_lines.append(node.points[b])
+			line_quads.add(node.points[a], node.points[b], LINE_SELECTED, LINE_SELECTED_SCALE)
 		elif c == hover_connection:
-			hover_lines.append(node.points[a])
-			hover_lines.append(node.points[b])
+			line_quads.add(node.points[a], node.points[b], LINE_HOVER, LINE_HOVER_SCALE)
 		else:
-			lines.append(node.points[a])
-			lines.append(node.points[b])
-
-	if lines.size() >= 2:
-		gizmo.add_lines(lines, get_material("lines", gizmo), false)
-	if hover_lines.size() >= 2:
-		gizmo.add_lines(hover_lines, get_material("lines_hover", gizmo), false)
-	if selected_lines.size() >= 2:
-		gizmo.add_lines(selected_lines, get_material("lines_selected", gizmo), false)
-		gizmo.add_lines(selected_lines, get_material("lines_selected", gizmo), false)
+			line_quads.add(node.points[a], node.points[b], LINE, 1.0)
 
 	var preview_from: int = editor.connect_from_point() if editor and editor.graph == node else -1
 	if editor and editor.graph == node and editor.preview_cursor != null and preview_from >= 0:
-		var preview := PackedVector3Array()
-		preview.append(node.points[preview_from])
-		preview.append(node.to_local(editor.preview_cursor))
-		gizmo.add_lines(preview, get_material("preview", gizmo), false)
+		line_quads.add(node.points[preview_from], node.to_local(editor.preview_cursor), PREVIEW, 1.0)
 
+	var markers := PackedVector3Array()
+	var marker_colors := PackedColorArray()
+	var marker_scales := PackedFloat32Array()
 	for i in node.points.size():
-		var selected := selected_pts.has(i)
-		var mat_name := "point_selected" if selected else ("point_hover" if i == hover_point else "point")
-		var mesh := _sphere_selected if selected else _sphere
-		gizmo.add_mesh(mesh, get_material(mat_name, gizmo), Transform3D(Basis(), node.points[i]))
+		markers.append(node.points[i])
+		if selected_pts.has(i):
+			marker_colors.append(POINT_SELECTED)
+			marker_scales.append(POINT_SELECTED_SCALE)
+		elif i == hover_point:
+			marker_colors.append(POINT_HOVER)
+			marker_scales.append(POINT_HOVER_SCALE)
+		else:
+			marker_colors.append(POINT)
+			marker_scales.append(1.0)
+
+	var line_mesh := line_quads.build()
+	if line_mesh != null:
+		line_mesh.custom_aabb = _padded_bounds(line_quads.vertices)
+		gizmo.add_mesh(line_mesh, _line_material)
+	var point_mesh := _build_markers(markers, marker_colors, marker_scales)
+	if point_mesh != null:
+		gizmo.add_mesh(point_mesh, _point_material)
+
+
+static func _build_markers(positions: PackedVector3Array, colors: PackedColorArray, scales: PackedFloat32Array) -> ArrayMesh:
+	if positions.is_empty():
+		return null
+	var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
+	var vertices := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var uv2s := PackedVector2Array()
+	var cols := PackedColorArray()
+	var indices := PackedInt32Array()
+	for i in positions.size():
+		var base := vertices.size()
+		for corner in corners:
+			vertices.append(positions[i])
+			uvs.append(corner)
+			uv2s.append(Vector2(scales[i], 0.0))
+			cols.append(colors[i])
+		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_TEX_UV2] = uv2s
+	arrays[Mesh.ARRAY_COLOR] = cols
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.custom_aabb = _padded_bounds(positions)
+	return mesh
+
+
+## Bounds of the markers grown by a lot, because their real size is set on screen and
+## the engine would otherwise cull them by their zero-size quads.
+static func _padded_bounds(positions: PackedVector3Array) -> AABB:
+	var box := AABB(positions[0], Vector3.ZERO)
+	for p in positions:
+		box = box.expand(p)
+	return box.grow(maxf(box.get_longest_axis_size() * 0.05, 100.0))
+
+
+## Collects line segments as screen-width quads for graph_line.gdshader.
+class _ScreenLines:
+	var vertices := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var others := PackedFloat32Array()
+	var cols := PackedColorArray()
+	var indices := PackedInt32Array()
+
+	func add(from: Vector3, to: Vector3, color: Color, scale: float) -> void:
+		var base := vertices.size()
+		for end in [[from, to, -1.0], [from, to, 1.0], [to, from, 1.0], [to, from, -1.0]]:
+			vertices.append(end[0])
+			uvs.append(Vector2(end[2], 0.0))
+			others.append_array([end[1].x, end[1].y, end[1].z, scale])
+			cols.append(color)
+		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+
+	func build() -> ArrayMesh:
+		if vertices.is_empty():
+			return null
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = vertices
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+		arrays[Mesh.ARRAY_CUSTOM0] = others
+		arrays[Mesh.ARRAY_COLOR] = cols
+		arrays[Mesh.ARRAY_INDEX] = indices
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {},
+				Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT)
+		return mesh
 
 
 func _subgizmos_intersect_ray(gizmo: EditorNode3DGizmo, camera: Camera3D, screen_pos: Vector2) -> int:
@@ -124,7 +206,7 @@ func _subgizmos_intersect_ray(gizmo: EditorNode3DGizmo, camera: Camera3D, screen
 			projected[i] = Vector2(-1e6, -1e6)
 		else:
 			projected[i] = camera.unproject_position(global_pt)
-	return HEGoGraphPicking.closest_point(screen_pos, projected)
+	return HEGoGraphPicking.closest_point(screen_pos, projected, HEGoGraphPicking.point_radius())
 
 
 func _subgizmos_intersect_frustum(gizmo: EditorNode3DGizmo, camera: Camera3D, frustum_planes: Array) -> PackedInt32Array:

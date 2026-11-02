@@ -55,10 +55,123 @@ signal graph_changed
 		connection_attribs = value
 		graph_changed.emit()
 
+## How the path visualisation draws a connection.
+enum PathShape {
+	## A flat translucent band lying on the surface.
+	RIBBON,
+	## A cylinder per connection with a sphere at each point.
+	TUBE,
+}
+
+@export_group("Visualization")
+
+## Draws the graph as a path: a translucent ribbon or tube along every connection whose
+## width comes from an attribute, with an outline. It is part of the graph's editor
+## gizmo, so it only exists in the editor and View > Gizmos hides it.
+@export var path_mode := false:
+	set(value):
+		path_mode = value
+		_queue_path_rebuild()
+
+## Name of the attribute that gives the path width in metres. A connection attribute
+## of that name wins over a point attribute, which is interpolated between the ends of a
+## connection. Missing or zero values use [member path_default_width].
+@export var path_width_attribute: StringName = &"path_width":
+	set(value):
+		path_width_attribute = value
+		_queue_path_rebuild()
+
+## Width in metres where [member path_width_attribute] gives none.
+@export_range(0.01, 100.0, 0.01, "or_greater", "suffix:m") var path_default_width := 2.0:
+	set(value):
+		path_default_width = value
+		_queue_path_rebuild()
+
+## Ribbon or tube. A tube uses the width as its diameter.
+@export var path_shape := PathShape.RIBBON:
+	set(value):
+		path_shape = value
+		_queue_path_rebuild()
+
+## Colour and opacity of the ribbon or tube.
+@export var path_color := Color(1.0, 0.72, 0.2, 0.35):
+	set(value):
+		path_color = value
+		_queue_path_rebuild()
+
+## Draws the boundary: both ribbon edges and the end caps, or the tube's silhouette lines
+## and end rings.
+@export var path_outline := true:
+	set(value):
+		path_outline = value
+		_queue_path_rebuild()
+
+## Colour of the outline.
+@export var path_outline_color := Color(1.0, 0.85, 0.35, 1.0):
+	set(value):
+		path_outline_color = value
+		_queue_path_rebuild()
+
+## Lays the path on the surface between points, and orients the ribbon to its normal,
+## using the [member surface_provider] or physics colliders. Without a surface the path
+## runs straight between points and the ribbon faces up.
+@export var path_drape := true:
+	set(value):
+		path_drape = value
+		_queue_path_rebuild()
+
+## Distance in metres between samples when draping.
+@export_range(0.25, 64.0, 0.25, "or_greater", "suffix:m") var path_sample_spacing := 3.0:
+	set(value):
+		path_sample_spacing = value
+		_queue_path_rebuild()
+
+## Height of the path above the surface along its normal, to avoid z-fighting.
+@export_range(0.0, 2.0, 0.01, "or_greater", "suffix:m") var path_lift := 0.25:
+	set(value):
+		path_lift = value
+		_queue_path_rebuild()
+
+## Segments around a tube.
+@export_range(4, 64) var path_tube_sides := 12:
+	set(value):
+		path_tube_sides = value
+		_queue_path_rebuild()
+
+@export_group("Surface")
+
+## Optional node that gives the ground height, for snapping and for the path
+## visualisation. It needs [code]sample_height(Vector2) -> float[/code], taking a local
+## x/z position and returning the local height, and may have
+## [code]contains_position(Vector2) -> bool[/code]. Without one, a physics ray from above
+## is used. HEGo does not depend on any terrain addon.
+@export_node_path("Node3D") var surface_provider := NodePath():
+	set(value):
+		surface_provider = value
+		_queue_path_rebuild()
+
+## Puts every point added or moved in the editor on the surface.
+@export var snap_to_surface := false
+
+## Height above the surface in metres that snapped points get.
+@export_range(-10.0, 10.0, 0.01, "or_greater", "or_less", "suffix:m") var surface_offset := 0.0
+
+## Moves every point onto the surface now, as one undoable step.
+@export_tool_button("Snap all points to surface", "Snap") var snap_all_button := request_snap_all
+
+## Emitted by [method request_snap_all] when an editor wants to apply the snap as an
+## undoable action. Without a listener the snap is applied directly.
+signal snap_all_requested
+
 var _syncing := false
+var _path_mesh: ArrayMesh
+var _path_dirty := true
+var _path_redraw_queued := false
 
 
 func _enter_tree() -> void:
+	if not graph_changed.is_connected(_queue_path_rebuild):
+		graph_changed.connect(_queue_path_rebuild)
 	if not child_entered_tree.is_connected(_on_child_entered):
 		child_entered_tree.connect(_on_child_entered)
 	if not child_exiting_tree.is_connected(_on_child_exiting):
@@ -68,6 +181,8 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	if graph_changed.is_connected(_queue_path_rebuild):
+		graph_changed.disconnect(_queue_path_rebuild)
 	if child_entered_tree.is_connected(_on_child_entered):
 		child_entered_tree.disconnect(_on_child_entered)
 	if child_exiting_tree.is_connected(_on_child_exiting):
@@ -90,7 +205,7 @@ func get_connection(index: int) -> Vector2i:
 ## Appends a point at [param position] and returns its index.
 func add_point(position: Vector3) -> int:
 	var next := points.duplicate()
-	next.append(position)
+	next.append(_snapped(position))
 	points = next
 	return points.size() - 1
 
@@ -100,7 +215,7 @@ func set_point_position(index: int, position: Vector3) -> void:
 	if index < 0 or index >= points.size():
 		return
 	var next := points.duplicate()
-	next[index] = position
+	next[index] = _snapped(position)
 	points = next
 
 
@@ -109,12 +224,87 @@ func set_point_position_live(index: int, position: Vector3) -> void:
 	if index < 0 or index >= points.size():
 		return
 	var next := points.duplicate()
-	next[index] = position
+	next[index] = _snapped(position)
 	_syncing = true
 	points = next
 	_syncing = false
 	if Engine.is_editor_hint():
 		update_gizmos()
+	_queue_path_rebuild()
+
+
+## [param position] (graph local) put on the surface when [member snap_to_surface] is on
+## in the editor; otherwise unchanged.
+func _snapped(position: Vector3) -> Vector3:
+	if not snap_to_surface or not Engine.is_editor_hint():
+		return position
+	return snapped_to_surface(position, HEGoGraphSurface.new(self, surface_provider))
+
+
+## [param position] (graph local) with its height replaced by the surface under it plus
+## [member surface_offset]. Unchanged where there is no surface.
+func snapped_to_surface(position: Vector3, surface: HEGoGraphSurface) -> Vector3:
+	var hit := surface.query_local(position)
+	if hit.is_empty():
+		return position
+	return Vector3(position.x, hit.position.y + surface_offset, position.z)
+
+
+## Moves every point onto the surface under it ([member surface_provider], else
+## physics) plus [member surface_offset]. Returns the number of points that moved.
+func snap_all_to_surface() -> int:
+	var surface := HEGoGraphSurface.new(self, surface_provider)
+	if not surface.is_available():
+		return 0
+	var next := points.duplicate()
+	var moved := 0
+	for i in next.size():
+		var target := snapped_to_surface(next[i], surface)
+		if not is_equal_approx(target.y, next[i].y):
+			next[i] = target
+			moved += 1
+	if moved > 0:
+		points = next
+		if Engine.is_editor_hint():
+			update_gizmos()
+	return moved
+
+
+## What the "Snap all points to surface" button calls: lets an editor do it as an undoable
+## action through [signal snap_all_requested], else snaps directly.
+func request_snap_all() -> void:
+	if snap_all_requested.get_connections().is_empty():
+		snap_all_to_surface()
+	else:
+		snap_all_requested.emit()
+
+
+## Marks the path mesh stale and asks the gizmo to redraw on the next idle frame, once
+## however many changes came in.
+func _queue_path_rebuild() -> void:
+	_path_dirty = true
+	if _path_redraw_queued or not is_inside_tree() or not Engine.is_editor_hint():
+		return
+	_path_redraw_queued = true
+	_redraw_path.call_deferred()
+
+
+func _redraw_path() -> void:
+	_path_redraw_queued = false
+	if is_inside_tree():
+		update_gizmos()
+
+
+## The path visualisation mesh (fill and outline surfaces, in local space), rebuilt only
+## when the graph or a visualisation property changed since the last call. Null when
+## [member path_mode] is off. The editor gizmo draws it.
+func get_path_mesh() -> ArrayMesh:
+	if not path_mode:
+		return null
+	if _path_dirty or _path_mesh == null:
+		_path_mesh = HEGoGraphPathMesh.build(self, HEGoGraphSurface.new(self, surface_provider))
+		_path_dirty = false
+	return _path_mesh
 
 
 ## Deletes the given point indices and any connection that used them. Remaining
