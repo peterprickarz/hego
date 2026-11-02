@@ -45,6 +45,16 @@ var _source_uv_multiplier := 1.0
 		if triplanar_sharpness == value: return
 		triplanar_sharpness = value
 		emit_changed()
+## Which terrain-local axes the textures are projected along. Triplanar blends
+## all three (default). Biplanar keeps the two dominant axes per fragment. Sides
+## uses X and Z only, never from above or below (cliffs); a nearly flat surface
+## falls back to a single side axis. Top is a single planar projection along Y.
+enum ProjectionMode { TRIPLANAR, BIPLANAR, SIDES, TOP }
+@export var projection: ProjectionMode = ProjectionMode.TRIPLANAR:
+	set(value):
+		if projection == value: return
+		projection = value
+		emit_changed()
 @export_range(0.0, 8.0, 0.01) var displacement_strength := 1.0:
 	set(value):
 		if not is_finite(value) or value < 0.0:
@@ -155,6 +165,7 @@ func _sync_source_profile() -> void:
 	ormh_texture = _source_profile.ormh_texture
 	uv_scale = _source_profile.uv_scale * _source_uv_multiplier
 	triplanar_sharpness = _source_profile.triplanar_sharpness
+	projection = _source_profile.projection
 	displacement_strength = _source_profile.displacement_strength
 	height_blend_contrast = _source_profile.height_blend_contrast
 	height_blend_bias = _source_profile.height_blend_bias

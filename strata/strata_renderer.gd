@@ -142,7 +142,8 @@ var _runtime_mode := false
 var _camera: Camera3D
 var _mesher: RefCounted
 var _shader_material: ShaderMaterial
-var _crease_shader: Shader
+var _variant_shaders := {}
+var pixel_sampling := false
 var _active_crease_variant := false
 # "smooth|" or "creases|" plus the applied custom-code key: the shader in use.
 var _active_shader_key := ""
@@ -526,6 +527,7 @@ func _bind_material_pool() -> void:
 	var packed: Array[Texture2D] = []
 	var scales := PackedFloat32Array()
 	var sharpnesses := PackedFloat32Array()
+	var projections := PackedInt32Array()
 	var displacements := PackedFloat32Array()
 	var contrasts := PackedFloat32Array()
 	var biases := PackedFloat32Array()
@@ -542,6 +544,7 @@ func _bind_material_pool() -> void:
 		packed.append(source.ormh_texture if source.ormh_texture != null else default_ormh)
 		scales.append(maxf(0.001, source.uv_scale))
 		sharpnesses.append(source.triplanar_sharpness)
+		projections.append(clampi(int(source.projection), 0, 3))
 		displacements.append(maxf(0.0, source.displacement_strength))
 		contrasts.append(source.height_blend_contrast)
 		biases.append(source.height_blend_bias)
@@ -553,6 +556,7 @@ func _bind_material_pool() -> void:
 	_shader_material.set_shader_parameter("ormh_maps", packed)
 	_shader_material.set_shader_parameter("uv_scales", scales)
 	_shader_material.set_shader_parameter("triplanar_sharpnesses", sharpnesses)
+	_shader_material.set_shader_parameter("projection_modes", projections)
 	_shader_material.set_shader_parameter("material_displacement", displacements)
 	_shader_material.set_shader_parameter("height_blend_contrasts", contrasts)
 	_shader_material.set_shader_parameter("height_blend_biases", biases)
@@ -570,7 +574,7 @@ static func _solid_texture(color: Color) -> ImageTexture:
 
 func _update_shading_variant() -> void:
 	var wants_creases := smooth_shading and crease_angle_degrees < 180.0
-	var key := ("creases|" if wants_creases else "smooth|") + _hook_key_applied
+	var key := ("creases|" if wants_creases else "smooth|") + ("pixel|" if pixel_sampling else "") + _hook_key_applied
 	if key == _active_shader_key: return
 	var target := _surface_shader(wants_creases)
 	# Rebinding happens only on explicit variant or custom-code changes, never
@@ -599,35 +603,42 @@ func _surface_shader(creases: bool) -> Shader:
 	_stats.custom_shader_failed_ids = failed_ids
 	if not _hook_spec_applied.is_empty():
 		var entries := _hook_spec_applied
-		var shader := _compiled_shader(_hook_shader_code(entries, creases))
+		var shader := _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling))
 		if shader == null:
 			entries = []
 			for entry: Dictionary in _hook_spec_applied:
-				if _compiled_shader(_hook_shader_code([entry], creases)) != null:
+				if _compiled_shader(_hook_shader_code([entry], creases, pixel_sampling)) != null:
 					entries.append(entry)
 				else:
 					failed_ids.append(entry.id)
 					push_error("%s: custom_fragment_code does not compile, so this material renders without it. The SHADER ERROR printed above (when this code was first compiled) gives the reason." % entry.label)
 			_stats.custom_shader_failed_ids = failed_ids
 			if not entries.is_empty():
-				shader = _compiled_shader(_hook_shader_code(entries, creases))
+				shader = _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling))
 				if shader == null:
 					push_error("The custom_fragment_code of materials %s compiles separately but not together; the terrain uses its plain shader." % ", ".join(entries.map(func(entry: Dictionary) -> String: return entry.label)))
 		if shader != null:
 			_hook_spec_bound = entries
 			_stats.custom_shader_material_ids = PackedInt32Array(entries.map(func(entry: Dictionary) -> int: return entry.id))
 			return shader
-	if not creases:
+	if not creases and not pixel_sampling:
 		return load(SURFACE_SHADER_PATH)
-	if _crease_shader == null:
-		_crease_shader = Shader.new()
+	var defines := _variant_defines(creases, pixel_sampling)
+	if not _variant_shaders.has(defines):
+		var variant := Shader.new()
 		var base_shader: Shader = load(SURFACE_SHADER_PATH)
 		var code := base_shader.code
 		# A generated wrapper shares the entire source. Absolute include paths
 		# are required because this cached Shader has no separate source file.
 		code = code.replace('#include "', '#include "res://addons/strata/shaders/')
-		_crease_shader.code = "#define HEGO_TERRAIN_CREASES\n" + code
-	return _crease_shader
+		variant.code = defines + code
+		_variant_shaders[defines] = variant
+	return _variant_shaders[defines]
+
+## Compile-time switches in front of the shader source. Pixel sampling changes
+## sampler filter hints, which cannot be toggled by a uniform.
+static func _variant_defines(creases: bool, pixel: bool) -> String:
+	return ("#define STRATA_PIXEL_SAMPLING\n" if pixel else "") + ("#define HEGO_TERRAIN_CREASES\n" if creases else "")
 
 static func _compiled_shader(code: String) -> Shader:
 	if _generated_shaders.has(code): return _generated_shaders[code]
@@ -643,7 +654,7 @@ static func _compiled_shader(code: String) -> Shader:
 ## The plain shader source with STRATA_MATERIAL_HOOKS defined and its marker
 ## replaced by one function per material plus constant-ID dispatch, in the
 ## style of terrain_texture_dispatch.gdshaderinc.
-static func _hook_shader_code(entries: Array, creases: bool) -> String:
+static func _hook_shader_code(entries: Array, creases: bool, pixel := false) -> String:
 	var base_shader: Shader = load(SURFACE_SHADER_PATH)
 	var code := base_shader.code.replace('#include "', '#include "res://addons/strata/shaders/')
 	var marker := code.find("\n" + _HOOK_MARKER + "\n")
@@ -667,7 +678,7 @@ static func _hook_shader_code(entries: Array, creases: bool) -> String:
 	block.append("bool strata_material_has_hook(int id) {\n\tswitch (id) {\n%s\t}\n\treturn false;\n}" % has_cases)
 	block.append("void strata_material_hook(int id, inout StrataSurface s, in StrataContext c) {\n\tswitch (id) {\n%s\t}\n}" % call_cases)
 	code = code.substr(0, marker + 1) + "\n".join(block) + code.substr(marker + 1 + _HOOK_MARKER.length())
-	return "#define STRATA_MATERIAL_HOOKS\n" + ("#define HEGO_TERRAIN_CREASES\n" if creases else "") + code
+	return "#define STRATA_MATERIAL_HOOKS\n" + _variant_defines(creases, pixel) + code
 
 ## The custom fragment code of the current materials, by material ID. Invalid
 ## parameter entries are reported and left out.
@@ -1150,6 +1161,9 @@ func _quality_changed() -> void:
 	displacement_vertex_spacing = render_settings.displacement_vertex_spacing
 	displacement_refinement_radius = render_settings.displacement_refinement_radius
 	displacement_refinement_budget = render_settings.displacement_refinement_budget
+	if pixel_sampling != render_settings.pixel_sampling:
+		pixel_sampling = render_settings.pixel_sampling
+		if _shader_material != null: _update_shading_variant()
 	_invalidate_geometry_lod()
 
 func _projection_scale() -> float:
