@@ -70,6 +70,12 @@ uniform sampler2D ownership_field : filter_linear, repeat_disable;
 uniform bool show_ownership = false;
 uniform float terrain_tint_strength = 1.0;
 uniform float terrain_ao_strength = 1.0;
+// Rain wetness, set through StrataRenderer.surface_wetness (0 = dry, the default).
+// Darkens albedo and lowers roughness, fully on upward faces, partly on steep ones.
+uniform float surface_wetness : hint_range(0.0, 1.0) = 0.0;
+uniform float wet_darkening : hint_range(0.0, 1.0) = 0.42;
+uniform float wet_roughness : hint_range(0.0, 1.0) = 0.55;
+uniform float wet_steep_factor : hint_range(0.0, 1.0) = 0.45;
 uniform sampler2D channel_preview_field : filter_linear, repeat_disable;
 uniform bool show_channel_preview = false;
 uniform vec2 channel_preview_origin = vec2(0.0);
@@ -365,6 +371,11 @@ void fragment() {
 			ownership_coverage = clamp(textureLod(ownership_field, mask_uv, 0.0).r, 0.0, 1.0);
 		}
 		ALBEDO = mix(ALBEDO, vec3(0.95, 0.24, 0.055), ownership_coverage * 0.8);
+	}
+	if (surface_wetness > 0.0) {
+		float wet = surface_wetness * mix(wet_steep_factor, 1.0, smoothstep(0.4, 0.9, final_normal.y));
+		ALBEDO *= 1.0 - wet_darkening * wet;
+		orm.g = mix(orm.g, min(orm.g, wet_roughness), wet);
 	}
 	ROUGHNESS = clamp(orm.g, 0.04, 1.0); METALLIC = clamp(orm.b, 0.0, 1.0);
 	AO = clamp(orm.r, 0.0, 1.0) * mix(1.0, terrain_macro.a, terrain_ao_strength);
