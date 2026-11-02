@@ -1,6 +1,6 @@
 # Strata addon package
 
-This standalone package is built from source commit e09d823b11dd14f76f6a8e89f9efccb8e86edffe. It depends on Godot
+This standalone package is built from source commit e6a02e0d2b694438f1f51962ce1579915ec4922f. It depends on Godot
 and godot-cpp, but does not require HEGo or Houdini. See `PACKAGE.json` for
 the package dependency declaration and `native-build.json` for binary receipts.
 

@@ -59,6 +59,16 @@ func parameters() -> Dictionary:
 		if not is_finite(value) or value <= 0.0: return
 		uv_far_distance = value
 		emit_changed()
+@export_group("Material sampling")
+## Opt-in pixel-art look. Colour and ORMH use nearest filtering with mipmaps and
+## sample at texel centres (mip level still chosen from the unsnapped
+## coordinates), so the height blend follows the same texel grid. Normals stay
+## bilinear. Off keeps the default smooth filtering.
+@export var pixel_sampling := false:
+	set(value):
+		if pixel_sampling == value: return
+		pixel_sampling = value
+		emit_changed()
 @export_group("Terrain-wide tint and AO")
 @export_range(0.0, 1.0, 0.01) var terrain_tint_strength := 1.0:
 	set(value):

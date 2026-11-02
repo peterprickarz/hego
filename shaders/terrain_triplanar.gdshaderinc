@@ -20,6 +20,30 @@ vec3 terrain_triplanar_weights(vec3 normal, float sharpness) {
 	return weights / (weights.x + weights.y + weights.z);
 }
 
+// Per-material projection mode on top of terrain_triplanar_weights. Mode 0 is
+// the unchanged triplanar path. Unused axes get exactly zero weight, so callers
+// skip their fetches. ShaderMaterial int arrays start at zero (triplanar).
+vec3 terrain_projection_weights(vec3 normal, float sharpness, int mode) {
+	if (mode <= 0 || mode > 3) { return terrain_triplanar_weights(normal, sharpness); }
+	if (mode == 3) { return vec3(0.0, 1.0, 0.0); }
+	vec3 magnitude = abs(normal);
+	if (mode == 2) {
+		// Near-horizontal surface: no meaningful side direction, so use one side
+		// axis instead of smearing between two noisy ones.
+		if (max(magnitude.x, magnitude.z) < 0.0001) { return vec3(0.0, 0.0, 1.0); }
+		magnitude.y = 0.0;
+	} else {
+		// Biplanar: drop the weakest axis (ties keep Y, then X).
+		if (magnitude.y <= magnitude.x && magnitude.y <= magnitude.z) { magnitude.y = 0.0; }
+		else if (magnitude.x <= magnitude.z) { magnitude.x = 0.0; }
+		else { magnitude.z = 0.0; }
+	}
+	magnitude /= max(magnitude.x, max(magnitude.y, magnitude.z));
+	float exponent = sharpness > 0.0 ? clamp(sharpness, 1.0, 64.0) : 4.0;
+	vec3 weights = pow(magnitude, vec3(exponent));
+	return weights / (weights.x + weights.y + weights.z);
+}
+
 mat3 terrain_triplanar_frame(int axis, vec3 normal) {
 	if (axis == 0) {
 		float side = normal.x < 0.0 ? -1.0 : 1.0;
