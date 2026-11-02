@@ -1,6 +1,6 @@
 # HEGo Strata package
 
-This package is built from source commit e6a02e0d2b694438f1f51962ce1579915ec4922f. It cooks Houdini Digital Assets
+This package is built from source commit 2646f68cc2203583e091f3a5c3b7aad203ce6356. It cooks Houdini Digital Assets
 into Strata layers and requires both other packages from the same source
 revision: HEGo at `addons/hego` and Strata at `addons/strata`.
 See `PACKAGE.json` for their branches. It contains no native code.
