@@ -1,29 +1,29 @@
 {
   "format_version": 1,
-  "source_fingerprint": "875f5cede9e380c9e50d75216b62fb03ff1180aa84d103889e91843508c8a265",
+  "source_fingerprint": "d313d6e0efebfffd5ae3f73ed9ac1230bc82e8cba11a6532e5fa21900b8ac7c7",
   "artifacts": {
     "bin/hego.windows.template_debug.x86_64.dll": {
-      "sha256": "fc7f36643a0e14ea77bea53bb7593bb362c2e31ee85be274dff99c404101fac4",
+      "sha256": "b70af672ec8b2959fbc04ae43b73d4d19bd1ceb8a5d23a1bf5e8b92070ad015d",
       "build_context": "platform=windows,target=template_debug,arch=x86_64,compiler=x86_64-w64-mingw32-g++ (GCC) 16.2.1 20260819 (Fedora MinGW 16.2.1-1.fc44),hfs=hfs22.0.429,hapi_headers_sha256=55b9bbd456bd9d4da1bbb1c05f276f82aad7cd7ef6e2208ddbf937126dcf55c4"
     },
     "bin/hego.windows.template_release.x86_64.dll": {
-      "sha256": "120b5345385d509b36f6dfc2edec6879fcc97b5a047cc73f00b979d2bd1352c4",
+      "sha256": "dd700ce40ceeb77d47bc93fb4a54bd37cbb2e5e264fdead2d6719fc2d107be82",
       "build_context": "platform=windows,target=template_release,arch=x86_64,compiler=x86_64-w64-mingw32-g++ (GCC) 16.2.1 20260819 (Fedora MinGW 16.2.1-1.fc44),hfs=hfs22.0.429,hapi_headers_sha256=55b9bbd456bd9d4da1bbb1c05f276f82aad7cd7ef6e2208ddbf937126dcf55c4"
     },
     "bin/libhego.linux.template_debug.x86_64.so": {
-      "sha256": "710ff99f4b6625a8dfa630c58a6d1d8a326a1bc9dbd933dbcee49a716d4f69d0",
+      "sha256": "2d7c63a4a22810bf807bb37bdf9641c32ec65faf906a1f5166c40e413b487b57",
       "build_context": "platform=linux,target=template_debug,arch=x86_64,compiler=hego-linux-compat,hfs=hfs22.0.429,hapi_headers_sha256=55b9bbd456bd9d4da1bbb1c05f276f82aad7cd7ef6e2208ddbf937126dcf55c4"
     },
     "bin/libhego.linux.template_release.x86_64.so": {
-      "sha256": "ea88cb66387aaee7fe4e09e1af6771a671d0327b9600c26f6d71d1f354df60d3",
+      "sha256": "e107dd8d9e45507283d7f826fe5203cf06db7bede4b736c58da60601cbfa394e",
       "build_context": "platform=linux,target=template_release,arch=x86_64,compiler=hego-linux-compat,hfs=hfs22.0.429,hapi_headers_sha256=55b9bbd456bd9d4da1bbb1c05f276f82aad7cd7ef6e2208ddbf937126dcf55c4"
     },
     "bin/libhego.macos.template_debug.dylib": {
-      "sha256": "75eb17a8e27b5f5d5b4380db9c0638e29eb603376af0dea4f73f05adc6f3b0bd",
+      "sha256": "681760039a062d13784a35d0ebdb4d1fe8eab0a803620c60b569dca4085ec157",
       "build_context": "platform=macos,target=template_debug,arch=universal,compiler=clang version 22.1.8 (Fedora 22.1.8-4.fc44),hfs=hfs22.0.429,hapi_headers_sha256=55b9bbd456bd9d4da1bbb1c05f276f82aad7cd7ef6e2208ddbf937126dcf55c4"
     },
     "bin/libhego.macos.template_release.dylib": {
-      "sha256": "9d6df96e67dfe3e9494849471812e259026cd3c61d5b41e782984cabe1dbb022",
+      "sha256": "949782aebc2ededd74ebab0b6c4447377f14c615ec3ba1bd3c4bc3f4d4855747",
       "build_context": "platform=macos,target=template_release,arch=universal,compiler=clang version 22.1.8 (Fedora 22.1.8-4.fc44),hfs=hfs22.0.429,hapi_headers_sha256=55b9bbd456bd9d4da1bbb1c05f276f82aad7cd7ef6e2208ddbf937126dcf55c4"
     }
   }
