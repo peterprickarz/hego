@@ -99,6 +99,8 @@ bool snapshot_fields(const godot::Array &source, std::vector<FieldSnapshot> &fie
 			}
 		}
 		field.grid = {image->get_width(), image->get_height(), item["sample_origin"], item["sample_step_x"], item["sample_step_y"]};
+		const bool transpose = HEGo::Util::Geo::heightfield_grid_points_down(field.grid);
+		if (transpose) HEGo::Util::Geo::transpose_heightfield_grid(field.grid);
 		if (!HEGo::Util::Geo::volume_transform_from_heightfield_grid(field.grid, field.transform, error)) {
 			return false;
 		}
@@ -114,7 +116,19 @@ bool snapshot_fields(const godot::Array &source, std::vector<FieldSnapshot> &fie
 			return false;
 		}
 		field.samples.resize(count);
-		std::memcpy(field.samples.data(), bytes.ptr(), count * sizeof(float));
+		if (transpose) {
+			// Image rows become volume columns; the grid is already transposed.
+			const int image_width = field.grid.height;
+			const int image_height = field.grid.width;
+			const uint8_t *pixels = bytes.ptr();
+			for (int y = 0; y < image_height; ++y) {
+				for (int x = 0; x < image_width; ++x) {
+					std::memcpy(&field.samples[size_t(x) * image_height + y], pixels + (size_t(y) * image_width + x) * sizeof(float), sizeof(float));
+				}
+			}
+		} else {
+			std::memcpy(field.samples.data(), bytes.ptr(), count * sizeof(float));
+		}
 		for (float value : field.samples) {
 			if (!std::isfinite(value)) {
 				error = "Heightfield scalar samples must all be finite float32 values.";

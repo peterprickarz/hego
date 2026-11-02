@@ -79,6 +79,12 @@ The input row's terrain options decide what is sent:
 Each channel keeps its own grid. Read the grid size, position and orientation from the
 volumes themselves rather than assuming they match one another.
 
+Every volume's height axis points up, as on a HeightField SOP's output, so HeightField nodes
+and the viewport read it the right way up. Strata's own grids run columns along +X and rows
+along +Z, which would point that axis down; HEGo transposes such a grid on upload, keeping
+every sample at its position. The result is Houdini's HeightField layout: voxel index 0
+steps along +Z and index 1 along +X.
+
 ## What the HDA must output
 
 For every channel it publishes, the HDA outputs one scalar heightfield volume:

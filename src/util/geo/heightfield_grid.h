@@ -31,6 +31,20 @@ inline double grid_vector_length(godot::Vector3 value) {
     return std::hypot(static_cast<double>(value.x), static_cast<double>(value.y), static_cast<double>(value.z));
 }
 
+// Houdini's HeightField SOP steps index 0 along +Z and index 1 along +X, with
+// its height axis (index 2) up. volume_transform_from_heightfield_grid completes
+// the basis as step_x x step_y, so a grid in image order (columns +X, rows +Z)
+// would point the height axis down. Such a grid is transposed instead; every
+// sample keeps its physical position.
+inline bool heightfield_grid_points_down(const HeightfieldGrid &grid) {
+    return grid.step_x.cross(grid.step_y).y < 0.0f;
+}
+
+inline void transpose_heightfield_grid(HeightfieldGrid &grid) {
+    std::swap(grid.width, grid.height);
+    std::swap(grid.step_x, grid.step_y);
+}
+
 inline bool validate_heightfield_grid(const HeightfieldGrid &grid, godot::String &error) {
     if (grid.width <= 0 || grid.height <= 0 || !finite_vector(grid.origin) || !finite_vector(grid.step_x) || !finite_vector(grid.step_y)) {
         error = "Heightfield dimensions must be positive and its origin and steps finite.";

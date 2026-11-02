@@ -144,6 +144,17 @@ func _commit(host: Node, producer: String, target: StrataLayer, snapshot: Dictio
 func _sample_height(layer: StrataLayer, at: Vector2) -> float:
 	return float(layer.sample_channel(&"height", at).get("value", 0.0))
 
+## Value of a fetched field at the sample centred on a SOP-local position, NAN if
+## the lattice has no sample there. Houdini may return a transposed lattice.
+func _field_value_at(field: Dictionary, at: Vector3) -> float:
+	var basis := Transform2D(Vector2(field.sample_step_x.x, field.sample_step_x.z), Vector2(field.sample_step_y.x, field.sample_step_y.z), Vector2(field.sample_origin.x, field.sample_origin.z))
+	var logical := basis.affine_inverse() * Vector2(at.x, at.z)
+	var index := Vector2i(logical.round())
+	var image: Image = field.image
+	if not logical.is_equal_approx(Vector2(index)) or index.x < 0 or index.y < 0 or index.x >= image.get_width() or index.y >= image.get_height():
+		return NAN
+	return image.get_pixel(index.x, index.y).r
+
 func _exercise() -> bool:
 	# Fail before connecting to Houdini if the runner accidentally staged the
 	# tracked old HEGo binary or an incompatible prototype extension.
@@ -198,22 +209,24 @@ func _exercise() -> bool:
 	var source_height := _get_field(coarse_input.fields, "height")
 	if not _check(not coarse_height.is_empty() and not coarse_mask.is_empty(), "Houdini did not return both height and mask fields"):
 		return false
-	if not _check(coarse_height.image.get_size() == Vector2i(7, 5), "Rectangular 7x5 field dimensions changed in Houdini"):
+	# Strata's columns +X/rows +Z arrive in Houdini's HeightField layout (index 0
+	# along +Z, index 1 along +X, height axis up): the same samples, transposed.
+	if not _check(coarse_height.image.get_size() == Vector2i(5, 7), "Rectangular 7x5 field did not arrive as Houdini's transposed 5x7 HeightField"):
 		return false
 	if not _check(coarse_height.sample_origin.is_equal_approx(source_height.sample_origin)
-			and coarse_height.sample_step_x.is_equal_approx(source_height.sample_step_x)
-			and coarse_height.sample_step_y.is_equal_approx(source_height.sample_step_y), "Houdini changed the sample-center origin or basis"):
+			and coarse_height.sample_step_x.is_equal_approx(source_height.sample_step_y)
+			and coarse_height.sample_step_y.is_equal_approx(source_height.sample_step_x), "Houdini changed the sample-center origin or did not transpose the basis"):
 		return false
 	if not _check(source_height.sample_origin.x < 0.0 and source_height.sample_origin.z < 0.0, "Fixture did not exercise a negative offset grid"):
 		return false
 	var samples_match := true
 	for y in range(5):
 		for x in range(7):
-			samples_match = samples_match and is_equal_approx(coarse_height.image.get_pixel(x, y).r, source_height.image.get_pixel(x, y).r + 10.0)
-			samples_match = samples_match and is_equal_approx(coarse_mask.image.get_pixel(x, y).r, 1.0)
+			samples_match = samples_match and is_equal_approx(coarse_height.image.get_pixel(y, x).r, source_height.image.get_pixel(x, y).r + 10.0)
+			samples_match = samples_match and is_equal_approx(coarse_mask.image.get_pixel(y, x).r, 1.0)
 	if not _check(samples_match, "Asymmetric HAPI height ramp changed sample ordering/values or the mask channel"):
 		return false
-	if not _check(is_equal_approx(coarse_height.image.get_pixel(3, 2).r, 43.0), "Houdini Volume Wrangle did not add 10 to the ramp center"):
+	if not _check(is_equal_approx(_field_value_at(coarse_height, Vector3.ZERO), 43.0), "Houdini Volume Wrangle did not add 10 to the ramp center"):
 		return false
 	var committed := _commit(host, "coarse-generator", coarse, coarse_input, uploaded.fields)
 	if not _check(committed.get("ok", false), "Could not atomically publish procedural coarse result: %s" % committed.get("message", "")):
@@ -254,7 +267,7 @@ func _exercise() -> bool:
 	if not _check(detail_cook.get("ok", false), "Detail HAPI round-trip failed: %s" % detail_cook.get("error", "")):
 		return false
 	var detail_height := _get_field(detail_cook.fields, "height")
-	if not _check(not detail_height.is_empty() and is_equal_approx(detail_height.image.get_pixel(3, 2).r, 48.0), "Detail stage did not consume the raw later fine constraint / expected cumulative height"):
+	if not _check(not detail_height.is_empty() and is_equal_approx(_field_value_at(detail_height, Vector3.ZERO), 48.0), "Detail stage did not consume the raw later fine constraint / expected cumulative height"):
 		return false
 	var detail_commit := _commit(host, "detail-generator", detail, detail_input, detail_cook.fields)
 	if not _check(detail_commit.get("ok", false), "Detail stage commit failed: %s" % detail_commit.get("message", "")):
@@ -282,8 +295,8 @@ func _exercise() -> bool:
 	if not _check(recook_commit.get("ok", false), "Procedural recook commit failed: %s" % recook_commit.get("message", "")):
 		return false
 	var recooked_coarse_field: StrataFieldData = coarse.procedural_fields["height"]
-	if not _check(recooked_coarse_field != old_coarse_field and is_equal_approx(old_coarse_field.data.get_sample(&"height", Vector2i(3, 2)), 43.0)
-			and is_equal_approx(recooked_coarse_field.data.get_sample(&"height", Vector2i(3, 2)), 53.0), "Replacing a procedural result mutated an older FieldData reference instead of publishing a new snapshot"):
+	if not _check(recooked_coarse_field != old_coarse_field and is_equal_approx(float(old_coarse_field.sample(Vector2.ZERO).get("value", NAN)), 43.0)
+			and is_equal_approx(float(recooked_coarse_field.sample(Vector2.ZERO).get("value", NAN)), 53.0), "Replacing a procedural result mutated an older FieldData reference instead of publishing a new snapshot"):
 		return false
 	if not _check(is_equal_approx(_sample_height(fine, Vector2(0, 0)), 3.0) and fine.data.has_sample(&"height", Vector2i(4, 2)), "Procedural recook erased manual fine delta or same-value ownership"):
 		return false
@@ -406,7 +419,7 @@ func _exercise() -> bool:
 	if not _check(raw_roundtrip.get("ok", false), "Raw constraint/mask native round-trip failed: %s" % raw_roundtrip.get("error", "")):
 		return false
 	var returned_constraint := _get_field(raw_roundtrip.fields, "constraint")
-	if not _check(not returned_constraint.is_empty() and is_equal_approx(returned_constraint.image.get_pixel(3, 2).r, 4.0), "Raw native round-trip changed or dropped the later constraint channel"):
+	if not _check(not returned_constraint.is_empty() and is_equal_approx(_field_value_at(returned_constraint, Vector3.ZERO), 4.0), "Raw native round-trip changed or dropped the later constraint channel"):
 		return false
 	if not _check(not _get_field(raw_roundtrip.fields, "mask").is_empty(), "Raw native round-trip dropped mask"):
 		return false
@@ -449,7 +462,9 @@ func _exercise() -> bool:
 	if not _check(is_equal_approx(_sample_height(host_target, Vector2(0, 0)), 56.0), "HEGoNode3D.cook output did not include the manual fine input stack"):
 		return false
 	var routed_height: StrataFieldData = host_target.procedural_fields["height"]
-	var routed_local_center := routed_height.physical_position(Vector2(3.0, 2.0))
+	# The routed field keeps Houdini's transposed HeightField lattice: the 7x5
+	# input's centre sample (3, 2) comes back at index (2, 3).
+	var routed_local_center := routed_height.physical_position(Vector2(2.0, 3.0))
 	var routed_world_center := terrain.to_global(routed_local_center)
 	if not _check(routed_world_center.is_equal_approx(terrain.to_global(Vector3.ZERO)), "Translated/yawed terrain and separate HEGo host transforms produced the wrong numeric output position: %s" % str(routed_world_center)):
 		return false

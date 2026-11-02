@@ -44,16 +44,22 @@ func verify_fields(actual: Array, expected: Array, transform: Transform3D) -> vo
 		var output: Dictionary = by_name[source.name]
 		var image: Image = output.image
 		var reference: Image = source.image
-		check(image.get_format() == Image.FORMAT_RF and image.get_size() == reference.get_size(), "rectangular RF resolution retained: " + source.name)
-		check(output.coordinate_space == "sop_local" and output.resolution == reference.get_size(), "explicit grid metadata identifies SOP-local samples")
+		# A grid whose step_x x step_y points down arrives transposed, in Houdini's
+		# HeightField layout, so the volume's height axis is up.
+		var transposed: bool = source.sample_step_x.cross(source.sample_step_y).y < 0.0
+		var expected_size := Vector2i(reference.get_height(), reference.get_width()) if transposed else reference.get_size()
+		check(image.get_format() == Image.FORMAT_RF and image.get_size() == expected_size, "rectangular RF resolution retained, transposed only to keep the height axis up: " + source.name)
+		check(output.coordinate_space == "sop_local" and output.resolution == expected_size, "explicit grid metadata identifies SOP-local samples")
+		check(output.sample_step_x.cross(output.sample_step_y).y > 0.0, "uploaded heightfields point their height axis up like Houdini's HeightField: " + source.name)
 		check(output.attrs.get("large_int") == source.attrs.large_int and output.attrs.get("field_label") == source.name, "primitive scalar/string attributes retain their values")
 		check(absf(output.attrs.get("precision", 0.0) - source.attrs.precision) < 0.000000000001 and output.attrs.get("direction") == Vector3(1, 2, 3), "float64 and vector primitive attributes retain their values")
 		for y in range(reference.get_height()):
 			for x in range(reference.get_width()):
+				var index := Vector2i(y, x) if transposed else Vector2i(x, y)
 				var source_point: Vector3 = source.sample_origin + source.sample_step_x * x + source.sample_step_y * y
-				var output_point: Vector3 = output.sample_origin + output.sample_step_x * x + output.sample_step_y * y
+				var output_point: Vector3 = output.sample_origin + output.sample_step_x * index.x + output.sample_step_y * index.y
 				check(output_point.distance_to(transform * source_point) < 0.0002, "every physical sample center survives anisotropic/negative/rotated grids: %s %s" % [source.name, Vector2i(x, y)])
-				check(image.get_pixel(x, y).r == reference.get_pixel(x, y).r, "every asymmetric RF value remains at its physical source index: %s %s" % [source.name, Vector2i(x, y)])
+				check(image.get_pixel(index.x, index.y).r == reference.get_pixel(x, y).r, "every asymmetric RF value remains at its physical source position: %s %s" % [source.name, Vector2i(x, y)])
 
 func _run() -> void:
 	var api := HEGoAPI.get_singleton()
