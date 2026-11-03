@@ -1,11 +1,11 @@
 class_name HEGoGraphSurface
 extends RefCounted
 
-## Finds the ground under a [HEGoGraphInput3D] point, for snapping and for draping the
+## Finds the ground under a [HEGoGraph3D] point, for snapping and for draping the
 ## path visualisation.
 ##
 ## The surface is, in order:
-## [br]1. the graph's [member HEGoGraphInput3D.surface_provider] node, when it has a
+## [br]1. the graph's [member HEGoGraph3D.surface_provider] node, when it has a
 ## [code]sample_height(Vector2) -> float[/code] method (height in the provider's local
 ## space at a local x/z position). A [code]contains_position(Vector2) -> bool[/code]
 ## method, when present, limits where it answers. Nothing here depends on a particular

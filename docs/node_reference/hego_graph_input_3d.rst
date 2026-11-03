@@ -6,7 +6,10 @@ Each point becomes a Houdini point, each connection an open polyline primitive.
 Branches are allowed: a point with three or more connections is just a point several
 polylines share.
 
-The properties and methods are in :ref:`the class reference<class_HEGoGraphInput3D>`.
+``HEGoGraphInput3D`` extends :ref:`HEGoGraph3D<class_HEGoGraph3D>`, which holds all of the
+behaviour; the subclass stays so saved scenes load unchanged. A cook can also *build* a
+``HEGoGraph3D`` (:doc:`outputs/graph_output`), and any ``HEGoGraph3D`` can feed another
+cook's input. The properties and methods are in :ref:`the class reference<class_HEGoGraphInput3D>`.
 What a cook does with the geometry is :doc:`inputs/graph_input`. A demo scene lives at
 ``demo/scenes/GraphInput.tscn``.
 
@@ -47,7 +50,9 @@ Each entry on the ``HEGoGraphAttributes`` child is a
    * - ``owner``
      - **Point** or **Connection**. Connections become primitive attributes.
    * - ``value_type``
-     - **Float**, **Int** or **String**.
+     - **Float**, **Int**, **String** or **Vector3** (a three-float Houdini vector,
+       stored as ``PackedVector3Array``; edited as three spin boxes, interpolated when a
+       connection is split).
    * - ``default_*``
      - Value given to a newly created point or connection.
    * - ``int_as_toggle``
@@ -59,6 +64,15 @@ Each entry on the ``HEGoGraphAttributes`` child is a
 Several ``HEGoGraphAttributes`` children concatenate in tree order. Changing the
 schema adds missing arrays at their defaults and drops keys that are gone. Existing
 values for names that remain are kept.
+
+Large graphs
+------------
+
+Group *Preview*: ``preview_unselected`` (on) draws the connection lines while the
+graph is not selected; they are built once per change of the graph and cached. Point
+markers only appear while the graph is selected, for every point up to
+``marker_limit`` (20000) and beyond that only for the selected and hovered points, so a
+cooked graph of tens of thousands of points stays responsive.
 
 Viewport
 --------

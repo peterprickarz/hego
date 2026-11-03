@@ -39,7 +39,7 @@ func _apply_sizes() -> void:
 
 
 func _get_gizmo_name() -> String:
-	return "HEGoGraphInput3D"
+	return "HEGoGraph3D"
 
 
 func _get_priority() -> int:
@@ -47,12 +47,12 @@ func _get_priority() -> int:
 
 
 func _has_gizmo(for_node_3d: Node3D) -> bool:
-	return for_node_3d is HEGoGraphInput3D
+	return for_node_3d is HEGoGraph3D
 
 
 func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	gizmo.clear()
-	var node := gizmo.get_node_3d() as HEGoGraphInput3D
+	var node := gizmo.get_node_3d() as HEGoGraph3D
 	if node == null:
 		return
 
@@ -81,29 +81,46 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		gizmo.add_mesh(path_mesh)
 
 	_apply_sizes()
-	var line_quads := _ScreenLines.new()
-	for c in node.connection_count():
-		var a: int = node.connections[c * 2]
-		var b: int = node.connections[c * 2 + 1]
-		if a < 0 or b < 0 or a >= node.points.size() or b >= node.points.size():
-			continue
-		if selected_conns.has(c):
-			line_quads.add(node.points[a], node.points[b], LINE_SELECTED, LINE_SELECTED_SCALE)
-		elif c == hover_connection:
-			line_quads.add(node.points[a], node.points[b], LINE_HOVER, LINE_HOVER_SCALE)
-		else:
-			line_quads.add(node.points[a], node.points[b], LINE, 1.0)
+	var edited := editor != null and editor.graph == node
+	if not edited and not node.preview_unselected:
+		return
+	# Plain connection lines are cached per graph version: rebuilding them for a cooked
+	# graph of tens of thousands of connections on every redraw would stall the editor.
+	var plain := _plain_lines(node)
+	if plain != null:
+		gizmo.add_mesh(plain, _line_material)
+	if not edited:
+		return
 
-	var preview_from: int = editor.connect_from_point() if editor and editor.graph == node else -1
-	if editor and editor.graph == node and editor.preview_cursor != null and preview_from >= 0:
+	# Highlights (selected and hovered connections, the connect preview) on top.
+	var line_quads := _ScreenLines.new()
+	for c in selected_conns:
+		if c >= 0 and c < node.connection_count():
+			_add_connection(line_quads, node, c, LINE_SELECTED, LINE_SELECTED_SCALE)
+	if hover_connection >= 0 and hover_connection < node.connection_count() and not selected_conns.has(hover_connection):
+		_add_connection(line_quads, node, hover_connection, LINE_HOVER, LINE_HOVER_SCALE)
+
+	var preview_from: int = editor.connect_from_point()
+	if editor.preview_cursor != null and preview_from >= 0:
 		line_quads.add(node.points[preview_from], node.to_local(editor.preview_cursor), PREVIEW, 1.0)
 
+	# Every point gets a marker up to the graph's marker limit; beyond it only the selected
+	# and hovered points do.
 	var markers := PackedVector3Array()
 	var marker_colors := PackedColorArray()
 	var marker_scales := PackedFloat32Array()
-	for i in node.points.size():
+	var all_markers := node.points.size() <= node.marker_limit
+	var selected_set := {}
+	for i in selected_pts:
+		selected_set[i] = true
+	var candidates: Variant = range(node.points.size()) if all_markers else selected_pts.duplicate()
+	if not all_markers and hover_point >= 0 and not selected_set.has(hover_point):
+		candidates.append(hover_point)
+	for i in candidates:
+		if i < 0 or i >= node.points.size():
+			continue
 		markers.append(node.points[i])
-		if selected_pts.has(i):
+		if selected_set.has(i):
 			marker_colors.append(POINT_SELECTED)
 			marker_scales.append(POINT_SELECTED_SCALE)
 		elif i == hover_point:
@@ -120,6 +137,40 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	var point_mesh := _build_markers(markers, marker_colors, marker_scales)
 	if point_mesh != null:
 		gizmo.add_mesh(point_mesh, _point_material)
+
+
+# Plain line meshes per graph (instance id -> [graph_version, mesh]). Untyped and checked:
+# a plugin instance alive across a script reload keeps null for members added since.
+var _line_cache = {}
+
+
+func _plain_lines(node: HEGoGraph3D) -> ArrayMesh:
+	if _line_cache == null:
+		_line_cache = {}
+	var key := node.get_instance_id()
+	var cached: Array = _line_cache.get(key, [])
+	if not cached.is_empty() and cached[0] == node.graph_version:
+		return cached[1]
+	var quads := _ScreenLines.new()
+	for c in node.connection_count():
+		_add_connection(quads, node, c, LINE, 1.0)
+	var mesh := quads.build()
+	if mesh != null:
+		mesh.custom_aabb = _padded_bounds(quads.vertices)
+	# Drop entries of freed graphs.
+	for id in _line_cache.keys():
+		if not is_instance_id_valid(id):
+			_line_cache.erase(id)
+	_line_cache[key] = [node.graph_version, mesh]
+	return mesh
+
+
+static func _add_connection(quads: _ScreenLines, node: HEGoGraph3D, c: int, color: Color, scale: float) -> void:
+	var a: int = node.connections[c * 2]
+	var b: int = node.connections[c * 2 + 1]
+	if a < 0 or b < 0 or a >= node.points.size() or b >= node.points.size():
+		return
+	quads.add(node.points[a], node.points[b], color, scale)
 
 
 static func _build_markers(positions: PackedVector3Array, colors: PackedColorArray, scales: PackedFloat32Array) -> ArrayMesh:
@@ -195,7 +246,7 @@ class _ScreenLines:
 
 
 func _subgizmos_intersect_ray(gizmo: EditorNode3DGizmo, camera: Camera3D, screen_pos: Vector2) -> int:
-	var node := gizmo.get_node_3d() as HEGoGraphInput3D
+	var node := gizmo.get_node_3d() as HEGoGraph3D
 	if node == null or node.points.is_empty():
 		return -1
 	var projected := PackedVector2Array()
@@ -211,7 +262,7 @@ func _subgizmos_intersect_ray(gizmo: EditorNode3DGizmo, camera: Camera3D, screen
 
 func _subgizmos_intersect_frustum(gizmo: EditorNode3DGizmo, camera: Camera3D, frustum_planes: Array) -> PackedInt32Array:
 	var ids := PackedInt32Array()
-	var node := gizmo.get_node_3d() as HEGoGraphInput3D
+	var node := gizmo.get_node_3d() as HEGoGraph3D
 	if node == null:
 		return ids
 	for i in node.points.size():
@@ -227,7 +278,7 @@ func _subgizmos_intersect_frustum(gizmo: EditorNode3DGizmo, camera: Camera3D, fr
 
 
 func _get_subgizmo_transform(gizmo: EditorNode3DGizmo, subgizmo_id: int) -> Transform3D:
-	var node := gizmo.get_node_3d() as HEGoGraphInput3D
+	var node := gizmo.get_node_3d() as HEGoGraph3D
 	if subgizmo_id == HEGoGraphEditor.GROUP_SUBGIZMO:
 		if editor and editor.graph == node:
 			return Transform3D(Basis(), editor.group_center())
@@ -238,7 +289,7 @@ func _get_subgizmo_transform(gizmo: EditorNode3DGizmo, subgizmo_id: int) -> Tran
 
 
 func _set_subgizmo_transform(gizmo: EditorNode3DGizmo, subgizmo_id: int, transform: Transform3D) -> void:
-	var node := gizmo.get_node_3d() as HEGoGraphInput3D
+	var node := gizmo.get_node_3d() as HEGoGraph3D
 	if subgizmo_id == HEGoGraphEditor.GROUP_SUBGIZMO:
 		if editor and editor.graph == node:
 			editor.move_group_live(transform.origin)
@@ -250,7 +301,7 @@ func _set_subgizmo_transform(gizmo: EditorNode3DGizmo, subgizmo_id: int, transfo
 
 
 func _commit_subgizmos(gizmo: EditorNode3DGizmo, ids: PackedInt32Array, restores: Array, cancel: bool) -> void:
-	var node := gizmo.get_node_3d() as HEGoGraphInput3D
+	var node := gizmo.get_node_3d() as HEGoGraph3D
 	if node == null:
 		return
 	# The group id restores from where each of its points started.

@@ -2,7 +2,7 @@
 class_name HEGoGraphAttributes
 extends Node
 
-## Schema for a [HEGoGraphInput3D]: the attributes its points and connections can carry.
+## Schema for a [HEGoGraph3D]: the attributes its points and connections can carry.
 ##
 ## Parent this under a graph and fill [member attributes]. The list can be saved as its
 ## own scene and reused under other graphs. Several children concatenate in tree order.

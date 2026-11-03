@@ -153,8 +153,8 @@ func cook() -> void:
 	_last_cook_succeeded = true
 
 
-## The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh and
-## object output, then every [HEGoOutputHandler] other addons provide (see
+## The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh,
+## object and graph output, then every [HEGoOutputHandler] other addons provide (see
 ## [method HEGoOutputHandler.extension_handlers]), then curve output.
 ##
 ## Each has [code]output_phase()[/code], [code]should_handle(summary)[/code] and
@@ -169,6 +169,7 @@ func output_handlers() -> Array:
 		HEGoMeshOutput,
 		HEGoMultiMeshOutput,
 		HEGoObjectOutput,
+		HEGoGraphOutput,
 	]
 	handlers.append_array(HEGoOutputHandler.extension_handlers())
 	handlers.append(HEGoCurveOutput)

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphAttributeDef" inherits="Resource" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 	<brief_description>
-		One attribute a [HEGoGraphInput3D] can store on its points or connections.
+		One attribute a [HEGoGraph3D] can store on its points or connections.
 	</brief_description>
 	<description>
 		Lives in a [HEGoGraphAttributes] list on a child of the graph. The name, owner and value type decide what is sent to Houdini; the rest only shapes the editor UI.
@@ -29,6 +29,13 @@
 				Whether [param array] is the packed type this definition stores.
 			</description>
 		</method>
+		<method name="value_type_of" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="array" type="Variant" />
+			<description>
+				The value type that stores [param array], or -1 when no type does. Used to declare the attributes a cook sends back.
+			</description>
+		</method>
 	</methods>
 	<members>
 		<member name="attribute_name" type="String" setter="@attribute_name_setter" getter="" default="&quot;attr&quot;">
@@ -49,6 +56,9 @@
 		<member name="default_string" type="String" setter="@default_string_setter" getter="" default="&quot;&quot;">
 			Default for a newly created point or connection when [member value_type] is STRING.
 		</member>
+		<member name="default_vector" type="Vector3" setter="@default_vector_setter" getter="" default="Vector3(0, 0, 0)">
+			Default for a newly created point or connection when [member value_type] is VECTOR3.
+		</member>
 		<member name="int_as_toggle" type="bool" setter="@int_as_toggle_setter" getter="" default="false">
 			When [member value_type] is INT, the editor shows a checkbox and stores 0 or 1.
 		</member>
@@ -66,6 +76,9 @@
 		<constant name="INT" value="1" enum="ValueType">
 		</constant>
 		<constant name="STRING" value="2" enum="ValueType">
+		</constant>
+		<constant name="VECTOR3" value="3" enum="ValueType">
+			Three floats (a Houdini vector of tuple size 3), stored as a [PackedVector3Array].
 		</constant>
 	</constants>
 </class>

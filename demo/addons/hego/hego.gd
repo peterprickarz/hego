@@ -116,7 +116,7 @@ func _cleanup_houdini_session():
 ## left it driving the node from before: that node's parameter widgets stayed on screen, and
 ## Recook still cooked it.
 func _handles(object: Object) -> bool:
-	return object is HEGoGraphInput3D
+	return object is HEGoGraph3D
 
 
 func _edit(object: Object) -> void:

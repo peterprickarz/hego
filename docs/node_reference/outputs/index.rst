@@ -9,6 +9,7 @@ that best fits your use case.
 
    geometry_output
    curve_output
+   graph_output
    instancing_output
    object_spawning_output
    terrain3d_output

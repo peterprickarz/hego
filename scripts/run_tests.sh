@@ -44,7 +44,7 @@ fi
 GODOT_TESTS=(
     brush_radius_test displacement_refinement_settings_test pixel_sampling_test
     hego_asset_agent_test hego_await_task_test hego_extension_points_test hego_geo_output_test
-    hego_graph_input_test hego_input_children_test hego_input_ui_test hego_log_test
+    hego_graph_input_test hego_graph_output_test hego_input_children_test hego_input_ui_test hego_log_test
     hego_mesh_copy_lod_test hego_mesh_output_test hego_output_skip_test hego_panel_async_test
     hego_panel_contract_test hego_point_util_test hego_terrain3d_bridge_test
     island_transition_test material_binding_test material_brush_test material_distribution_test material_tiling_test

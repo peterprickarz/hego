@@ -41,8 +41,8 @@ func run() -> void:
 	# --- output handlers: built-ins, then the bridge's, sorted, then curves ------
 	var host := HEGoNode3D.new()
 	var handlers := host.output_handlers()
-	check(handlers.slice(0, 3) == [HEGoMeshOutput, HEGoMultiMeshOutput, HEGoObjectOutput] and handlers.back() == HEGoCurveOutput, "HEGo's own handlers keep their places around the extension handlers")
-	var extensions := handlers.slice(3, handlers.size() - 1)
+	check(handlers.slice(0, 4) == [HEGoMeshOutput, HEGoMultiMeshOutput, HEGoObjectOutput, HEGoGraphOutput] and handlers.back() == HEGoCurveOutput, "HEGo's own handlers keep their places around the extension handlers")
+	var extensions := handlers.slice(4, handlers.size() - 1)
 	var names: Array = []
 	for handler in extensions:
 		names.append(String((handler.get_script() as Script).get_global_name()) if handler is HEGoOutputHandler else "")

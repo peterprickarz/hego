@@ -1,7 +1,7 @@
 class_name HEGoGraphEditor
 extends RefCounted
 
-## Viewport editing for a selected [HEGoGraphInput3D].
+## Viewport editing for a selected [HEGoGraph3D].
 ##
 ## Point selection and the move/rotate/scale widget are Godot's built-in
 ## subgizmos. This object only handles Draw-mode clicks, connection picks,
@@ -34,7 +34,7 @@ var gizmo_plugin: EditorNode3DGizmoPlugin
 var active_gizmo: EditorNode3DGizmo
 var toolbar: Control
 var attrib_panel: Control
-var graph: HEGoGraphInput3D
+var graph: HEGoGraph3D
 var mode: Mode = Mode.DRAW
 var placement_mode: int = HEGoGraphPlacement.Mode.CAMERA
 var world_axis: int = HEGoGraphPlacement.Axis.XZ
@@ -85,7 +85,7 @@ func edit(object: Object) -> void:
 		graph.graph_changed.disconnect(_on_graph_changed)
 	if graph != null and graph.snap_all_requested.is_connected(_on_snap_all_requested):
 		graph.snap_all_requested.disconnect(_on_snap_all_requested)
-	graph = object as HEGoGraphInput3D
+	graph = object as HEGoGraph3D
 	selected_points = PackedInt32Array()
 	selected_connections = PackedInt32Array()
 	last_point = -1
