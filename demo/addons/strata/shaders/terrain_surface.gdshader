@@ -80,6 +80,18 @@ uniform float surface_wetness : hint_range(0.0, 1.0) = 0.0;
 uniform float wet_darkening : hint_range(0.0, 1.0) = 0.42;
 uniform float wet_roughness : hint_range(0.0, 1.0) = 0.55;
 uniform float wet_steep_factor : hint_range(0.0, 1.0) = 0.45;
+// Optional world-space AO overlay, set through StrataRenderer.set_ao_overlay (off by
+// default). World XZ tiles of ao_overlay_tile_size metres from ao_overlay_origin; the table
+// holds each tile's layer + 1 (R8, 0 = no map). Layers are single-channel occlusion, 1 = none.
+uniform bool ao_overlay_enabled = false;
+uniform sampler2DArray ao_overlay_layers : filter_linear_mipmap, repeat_disable;
+uniform sampler2D ao_overlay_table : filter_nearest, repeat_disable;
+uniform vec2 ao_overlay_origin = vec2(0.0);
+uniform vec2 ao_overlay_tile_size = vec2(256.0);
+uniform float ao_overlay_ao_strength = 1.0;
+uniform float ao_overlay_albedo_strength = 0.0;
+uniform float ao_overlay_fade_start = 40.0;
+uniform float ao_overlay_fade_end = 60.0;
 uniform sampler2D channel_preview_field : filter_linear, repeat_disable;
 uniform bool show_channel_preview = false;
 uniform vec2 channel_preview_origin = vec2(0.0);
@@ -203,6 +215,23 @@ float material_height_offset(vec3 base_point, vec3 projection_normal) {
 		if (weights[slot] > 0.0) { height_detail += (heights[slot] - 0.5) * material_displacement[ids[slot]] * weights[slot]; }
 	}
 	return height_detail * displacement_strength * fade;
+}
+
+// Occlusion of the world-space AO overlay at a terrain-local point (1 outside the tiles, in
+// tiles without a map and beyond the fade). Explicit gradients from the caller's uniform
+// derivatives, so it may run in any control flow.
+float terrain_ao_overlay(vec3 local_point, vec3 local_dx, vec3 local_dy, float view_distance, mat4 model) {
+	float fade = 1.0 - smoothstep(ao_overlay_fade_start, ao_overlay_fade_end, view_distance);
+	if (fade <= 0.0) { return 1.0; }
+	vec2 tile_position = ((model * vec4(local_point, 1.0)).xz - ao_overlay_origin) / ao_overlay_tile_size;
+	ivec2 tile = ivec2(floor(tile_position));
+	if (any(lessThan(tile, ivec2(0))) || any(greaterThanEqual(tile, textureSize(ao_overlay_table, 0)))) { return 1.0; }
+	int layer = int(texelFetch(ao_overlay_table, tile, 0).r * 255.0 + 0.5) - 1;
+	if (layer < 0) { return 1.0; }
+	vec2 uv_dx = (mat3(model) * local_dx).xz / ao_overlay_tile_size;
+	vec2 uv_dy = (mat3(model) * local_dy).xz / ao_overlay_tile_size;
+	float occlusion = textureGrad(ao_overlay_layers, vec3(tile_position - vec2(tile), float(layer)), uv_dx, uv_dy).r;
+	return mix(1.0, occlusion, fade);
 }
 
 #ifdef STRATA_MATERIAL_HOOKS
@@ -397,6 +426,11 @@ void fragment() {
 	}
 	ROUGHNESS = clamp(orm.g, 0.04, 1.0); METALLIC = clamp(orm.b, 0.0, 1.0);
 	AO = clamp(orm.r, 0.0, 1.0) * mix(1.0, terrain_macro.a, terrain_ao_strength);
+	if (ao_overlay_enabled) {
+		float overlay = terrain_ao_overlay(base_point, point_dx, point_dy, length(VERTEX), MODEL_MATRIX);
+		AO *= mix(1.0, overlay, ao_overlay_ao_strength);
+		ALBEDO *= mix(1.0, overlay, ao_overlay_albedo_strength);
+	}
 #ifdef STRATA_MATERIAL_HOOKS
 	EMISSION = emission;
 #endif

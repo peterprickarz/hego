@@ -148,6 +148,8 @@ var surface_wetness := 0.0:
 	set(value):
 		surface_wetness = clampf(value, 0.0, 1.0)
 		if _shader_material != null: _shader_material.set_shader_parameter("surface_wetness", surface_wetness)
+# World-space AO overlay (set_ao_overlay): runtime state, not saved; empty = off.
+var _ao_overlay := {}
 var _variant_shaders := {}
 var pixel_sampling := false
 var _active_crease_variant := false
@@ -796,6 +798,7 @@ func _update_material_settings() -> void:
 	_shader_material.set_shader_parameter("displacement_strength", maxf(displacement_strength, 0.0))
 	_shader_material.set_shader_parameter("debug_lod", debug_lod)
 	_shader_material.set_shader_parameter("debug_discarded", debug_discarded)
+	_apply_ao_overlay()
 	for patch in _patches.values():
 		_update_patch_bounds(patch)
 
@@ -956,6 +959,54 @@ func set_macro_map(image: Image, bounds: Rect2) -> bool:
 		return false
 	_bind_region_flags()
 	return true
+
+## Optional world-space AO overlay, off by default and not saved (a game script sets it at
+## run time). World XZ is split into tiles of [param tile_size] metres from [param origin];
+## [param table] has one texel per tile holding the tile's layer of
+## [param layers] + 1 as an R8 value (0: no map, the overlay is 1 there). A layer is a
+## single-channel occlusion map over its tile (1 = unoccluded, texel centres at
+## (i + 0.5) / width), sampled with linear filtering and mipmaps. The terrain's AO is
+## multiplied by mix(1, overlay, ao_strength) and its albedo by mix(1, overlay,
+## albedo_strength); the overlay fades to 1 between fade_start and fade_end metres from the
+## camera. [param settings]: ao_strength (default 1), albedo_strength (0), fade_start (40),
+## fade_end (60). Update the textures in place (Texture2DArray.update_layer,
+## ImageTexture.update) to stream tiles; call again only to replace them or change the
+## settings. Returns false, leaving the overlay off, for invalid arguments.
+func set_ao_overlay(layers: Texture2DArray, table: Texture2D, origin: Vector2, tile_size: Vector2, settings := {}) -> bool:
+	var fade_start := float(settings.get("fade_start", 40.0))
+	var fade_end := float(settings.get("fade_end", 60.0))
+	if layers == null or table == null or not origin.is_finite() or not tile_size.is_finite() or tile_size.x <= 0.0 or tile_size.y <= 0.0 or not is_finite(fade_start) or not is_finite(fade_end):
+		push_warning("Invalid AO overlay; the overlay is off.")
+		clear_ao_overlay()
+		return false
+	_ao_overlay = {"layers": layers, "table": table, "origin": origin, "tile_size": tile_size,
+		"ao_strength": clampf(float(settings.get("ao_strength", 1.0)), 0.0, 1.0),
+		"albedo_strength": clampf(float(settings.get("albedo_strength", 0.0)), 0.0, 1.0),
+		"fade_start": maxf(fade_start, 0.0), "fade_end": maxf(fade_end, maxf(fade_start, 0.0) + 0.01)}
+	_apply_ao_overlay()
+	return true
+
+func clear_ao_overlay() -> void:
+	_ao_overlay = {}
+	_apply_ao_overlay()
+
+## The overlay set with set_ao_overlay() (its textures and settings), empty when off.
+func get_ao_overlay() -> Dictionary:
+	return _ao_overlay.duplicate()
+
+func _apply_ao_overlay() -> void:
+	if _shader_material == null: return
+	var enabled := not _ao_overlay.is_empty()
+	_shader_material.set_shader_parameter("ao_overlay_enabled", enabled)
+	_shader_material.set_shader_parameter("ao_overlay_layers", _ao_overlay.get("layers"))
+	_shader_material.set_shader_parameter("ao_overlay_table", _ao_overlay.get("table"))
+	if not enabled: return
+	_shader_material.set_shader_parameter("ao_overlay_origin", _ao_overlay.origin)
+	_shader_material.set_shader_parameter("ao_overlay_tile_size", _ao_overlay.tile_size)
+	_shader_material.set_shader_parameter("ao_overlay_ao_strength", _ao_overlay.ao_strength)
+	_shader_material.set_shader_parameter("ao_overlay_albedo_strength", _ao_overlay.albedo_strength)
+	_shader_material.set_shader_parameter("ao_overlay_fade_start", _ao_overlay.fade_start)
+	_shader_material.set_shader_parameter("ao_overlay_fade_end", _ao_overlay.fade_end)
 
 func set_channel_preview(image: Image, bounds: Rect2, enabled: bool) -> bool:
 	if _shader_material == null: return false

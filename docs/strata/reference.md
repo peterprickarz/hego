@@ -182,6 +182,49 @@ Runtime API:
 | `StrataNavigation.profile` | the profile this node bakes; default `default`. A profile missing from the data is reported by the bake |
 | `StrataNavigation.navigation_layers` | the layer bits of this node's regions; agents choose a population with them |
 
+## World-space AO overlay
+
+Optional contact shadows on the terrain from objects standing on it (ground cover, props,
+plants), baked per square world tile and streamed around the camera. Off by default: a terrain
+without an overlay node draws exactly as before (the shader tests one uniform bool).
+
+**Renderer.** `StrataRenderer.set_ao_overlay(layers, table, origin, tile_size, settings)` binds a
+`Texture2DArray` of single-channel occlusion maps (1 = unoccluded) and a lookup table (one R8
+texel per world tile: layer + 1, 0 = no map). World XZ is split into tiles of `tile_size` metres
+from `origin`. The terrain's AO is multiplied by `mix(1, overlay, ao_strength)` and its albedo by
+`mix(1, overlay, albedo_strength)`; the overlay fades to 1 between `fade_start` and `fade_end`
+metres from the camera (defaults: AO 1, albedo 0, 40 to 60 m). `clear_ao_overlay()` turns it off;
+it is runtime state and is not saved. Textures are updated in place to stream tiles.
+
+**Baker.** `StrataAOOverlayBaker` rasterizes blobs on the GPU (a local `RenderingDevice` compute
+pass; needs Forward+ or Mobile, not headless) from the instances of `MultiMeshInstance3D` nodes
+(their MultiMesh transforms) and `MeshInstance3D` nodes. A blob sits at the mesh's AABB centre;
+its radius is `radius` (metres at instance scale 1) or `footprint` × half the mesh's larger
+horizontal AABB side, times the instance's horizontal scale, clamped to `max_radius`. Its
+occlusion is `strength × (1 − d²/r²)²`; blobs multiply, down to `floor`. A source's rule comes,
+first match wins, from its `strata_ao` metadata (on the node or its mesh: `{radius or footprint,
+strength}`; strength 0 excludes it), from `rules[key]` with key = an optional `classify(node)`,
+the mesh file's base name or path, else from `default` (or the node is skipped). `max_range`
+keeps only sources whose visibility range ends within it.
+
+**Tiles.** `bake_tile(layout, tile, roots, options)` writes `<directory>/tile_X_Z.res` (an R8
+`Image`, mip 0, compressed; none when nothing is occluded) and `edges/tile_X_Z.f32` (the blobs
+within `2 × max_radius` of the tile's edges). A tile owns the instances whose blob centre lies
+in it and adds its neighbours' edge blobs; afterwards the `max_radius` band along the edges of
+every neighbour that has an edge file is rebaked from those files, so seams agree in any bake
+order. 2048² texels per 256 m tile (0.125 m) take 1-3 MB on disk.
+
+**Node.** `StrataAOOverlay` (child of a `StrataTerrain3D`, or `terrain` set) streams the tiles
+within `load_radius` of the camera on threads into `slots` array layers (mipmaps built on a
+worker thread, one layer upload per frame, about 0.5 ms), frees those beyond `unload_radius`, and
+binds every `StrataRenderer` child and the editor preview (`editor_preview`). Each slot costs
+resolution² × 4/3 bytes of video memory (5.6 MB at 2048²). `rebake_tiles(tiles)` (and the
+inspector button **Rebake tiles near the camera**) bakes from the nodes in `source_group`
+(default `strata_ao_sources`; a group on a parent covers its subtree, hand-placed objects
+included) and from source providers: nodes in the group `strata_ao_source_providers` with
+`get_ao_overlay_sources(rect) -> Array` of nodes, for streamed or unloaded content (nodes outside
+the scene tree are freed after the bake). `get_stats()` reports residency, uploads and memory.
+
 ## Custom material shader code
 
 `StrataMaterial.custom_fragment_code` is the body of a function the renderer adds to the
@@ -254,6 +297,7 @@ All are binary `.res` resources, written through a temporary `<name>~.res` file.
 | Terrain bounds | square, with a side of 8 m × a power of two (8 m to 32 km at the default render quality; the factor is the quality's minimum patch size); non-square or other sizes are not drawn |
 | Regions | 4096 cells per side at most and at most 1,048,576 regions; resident regions are bounded by the streaming slots (25 near and 256 far by default), which must not exceed the graphics device's texture array layers |
 | Precomputed control maps | `editor_control_ids` and `editor_control_weights` are at most 1025 texels per side; region composition has no such limit |
+| AO overlay | 255 resident tiles (layers of one `Texture2DArray`), resolution a multiple of 4 |
 | Baked tint and AO map | at most 4097 texels per side: the default 4 m spacing covers terrains up to 16 km, a larger terrain needs a coarser `macro` spacing |
 | Bake | 512 MiB in total for all regions and their detail levels |
 | Heightfield exchanged with Houdini | 20 Mi samples per volume |
