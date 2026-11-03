@@ -115,6 +115,40 @@ enum ProjectionMode { TRIPLANAR, BIPLANAR, SIDES, TOP }
 		if surface_type == value: return
 		surface_type = value
 		emit_changed()
+@export_group("Top Layer", "top_")
+## Optional texture set for the upward projection: where this material projects
+## along +Y (triplanar, biplanar or top), the top set replaces color, normal and
+## ORMH, including the ORMH height used for height blending and displacement.
+## Downward (-Y) and side projections keep the main set. Leave empty (the
+## default) to project the main set on every axis, exactly as before. Needs a
+## free renderer texture slot per top set (material count + top sets <= 32).
+@export var top_color_texture: Texture2D:
+	set(value):
+		if top_color_texture == value: return
+		top_color_texture = value
+		_watch_textures()
+		emit_changed()
+@export var top_normal_texture: Texture2D:
+	set(value):
+		if top_normal_texture == value: return
+		top_normal_texture = value
+		_watch_textures()
+		emit_changed()
+@export var top_ormh_texture: Texture2D:
+	set(value):
+		if top_ormh_texture == value: return
+		top_ormh_texture = value
+		_watch_textures()
+		emit_changed()
+## Top-set repeats per terrain-local metre; 0 (the default) uses uv_scale.
+@export_range(0.0, 16.0, 0.001) var top_uv_scale := 0.0:
+	set(value):
+		if not is_finite(value) or value < 0.0:
+			push_warning("Terrain material top UV scale must be finite and not negative")
+			return
+		if top_uv_scale == value: return
+		top_uv_scale = value
+		emit_changed()
 @export_group("Custom Shader", "custom_")
 ## Optional GLSL statements that adjust this material in the terrain's fragment
 ## shader, for example a fresnel rim. They become the body of
@@ -163,6 +197,10 @@ func _sync_source_profile() -> void:
 	color_texture = _source_profile.color_texture
 	normal_texture = _source_profile.normal_texture
 	ormh_texture = _source_profile.ormh_texture
+	top_color_texture = _source_profile.top_color_texture
+	top_normal_texture = _source_profile.top_normal_texture
+	top_ormh_texture = _source_profile.top_ormh_texture
+	top_uv_scale = _source_profile.top_uv_scale * _source_uv_multiplier
 	uv_scale = _source_profile.uv_scale * _source_uv_multiplier
 	triplanar_sharpness = _source_profile.triplanar_sharpness
 	projection = _source_profile.projection
@@ -179,10 +217,14 @@ func _watch_textures() -> void:
 	for texture in _watched_textures:
 		if texture.changed.is_connected(_texture_changed): texture.changed.disconnect(_texture_changed)
 	_watched_textures.clear()
-	for texture in [color_texture, normal_texture, ormh_texture]:
+	for texture in [color_texture, normal_texture, ormh_texture, top_color_texture, top_normal_texture, top_ormh_texture]:
 		if texture != null and not _watched_textures.has(texture):
 			_watched_textures.append(texture)
 			texture.changed.connect(_texture_changed)
+
+## True when the top layer is in use (a top colour texture is set).
+func has_top_textures() -> bool:
+	return top_color_texture != null
 
 func _texture_changed() -> void:
 	emit_changed()

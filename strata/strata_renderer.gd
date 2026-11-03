@@ -557,6 +557,28 @@ func _bind_material_pool() -> void:
 		roughness_scales.append(float(source.get("roughness_scale")) if "roughness_scale" in source else 1.0)
 		roughness_biases.append(float(source.get("roughness_bias")) if "roughness_bias" in source else 0.0)
 		_bound_displacement_multiplier = maxf(_bound_displacement_multiplier, displacements[-1])
+	# Top layer sets (StrataMaterial.top_*) take free texture slots from the end of the
+	# pool, after the materials; top_texture_slots holds slot + 1 per material (0: none,
+	# so a not yet bound int array means no top layer).
+	var top_slots := PackedInt32Array()
+	top_slots.resize(32)
+	var top_scales := PackedFloat32Array()
+	top_scales.resize(32)
+	var next_free := 31
+	for index in range(mini(_materials.size(), 32)):
+		var source := _materials[index]
+		if source == null or not source.has_top_textures(): continue
+		if next_free < _materials.size():
+			push_warning("Strata: no free texture slot for the top layer of material %d; it renders without one." % index)
+			continue
+		colors[next_free] = source.top_color_texture
+		normals[next_free] = source.top_normal_texture if source.top_normal_texture != null else default_normal
+		packed[next_free] = source.top_ormh_texture if source.top_ormh_texture != null else default_ormh
+		top_slots[index] = next_free + 1
+		top_scales[index] = maxf(0.001, source.top_uv_scale if source.top_uv_scale > 0.0 else source.uv_scale)
+		next_free -= 1
+	_shader_material.set_shader_parameter("top_texture_slots", top_slots)
+	_shader_material.set_shader_parameter("top_uv_scales", top_scales)
 	_shader_material.set_shader_parameter("color_maps", colors)
 	_shader_material.set_shader_parameter("normal_maps", normals)
 	_shader_material.set_shader_parameter("ormh_maps", packed)
