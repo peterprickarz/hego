@@ -149,6 +149,16 @@ func cook() -> void:
 
 	if not skipped.is_empty():
 		HEGoLog.get_singleton().debug(LOG_CATEGORY, "Nothing to do for: " + ", ".join(skipped))
+
+	# Extensions follow up on the finished output (post-processing, saving).
+	for extension in extensions:
+		timings.begin_phase()
+		var finished: Dictionary = await extension.cook_finished(context)
+		timings.end_phase("extension_finish")
+		if not finished.get("ok", false):
+			_cook_failed(extensions, cook_state, String(finished.get("message", "A cook extension could not finish")), extension)
+			HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
+			return
 	HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 	_last_cook_succeeded = true
 

@@ -197,9 +197,11 @@ dependency only ever points from that addon to HEGo:
 - :ref:`HEGoCookExtension<class_HEGoCookExtension>` is the per-node hook: a node you add as
   a direct child of one :ref:`HEGoNode3D<class_HEGoNode3D>`. Its hooks run at each step of
   the cook: ``cook_prepare()`` before anything reaches Houdini, ``cook_before()`` before the
-  HDA cooks, ``cook_commit()`` before ``Outputs`` is replaced, and ``cook_failed()`` when the
-  cook stops early. Any hook returning ``ok: false`` stops the cook with every previous
-  output left in place. An extension can also make the cook strict. To turn a kind of cook
+  HDA cooks, ``cook_commit()`` before ``Outputs`` is replaced, ``cook_finished()`` after the
+  output handlers have rebuilt ``Outputs`` (post-processing that needs the new result, on
+  every cook however it was started: the panel's Recook, a Session Sync update, a script),
+  and ``cook_failed()`` when the cook stops early. Any hook before ``cook_finished()``
+  returning ``ok: false`` stops the cook with every previous output left in place. An extension can also make the cook strict. To turn a kind of cook
   result into something, write an output handler instead; it needs no child node.
 
 When a node's inputs or parameters change, it emits
