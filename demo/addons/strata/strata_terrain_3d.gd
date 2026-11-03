@@ -469,7 +469,15 @@ func is_runtime_bake_stale() -> bool:
 func publish_runtime_data(data: StrataRuntimeData, signature: Array) -> void:
 	data.bake_revision = (runtime_data.bake_revision if runtime_data != null else 0) + 1
 	var was_stale := runtime_bake_stale
+	var previous := runtime_data
 	runtime_data = data
+	# Saving takes over the file's path from the previous bake. In the editor, children
+	# (collision) still holding it would then be saved into the scene as an embedded,
+	# outdated copy that no longer matches the region files; hand them the new bake.
+	if Engine.is_editor_hint() and previous != null:
+		for child in get_children():
+			if child.get(&"data") == previous:
+				child.set(&"data", data)
 	_runtime_signature = signature
 	runtime_bake_stale = false
 	if StrataStorage.has_storage(self):
