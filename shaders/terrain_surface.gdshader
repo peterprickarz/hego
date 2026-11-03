@@ -13,6 +13,10 @@ uniform sampler2D ormh_maps[32] : filter_linear_mipmap, repeat_enable;
 #endif
 uniform sampler2D normal_maps[32] : filter_linear_mipmap, repeat_enable;
 uniform float uv_scales[32];
+// Optional top layer per material (StrataMaterial.top_*): texture slot + 1 of the set the
+// upward (+Y) projection uses (0: none, the material's own set on every axis) and its scale.
+uniform int top_texture_slots[32];
+uniform float top_uv_scales[32];
 // Per-material axis-weight exponent, shared by color, normal and ORMH (1-64).
 uniform float triplanar_sharpnesses[32];
 // Per-material projection: 0 triplanar, 1 biplanar, 2 sides (X+Z), 3 top (Y).
@@ -156,6 +160,14 @@ vec2 endpoint_field_uv(vec2 position, vec2 origin, vec2 size, ivec2 dimensions) 
 // undisplaced surface point; outside it no material texture is fetched. The
 // projections match fragment(): same base point, smooth normal and per-material
 // axis weights, sampled at LOD0.
+// Texture slot and UV scale of material id's projection along axis: the top layer set for the
+// upward (+Y) projection when the material has one, otherwise the material's own set.
+int terrain_axis_texture(int id, int axis, vec3 projection_normal, inout float scale) {
+	int top = top_texture_slots[id];
+	if (axis == 1 && top > 0 && projection_normal.y >= 0.0) { scale = top_uv_scales[id]; return top - 1; }
+	return id;
+}
+
 float material_height_offset(vec3 base_point, vec3 projection_normal) {
 	float fade = displacement_enabled ? 1.0 - smoothstep(displacement_radius * 0.55, displacement_radius, distance(base_point, camera_position)) : 0.0;
 	if (fade <= 0.0) { return 0.0; }
@@ -174,9 +186,11 @@ float material_height_offset(vec3 base_point, vec3 projection_normal) {
 			for (int axis = 0; axis < 3; axis++) {
 				float axis_weight = axis_weights[axis];
 				if (axis_weight > 0.0) {
-					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * uv_scales[id];
-					vec2 sampled_alpha = vec2(terrain_ormh_lod(id, uv, 0.0).a);
-					if (far_mix > 0.0) { sampled_alpha.y = terrain_ormh_lod(id, uv * far_uv_factor, 0.0).a; }
+					float axis_scale = uv_scales[id];
+					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
+					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
+					vec2 sampled_alpha = vec2(terrain_ormh_lod(tid, uv, 0.0).a);
+					if (far_mix > 0.0) { sampled_alpha.y = terrain_ormh_lod(tid, uv * far_uv_factor, 0.0).a; }
 					blend_heights[slot] += mix(sampled_alpha.x, sampled_alpha.y, far_mix) * axis_weight;
 					heights[slot] += mix(terrain_finite_height(sampled_alpha.x), terrain_finite_height(sampled_alpha.y), far_mix) * axis_weight;
 				}
@@ -251,10 +265,12 @@ void fragment() {
 			for (int axis = 0; axis < 3; axis++) {
 				float axis_weight = axis_weights[axis];
 				if (axis_weight > 0.0) {
-					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * scale;
-					vec2 dx = terrain_triplanar_uv(frames[axis], point_dx) * scale; vec2 dy = terrain_triplanar_uv(frames[axis], point_dy) * scale;
-					vec4 projected = terrain_ormh_grad(id, uv, dx, dy);
-					if (far_mix > 0.0) { projected = mix(projected, terrain_ormh_grad(id, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor), far_mix); }
+					float axis_scale = scale;
+					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
+					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
+					vec2 dx = terrain_triplanar_uv(frames[axis], point_dx) * axis_scale; vec2 dy = terrain_triplanar_uv(frames[axis], point_dy) * axis_scale;
+					vec4 projected = terrain_ormh_grad(tid, uv, dx, dy);
+					if (far_mix > 0.0) { projected = mix(projected, terrain_ormh_grad(tid, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor), far_mix); }
 					packed_samples[slot] += projected * axis_weight;
 				}
 			}
@@ -292,14 +308,16 @@ void fragment() {
 			for (int axis = 0; axis < 3; axis++) {
 				float axis_weight = axis_weights[axis];
 				if (axis_weight > 0.0) {
-					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * scale;
-					vec2 dx = terrain_triplanar_uv(frames[axis], point_dx) * scale; vec2 dy = terrain_triplanar_uv(frames[axis], point_dy) * scale;
-					vec3 sampled_color = terrain_color_grad(id, uv, dx, dy).rgb;
-					vec2 near_rg = terrain_normal_grad(id, uv, dx, dy).rg * 2.0 - 1.0;
+					float axis_scale = scale;
+					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
+					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
+					vec2 dx = terrain_triplanar_uv(frames[axis], point_dx) * axis_scale; vec2 dy = terrain_triplanar_uv(frames[axis], point_dy) * axis_scale;
+					vec3 sampled_color = terrain_color_grad(tid, uv, dx, dy).rgb;
+					vec2 near_rg = terrain_normal_grad(tid, uv, dx, dy).rg * 2.0 - 1.0;
 					vec3 near_normal = vec3(near_rg, sqrt(max(0.0, 1.0 - dot(near_rg, near_rg))));
 					if (far_mix > 0.0) {
-						sampled_color = mix(sampled_color, terrain_color_grad(id, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor).rgb, far_mix);
-						vec2 far_rg = terrain_normal_grad(id, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor).rg * 2.0 - 1.0;
+						sampled_color = mix(sampled_color, terrain_color_grad(tid, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor).rgb, far_mix);
+						vec2 far_rg = terrain_normal_grad(tid, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor).rg * 2.0 - 1.0;
 						vec3 far_normal = vec3(far_rg, sqrt(max(0.0, 1.0 - dot(far_rg, far_rg))));
 						near_normal = mix(near_normal, far_normal, far_mix);
 					}

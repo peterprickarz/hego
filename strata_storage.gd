@@ -309,6 +309,10 @@ static func _save_resources(entries: Array) -> Dictionary:
 		if error != OK:
 			_remove_all(temporaries)
 			return _error("Could not write %s (%s); previous file kept" % [path, error_string(error)])
+		# Keep the replaced file's UID, so scenes referencing it by UID still resolve.
+		var uid := ResourceLoader.get_resource_uid(path)
+		if uid != ResourceUID.INVALID_ID:
+			ResourceSaver.set_uid(temporary, uid)
 		temporaries.append(temporary)
 	var saved: Array = []
 	for index in range(entries.size()):
