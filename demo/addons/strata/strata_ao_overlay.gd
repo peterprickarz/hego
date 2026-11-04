@@ -87,6 +87,8 @@ const PROVIDER_GROUP := &"strata_ao_source_providers"
 
 ## Optional key function for the rules (node -> String), set by game code.
 var classify: Callable
+## Optional procedural world footprints, callable(Rect2) -> packed x,z,radius,strength.
+var blob_source: Callable
 
 var _layers: Texture2DArray
 var _table_image: Image
@@ -368,7 +370,7 @@ func layout() -> Dictionary:
 func bake_options() -> Dictionary:
 	return {"rules": rules, "default": default_rule if not default_rule.is_empty() else null,
 		"classify": classify if classify.is_valid() else null, "max_radius": max_radius,
-		"floor": floor_value, "max_range": max_range}
+		"floor": floor_value, "max_range": max_range, "blob_source": blob_source}
 
 
 ## Source roots for [param rect]: the [member source_group] nodes (filtered by bounds in the

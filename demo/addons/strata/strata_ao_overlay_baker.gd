@@ -429,14 +429,35 @@ static func bake_tile(layout: Dictionary, tile: Vector2i, roots: Array, options:
 	var rect := tile_rect(layout, tile)
 	var resolution := int(layout.get("resolution", 2048))
 	var collected := collect(roots, options, rect)
-	var collect_ms := (Time.get_ticks_usec() - started) / 1000.0
+	# Optional procedural footprints use the same GPU splat and seam cache as
+	# ordinary mesh instances. The provider receives this tile's world rectangle.
+	var owned_blobs := PackedFloat32Array()
+	var owned_edges := PackedFloat32Array()
+	var blob_source: Variant = options.get("blob_source")
 	var band := 2.0 * float(options.max_radius)
-	var result := bake(rect, resolution, collected, _neighbour_blobs(layout, tile), options, band)
+	if blob_source is Callable and (blob_source as Callable).is_valid():
+		var supplied: PackedFloat32Array = blob_source.call(rect)
+		for i in range(0, supplied.size() - 3, 4):
+			var centre := Vector2(supplied[i], supplied[i + 1])
+			if not centre.is_finite() or not rect.has_point(centre): continue
+			var radius := supplied[i + 2]
+			var strength := supplied[i + 3]
+			if not is_finite(radius) or not is_finite(strength) or radius <= 0.0 or strength <= 0.0: continue
+			var blob := PackedFloat32Array([centre.x, centre.y, minf(radius, float(options.max_radius)), minf(strength, 0.95)])
+			owned_blobs.append_array(blob)
+			var local := centre - rect.position
+			if local.x < band or local.y < band or local.x >= rect.size.x - band or local.y >= rect.size.y - band:
+				owned_edges.append_array(blob)
+	var collect_ms := (Time.get_ticks_usec() - started) / 1000.0
+	var blobs := _neighbour_blobs(layout, tile)
+	blobs.append_array(owned_blobs)
+	var result := bake(rect, resolution, collected, blobs, options, band)
 	if not result.ok:
 		return {"ok": false, "tile": tile, "message": "AO overlay bake: " + str(result.message)}
 	var stats := histogram_stats(result.histogram)
 	var bytes := save_tile_image(layout, tile, result.image, stats.occluded_fraction > 0.0)
 	var edges: PackedFloat32Array = result.edges
+	edges.append_array(owned_edges)
 	var edge_file := edges_path(layout, tile)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(edge_file.get_base_dir()))
 	var file := FileAccess.open(edge_file, FileAccess.WRITE)
@@ -452,6 +473,7 @@ static func bake_tile(layout: Dictionary, tile: Vector2i, roots: Array, options:
 					neighbours.append(other)
 	var report := {"ok": bytes >= 0, "tile": tile, "path": tile_path(layout, tile) if bytes > 0 else "",
 		"instances": collected.instances, "by_key": collected.by_key, "edge_blobs": edges.size() / 4,
+		"procedural_blobs": owned_blobs.size() / 4,
 		"bytes": bytes, "collect_ms": collect_ms, "gpu_ms": result.gpu_ms, "neighbours_rebaked": neighbours,
 		"ms": (Time.get_ticks_usec() - started) / 1000.0}
 	report.merge(stats)

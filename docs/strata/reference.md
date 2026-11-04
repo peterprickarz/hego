@@ -207,6 +207,14 @@ strength}`; strength 0 excludes it), from `rules[key]` with key = an optional `c
 the mesh file's base name or path, else from `default` (or the node is skipped). `max_range`
 keeps only sources whose visibility range ends within it.
 
+Procedural sources can set `options.blob_source` (or the overlay node's
+`blob_source`) to a `Callable(Rect2) -> PackedFloat32Array`. Return world-space
+`[x, z, radius, strength]` groups whose centres belong to the supplied tile.
+These samples use the same GPU splat, persistent edge files and neighbour
+rebakes as mesh sources; `procedural_blobs` reports their count. The provider
+owns shape sampling, contact tests and any density normalization. This is useful
+for shader-deformed splines whose MultiMesh transforms are packed curve data.
+
 **Tiles.** `bake_tile(layout, tile, roots, options)` writes `<directory>/tile_X_Z.res` (an R8
 `Image`, mip 0, compressed; none when nothing is occluded) and `edges/tile_X_Z.f32` (the blobs
 within `2 × max_radius` of the tile's edges). A tile owns the instances whose blob centre lies
