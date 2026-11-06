@@ -192,8 +192,10 @@ without an overlay node draws exactly as before (the shader tests one uniform bo
 `Texture2DArray` of single-channel occlusion maps (1 = unoccluded) and a lookup table (one R8
 texel per world tile: layer + 1, 0 = no map). World XZ is split into tiles of `tile_size` metres
 from `origin`. The terrain's AO is multiplied by `mix(1, overlay, ao_strength)` and its albedo by
-`mix(1, overlay, albedo_strength)`; the overlay fades to 1 between `fade_start` and `fade_end`
-metres from the camera (defaults: AO 1, albedo 0, 40 to 60 m). `clear_ao_overlay()` turns it off;
+`mix(1, overlay, albedo_strength)`, and its roughness moves towards 1 by
+`(1 − overlay) × roughness_strength` (ground under cover is littered and sheltered, so it does not
+share the open ground's sheen); the overlay fades to 1 between `fade_start` and `fade_end`
+metres from the camera (defaults: AO 1, albedo 0, roughness 0, 40 to 60 m). `clear_ao_overlay()` turns it off;
 it is runtime state and is not saved. Textures are updated in place to stream tiles.
 
 **Baker.** `StrataAOOverlayBaker` rasterizes blobs on the GPU (a local `RenderingDevice` compute

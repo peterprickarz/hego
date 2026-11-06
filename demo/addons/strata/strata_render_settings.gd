@@ -60,10 +60,10 @@ func parameters() -> Dictionary:
 		uv_far_distance = value
 		emit_changed()
 @export_group("Material sampling")
-## Opt-in pixel-art look. Colour and ORMH use nearest filtering with mipmaps and
+## Opt-in pixel-art look. Colour, normals and ORMH use nearest filtering with mipmaps and
 ## sample at texel centres (mip level still chosen from the unsnapped
-## coordinates), so the height blend follows the same texel grid. Normals stay
-## bilinear. Off keeps the default smooth filtering.
+## coordinates), so lighting detail and the height blend follow the same texel grid.
+## Off keeps the default smooth filtering.
 @export var pixel_sampling := false:
 	set(value):
 		if pixel_sampling == value: return
@@ -79,6 +79,16 @@ func parameters() -> Dictionary:
 	set(value):
 		if not is_finite(value) or value < 0.0 or value > 1.0: return
 		terrain_ao_strength = value
+		emit_changed()
+@export_group("Surface response")
+## Dielectric specular level of every terrain material (Godot SPECULAR; 0.5 is Godot's default,
+## F0 0.04). Godot also limits the grazing-angle Fresnel by F0, so rough natural ground such as
+## soil, moss and weathered rock reads better around 0.1, without a sheen towards the sun. Rain
+## wetness raises it towards the water film's 0.5.
+@export_range(0.0, 1.0, 0.01) var terrain_specular := 0.5:
+	set(value):
+		if not is_finite(value) or value < 0.0 or value > 1.0: return
+		terrain_specular = value
 		emit_changed()
 
 @export_group("Near displacement geometry")

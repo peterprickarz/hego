@@ -35,10 +35,10 @@ func run() -> void:
 			check(names.has("color_maps") and names.has("ormh_maps") and names.has("normal_maps"), "variant creases=%s pixel=%s compiles with sampler arrays" % [creases, pixel])
 			check(names.size() == reference, "variant creases=%s pixel=%s keeps the uniform set" % [creases, pixel])
 	var source := FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_surface.gdshader")
-	check(source.contains("color_maps[32] : source_color, filter_nearest_mipmap") and source.contains("ormh_maps[32] : filter_nearest_mipmap") and source.contains("normal_maps[32] : filter_linear_mipmap"), "pixel variant: nearest colour/ORMH, bilinear normals")
+	check(source.contains("color_maps[32] : source_color, filter_nearest_mipmap") and source.contains("ormh_maps[32] : filter_nearest_mipmap") and source.contains("normal_maps[32] : filter_nearest_mipmap"), "pixel variant: nearest colour/ORMH/normals")
 	var dispatch := FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_texture_dispatch.gdshaderinc")
 	check(not dispatch.contains("textureGrad(color_maps[0], uv") and dispatch.contains("terrain_pixel_uv(uv, textureSize(ormh_maps[31], 0))"), "colour and ORMH fetches snap through terrain_pixel_uv")
-	check(dispatch.contains("textureGrad(normal_maps[0], uv, dx, dy)"), "normal fetches are not snapped")
+	check(dispatch.contains("terrain_pixel_uv(uv, textureSize(normal_maps[0], 0))") and not dispatch.contains("textureGrad(normal_maps[0], uv, dx, dy)"), "normal fetches snap on the material grid")
 	check(source.contains("uniform int projection_modes[32]") and source.count("terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id])") == 2, "fragment and vertex paths use the per-material projection")
 	var material := StrataMaterial.new()
 	material.projection = StrataMaterial.ProjectionMode.SIDES

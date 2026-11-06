@@ -44,6 +44,11 @@ const PROVIDER_GROUP := &"strata_ao_source_providers"
 	set(value):
 		albedo_strength = value
 		_bound.clear()
+## How far occluded ground moves towards roughness 1 (litter and shelter under the sources).
+@export_range(0.0, 1.0, 0.01) var roughness_strength := 0.0:
+	set(value):
+		roughness_strength = value
+		_bound.clear()
 ## Distance from the camera (m) where the overlay starts to fade and where it is gone. Keep the
 ## end inside the visibility ranges of the sources, so no shadow shows without its object.
 @export var fade_start := 40.0:
@@ -304,7 +309,7 @@ func renderers() -> Array[StrataRenderer]:
 func _bind() -> void:
 	if _layers == null or _table_texture == null:
 		return
-	var settings := {"ao_strength": ao_strength, "albedo_strength": albedo_strength, "fade_start": fade_start, "fade_end": fade_end}
+	var settings := {"ao_strength": ao_strength, "albedo_strength": albedo_strength, "roughness_strength": roughness_strength, "fade_start": fade_start, "fade_end": fade_end}
 	var origin := tile_origin + Vector2(_table_range.position) * tile_size
 	for renderer in renderers():
 		var current := renderer.get_ao_overlay()

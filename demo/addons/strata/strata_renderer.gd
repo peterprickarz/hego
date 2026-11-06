@@ -788,6 +788,7 @@ func _update_material_settings() -> void:
 	_shader_material.set_shader_parameter("height_blend_enabled", height_blend_enabled)
 	_shader_material.set_shader_parameter("terrain_tint_strength", render_settings.terrain_tint_strength if render_settings != null else 1.0)
 	_shader_material.set_shader_parameter("terrain_ao_strength", render_settings.terrain_ao_strength if render_settings != null else 1.0)
+	_shader_material.set_shader_parameter("terrain_specular", render_settings.terrain_specular if render_settings != null else 0.5)
 	_shader_material.set_shader_parameter("surface_wetness", surface_wetness)
 	_shader_material.set_shader_parameter("distance_uv_enabled", distance_uv_enabled)
 	_shader_material.set_shader_parameter("far_uv_factor", far_uv_factor)
@@ -967,9 +968,10 @@ func set_macro_map(image: Image, bounds: Rect2) -> bool:
 ## single-channel occlusion map over its tile (1 = unoccluded, texel centres at
 ## (i + 0.5) / width), sampled with linear filtering and mipmaps. The terrain's AO is
 ## multiplied by mix(1, overlay, ao_strength) and its albedo by mix(1, overlay,
-## albedo_strength); the overlay fades to 1 between fade_start and fade_end metres from the
-## camera. [param settings]: ao_strength (default 1), albedo_strength (0), fade_start (40),
-## fade_end (60). Update the textures in place (Texture2DArray.update_layer,
+## albedo_strength), and its roughness moves towards 1 by (1 - overlay) * roughness_strength;
+## the overlay fades to 1 between fade_start and fade_end metres from the camera.
+## [param settings]: ao_strength (default 1), albedo_strength (0), roughness_strength (0),
+## fade_start (40), fade_end (60). Update the textures in place (Texture2DArray.update_layer,
 ## ImageTexture.update) to stream tiles; call again only to replace them or change the
 ## settings. Returns false, leaving the overlay off, for invalid arguments.
 func set_ao_overlay(layers: Texture2DArray, table: Texture2D, origin: Vector2, tile_size: Vector2, settings := {}) -> bool:
@@ -982,6 +984,7 @@ func set_ao_overlay(layers: Texture2DArray, table: Texture2D, origin: Vector2, t
 	_ao_overlay = {"layers": layers, "table": table, "origin": origin, "tile_size": tile_size,
 		"ao_strength": clampf(float(settings.get("ao_strength", 1.0)), 0.0, 1.0),
 		"albedo_strength": clampf(float(settings.get("albedo_strength", 0.0)), 0.0, 1.0),
+		"roughness_strength": clampf(float(settings.get("roughness_strength", 0.0)), 0.0, 1.0),
 		"fade_start": maxf(fade_start, 0.0), "fade_end": maxf(fade_end, maxf(fade_start, 0.0) + 0.01)}
 	_apply_ao_overlay()
 	return true
@@ -1005,6 +1008,7 @@ func _apply_ao_overlay() -> void:
 	_shader_material.set_shader_parameter("ao_overlay_tile_size", _ao_overlay.tile_size)
 	_shader_material.set_shader_parameter("ao_overlay_ao_strength", _ao_overlay.ao_strength)
 	_shader_material.set_shader_parameter("ao_overlay_albedo_strength", _ao_overlay.albedo_strength)
+	_shader_material.set_shader_parameter("ao_overlay_roughness_strength", _ao_overlay.roughness_strength)
 	_shader_material.set_shader_parameter("ao_overlay_fade_start", _ao_overlay.fade_start)
 	_shader_material.set_shader_parameter("ao_overlay_fade_end", _ao_overlay.fade_end)
 

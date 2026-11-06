@@ -1,17 +1,18 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
-// STRATA_PIXEL_SAMPLING (StrataRenderSettings.pixel_sampling) switches colour and
-// ORMH to nearest-mipmap filtering; the dispatch functions then also snap the
-// UV to texel centres. Normals always stay bilinear.
+// STRATA_PIXEL_SAMPLING (StrataRenderSettings.pixel_sampling) switches colour,
+// ORMH and normals to nearest-mipmap filtering; the dispatch functions also
+// snap UV to texel centres while retaining continuous derivatives.
 #ifdef STRATA_PIXEL_SAMPLING
 uniform sampler2D color_maps[32] : source_color, filter_nearest_mipmap, repeat_enable;
 uniform sampler2D ormh_maps[32] : filter_nearest_mipmap, repeat_enable;
+uniform sampler2D normal_maps[32] : filter_nearest_mipmap, repeat_enable;
 #else
 uniform sampler2D color_maps[32] : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D ormh_maps[32] : filter_linear_mipmap, repeat_enable;
-#endif
 uniform sampler2D normal_maps[32] : filter_linear_mipmap, repeat_enable;
+#endif
 uniform float uv_scales[32];
 // Optional top layer per material (StrataMaterial.top_*): texture slot + 1 of the set the
 // upward (+Y) projection uses (0: none, the material's own set on every axis) and its scale.
@@ -74,11 +75,17 @@ uniform sampler2D ownership_field : filter_linear, repeat_disable;
 uniform bool show_ownership = false;
 uniform float terrain_tint_strength = 1.0;
 uniform float terrain_ao_strength = 1.0;
+// Dielectric specular level (Godot SPECULAR, F0 = 0.16 * specular^2), set through
+// StrataRenderSettings.terrain_specular. Godot also derives the grazing Fresnel limit from F0,
+// so lower values remove the bright sheen the ground otherwise shows towards the sun.
+uniform float terrain_specular : hint_range(0.0, 1.0) = 0.5;
 // Rain wetness, set through StrataRenderer.surface_wetness (0 = dry, the default).
-// Darkens albedo and lowers roughness, fully on upward faces, partly on steep ones.
+// Darkens albedo, lowers roughness and raises specular towards a water film's (wet_specular),
+// fully on upward faces, partly on steep ones.
 uniform float surface_wetness : hint_range(0.0, 1.0) = 0.0;
 uniform float wet_darkening : hint_range(0.0, 1.0) = 0.42;
 uniform float wet_roughness : hint_range(0.0, 1.0) = 0.55;
+uniform float wet_specular : hint_range(0.0, 1.0) = 0.5;
 uniform float wet_steep_factor : hint_range(0.0, 1.0) = 0.45;
 // Optional world-space AO overlay, set through StrataRenderer.set_ao_overlay (off by
 // default). World XZ tiles of ao_overlay_tile_size metres from ao_overlay_origin; the table
@@ -90,6 +97,8 @@ uniform vec2 ao_overlay_origin = vec2(0.0);
 uniform vec2 ao_overlay_tile_size = vec2(256.0);
 uniform float ao_overlay_ao_strength = 1.0;
 uniform float ao_overlay_albedo_strength = 0.0;
+// Occluded ground (litter, shelter) is rougher: roughness moves towards 1 by (1 - overlay) * this.
+uniform float ao_overlay_roughness_strength = 0.0;
 uniform float ao_overlay_fade_start = 40.0;
 uniform float ao_overlay_fade_end = 60.0;
 uniform sampler2D channel_preview_field : filter_linear, repeat_disable;
@@ -419,17 +428,20 @@ void fragment() {
 		}
 		ALBEDO = mix(ALBEDO, vec3(0.95, 0.24, 0.055), ownership_coverage * 0.8);
 	}
+	float wet = 0.0;
 	if (surface_wetness > 0.0) {
-		float wet = surface_wetness * mix(wet_steep_factor, 1.0, smoothstep(0.4, 0.9, final_normal.y));
+		wet = surface_wetness * mix(wet_steep_factor, 1.0, smoothstep(0.4, 0.9, final_normal.y));
 		ALBEDO *= 1.0 - wet_darkening * wet;
 		orm.g = mix(orm.g, min(orm.g, wet_roughness), wet);
 	}
 	ROUGHNESS = clamp(orm.g, 0.04, 1.0); METALLIC = clamp(orm.b, 0.0, 1.0);
+	SPECULAR = mix(terrain_specular, max(terrain_specular, wet_specular), wet);
 	AO = clamp(orm.r, 0.0, 1.0) * mix(1.0, terrain_macro.a, terrain_ao_strength);
 	if (ao_overlay_enabled) {
 		float overlay = terrain_ao_overlay(base_point, point_dx, point_dy, length(VERTEX), MODEL_MATRIX);
 		AO *= mix(1.0, overlay, ao_overlay_ao_strength);
 		ALBEDO *= mix(1.0, overlay, ao_overlay_albedo_strength);
+		ROUGHNESS = mix(ROUGHNESS, 1.0, (1.0 - overlay) * ao_overlay_roughness_strength);
 	}
 #ifdef STRATA_MATERIAL_HOOKS
 	EMISSION = emission;

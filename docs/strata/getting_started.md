@@ -213,16 +213,24 @@ it is one of the blended materials.
 The terrain's `render_settings` (`StrataRenderSettings`) choose the geometry density with a
 `quality` preset (Performance, Balanced, High or Ultra, or Custom for your own patch
 settings), the strength of the terrain-wide tint and AO map (`terrain_tint_strength`,
-`terrain_ao_strength`), and how much extra geometry is added near
+`terrain_ao_strength`), the dielectric specular level of every material (`terrain_specular`,
+under *Surface response*), and how much extra geometry is added near
 the camera for material displacement (*Near displacement geometry*). These settings change
 only what you see; collision, navigation and the stored heights are unaffected. A bake keeps
 a copy of them for the runtime renderer.
 
+**Specular level** (`terrain_specular`, default 0.5, Godot's own default). Godot derives both the
+head-on reflectance (F0 = 0.16 × specular²) and the grazing-angle Fresnel limit from it, so at 0.5
+the whole terrain picks up a bright sheen when you look towards the sun, whatever its roughness.
+Rough natural ground (soil, moss, weathered rock) reads better around 0.1, which is also a good
+match for vegetation and rock props that set `SPECULAR` near 0.1. Rain wetness
+(`StrataRenderer.surface_wetness`) raises it towards a water film's 0.5 (`wet_specular`).
+
 **Pixel sampling** (`pixel_sampling`, under *Material sampling*, off by default) gives
-low-resolution pixel-art materials a crisp look. Colour and ORMH textures are sampled with
+low-resolution pixel-art materials a crisp look. Colour, normal and ORMH textures are sampled with
 nearest filtering (still mipmapped, so distant terrain stays stable) at texel centres, and the
 height blend between materials follows the same texel grid, so blend boundaries are stair-stepped
-instead of smooth. Normal maps stay bilinear. Turning it on switches to a separate cached shader
+instead of smooth. Normal detail follows the same pixel grid. Turning it on switches to a separate cached shader
 variant (a compile-time `STRATA_PIXEL_SAMPLING` define), so the default look and cost are
 unchanged when it is off. Nearest filtering is best with textures that are authored at their
 intended pixel size and imported with mipmaps.
