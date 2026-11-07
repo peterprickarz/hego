@@ -128,3 +128,51 @@ func parameters() -> Dictionary:
 		if displacement_refinement_budget == value: return
 		displacement_refinement_budget = value
 		emit_changed()
+
+@export_group("Surface cache")
+## Camera-centred clipmap of the resolved terrain surface (StrataSurfaceCache), filled on the
+## GPU from the terrain material. Near displacement reads its relief, and other shaders read the
+## ground below them through shaders/strata_surface_cache.gdshaderinc (blending props, rocks and
+## cliffs into the terrain). Needs Forward+ or Mobile. See "Surface cache" in docs/strata/reference.md.
+@export var surface_cache_enabled := false:
+	set(value):
+		if surface_cache_enabled == value: return
+		surface_cache_enabled = value
+		emit_changed()
+## Levels of doubling cell size. Level k covers resolution x texel x 2^k metres around the camera.
+@export_range(1, 8, 1) var surface_cache_levels := 6:
+	set(value):
+		if value < 1 or value > 8: return
+		if surface_cache_levels == value: return
+		surface_cache_levels = value
+		emit_changed()
+## Cells per side of every level (16 bytes per cell and level).
+@export_enum("256:256", "512:512", "1024:1024", "2048:2048") var surface_cache_resolution := 1024:
+	set(value):
+		if value not in [256, 512, 1024, 2048]: return
+		if surface_cache_resolution == value: return
+		surface_cache_resolution = value
+		emit_changed()
+## Cells per metre of level 0. Match the material texel density (128 for 128 texels/m materials)
+## so level 0 copies material texels one to one.
+@export_range(8.0, 512.0, 1.0) var surface_cache_texels_per_metre := 128.0:
+	set(value):
+		if not is_finite(value) or value <= 0.0: return
+		if surface_cache_texels_per_metre == value: return
+		surface_cache_texels_per_metre = value
+		emit_changed()
+## Near displacement reads the material relief from the cache instead of sampling every
+## material per vertex. The cache level whose cells match displacement_vertex_spacing must cover
+## the displacement radius; vertices outside it evaluate the material directly.
+@export var surface_cache_displacement := true:
+	set(value):
+		if surface_cache_displacement == value: return
+		surface_cache_displacement = value
+		emit_changed()
+## Publish the cache as the strata_cache_* global shader parameters. Only one terrain per scene
+## should publish.
+@export var surface_cache_publish_globals := true:
+	set(value):
+		if surface_cache_publish_globals == value: return
+		surface_cache_publish_globals = value
+		emit_changed()

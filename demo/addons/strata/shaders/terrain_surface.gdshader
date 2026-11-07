@@ -135,37 +135,7 @@ varying vec2 terrain_position;
 #include "terrain_normals.gdshaderinc"
 #include "terrain_height_blend.gdshaderinc"
 #include "terrain_triplanar.gdshaderinc"
-
-float base_height(vec2 position) {
-	if (!triangle_height_sampling) { return terrain_linear_height(position); }
-	ivec2 lattice_max = terrain_lattice_max();
-	vec2 grid = clamp((position - field_origin) / terrain_lattice_step(), vec2(0.0), vec2(lattice_max));
-	ivec2 first = min(ivec2(floor(grid)), lattice_max - ivec2(1));
-	vec2 f = grid - vec2(first);
-	float a = terrain_texel_height(first);
-	float b = terrain_texel_height(first + ivec2(1, 0));
-	float c = terrain_texel_height(first + ivec2(0, 1));
-	float d = terrain_texel_height(first + ivec2(1, 1));
-	return f.x + f.y <= 1.0 ? a + (b - a) * f.x + (c - a) * f.y : d + (c - d) * (1.0 - f.x) + (b - d) * (1.0 - f.y);
-}
-
-// The default smooth path returns the caller's continuous gradient without
-// further fetches. Crease and legacy lighting replace it for lighting only.
-vec2 base_shading_gradient(vec2 position, vec2 smooth_gradient) {
-	if (smooth_shading) {
-#ifdef HEGO_TERRAIN_CREASES
-		vec3 normal = terrain_crease_normal(position, crease_cosine);
-		return -normal.xz / normal.y;
-#else
-		return smooth_gradient;
-#endif
-	}
-	// Compatibility/A-B mode: the previous triangle-constant field derivatives.
-	float epsilon = 0.08;
-	return vec2(
-		(base_height(position + vec2(epsilon, 0.0)) - base_height(position - vec2(epsilon, 0.0))) / (2.0 * epsilon),
-		(base_height(position + vec2(0.0, epsilon)) - base_height(position - vec2(0.0, epsilon))) / (2.0 * epsilon));
-}
+#include "terrain_surface_core.gdshaderinc"
 
 float uv_blend(vec3 base_point) {
 	if (!distance_uv_enabled) { return 0.0; }
@@ -177,53 +147,53 @@ vec2 endpoint_field_uv(vec2 position, vec2 origin, vec2 size, ivec2 dimensions) 
 	return (logical * vec2(dimensions - ivec2(1)) + vec2(0.5)) / vec2(dimensions);
 }
 
+#ifdef STRATA_SURFACE_CACHE
+// Relief from StrataSurfaceCache (StrataRenderSettings.surface_cache_*): the cache's relief
+// layers hold terrain_material_relief() at texel corners (cell g at g * texel), so a vertex on
+// that lattice reads its own value and others interpolate bilinearly. surface_cache_params:
+// level-0 texel size (m), resolution (power of two), level count, relief level. The window of
+// level k starts at cell surface_cache_origins[k] (a huge value while the level is unfilled).
+uniform sampler2DArray surface_cache_height : filter_nearest, repeat_disable;
+uniform vec4 surface_cache_params = vec4(0.0);
+uniform vec2 surface_cache_origins[8];
+
+bool surface_cache_relief(vec2 position, out float relief) {
+	relief = 0.0;
+	int level = int(surface_cache_params.w);
+	int resolution = int(surface_cache_params.y);
+	if (resolution <= 0 || level < 0 || level >= int(surface_cache_params.z)) { return false; }
+	float texel = surface_cache_params.x * exp2(float(level));
+	vec2 grid = position / texel;
+	ivec2 first = ivec2(floor(grid));
+	ivec2 origin = ivec2(surface_cache_origins[level]);
+	// Two cells of margin: the window edge may be refilled this frame.
+	if (any(lessThan(first, origin + ivec2(2))) || any(greaterThanEqual(first + ivec2(1), origin + ivec2(resolution - 2)))) { return false; }
+	vec2 f = grid - vec2(first);
+	ivec2 mask = ivec2(resolution - 1);
+	int layer = level * 2 + 1;
+	float a = texelFetch(surface_cache_height, ivec3(first & mask, layer), 0).r;
+	float b = texelFetch(surface_cache_height, ivec3((first + ivec2(1, 0)) & mask, layer), 0).r;
+	float c = texelFetch(surface_cache_height, ivec3((first + ivec2(0, 1)) & mask, layer), 0).r;
+	float d = texelFetch(surface_cache_height, ivec3((first + ivec2(1, 1)) & mask, layer), 0).r;
+	relief = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+	return true;
+}
+#endif
+
 // Signed material relief in metres along the terrain normal. The fade uses the
 // undisplaced surface point; outside it no material texture is fetched. The
 // projections match fragment(): same base point, smooth normal and per-material
 // axis weights, sampled at LOD0.
-// Texture slot and UV scale of material id's projection along axis: the top layer set for the
-// upward (+Y) projection when the material has one, otherwise the material's own set.
-int terrain_axis_texture(int id, int axis, vec3 projection_normal, inout float scale) {
-	int top = top_texture_slots[id];
-	if (axis == 1 && top > 0 && projection_normal.y >= 0.0) { scale = top_uv_scales[id]; return top - 1; }
-	return id;
-}
-
 float material_height_offset(vec3 base_point, vec3 projection_normal) {
 	float fade = displacement_enabled ? 1.0 - smoothstep(displacement_radius * 0.55, displacement_radius, distance(base_point, camera_position)) : 0.0;
 	if (fade <= 0.0) { return 0.0; }
-	ivec4 ids; vec4 weights; float discarded;
-	terrain_blend(base_point.xz, ids, weights, discarded);
-	float height_detail = 0.0;
 	float far_mix = uv_blend(base_point);
-	mat3 frames[3];
-	for (int axis = 0; axis < 3; axis++) { frames[axis] = terrain_triplanar_frame(axis, projection_normal); }
-	vec4 heights = vec4(0.5); vec4 blend_heights = vec4(0.5); vec4 contrasts = vec4(0.0); vec4 biases = vec4(0.0);
-	for (int slot = 0; slot < 4; slot++) {
-		if (weights[slot] > 0.0) {
-			int id = ids[slot];
-			vec3 axis_weights = terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id]);
-			blend_heights[slot] = 0.0; heights[slot] = 0.0;
-			for (int axis = 0; axis < 3; axis++) {
-				float axis_weight = axis_weights[axis];
-				if (axis_weight > 0.0) {
-					float axis_scale = uv_scales[id];
-					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
-					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
-					vec2 sampled_alpha = vec2(terrain_ormh_lod(tid, uv, 0.0).a);
-					if (far_mix > 0.0) { sampled_alpha.y = terrain_ormh_lod(tid, uv * far_uv_factor, 0.0).a; }
-					blend_heights[slot] += mix(sampled_alpha.x, sampled_alpha.y, far_mix) * axis_weight;
-					heights[slot] += mix(terrain_finite_height(sampled_alpha.x), terrain_finite_height(sampled_alpha.y), far_mix) * axis_weight;
-				}
-			}
-			contrasts[slot] = height_blend_contrasts[id]; biases[slot] = height_blend_biases[id];
-		}
-	}
-	weights = terrain_height_blend_weights(weights, blend_heights, contrasts, biases);
-	for (int slot = 0; slot < 4; slot++) {
-		if (weights[slot] > 0.0) { height_detail += (heights[slot] - 0.5) * material_displacement[ids[slot]] * weights[slot]; }
-	}
-	return height_detail * displacement_strength * fade;
+#ifdef STRATA_SURFACE_CACHE
+	// The cache holds the near-UV relief only.
+	float cached = 0.0;
+	if (far_mix <= 0.0 && surface_cache_relief(base_point.xz, cached)) { return cached * displacement_strength * fade; }
+#endif
+	return terrain_material_relief(base_point, projection_normal, far_mix) * displacement_strength * fade;
 }
 
 // Occlusion of the world-space AO overlay at a terrain-local point (1 outside the tiles, in
@@ -284,10 +254,15 @@ void fragment() {
 	vec2 smooth_gradient = terrain_smooth_gradient(terrain_position);
 	vec3 projection_normal = normalize(vec3(-smooth_gradient.x, 1.0, -smooth_gradient.y));
 	if (has_holes && terrain_cell_hole(terrain_position)) { discard; }
-	ivec4 ids; vec4 weights; float discarded;
-	terrain_blend(terrain_position, ids, weights, discarded);
-	vec3 color = vec3(0.0); vec3 orm = vec3(0.0);
 	float far_mix = uv_blend(base_point);
+	vec3 color; vec3 orm; vec3 final_normal; float discarded;
+#ifdef STRATA_MATERIAL_HOOKS
+	vec3 emission = vec3(0.0);
+	// Materials with custom code are completed one by one before blending, so this
+	// variant keeps the per-slot loop inline (terrain_surface_evaluate() is the plain path).
+	ivec4 ids; vec4 weights;
+	terrain_blend(terrain_position, ids, weights, discarded);
+	color = vec3(0.0); orm = vec3(0.0);
 	mat3 frames[3];
 	for (int axis = 0; axis < 3; axis++) { frames[axis] = terrain_triplanar_frame(axis, projection_normal); }
 	// Cache the RGBA ORMH projections before weighting the other families. Each
@@ -317,12 +292,11 @@ void fragment() {
 		}
 	}
 	weights = terrain_height_blend_weights(weights, heights, contrasts, biases);
-#ifdef STRATA_MATERIAL_HOOKS
 	// Materials with custom code are completed one by one before blending, so
 	// they need the lighting normal now. It depends on terrain position alone.
 	vec2 gradient = base_shading_gradient(terrain_position, smooth_gradient);
 	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
-	vec3 hooked_normal = vec3(0.0); vec3 emission = vec3(0.0);
+	vec3 hooked_normal = vec3(0.0);
 	StrataContext context;
 	context.position = base_point;
 	context.world_position = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -330,7 +304,6 @@ void fragment() {
 	context.view = normalize(transpose(mat3(MODEL_MATRIX)) * (mat3(INV_VIEW_MATRIX) * VIEW));
 	context.geometric_normal = geometric_normal;
 	context.screen_uv = SCREEN_UV;
-#endif
 	// Tangent-space detail is accumulated per projection axis across materials;
 	// reorientation is linear in it, so each axis is reoriented once below.
 	vec3 axis_details[3];
@@ -339,10 +312,8 @@ void fragment() {
 		if (weights[slot] > 0.0) {
 			int id = ids[slot]; float scale = uv_scales[id];
 			vec3 axis_weights = slot_axis_weights[slot];
-#ifdef STRATA_MATERIAL_HOOKS
 			bool hooked = strata_material_has_hook(id);
 			vec3 slot_color = vec3(0.0); vec3 slot_normal = vec3(0.0);
-#endif
 			for (int axis = 0; axis < 3; axis++) {
 				float axis_weight = axis_weights[axis];
 				if (axis_weight > 0.0) {
@@ -359,7 +330,6 @@ void fragment() {
 						vec3 far_normal = vec3(far_rg, sqrt(max(0.0, 1.0 - dot(far_rg, far_rg))));
 						near_normal = mix(near_normal, far_normal, far_mix);
 					}
-#ifdef STRATA_MATERIAL_HOOKS
 					// Reorientation is linear in detail, so this material's own sum
 					// equals its share of the per-axis accumulation below.
 					if (hooked) {
@@ -367,14 +337,12 @@ void fragment() {
 						slot_normal += terrain_reoriented_normal(frames[axis], geometric_normal, near_normal * axis_weight);
 						continue;
 					}
-#endif
 					color += sampled_color * (weights[slot] * axis_weight);
 					axis_details[axis] += near_normal * (weights[slot] * axis_weight);
 				}
 			}
 			vec3 sampled_orm = packed_samples[slot].rgb;
 			sampled_orm.g = clamp(sampled_orm.g * material_roughness_scales[id] + material_roughness_biases[id], 0.0, 1.0);
-#ifdef STRATA_MATERIAL_HOOKS
 			if (hooked) {
 				float normal_length = length(slot_normal);
 				StrataSurface surface = StrataSurface(slot_color, normal_length > 0.00000001 ? slot_normal / normal_length : geometric_normal, sampled_orm.g, sampled_orm.b, sampled_orm.r, vec3(0.0));
@@ -389,7 +357,6 @@ void fragment() {
 				sampled_orm = vec3(surface.ao, surface.roughness, surface.metallic);
 				emission += surface.emission * weights[slot];
 			}
-#endif
 			orm += sampled_orm * weights[slot];
 		}
 	}
@@ -401,17 +368,17 @@ void fragment() {
 	// Keep lighting smooth independently of canonical triangle height sampling.
 	// Each projection's detail is reoriented onto this lighting normal, so a flat
 	// normal map reproduces it exactly for every sharpness and crease setting.
-#ifndef STRATA_MATERIAL_HOOKS
-	vec2 gradient = base_shading_gradient(terrain_position, smooth_gradient);
-	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
-#endif
-	vec3 final_normal = vec3(0.0);
+	final_normal = vec3(0.0);
 	for (int axis = 0; axis < 3; axis++) { final_normal += terrain_reoriented_normal(frames[axis], geometric_normal, axis_details[axis]); }
-#ifdef STRATA_MATERIAL_HOOKS
 	final_normal += hooked_normal;
-#endif
 	float final_length_squared = dot(final_normal, final_normal);
 	final_normal = final_length_squared > 0.00000001 ? final_normal * inversesqrt(final_length_squared) : geometric_normal;
+#else
+	// Keep lighting smooth independently of canonical triangle height sampling.
+	vec2 gradient = base_shading_gradient(terrain_position, smooth_gradient);
+	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
+	terrain_surface_evaluate(terrain_position, base_point, point_dx, point_dy, projection_normal, geometric_normal, far_mix, color, orm, final_normal, discarded);
+#endif
 	NORMAL = normalize((VIEW_MATRIX * MODEL_MATRIX * vec4(final_normal, 0.0)).xyz);
 	ALBEDO = color;
 	// RGBAH is linear terrain-scale data, separate from repeating source UVs.

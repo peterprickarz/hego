@@ -235,6 +235,72 @@ included) and from source providers: nodes in the group `strata_ao_source_provid
 `get_ao_overlay_sources(rect) -> Array` of nodes, for streamed or unloaded content (nodes outside
 the scene tree are freed after the bake). `get_stats()` reports residency, uploads and memory.
 
+## Surface cache
+
+A camera-centred clipmap of the evaluated terrain surface (`StrataSurfaceCache`,
+`strata_surface_cache.gd`), filled on the GPU from the terrain material. Other shaders read the
+ground below a point from it (rocks, cliffs and props that blend into the terrain), and the
+terrain reads its near displacement relief from it instead of sampling four materials per
+vertex. Off by default (`StrataRenderSettings.surface_cache_enabled`); needs Forward+ or Mobile.
+
+**Layout.** `surface_cache_levels` levels (default 6, at most 8) of `surface_cache_resolution`²
+cells (default 1024). Level 0 has one cell per material texel (`surface_cache_texels_per_metre`,
+default 128: 1/128 m); each further level doubles the cell, so six levels of 1024 cells reach
+±128 m. Each level's window is centred on the camera, snapped to 16 cells, and stored
+toroidally (cell `g` at `g & (resolution − 1)`), so a moving camera refills only the exposed
+strips. Full refills (start, teleports, material edits) are limited to one level per frame,
+finest first. Terrain edits (heights, holes, controls, region changes, macro and coarse maps)
+refill the affected rectangle. Memory is 16 bytes per cell per level: 96 MB at the defaults.
+
+| Texture (2D array) | Per cell |
+| --- | --- |
+| albedo, RGBA8 | sRGB albedo after the terrain tint map; A: material AO × macro AO |
+| normal, RGBA8 | octahedral unit normal (terrain-local, around +Y); B: roughness; A: metallic |
+| height, R32F, two layers per level | at the cell corner: base height (−1e30 in holes), and the raw material relief before `displacement_strength` and the camera fade |
+
+The cache holds the near material (no far-tile blend) without custom fragment code, evaluated
+by the same functions as the terrain shader (`terrain_surface_core.gdshaderinc`, which the
+compute fill splices into GLSL). View-dependent code cannot be cached, so the terrain keeps
+shading its pixels directly.
+
+**Displacement.** With `surface_cache_displacement` (default on) the terrain shader is built
+with `STRATA_SURFACE_CACHE` and reads near relief from the level whose cell matches
+`displacement_vertex_spacing` (bilinear between corner heights), falling back to direct
+evaluation outside it and beyond the near UV distance.
+
+**Readers.** With `surface_cache_publish_globals` (default on) the cache is published as the
+`strata_cache_*` global shader parameters. The Strata plugin adds them to the project's
+`[shader_globals]` when it loads (or call `StrataSurfaceCache.register_project_globals()` and
+save the project settings); a shader using them does not compile without them. Include
+`res://addons/strata/shaders/strata_surface_cache.gdshaderinc` in any spatial shader:
+
+```glsl
+float footprint = strata_ground_footprint(world_position);   // uniform control flow
+StrataGround ground;
+if (strata_ground_sample(world_position, footprint, ground)) {
+    float w = strata_ground_blend_weight(ground, world_position, world_normal, 0.3, 1.0)
+        * strata_cache_edge_fade(world_position);
+    // mix albedo, normal, roughness, ao, specular toward ground.* by w
+}
+```
+
+`strata_ground_sample()` picks the finest level at or above the pixel footprint whose window
+holds the point and returns the ground's linear albedo, AO, world normal, roughness, metallic,
+the terrain's specular level and the rendered ground height. Inside the displacement radius
+that height includes the relief as the terrain mesh shows it: read at the level whose cells
+match `displacement_vertex_spacing` (published in `strata_cache_surface.z`), interpolated
+between those vertices, along the smooth terrain normal, with the terrain's distance fade. It returns
+false outside the cache, in holes and while the cache is disabled. Cells are read without
+filtering (texel-exact, matching pixel sampling). `strata_ground_blend_weight()` is 1 at and
+below the ground and fades to 0 at `band` metres above it, reduced on faces turned away from the
+sky by `facing`; `strata_cache_edge_fade()` fades it out over the outer quarter of the coarsest
+window, so effects do not pop at the cache edge.
+
+The cache only rewrites what changes and parameters are sent only when they change (a global
+texture parameter dirties every material using it). `StrataRenderer.get_stats().surface_cache`
+reports the status, levels, memory, full fills and the cells filled in the last frame;
+`get_surface_cache()` returns the cache.
+
 ## Custom material shader code
 
 `StrataMaterial.custom_fragment_code` is the body of a function the renderer adds to the

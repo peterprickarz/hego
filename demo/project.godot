@@ -78,3 +78,50 @@ sprint={
 [navigation]
 
 3d/merge_rasterizer_cell_scale=0.01
+
+[shader_globals]
+
+strata_cache_albedo={
+"type": "sampler2DArray",
+"value": ""
+}
+strata_cache_normal={
+"type": "sampler2DArray",
+"value": ""
+}
+strata_cache_height={
+"type": "sampler2DArray",
+"value": ""
+}
+strata_cache_params={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+strata_cache_windows_a={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+strata_cache_windows_b={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+strata_cache_windows_c={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+strata_cache_windows_d={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+strata_cache_camera={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+strata_cache_surface={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+strata_cache_world_to_local={
+"type": "transform",
+"value": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+}

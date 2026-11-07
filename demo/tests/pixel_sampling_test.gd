@@ -39,7 +39,10 @@ func run() -> void:
 	var dispatch := FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_texture_dispatch.gdshaderinc")
 	check(not dispatch.contains("textureGrad(color_maps[0], uv") and dispatch.contains("terrain_pixel_uv(uv, textureSize(ormh_maps[31], 0))"), "colour and ORMH fetches snap through terrain_pixel_uv")
 	check(dispatch.contains("terrain_pixel_uv(uv, textureSize(normal_maps[0], 0))") and not dispatch.contains("textureGrad(normal_maps[0], uv, dx, dy)"), "normal fetches snap on the material grid")
-	check(source.contains("uniform int projection_modes[32]") and source.count("terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id])") == 2, "fragment and vertex paths use the per-material projection")
+	# The material path is shared with the surface cache (terrain_surface_core.gdshaderinc); the hook
+	# variant keeps its own loop in the shader.
+	var core := FileAccess.get_file_as_string("res://addons/strata/shaders/terrain_surface_core.gdshaderinc")
+	check(source.contains("uniform int projection_modes[32]") and core.count("terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id])") == 2 and source.count("terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id])") == 1, "fragment, vertex and hook paths use the per-material projection")
 	var material := StrataMaterial.new()
 	material.projection = StrataMaterial.ProjectionMode.SIDES
 	var variant := material.make_variant(2.0)

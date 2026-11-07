@@ -125,6 +125,8 @@ extends Node3D
 			_apply_wireframe_state()
 
 const SURFACE_SHADER_PATH := "res://addons/strata/shaders/terrain_surface.gdshader"
+## Preloaded so the renderer does not depend on the global class cache listing StrataSurfaceCache.
+const _SurfaceCache := preload("res://addons/strata/strata_surface_cache.gd")
 const _HOOK_MARKER := "STRATA_MATERIAL_HOOK_FUNCTIONS"
 ## Seconds of editor idle time after a custom_fragment_code edit before the
 ## shader is regenerated, so typing does not compile every keystroke.
@@ -153,6 +155,9 @@ var _ao_overlay := {}
 var _variant_shaders := {}
 var pixel_sampling := false
 var _active_crease_variant := false
+## StrataSurfaceCache while StrataRenderSettings.surface_cache_enabled (Forward+/Mobile only).
+var _surface_cache: _SurfaceCache
+var _surface_cache_variant := false
 # "smooth|" or "creases|" plus the applied custom-code key: the shader in use.
 var _active_shader_key := ""
 # Custom fragment code requested by the materials, the request the shader was
@@ -466,6 +471,7 @@ func _apply_wireframe_state() -> void:
 
 func _exit_tree() -> void:
 	_unwatch_materials()
+	_release_surface_cache()
 	if _owns_preview_disable and is_instance_valid(_source) and not (_source as StrataTerrain3D).is_preview_enabled():
 		(_source as StrataTerrain3D).set_preview_enabled(true)
 	if _owns_wireframe and get_viewport().debug_draw == Viewport.DEBUG_DRAW_WIREFRAME:
@@ -490,10 +496,74 @@ func _process(_delta: float) -> void:
 	if not local_camera.is_finite():
 		return
 	_shader_material.set_shader_parameter("camera_position", local_camera)
+	_update_surface_cache(local_camera)
 	if _refinement_requested() and _mesher != null and not _mesher.has_method("select_refined_patches") and _refinement_warning_emitted and not _lod_settings_dirty: return
 	if _lod_settings_dirty or not _last_camera.is_finite() or _last_camera.distance_to(Vector2(local_camera.x, local_camera.z)) >= _camera_update_threshold(_render_bounds) or _last_refinement_active != _refinement_zone_active() or not is_equal_approx(_last_projection_scale, _projection_scale()):
 		_stats.lod_updated_this_frame = force_lod_update()
 	_stats.process_cpu_ms = (Time.get_ticks_usec() - started) / 1000.0
+
+# ─────────────────────────────────────────────
+# Surface cache
+# ─────────────────────────────────────────────
+
+## True when the settings ask for the cache and this renderer can run it.
+func _surface_cache_wanted() -> bool:
+	return render_settings != null and render_settings.surface_cache_enabled and _SurfaceCache.available()
+
+## True when the terrain shader should read near displacement from the cache.
+func _surface_cache_displacement_wanted() -> bool:
+	return _surface_cache_wanted() and render_settings.surface_cache_displacement
+
+## The cache level whose cells match the near displacement vertex spacing.
+func _surface_cache_relief_level() -> int:
+	if _surface_cache == null: return -1
+	var level := roundi(log(maxf(displacement_vertex_spacing, 0.0001) / _surface_cache.texel) / log(2.0))
+	return clampi(level, 0, _surface_cache.levels - 1)
+
+## Re-evaluates terrain-local [param rect] (everything when empty) in the surface cache.
+func _invalidate_surface_cache(rect := Rect2()) -> void:
+	if _surface_cache == null: return
+	_surface_cache.invalidate(rect)
+	_surface_cache.mark_material_dirty()
+
+func _update_surface_cache(local_camera: Vector3) -> void:
+	if not _surface_cache_wanted():
+		if _surface_cache != null: _release_surface_cache()
+		return
+	if _surface_cache == null:
+		_surface_cache = _SurfaceCache.new()
+		_surface_cache.mark_material_dirty()
+	_surface_cache.configure(render_settings.surface_cache_levels, render_settings.surface_cache_resolution, render_settings.surface_cache_texels_per_metre)
+	_surface_cache.publish_globals = render_settings.surface_cache_publish_globals
+	var creases := smooth_shading and crease_angle_degrees < 180.0
+	_surface_cache.update(_shader_material, _variant_defines(creases, pixel_sampling), local_camera)
+	var radius := displacement_refinement_radius if displacement_enabled else 0.0
+	_surface_cache.publish(_source.global_transform, local_camera, radius, displacement_strength, render_settings.terrain_specular, _surface_cache_relief_level())
+	if _surface_cache_variant:
+		var origins := PackedVector2Array()
+		for k in _SurfaceCache.MAX_LEVELS:
+			origins.append(Vector2(_surface_cache.level_origin(k)))
+		# Set on change only: a texture parameter rebuilds the material's uniform set.
+		var params := Vector4(_surface_cache.texel, _surface_cache.resolution, _surface_cache.levels, _surface_cache_relief_level())
+		if _shader_material.get_shader_parameter("surface_cache_height") != _surface_cache.height_texture:
+			_shader_material.set_shader_parameter("surface_cache_height", _surface_cache.height_texture)
+		if _shader_material.get_shader_parameter("surface_cache_origins") != origins:
+			_shader_material.set_shader_parameter("surface_cache_origins", origins)
+		if _shader_material.get_shader_parameter("surface_cache_params") != params:
+			_shader_material.set_shader_parameter("surface_cache_params", params)
+	_stats.surface_cache = _surface_cache.stats
+
+func _release_surface_cache() -> void:
+	if _surface_cache == null: return
+	_surface_cache.release()
+	_surface_cache = null
+	_stats.erase("surface_cache")
+	if _shader_material != null:
+		_shader_material.set_shader_parameter("surface_cache_params", Vector4.ZERO)
+
+## The surface cache of this renderer, or null while it is disabled.
+func get_surface_cache() -> RefCounted:
+	return _surface_cache
 
 static func _valid_material(material: StrataMaterial) -> bool:
 	return material != null and is_finite(material.uv_scale) and material.uv_scale > 0.0 and is_finite(material.triplanar_sharpness) and material.triplanar_sharpness >= 1.0 and material.triplanar_sharpness <= 64.0 and is_finite(material.displacement_strength) and material.displacement_strength >= 0.0 and is_finite(material.height_blend_contrast) and material.height_blend_contrast >= 0.0 and material.height_blend_contrast <= 16.0 and is_finite(material.height_blend_bias) and material.height_blend_bias >= -0.5 and material.height_blend_bias <= 0.5
@@ -593,6 +663,7 @@ func _bind_material_pool() -> void:
 	_shader_material.set_shader_parameter("material_roughness_scales", roughness_scales)
 	_shader_material.set_shader_parameter("material_roughness_biases", roughness_biases)
 	_stats.material_count = _materials.size()
+	if _surface_cache != null: _surface_cache.mark_material_dirty()
 	_hook_spec_pending = _material_hook_spec()
 	_hook_key_pending = "" if _hook_spec_pending.is_empty() else var_to_str(_hook_spec_pending.map(func(entry: Dictionary) -> Array: return [entry.id, entry.code, entry.parameters.map(func(parameter: Dictionary) -> Array: return [parameter.name, parameter.type])]))
 	_bind_hook_parameters()
@@ -604,7 +675,8 @@ static func _solid_texture(color: Color) -> ImageTexture:
 
 func _update_shading_variant() -> void:
 	var wants_creases := smooth_shading and crease_angle_degrees < 180.0
-	var key := ("creases|" if wants_creases else "smooth|") + ("pixel|" if pixel_sampling else "") + _hook_key_applied
+	var wants_cache := _surface_cache_displacement_wanted()
+	var key := ("creases|" if wants_creases else "smooth|") + ("pixel|" if pixel_sampling else "") + ("cache|" if wants_cache else "") + _hook_key_applied
 	if key == _active_shader_key: return
 	var target := _surface_shader(wants_creases)
 	# Rebinding happens only on explicit variant or custom-code changes, never
@@ -620,6 +692,7 @@ func _update_shading_variant() -> void:
 	for name in parameters: _shader_material.set_shader_parameter(name, parameters[name])
 	for name in dropped: _shader_material.set_shader_parameter(name, null)
 	_active_crease_variant = wants_creases
+	_surface_cache_variant = wants_cache
 	_active_shader_key = key
 	_bind_hook_parameters()
 
@@ -633,27 +706,28 @@ func _surface_shader(creases: bool) -> Shader:
 	_stats.custom_shader_failed_ids = failed_ids
 	if not _hook_spec_applied.is_empty():
 		var entries := _hook_spec_applied
-		var shader := _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling))
+		var shader := _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_displacement_wanted()))
 		if shader == null:
 			entries = []
 			for entry: Dictionary in _hook_spec_applied:
-				if _compiled_shader(_hook_shader_code([entry], creases, pixel_sampling)) != null:
+				if _compiled_shader(_hook_shader_code([entry], creases, pixel_sampling, _surface_cache_displacement_wanted())) != null:
 					entries.append(entry)
 				else:
 					failed_ids.append(entry.id)
 					push_error("%s: custom_fragment_code does not compile, so this material renders without it. The SHADER ERROR printed above (when this code was first compiled) gives the reason." % entry.label)
 			_stats.custom_shader_failed_ids = failed_ids
 			if not entries.is_empty():
-				shader = _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling))
+				shader = _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_displacement_wanted()))
 				if shader == null:
 					push_error("The custom_fragment_code of materials %s compiles separately but not together; the terrain uses its plain shader." % ", ".join(entries.map(func(entry: Dictionary) -> String: return entry.label)))
 		if shader != null:
 			_hook_spec_bound = entries
 			_stats.custom_shader_material_ids = PackedInt32Array(entries.map(func(entry: Dictionary) -> int: return entry.id))
 			return shader
-	if not creases and not pixel_sampling:
+	var cache := _surface_cache_displacement_wanted()
+	if not creases and not pixel_sampling and not cache:
 		return load(SURFACE_SHADER_PATH)
-	var defines := _variant_defines(creases, pixel_sampling)
+	var defines := _variant_defines(creases, pixel_sampling, cache)
 	if not _variant_shaders.has(defines):
 		var variant := Shader.new()
 		var base_shader: Shader = load(SURFACE_SHADER_PATH)
@@ -666,9 +740,10 @@ func _surface_shader(creases: bool) -> Shader:
 	return _variant_shaders[defines]
 
 ## Compile-time switches in front of the shader source. Pixel sampling changes
-## sampler filter hints, which cannot be toggled by a uniform.
-static func _variant_defines(creases: bool, pixel: bool) -> String:
-	return ("#define STRATA_PIXEL_SAMPLING\n" if pixel else "") + ("#define HEGO_TERRAIN_CREASES\n" if creases else "")
+## sampler filter hints, which cannot be toggled by a uniform; the surface cache variant adds
+## the cache's relief texture to the vertex shader.
+static func _variant_defines(creases: bool, pixel: bool, cache := false) -> String:
+	return ("#define STRATA_PIXEL_SAMPLING\n" if pixel else "") + ("#define HEGO_TERRAIN_CREASES\n" if creases else "") + ("#define STRATA_SURFACE_CACHE\n" if cache else "")
 
 static func _compiled_shader(code: String) -> Shader:
 	if _generated_shaders.has(code): return _generated_shaders[code]
@@ -684,7 +759,7 @@ static func _compiled_shader(code: String) -> Shader:
 ## The plain shader source with STRATA_MATERIAL_HOOKS defined and its marker
 ## replaced by one function per material plus constant-ID dispatch, in the
 ## style of terrain_texture_dispatch.gdshaderinc.
-static func _hook_shader_code(entries: Array, creases: bool, pixel := false) -> String:
+static func _hook_shader_code(entries: Array, creases: bool, pixel := false, cache := false) -> String:
 	var base_shader: Shader = load(SURFACE_SHADER_PATH)
 	var code := base_shader.code.replace('#include "', '#include "res://addons/strata/shaders/')
 	var marker := code.find("\n" + _HOOK_MARKER + "\n")
@@ -708,7 +783,7 @@ static func _hook_shader_code(entries: Array, creases: bool, pixel := false) -> 
 	block.append("bool strata_material_has_hook(int id) {\n\tswitch (id) {\n%s\t}\n\treturn false;\n}" % has_cases)
 	block.append("void strata_material_hook(int id, inout StrataSurface s, in StrataContext c) {\n\tswitch (id) {\n%s\t}\n}" % call_cases)
 	code = code.substr(0, marker + 1) + "\n".join(block) + code.substr(marker + 1 + _HOOK_MARKER.length())
-	return "#define STRATA_MATERIAL_HOOKS\n" + _variant_defines(creases, pixel) + code
+	return "#define STRATA_MATERIAL_HOOKS\n" + _variant_defines(creases, pixel, cache) + code
 
 ## The custom fragment code of the current materials, by material ID. Invalid
 ## parameter entries are reported and left out.
@@ -799,6 +874,7 @@ func _update_material_settings() -> void:
 	_shader_material.set_shader_parameter("displacement_strength", maxf(displacement_strength, 0.0))
 	_shader_material.set_shader_parameter("debug_lod", debug_lod)
 	_shader_material.set_shader_parameter("debug_discarded", debug_discarded)
+	if _surface_cache != null: _surface_cache.mark_material_dirty()
 	_apply_ao_overlay()
 	for patch in _patches.values():
 		_update_patch_bounds(patch)
@@ -867,6 +943,7 @@ func set_compiled_field(compiled: Dictionary) -> bool:
 ## Swaps in a whole-terrain height image: restores the previous image, bounds and input when
 ## the region build fails, so a rejected field changes nothing.
 func _install_height_image(image: Image, bounds: Rect2, compiled: Dictionary) -> bool:
+	_invalidate_surface_cache()
 	var previous_image := _height_image
 	var previous_bounds := _render_bounds
 	var previous_input := _compiled_input
@@ -885,6 +962,7 @@ func _install_height_image(image: Image, bounds: Rect2, compiled: Dictionary) ->
 ## A brush can compile only its affected rectangle. The RF CPU image is patched natively and
 ## only the regions the rectangle touches (their aprons included) are uploaded, layer by layer.
 func update_compiled_region(compiled: Dictionary) -> bool:
+	_invalidate_surface_cache()
 	if _height_image == null or not compiled.get("ok", false) or _region_spec.is_empty(): return false
 	var patch: Image = compiled.get("image")
 	if patch == null or patch.get_format() != Image.FORMAT_RF: return false
@@ -944,6 +1022,7 @@ func set_ownership_overlay(layer: StrataLayer, channel: StringName = &"height", 
 ## resampled onto the region macro lattice (a straight copy when it already matches), so
 ## the shader addresses it through the regions like every other map.
 func set_macro_map(image: Image, bounds: Rect2) -> bool:
+	_invalidate_surface_cache()
 	if _shader_material == null: return false
 	if image == null:
 		_macro_image = null
@@ -1025,6 +1104,7 @@ func set_channel_preview(image: Image, bounds: Rect2, enabled: bool) -> bool:
 
 ## Transitional adapter: one L8 texel per cell of the height lattice.
 func set_hole_image(image: Image) -> bool:
+	_invalidate_surface_cache()
 	if _shader_material == null: return false
 	if image == null:
 		_hole_image = null
@@ -1094,6 +1174,7 @@ static func _height_dimensions(bounds: Rect2, spacing: float) -> Vector2i:
 ## endpoints. When its step is the region spacing times a power of two it becomes a region
 ## map of that scale (a straight slice); otherwise it is resampled, see [method _adapter_plan].
 func set_control_maps(ids: Image, weights: Image) -> bool:
+	_invalidate_surface_cache()
 	var previous_ids := _control_ids
 	var previous_weights := _control_weights
 	if not _store_control_maps(ids, weights): return false
@@ -1123,6 +1204,7 @@ func _store_control_maps(ids: Image, weights: Image) -> bool:
 ## layers it touches are updated. False (previous maps retained) for an invalid or
 ## out-of-range region.
 func update_control_region(ids: Image, weights: Image, origin: Vector2i) -> bool:
+	_invalidate_surface_cache()
 	if _control_ids == null or _control_weights == null: return false
 	if ids == null or weights == null or ids.get_size() != weights.get_size() or ids.get_width() < 1 or ids.get_height() < 1: return false
 	if origin.x < 0 or origin.y < 0 or origin.x + ids.get_width() > _control_ids.get_width() or origin.y + ids.get_height() > _control_ids.get_height(): return false
@@ -1248,6 +1330,9 @@ func _quality_changed() -> void:
 	if pixel_sampling != render_settings.pixel_sampling:
 		pixel_sampling = render_settings.pixel_sampling
 		if _shader_material != null: _update_shading_variant()
+	if _shader_material != null and _surface_cache_variant != _surface_cache_displacement_wanted():
+		_update_shading_variant()
+	if _surface_cache != null: _surface_cache.mark_material_dirty()
 	_invalidate_geometry_lod()
 
 func _projection_scale() -> float:
@@ -1734,6 +1819,7 @@ func _recompute_region_extrema(data: StrataRegionData) -> void:
 		data.height_min = float(extrema.min); data.height_max = float(extrema.max)
 
 func _region_changed(xy: Vector2i, was_active: bool) -> void:
+	_invalidate_surface_cache(StrataRegions.region_bounds(_region_spec, xy).grow(4.0 * float(_region_spec.get("spacing", 1.0))))
 	_refresh_height_extrema()
 	if was_active != _refinement_zone_active(): _invalidate_geometry_lod()
 	var area := StrataRegions.region_bounds(_region_spec, xy).grow(0.001)
@@ -1761,6 +1847,8 @@ func _write_region_table(xy: Vector2i) -> void:
 		color = Color8(slot & 255, slot >> 8, 0, _near_flag()) if _regions.has(xy) else Color8(slot & 255, slot >> 8, 255, 0)
 	_region_table_image.set_pixelv(xy, color)
 	_region_table_texture.update(_region_table_image)
+	if not _region_spec.is_empty():
+		_invalidate_surface_cache(StrataRegions.region_bounds(_region_spec, xy).grow(4.0 * float(_region_spec.get("spacing", 1.0))))
 
 ## Height extrema of the resident regions (the global range that drives refinement culling).
 func _refresh_height_extrema() -> void:
@@ -2008,6 +2096,7 @@ func _update_residency_stats() -> void:
 ## computed here once. False, with nothing changed, if any image is missing, mis-sized or in
 ## the wrong format.
 func set_coarse_maps(coarse_level: int, images: Dictionary) -> bool:
+	_invalidate_surface_cache()
 	if _region_spec.is_empty(): return false
 	var problem := _coarse_problem(_region_spec, coarse_level, images)
 	if not problem.is_empty():
@@ -2083,6 +2172,7 @@ func _bind_region_flags() -> void:
 	_shader_material.set_shader_parameter("has_material_maps", maps.has(StrataRegions.MAP_MATERIAL_IDS))
 	_shader_material.set_shader_parameter("has_holes", _holes_enabled and maps.has(StrataRegions.MAP_HOLES))
 	_shader_material.set_shader_parameter("has_terrain_macro_map", _macro_enabled and maps.has(StrataRegions.MAP_MACRO))
+	_invalidate_surface_cache()
 
 static func _array_placeholder(map: String) -> Texture2DArray:
 	if not _placeholder_arrays.has(map):
@@ -2417,6 +2507,7 @@ func _refresh_map(name: String, source: Image) -> bool:
 	return true
 
 func _regions_refreshed(changed: Array) -> void:
+	_invalidate_surface_cache()
 	_refresh_height_extrema()
 	if changed.has(StrataRegions.MAP_HOLES): _holes_enabled = _hole_image != null
 	if changed.has(StrataRegions.MAP_MACRO): _macro_enabled = _macro_image != null
