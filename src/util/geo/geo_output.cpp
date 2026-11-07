@@ -338,11 +338,12 @@ void HEGoPointSelection::_bind_methods()
 // HEGoSurfaceOutput
 // ─────────────────────────────────────────────
 
-bool HEGoSurfaceOutput::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &point_attribs)
+bool HEGoSurfaceOutput::setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &point_attribs,
+		const godot::PackedStringArray &custom_attribs)
 {
 	my_cache = cache;
 	my_node_id = node_id;
-	my_valid = HEGo::Util::Geo::prepare_surface_data(*cache, point_attribs, my_part, my_prims, my_vertex_point_indices, my_point_attrs);
+	my_valid = HEGo::Util::Geo::prepare_surface_data(*cache, point_attribs, my_part, my_prims, my_vertex_point_indices, my_point_attrs, custom_attribs);
 	if (my_valid)
 	{
 		my_cache->attribute_names(my_part, HAPI_ATTROWNER_PRIM);

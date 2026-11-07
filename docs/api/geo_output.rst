@@ -62,6 +62,9 @@ Each config field maps onto a call:
      - ``split_by(name)``, nested for more than one level
    * - ``normal``, ``color``, ``uv``, ``uv2``, ``tangents``
      - the ``point_attribs`` argument of ``get_surface_output()``
+   * - ``custom_attribs``
+     - the ``custom_attribs`` argument of ``get_surface_output()`` (``ARRAY_CUSTOM0..3``;
+       add the surface with its ``custom_format_flags``)
 
 So a points config reading ``N`` and ``pscale``, filtering on ``hego_spawn == 1`` and
 splitting on ``hego_node_path`` becomes:

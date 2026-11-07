@@ -48,6 +48,24 @@ Common vertex data is specified via point attributes:
      - Vector
      - Point
      - Tangent V. If missing, Godot can generate tangents
+   * - ``hego_custom0`` .. ``hego_custom3``
+     - Float, int or vector (1-4 components)
+     - Point
+     - Custom vertex channels ``ARRAY_CUSTOM0`` .. ``ARRAY_CUSTOM3``, read in shaders as
+       ``CUSTOM0`` .. ``CUSTOM3``. Each is packed to RGBA float per vertex; missing
+       components are 0. A channel whose attribute is absent is left out of the mesh.
+
+Custom channels
+---------------
+
+Any per-vertex data a shader needs beyond normals, colours and UVs - wind pivots, baked
+normals, masks - goes into ``hego_custom0`` to ``hego_custom3``. The mesh output adds each
+present channel with ``ARRAY_CUSTOM_RGBA_FLOAT``; reduced LODs share the base vertices, so
+they keep the channels, and overwriting a saved mesh resource keeps their formats. Each
+channel costs 16 bytes per vertex. ``HEGoMeshOutput.CUSTOM_ATTRIBS`` lists the attribute
+names; ``HEGoMeshOutput.fetch_meshes(context, custom_attribs)`` and
+``HEGoAssetNode.get_surface_output(point_attribs, preload_attribs, custom_attribs)`` take
+other names in channel order.
 
 Primitive Attributes
 --------------------

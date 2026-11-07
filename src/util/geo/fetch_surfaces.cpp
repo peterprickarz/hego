@@ -69,8 +69,10 @@ godot::Array invert_vector3_array(const godot::Array &values)
 	return inverted;
 }
 
+godot::String custom_channel_key(int channel) { return godot::String("hego_custom_channel") + godot::String::num_int64(channel); }
+
 bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &point_attribs, HAPI_PartInfo &out_part, godot::Array &out_prims,
-		godot::Array &out_vertex_point_indices, godot::Dictionary &out_point_attrs)
+		godot::Array &out_vertex_point_indices, godot::Dictionary &out_point_attrs, const godot::PackedStringArray &custom_attribs)
 {
 	const HAPI_Session *session = cache.session();
 	const HAPI_GeoInfo &geo_info = cache.geo_info();
@@ -121,7 +123,102 @@ bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &point
 		}
 	}
 
+	// Custom channels: up to four point attributes, each exported as one RGBA float
+	// channel (ARRAY_CUSTOM0..3). A blank name or an attribute the cook does not have
+	// leaves that channel out of the surface. Stored under their own keys, so a custom
+	// attribute may share a name with one of the standard reads above.
+	if (custom_attribs.size() > MAX_CUSTOM_CHANNELS)
+	{
+		HEGo::Util::Log::warning(HEGo::Util::Log::Category::OUTPUT,
+				godot::String("Only the first ") + godot::String::num_int64(MAX_CUSTOM_CHANNELS) + " custom attributes are exported; ignoring the rest.");
+	}
+	const godot::PackedStringArray point_names = cache.attribute_names(out_part, HAPI_ATTROWNER_POINT);
+	for (int channel = 0; channel < custom_attribs.size() && channel < MAX_CUSTOM_CHANNELS; channel++)
+	{
+		const godot::String name = custom_attribs[channel];
+		if (name.is_empty() || !point_names.has(name))
+		{
+			continue;
+		}
+		out_point_attrs[custom_channel_key(channel)] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, name);
+	}
+
 	return true;
+}
+
+godot::PackedFloat32Array pack_custom_channel(const godot::Array &values)
+{
+	// Any float or int tuple of size 1-4 becomes RGBA; missing components are 0.
+	godot::PackedFloat32Array packed;
+	packed.resize(values.size() * 4);
+	float *out = packed.ptrw();
+	for (int i = 0; i < values.size(); i++)
+	{
+		const godot::Variant &value = values[i];
+		float rgba[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		switch (value.get_type())
+		{
+			case godot::Variant::FLOAT:
+			case godot::Variant::INT:
+				rgba[0] = static_cast<float>(static_cast<double>(value));
+				break;
+			case godot::Variant::VECTOR2:
+			{
+				const godot::Vector2 v = value;
+				rgba[0] = v.x;
+				rgba[1] = v.y;
+				break;
+			}
+			case godot::Variant::VECTOR2I:
+			{
+				const godot::Vector2i v = value;
+				rgba[0] = static_cast<float>(v.x);
+				rgba[1] = static_cast<float>(v.y);
+				break;
+			}
+			case godot::Variant::VECTOR3:
+			{
+				const godot::Vector3 v = value;
+				rgba[0] = v.x;
+				rgba[1] = v.y;
+				rgba[2] = v.z;
+				break;
+			}
+			case godot::Variant::VECTOR3I:
+			{
+				const godot::Vector3i v = value;
+				rgba[0] = static_cast<float>(v.x);
+				rgba[1] = static_cast<float>(v.y);
+				rgba[2] = static_cast<float>(v.z);
+				break;
+			}
+			case godot::Variant::VECTOR4:
+			{
+				const godot::Vector4 v = value;
+				rgba[0] = v.x;
+				rgba[1] = v.y;
+				rgba[2] = v.z;
+				rgba[3] = v.w;
+				break;
+			}
+			case godot::Variant::VECTOR4I:
+			{
+				const godot::Vector4i v = value;
+				rgba[0] = static_cast<float>(v.x);
+				rgba[1] = static_cast<float>(v.y);
+				rgba[2] = static_cast<float>(v.z);
+				rgba[3] = static_cast<float>(v.w);
+				break;
+			}
+			default:
+				break;
+		}
+		out[i * 4 + 0] = rgba[0];
+		out[i * 4 + 1] = rgba[1];
+		out[i * 4 + 2] = rgba[2];
+		out[i * 4 + 3] = rgba[3];
+	}
+	return packed;
 }
 
 godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Ref<godot::Resource> fetch_surfaces_config, bool auto_cook)
@@ -145,6 +242,10 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::PackedStringArray filter_attribs = fetch_surfaces_config->get("filter_attribs");
 	godot::Array filter_attrib_values = fetch_surfaces_config->get("filter_attrib_values");
 	godot::PackedStringArray split_attribs = fetch_surfaces_config->get("split_attribs");
+	// Older saved configs have no custom_attribs property; get() then returns nil.
+	const godot::Variant custom_attribs_value = fetch_surfaces_config->get("custom_attribs");
+	const godot::PackedStringArray custom_attribs =
+			custom_attribs_value.get_type() == godot::Variant::NIL ? godot::PackedStringArray() : godot::PackedStringArray(custom_attribs_value);
 
 	// Shared with every other output of this cook, so attributes several of them
 	// want only cross the connection once.
@@ -187,7 +288,7 @@ godot::Dictionary fetch_surfaces(HEGoSessionManager *session_mgr, HAPI_NodeId no
 	godot::Array prims;
 	godot::Array vt_pt_indices;
 	godot::Dictionary point_attrs;
-	if (!prepare_surface_data(*cache, point_attribs, prepared_part, prims, vt_pt_indices, point_attrs))
+	if (!prepare_surface_data(*cache, point_attribs, prepared_part, prims, vt_pt_indices, point_attrs, custom_attribs))
 	{
 		return godot::Dictionary();
 	}
@@ -353,6 +454,28 @@ void modify_base_entries(
 			{
 				surface_array[godot::Mesh::ARRAY_TEX_UV2] = godot::PackedVector3Array(uv2_attr);
 			}
+		}
+		int64_t custom_format_flags = 0;
+		for (int channel = 0; channel < MAX_CUSTOM_CHANNELS; channel++)
+		{
+			const godot::String key = custom_channel_key(channel);
+			if (!filtered_point_attrs.has(key))
+			{
+				continue;
+			}
+			const godot::Array custom_attr = filtered_point_attrs[key];
+			if (custom_attr.size() > 0)
+			{
+				surface_array[godot::Mesh::ARRAY_CUSTOM0 + channel] = pack_custom_channel(custom_attr);
+				custom_format_flags |= static_cast<int64_t>(godot::Mesh::ARRAY_CUSTOM_RGBA_FLOAT)
+						<< (godot::Mesh::ARRAY_FORMAT_CUSTOM_BASE + channel * godot::Mesh::ARRAY_FORMAT_CUSTOM_BITS);
+			}
+		}
+		// Godot cannot infer a custom channel's format from its array; the surface has to
+		// be added with these flags (ArrayMesh.add_surface_from_arrays' flags argument).
+		if (custom_format_flags != 0)
+		{
+			nested_dict["custom_format_flags"] = custom_format_flags;
 		}
 		// Tangent calculation
 		if (filtered_point_attrs.has("tangentu") && filtered_point_attrs.has("tangentv") && filtered_point_attrs.has("N"))

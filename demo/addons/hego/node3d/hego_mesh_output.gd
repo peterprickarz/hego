@@ -14,6 +14,12 @@ const LOG_CATEGORY := "output"
 ## Point attributes read for every surface. P always comes along.
 const POINT_ATTRIBS := ["N", "Cd", "uv", "uv2", "tangents"]
 
+## Point attributes exported as the custom vertex channels, in order: the attribute at
+## index i becomes [constant Mesh.ARRAY_CUSTOM0] + i, packed to RGBA float (a float or int
+## of tuple size 1-4; missing components are 0). Shaders read them as CUSTOM0..CUSTOM3.
+## A channel whose attribute the cook does not have is left out of the surface.
+const CUSTOM_ATTRIBS := ["hego_custom0", "hego_custom1", "hego_custom2", "hego_custom3"]
+
 ## Primitive attributes the output is grouped by: one mesh per instance name, one
 ## surface per material within it.
 const MESH_INSTANCE_ATTRIB := "hego_mesh_instance"
@@ -78,9 +84,11 @@ static func should_handle(summary: Dictionary) -> bool:
 ##
 ## Nothing here touches the scene, so a node that wants to place the result itself can use
 ## this and [method build_array_mesh] instead of [method handle].
-static func fetch_surface_groups(context: HEGoOutputContext) -> Dictionary:
+## [param custom_attribs] names the point attributes for the custom channels, see
+## [constant CUSTOM_ATTRIBS] (at most four; a blank entry skips that channel).
+static func fetch_surface_groups(context: HEGoOutputContext, custom_attribs: PackedStringArray = PackedStringArray(CUSTOM_ATTRIBS)) -> Dictionary:
 	var output: HEGoSurfaceOutput = await context.await_task(
-		context.asset.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB])))
+		context.asset.get_surface_output(PackedStringArray(POINT_ATTRIBS), PackedStringArray(SURFACE_ATTRIBS + [MESH_INSTANCE_ATTRIB, MATERIAL_ATTRIB]), custom_attribs))
 	if output == null or not output.is_valid():
 		return {}
 
@@ -102,8 +110,8 @@ static func fetch_surface_groups(context: HEGoOutputContext) -> Dictionary:
 ## Returns [code]{ mesh_instance_key: ArrayMesh }[/code]. This is the half of
 ## [method handle] a custom node usually wants: it builds the meshes and leaves where they
 ## go, and whether they are saved as resources, to the caller.
-static func fetch_meshes(context: HEGoOutputContext) -> Dictionary:
-	var groups := await fetch_surface_groups(context)
+static func fetch_meshes(context: HEGoOutputContext, custom_attribs: PackedStringArray = PackedStringArray(CUSTOM_ATTRIBS)) -> Dictionary:
+	var groups := await fetch_surface_groups(context, custom_attribs)
 	var meshes := {}
 	for mesh_instance_key in groups:
 		var mesh := build_array_mesh(groups[mesh_instance_key])
@@ -217,6 +225,8 @@ static func build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
 		if not surface.get("hego_lod", []) is Array:
 			return _invalid_surface(material_key, "invalid LOD attribute")
 		var hego_lod_array: Array = surface.get("hego_lod", [])
+		# Custom channels need their format named when the surface is added.
+		var custom_flags := int(surface.get("custom_format_flags", 0))
 
 		if not hego_lod_array.is_empty():
 			# hego_lod holds one screen-space distance per LOD, and the index array
@@ -229,9 +239,10 @@ static func build_array_mesh(surfaces: Dictionary) -> ArrayMesh:
 				return _invalid_surface(material_key, "LOD counts/distances are invalid or base LOD 0.0 is missing")
 			surface_array[Mesh.ARRAY_INDEX] = lod_dict[0.0]
 			lod_dict.erase(0.0)
-			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], lod_dict)
+			# LODs are index lists over the same vertices, so they keep the custom channels.
+			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], lod_dict, custom_flags)
 		else:
-			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array)
+			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_array, [], {}, custom_flags)
 
 		if array_mesh.get_surface_count() != surface_id + 1:
 			return _invalid_surface(material_key, "Godot rejected the surface arrays")
@@ -404,10 +415,21 @@ static func copy_array_mesh_contents(target_mesh: ArrayMesh, source_mesh: ArrayM
 		if source_mesh.has_method("surface_get_blend_shape_arrays"):
 			blend_shape_arrays = source_mesh.surface_get_blend_shape_arrays(surface_index)
 		var lods := _surface_lods(source_mesh, surface_index, arrays)
-		target_mesh.add_surface_from_arrays(primitive_type, arrays, blend_shape_arrays, lods)
+		var custom_flags := custom_format_flags(source_mesh.surface_get_format(surface_index))
+		target_mesh.add_surface_from_arrays(primitive_type, arrays, blend_shape_arrays, lods, custom_flags)
 		var surface_material := source_mesh.surface_get_material(surface_index)
 		if surface_material != null:
 			target_mesh.surface_set_material(surface_index, surface_material)
+
+
+## The custom channel format bits of a surface format, which
+## [method ArrayMesh.add_surface_from_arrays] needs again to rebuild that surface.
+static func custom_format_flags(format: int) -> int:
+	var flags := 0
+	for channel in 4:
+		var shift: int = Mesh.ARRAY_FORMAT_CUSTOM_BASE + channel * Mesh.ARRAY_FORMAT_CUSTOM_BITS
+		flags |= format & (Mesh.ARRAY_FORMAT_CUSTOM_MASK << shift)
+	return flags
 
 
 ## The LODs of one surface of [param mesh], keyed by edge length, from the public getter

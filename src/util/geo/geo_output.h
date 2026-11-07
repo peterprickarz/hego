@@ -173,7 +173,9 @@ public:
 	/// Built by HEGoAssetNode::get_surface_output(); not meant to be constructed by hand.
 	/// Reads the primitive and vertex lists plus the named point attributes, so it
 	/// must run on the worker thread.
-	bool setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &point_attribs);
+	/// custom_attribs names up to four point attributes exported as ARRAY_CUSTOM0..3.
+	bool setup(const std::shared_ptr<HEGo::Util::Geo::GeoCache> &cache, HAPI_NodeId node_id, const godot::PackedStringArray &point_attribs,
+			const godot::PackedStringArray &custom_attribs = godot::PackedStringArray());
 
 	/// Whether the cook produced a mesh part with faces.
 	bool is_valid() const;

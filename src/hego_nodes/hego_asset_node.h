@@ -50,8 +50,10 @@ public:
 	// The cooked surfaces, for reading and splitting them from GDScript in code.
 	// point_attribs names which of N, Cd, uv, uv2 and tangents to read; P always is.
 	// preload_attribs are primitive attributes, loaded while the task runs.
-	godot::Ref<HEGoTask> get_surface_output(
-			godot::PackedStringArray point_attribs = godot::PackedStringArray(), godot::PackedStringArray preload_attribs = godot::PackedStringArray());
+	// custom_attribs names up to four point attributes, in channel order, that each
+	// surface carries as ARRAY_CUSTOM0..3 (RGBA float; blank or missing names skip a channel).
+	godot::Ref<HEGoTask> get_surface_output(godot::PackedStringArray point_attribs = godot::PackedStringArray(),
+			godot::PackedStringArray preload_attribs = godot::PackedStringArray(), godot::PackedStringArray custom_attribs = godot::PackedStringArray());
 
 	godot::Ref<HEGoTask> fetch_surfaces(godot::Ref<godot::Resource> fetch_surface_config);
 	godot::Ref<HEGoTask> fetch_points(godot::Ref<godot::Resource> fetch_point_config);
