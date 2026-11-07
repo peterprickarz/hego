@@ -466,7 +466,21 @@ void modify_base_entries(
 			const godot::Array custom_attr = filtered_point_attrs[key];
 			if (custom_attr.size() > 0)
 			{
-				surface_array[godot::Mesh::ARRAY_CUSTOM0 + channel] = pack_custom_channel(custom_attr);
+				const godot::PackedFloat32Array packed = pack_custom_channel(custom_attr);
+				// A channel that is zero on every vertex of this surface carries nothing a
+				// shader could not read anyway (missing custom attributes read as zero), so
+				// it is left out of this surface and costs no memory there.
+				bool any_value = false;
+				const float *values = packed.ptr();
+				for (int64_t i = 0; i < packed.size() && !any_value; i++)
+				{
+					any_value = values[i] != 0.0f;
+				}
+				if (!any_value)
+				{
+					continue;
+				}
+				surface_array[godot::Mesh::ARRAY_CUSTOM0 + channel] = packed;
 				custom_format_flags |= static_cast<int64_t>(godot::Mesh::ARRAY_CUSTOM_RGBA_FLOAT)
 						<< (godot::Mesh::ARRAY_FORMAT_CUSTOM_BASE + channel * godot::Mesh::ARRAY_FORMAT_CUSTOM_BITS);
 			}

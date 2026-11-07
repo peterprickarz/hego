@@ -62,7 +62,9 @@ Any per-vertex data a shader needs beyond normals, colours and UVs - wind pivots
 normals, masks - goes into ``hego_custom0`` to ``hego_custom3``. The mesh output adds each
 present channel with ``ARRAY_CUSTOM_RGBA_FLOAT``; reduced LODs share the base vertices, so
 they keep the channels, and overwriting a saved mesh resource keeps their formats. Each
-channel costs 16 bytes per vertex. ``HEGoMeshOutput.CUSTOM_ATTRIBS`` lists the attribute
+channel costs 16 bytes per vertex. A channel that is zero on every vertex of a surface (bark
+under foliage that alone carries the data, say) is left out of that surface; shaders read a
+missing custom channel as zero either way. ``HEGoMeshOutput.CUSTOM_ATTRIBS`` lists the attribute
 names; ``HEGoMeshOutput.fetch_meshes(context, custom_attribs)`` and
 ``HEGoAssetNode.get_surface_output(point_attribs, preload_attribs, custom_attribs)`` take
 other names in channel order.

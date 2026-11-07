@@ -7,7 +7,8 @@
 ## The fixture, tests/fixtures/hego_test_custom_channels.hda (built by
 ## make_custom_channels_fixture.py), writes known per-point values into hego_custom0 (float4),
 ## hego_custom1 (float) and hego_custom3 (vector3), and leaves hego_custom2 out, over a quad
-## with a reduced LOD triangle.
+## with a reduced LOD triangle (hego_material "quad"), plus a triangle whose points carry zero in
+## every custom attribute (hego_material "zero"), whose surface must get no custom channels.
 extends SceneTree
 
 const FIXTURE_DIR := "res://tests/fixtures"
@@ -93,7 +94,14 @@ func run() -> void:
 	var output: HEGoSurfaceOutput = await task_result(asset.get_surface_output(["N"], ["hego_lod"], custom))
 	check(output != null and output.is_valid(), "surface output is valid")
 	if output != null and output.is_valid():
-		var surface := output.select_all().get_surface(["hego_lod"])
+		await task_result(output.load_attributes(["hego_material"]))
+		var by_material := output.split_by("hego_material")
+		check(by_material.has("quad") and by_material.has("zero"), "fixture has the quad and the zero surface")
+		var zero_surface: Dictionary = by_material["zero"].get_surface()
+		var zero_arrays: Array = zero_surface["surface_array"]
+		check(zero_arrays[Mesh.ARRAY_CUSTOM0] == null and zero_arrays[Mesh.ARRAY_CUSTOM1] == null and zero_arrays[Mesh.ARRAY_CUSTOM3] == null
+			and not zero_surface.has("custom_format_flags"), "all-zero channels are left out of a surface")
+		var surface: Dictionary = by_material["quad"].get_surface(["hego_lod"])
 		check_arrays(surface["surface_array"], "surface")
 		var flags := int(surface.get("custom_format_flags", 0))
 		check(custom_format(flags, 0) == Mesh.ARRAY_CUSTOM_RGBA_FLOAT and custom_format(flags, 1) == Mesh.ARRAY_CUSTOM_RGBA_FLOAT
@@ -110,13 +118,17 @@ func run() -> void:
 	check(meshes.size() == 1 and meshes.values()[0] != null, "mesh output builds one mesh")
 	if meshes.size() == 1 and meshes.values()[0] != null:
 		var mesh: ArrayMesh = meshes.values()[0]
-		var format := mesh.surface_get_format(0)
+		# Surfaces follow the material split; find the quad (four vertices) and the zero triangle.
+		var quad := 0 if mesh.surface_get_array_len(0) == 4 else 1
+		check(mesh.get_surface_count() == 2 and HEGoMeshOutput.custom_format_flags(mesh.surface_get_format(1 - quad)) == 0,
+			"the zero surface has no custom channels in the mesh")
+		var format := mesh.surface_get_format(quad)
 		check(custom_format(format, 0) == Mesh.ARRAY_CUSTOM_RGBA_FLOAT and format & Mesh.ARRAY_FORMAT_CUSTOM0, "mesh surface has CUSTOM0 as RGBA float")
 		check(not (format & Mesh.ARRAY_FORMAT_CUSTOM2), "mesh surface has no CUSTOM2")
-		check_arrays(mesh.surface_get_arrays(0), "mesh")
+		check_arrays(mesh.surface_get_arrays(quad), "mesh")
 		var has_lods := DisplayServer.get_name() != "headless"
 		if has_lods:
-			var lods := HEGoMeshOutput._surface_lods(mesh, 0, mesh.surface_get_arrays(0))
+			var lods := HEGoMeshOutput._surface_lods(mesh, quad, mesh.surface_get_arrays(quad))
 			check(lods.size() == 1, "the reduced LOD survives next to the custom channels")
 		else:
 			print("  skip LOD checks (headless rendering keeps no LOD buffers)")
@@ -127,10 +139,10 @@ func run() -> void:
 		var reloaded := ResourceLoader.load(SAVE_PATH, "", ResourceLoader.CACHE_MODE_IGNORE) as ArrayMesh
 		check(reloaded != null, "saved mesh reloads")
 		if reloaded != null:
-			check(custom_format(reloaded.surface_get_format(0), 0) == Mesh.ARRAY_CUSTOM_RGBA_FLOAT, "overwritten resource keeps the CUSTOM0 format")
-			check_arrays(reloaded.surface_get_arrays(0), "reloaded")
+			check(custom_format(reloaded.surface_get_format(quad), 0) == Mesh.ARRAY_CUSTOM_RGBA_FLOAT, "overwritten resource keeps the CUSTOM0 format")
+			check_arrays(reloaded.surface_get_arrays(quad), "reloaded")
 			if has_lods:
-				check(HEGoMeshOutput._surface_lods(reloaded, 0, reloaded.surface_get_arrays(0)).size() == 1, "overwritten resource keeps its LOD")
+				check(HEGoMeshOutput._surface_lods(reloaded, quad, reloaded.surface_get_arrays(quad)).size() == 1, "overwritten resource keeps its LOD")
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
 
 	api.stop_session()
