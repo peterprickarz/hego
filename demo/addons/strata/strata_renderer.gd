@@ -118,6 +118,12 @@ extends Node3D
 	set(value):
 		debug_discarded = value
 		_update_material_settings()
+## Tints surface writers: cyan where the terrain takes them from the surface cache, magenta where
+## from the far writer layer (StrataSurfaceWriterFar), in proportion to their coverage.
+@export var debug_surface_writers := false:
+	set(value):
+		debug_surface_writers = value
+		_update_material_settings()
 @export var wireframe := false:
 	set(value):
 		wireframe = value
@@ -127,6 +133,11 @@ extends Node3D
 const SURFACE_SHADER_PATH := "res://addons/strata/shaders/terrain_surface.gdshader"
 ## Preloaded so the renderer does not depend on the global class cache listing StrataSurfaceCache.
 const _SurfaceCache := preload("res://addons/strata/strata_surface_cache.gd")
+const _WriterPass := preload("res://addons/strata/strata_surface_writer_pass.gd")
+const _WriterFar := preload("res://addons/strata/strata_surface_writer_far.gd")
+## Terrain material uniforms copied into StrataSurfaceWriter materials that use the terrain
+## material helper (STRATA_WRITER_TERRAIN_MATERIALS in strata_surface_writer.gdshaderinc).
+const _WRITER_MATERIAL_UNIFORMS := ["color_maps", "normal_maps", "ormh_maps", "uv_scales", "top_texture_slots", "top_uv_scales", "material_displacement", "material_roughness_scales", "material_roughness_biases"]
 const _HOOK_MARKER := "STRATA_MATERIAL_HOOK_FUNCTIONS"
 ## Seconds of editor idle time after a custom_fragment_code edit before the
 ## shader is regenerated, so typing does not compile every keystroke.
@@ -158,6 +169,10 @@ var _active_crease_variant := false
 ## StrataSurfaceCache while StrataRenderSettings.surface_cache_enabled (Forward+/Mobile only).
 var _surface_cache: _SurfaceCache
 var _surface_cache_variant := false
+## Draws StrataSurfaceWriter meshes for the cache (internal child while the cache runs).
+var _writer_pass: Node
+## Whole-terrain far layer of the writers (StrataRenderSettings.surface_writer_far_texel > 0).
+var _writer_far: _WriterFar
 # "smooth|" or "creases|" plus the applied custom-code key: the shader in use.
 var _active_shader_key := ""
 # Custom fragment code requested by the materials, the request the shader was
@@ -521,6 +536,59 @@ func _surface_cache_relief_level() -> int:
 	return clampi(level, 0, _surface_cache.levels - 1)
 
 ## Re-evaluates terrain-local [param rect] (everything when empty) in the surface cache.
+func _on_writers_changed(local_rect: Rect2) -> void:
+	if _surface_cache != null: _surface_cache.invalidate_writers(local_rect)
+	if _writer_far != null: _writer_far.invalidate(local_rect)
+
+func _ensure_writer_pass() -> void:
+	if _writer_pass != null and is_instance_valid(_writer_pass): return
+	_writer_pass = _WriterPass.new()
+	_writer_pass.name = "StrataSurfaceWriterPass"
+	_writer_pass.writers_changed.connect(_on_writers_changed)
+	add_child(_writer_pass, false, Node.INTERNAL_MODE_BACK)
+	var registry: StrataSurfaceWriterRegistry = _writer_pass.registry
+	if not registry.materials_changed.is_connected(_bind_writer_materials): registry.materials_changed.connect(_bind_writer_materials)
+	_bind_writer_materials()
+
+func _release_writer_pass() -> void:
+	if _writer_pass == null: return
+	if is_instance_valid(_writer_pass):
+		var registry: StrataSurfaceWriterRegistry = _writer_pass.registry
+		if registry != null and registry.materials_changed.is_connected(_bind_writer_materials): registry.materials_changed.disconnect(_bind_writer_materials)
+		_writer_pass.queue_free()
+	_writer_pass = null
+
+## Copies the terrain material uniforms into writer materials that sample terrain materials,
+## on the RenderingServer only (the writer material resources are not modified or saved).
+## A writer material's metadata "strata_terrain_materials" (Dictionary: int uniform name ->
+## terrain material channel name, as in StrataTerrain3D.editor_material_channels) sets those
+## uniforms to the channels' material ids in this terrain (-1 when it has no such channel).
+func _bind_writer_materials() -> void:
+	if _shader_material == null or _writer_pass == null or not is_instance_valid(_writer_pass): return
+	var registry: StrataSurfaceWriterRegistry = _writer_pass.registry
+	var values := {}
+	for name: String in _WRITER_MATERIAL_UNIFORMS:
+		var value: Variant = _shader_material.get_shader_parameter(name)
+		if value is Array:
+			var rids := []
+			for texture: Variant in value: rids.append((texture as Texture).get_rid() if texture is Texture else RID())
+			value = rids
+		values[name] = value
+	for material: Material in registry.materials():
+		var shader_material := material as ShaderMaterial
+		if shader_material == null or shader_material.shader == null: continue
+		var names := {}
+		for uniform in shader_material.shader.get_shader_uniform_list(): names[uniform.name] = true
+		if names.has("color_maps"):
+			for name: String in values:
+				if names.has(name) and values[name] != null: RenderingServer.material_set_param(material.get_rid(), name, values[name])
+		var by_channel: Variant = material.get_meta(&"strata_terrain_materials") if material.has_meta(&"strata_terrain_materials") else null
+		if by_channel is Dictionary and is_instance_valid(_source):
+			var channels: Variant = _source.get("editor_material_channels")
+			for uniform_name: Variant in by_channel:
+				var id := (channels as PackedStringArray).find(String(by_channel[uniform_name])) if channels is PackedStringArray else -1
+				if names.has(String(uniform_name)): RenderingServer.material_set_param(material.get_rid(), StringName(uniform_name), id)
+
 func _invalidate_surface_cache(rect := Rect2()) -> void:
 	if _surface_cache == null: return
 	_surface_cache.invalidate(rect)
@@ -536,7 +604,13 @@ func _update_surface_cache(local_camera: Vector3) -> void:
 	_surface_cache.configure(render_settings.surface_cache_levels, render_settings.surface_cache_resolution, render_settings.surface_cache_texels_per_metre)
 	_surface_cache.publish_globals = render_settings.surface_cache_publish_globals
 	var creases := smooth_shading and crease_angle_degrees < 180.0
-	_surface_cache.update(_shader_material, _variant_defines(creases, pixel_sampling), local_camera)
+	_ensure_writer_pass()
+	_writer_pass.terrain_transform = _source.global_transform
+	_writer_pass.texel = _surface_cache.texel
+	_writer_pass.measure = _surface_cache.measure_gpu
+	# Before the cache update, which dispatches this frame's tiles.
+	_update_writer_far()
+	_surface_cache.update(_shader_material, _variant_defines(creases, pixel_sampling), local_camera, _writer_pass)
 	var radius := displacement_refinement_radius if displacement_enabled else 0.0
 	_surface_cache.publish(_source.global_transform, local_camera, radius, displacement_strength, render_settings.terrain_specular, _surface_cache_relief_level())
 	if _surface_cache_variant:
@@ -544,16 +618,48 @@ func _update_surface_cache(local_camera: Vector3) -> void:
 		for k in _SurfaceCache.MAX_LEVELS:
 			origins.append(Vector2(_surface_cache.level_origin(k)))
 		# Set on change only: a texture parameter rebuilds the material's uniform set.
-		var params := Vector4(_surface_cache.texel, _surface_cache.resolution, _surface_cache.levels, _surface_cache_relief_level())
-		if _shader_material.get_shader_parameter("surface_cache_height") != _surface_cache.height_texture:
-			_shader_material.set_shader_parameter("surface_cache_height", _surface_cache.height_texture)
+		var relief_level := _surface_cache_relief_level() if render_settings.surface_cache_displacement else -1
+		var params := Vector4(_surface_cache.texel, _surface_cache.resolution, _surface_cache.levels, relief_level)
+		for pair: Array in [["surface_cache_height", _surface_cache.height_texture], ["surface_cache_height_linear", _surface_cache.height_texture], ["surface_cache_albedo", _surface_cache.albedo_texture], ["surface_cache_normal", _surface_cache.normal_texture], ["surface_cache_cover", _surface_cache.cover_texture]]:
+			if _shader_material.get_shader_parameter(pair[0]) != pair[1]:
+				_shader_material.set_shader_parameter(pair[0], pair[1])
 		if _shader_material.get_shader_parameter("surface_cache_origins") != origins:
 			_shader_material.set_shader_parameter("surface_cache_origins", origins)
 		if _shader_material.get_shader_parameter("surface_cache_params") != params:
 			_shader_material.set_shader_parameter("surface_cache_params", params)
 	_stats.surface_cache = _surface_cache.stats
+	_stats.surface_writers = _writer_pass.stats.merged({"writers": _writer_pass.registry.entry_count()})
+
+## Keeps the far writer layer sized to the terrain and fed by the writer pass, and binds it.
+func _update_writer_far() -> void:
+	if render_settings.surface_writer_far_texel <= 0.0:
+		_release_writer_far()
+		return
+	if _writer_far == null: _writer_far = _WriterFar.new()
+	_writer_far.configure(_source.base_bounds, _surface_cache.texel, render_settings.surface_writer_far_texel, render_settings.surface_writer_far_max_size)
+	_writer_far.update(_writer_pass)
+	var area := _writer_far.local_rect()
+	var rect := Vector4(area.position.x, area.position.y, area.size.x, area.size.y)
+	for pair: Array in [["surface_writer_far_albedo", _writer_far.albedo_texture], ["surface_writer_far_normal", _writer_far.normal_texture], ["surface_writer_far_rect", rect]]:
+		if _shader_material.get_shader_parameter(pair[0]) != pair[1]:
+			_shader_material.set_shader_parameter(pair[0], pair[1])
+	_stats.surface_writer_far = _writer_far.stats
+
+func _release_writer_far() -> void:
+	if _writer_far == null: return
+	_writer_far.release()
+	_writer_far = null
+	_stats.erase("surface_writer_far")
+	if _shader_material != null: _shader_material.set_shader_parameter("surface_writer_far_rect", Vector4.ZERO)
+
+## The far writer layer of this renderer, or null while it is disabled.
+func get_surface_writer_far() -> RefCounted:
+	return _writer_far
 
 func _release_surface_cache() -> void:
+	_release_writer_far()
+	_release_writer_pass()
+	_stats.erase("surface_writers")
 	if _surface_cache == null: return
 	_surface_cache.release()
 	_surface_cache = null
@@ -662,6 +768,7 @@ func _bind_material_pool() -> void:
 	_shader_material.set_shader_parameter("height_blend_biases", biases)
 	_shader_material.set_shader_parameter("material_roughness_scales", roughness_scales)
 	_shader_material.set_shader_parameter("material_roughness_biases", roughness_biases)
+	_bind_writer_materials()
 	_stats.material_count = _materials.size()
 	if _surface_cache != null: _surface_cache.mark_material_dirty()
 	_hook_spec_pending = _material_hook_spec()
@@ -675,7 +782,7 @@ static func _solid_texture(color: Color) -> ImageTexture:
 
 func _update_shading_variant() -> void:
 	var wants_creases := smooth_shading and crease_angle_degrees < 180.0
-	var wants_cache := _surface_cache_displacement_wanted()
+	var wants_cache := _surface_cache_wanted()
 	var key := ("creases|" if wants_creases else "smooth|") + ("pixel|" if pixel_sampling else "") + ("cache|" if wants_cache else "") + _hook_key_applied
 	if key == _active_shader_key: return
 	var target := _surface_shader(wants_creases)
@@ -706,25 +813,25 @@ func _surface_shader(creases: bool) -> Shader:
 	_stats.custom_shader_failed_ids = failed_ids
 	if not _hook_spec_applied.is_empty():
 		var entries := _hook_spec_applied
-		var shader := _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_displacement_wanted()))
+		var shader := _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_wanted()))
 		if shader == null:
 			entries = []
 			for entry: Dictionary in _hook_spec_applied:
-				if _compiled_shader(_hook_shader_code([entry], creases, pixel_sampling, _surface_cache_displacement_wanted())) != null:
+				if _compiled_shader(_hook_shader_code([entry], creases, pixel_sampling, _surface_cache_wanted())) != null:
 					entries.append(entry)
 				else:
 					failed_ids.append(entry.id)
 					push_error("%s: custom_fragment_code does not compile, so this material renders without it. The SHADER ERROR printed above (when this code was first compiled) gives the reason." % entry.label)
 			_stats.custom_shader_failed_ids = failed_ids
 			if not entries.is_empty():
-				shader = _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_displacement_wanted()))
+				shader = _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_wanted()))
 				if shader == null:
 					push_error("The custom_fragment_code of materials %s compiles separately but not together; the terrain uses its plain shader." % ", ".join(entries.map(func(entry: Dictionary) -> String: return entry.label)))
 		if shader != null:
 			_hook_spec_bound = entries
 			_stats.custom_shader_material_ids = PackedInt32Array(entries.map(func(entry: Dictionary) -> int: return entry.id))
 			return shader
-	var cache := _surface_cache_displacement_wanted()
+	var cache := _surface_cache_wanted()
 	if not creases and not pixel_sampling and not cache:
 		return load(SURFACE_SHADER_PATH)
 	var defines := _variant_defines(creases, pixel_sampling, cache)
@@ -874,10 +981,25 @@ func _update_material_settings() -> void:
 	_shader_material.set_shader_parameter("displacement_strength", maxf(displacement_strength, 0.0))
 	_shader_material.set_shader_parameter("debug_lod", debug_lod)
 	_shader_material.set_shader_parameter("debug_discarded", debug_discarded)
+	_shader_material.set_shader_parameter("debug_surface_writers", debug_surface_writers)
+	_update_parallax_settings()
 	if _surface_cache != null: _surface_cache.mark_material_dirty()
 	_apply_ao_overlay()
 	for patch in _patches.values():
 		_update_patch_bounds(patch)
+
+## Parallax (prototype) reads only the fragment shader's uniforms: nothing in the cache or the
+## geometry depends on it.
+func _update_parallax_settings() -> void:
+	if _shader_material == null or render_settings == null: return
+	_shader_material.set_shader_parameter("parallax_mode", render_settings.parallax_mode)
+	_shader_material.set_shader_parameter("parallax_radius", maxf(render_settings.parallax_radius, 0.0001))
+	_shader_material.set_shader_parameter("parallax_depth", render_settings.parallax_depth)
+	_shader_material.set_shader_parameter("parallax_strength", render_settings.parallax_strength)
+	_shader_material.set_shader_parameter("parallax_min_level", render_settings.parallax_min_level)
+	_shader_material.set_shader_parameter("parallax_steps", render_settings.parallax_steps)
+	_shader_material.set_shader_parameter("parallax_wall_shade", render_settings.parallax_wall_shade)
+	_shader_material.set_shader_parameter("parallax_debug", render_settings.parallax_debug)
 
 func refresh_heightfield() -> bool:
 	if not is_instance_valid(_source) or _shader_material == null:
@@ -1330,8 +1452,9 @@ func _quality_changed() -> void:
 	if pixel_sampling != render_settings.pixel_sampling:
 		pixel_sampling = render_settings.pixel_sampling
 		if _shader_material != null: _update_shading_variant()
-	if _shader_material != null and _surface_cache_variant != _surface_cache_displacement_wanted():
+	if _shader_material != null and _surface_cache_variant != _surface_cache_wanted():
 		_update_shading_variant()
+	_update_parallax_settings()
 	if _surface_cache != null: _surface_cache.mark_material_dirty()
 	_invalidate_geometry_lod()
 

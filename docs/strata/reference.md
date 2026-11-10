@@ -250,13 +250,21 @@ default 128: 1/128 m); each further level doubles the cell, so six levels of 102
 toroidally (cell `g` at `g & (resolution − 1)`), so a moving camera refills only the exposed
 strips. Full refills (start, teleports, material edits) are limited to one level per frame,
 finest first. Terrain edits (heights, holes, controls, region changes, macro and coarse maps)
-refill the affected rectangle. Memory is 16 bytes per cell per level: 96 MB at the defaults.
+refill the affected rectangle. Memory is 17 bytes per cell per level: 102 MB at the defaults.
 
 | Texture (2D array) | Per cell |
 | --- | --- |
 | albedo, RGBA8 | sRGB albedo after the terrain tint map; A: material AO × macro AO |
 | normal, RGBA8 | octahedral unit normal (terrain-local, around +Y); B: roughness; A: metallic |
 | height, R32F, two layers per level | at the cell corner: base height (−1e30 in holes), and the raw material relief before `displacement_strength` and the camera fade |
+| cover, R8 | how much of the cell surface writers replaced (0 none) |
+
+**Surface writers.** Meshes with a writer material (`StrataSurfaceWriter`) are drawn top-down and
+composited over the terrain material by the same fill, and the terrain shows them where they
+cover a cell. Beyond the cache's coarsest window the terrain reads the far writer layer
+(`StrataSurfaceWriterFar`): every writer over the whole terrain at `surface_writer_far_texel`
+(2 m), drawn once, 8 bytes per texel plus a third for mips (43 MB for a 4 km terrain at 2 m). See
+"Surface writers" in the addon's `README.md`.
 
 The cache holds the near material (no far-tile blend) without custom fragment code, evaluated
 by the same functions as the terrain shader (`terrain_surface_core.gdshaderinc`, which the
@@ -267,6 +275,21 @@ shading its pixels directly.
 with `STRATA_SURFACE_CACHE` and reads near relief from the level whose cell matches
 `displacement_vertex_spacing` (bilinear between corner heights), falling back to direct
 evaluation outside it and beyond the near UV distance.
+
+**Parallax (prototype, off by default).** `parallax_mode` marches each near pixel's view ray
+through the relief the displaced mesh does not carry: the relief of the cache level matching
+the pixel footprint minus the relief level's, scaled by `parallax_strength`, inside a shell of
+±`parallax_depth` metres around the mesh surface along the smooth normal. Smooth reads the
+fine level bilinearly; Columns reads it per cell (flat-topped columns whose walls show the
+column's texel darkened by `parallax_wall_shade`). `parallax_min_level` sets the finest level
+read, `parallax_radius` the fade distance, `parallax_steps` the step limit (one step per cell
+crossed, plus five to refine the hit) and `parallax_debug` shows hit height and walls (1) or
+level and step share (2). With displacement off the whole relief is marched. It moves only the
+position the material is evaluated at: no depth is written, nothing is cast into shadow maps,
+and readers of the cache see the mesh surface as before. Each cache level holds the height
+maps point-sampled at mip 0, so on noisy scanned heights single texels stand out as spikes and
+the residual also contains the mesh's own sampling error; a filtered relief per level would be
+needed before this is usable.
 
 **Readers.** With `surface_cache_publish_globals` (default on) the cache is published as the
 `strata_cache_*` global shader parameters. The Strata plugin adds them to the project's

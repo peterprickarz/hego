@@ -146,7 +146,7 @@ func parameters() -> Dictionary:
 		if surface_cache_levels == value: return
 		surface_cache_levels = value
 		emit_changed()
-## Cells per side of every level (16 bytes per cell and level).
+## Cells per side of every level (17 bytes per cell and level).
 @export_enum("256:256", "512:512", "1024:1024", "2048:2048") var surface_cache_resolution := 1024:
 	set(value):
 		if value not in [256, 512, 1024, 2048]: return
@@ -168,6 +168,87 @@ func parameters() -> Dictionary:
 	set(value):
 		if surface_cache_displacement == value: return
 		surface_cache_displacement = value
+		emit_changed()
+## Prototype. Per-pixel parallax of the relief that is finer than the displaced mesh, marched
+## through the surface cache's relief (needs surface_cache_enabled). The mesh keeps the relief of
+## its vertex spacing; the ray sees the rest, at the cache level matching the pixel. Smooth reads
+## the relief bilinearly, Columns per cache cell (flat-topped texel columns with walls). No
+## depth is written and nothing is cast into shadow maps.
+@export_enum("Off:0", "Smooth:1", "Columns:2") var parallax_mode := 0:
+	set(value):
+		if value < 0 or value > 2: return
+		if parallax_mode == value: return
+		parallax_mode = value
+		emit_changed()
+## Distance in metres where the parallax has faded out (it fades from 60 % of it).
+@export_range(0.0, 64.0, 0.5) var parallax_radius := 8.0:
+	set(value):
+		if not is_finite(value) or value < 0.0: return
+		if parallax_radius == value: return
+		parallax_radius = value
+		emit_changed()
+## Half thickness in metres of the shell around the mesh surface the ray is marched through;
+## finer relief beyond it is flattened.
+@export_range(0.0, 0.25, 0.005) var parallax_depth := 0.02:
+	set(value):
+		if not is_finite(value) or value < 0.0: return
+		if parallax_depth == value: return
+		parallax_depth = value
+		emit_changed()
+## Share of the relief the mesh does not carry that the ray sees. Material displacement is tuned
+## for lumps of the mesh's vertex spacing: at 1 single texels stand out as spikes several
+## centimetres tall.
+@export_range(0.0, 1.0, 0.01) var parallax_strength := 0.25:
+	set(value):
+		if not is_finite(value) or value < 0.0 or value > 1.0: return
+		if parallax_strength == value: return
+		parallax_strength = value
+		emit_changed()
+## Finest cache level the ray reads. Level 0 is one material texel, where scanned height maps
+## are noisy; level 2 keeps features of about 3 cm and up (with 128 cells per metre).
+@export_range(0, 4, 1) var parallax_min_level := 0:
+	set(value):
+		if value < 0 or value > 4: return
+		if parallax_min_level == value: return
+		parallax_min_level = value
+		emit_changed()
+## Most steps of one ray (one per cache cell it crosses, plus five to refine the hit).
+@export_range(4, 64, 1) var parallax_steps := 24:
+	set(value):
+		if value < 4 or value > 64: return
+		if parallax_steps == value: return
+		parallax_steps = value
+		emit_changed()
+## Columns: albedo multiplier of column walls.
+@export_range(0.0, 1.0, 0.01) var parallax_wall_shade := 0.75:
+	set(value):
+		if not is_finite(value) or value < 0.0 or value > 1.0: return
+		if parallax_wall_shade == value: return
+		parallax_wall_shade = value
+		emit_changed()
+## 1: hit height (red above the mesh, blue below) and walls (green). 2: cache level (red) and
+## share of parallax_steps used (green).
+@export_range(0, 2, 1) var parallax_debug := 0:
+	set(value):
+		if parallax_debug == value: return
+		parallax_debug = value
+		emit_changed()
+## Edge in metres of the far writer layer's texels (StrataSurfaceWriterFar): every surface writer
+## drawn once over the whole terrain, which the terrain shows beyond the cache's reach. Snapped to
+## a power-of-two multiple of the level-0 cell and doubled until surface_writer_far_max_size
+## holds the terrain. 0 disables the layer (writers then end at the cache's coarsest window).
+@export_range(0.0, 64.0, 0.25) var surface_writer_far_texel := 2.0:
+	set(value):
+		if not is_finite(value) or value < 0.0: return
+		if surface_writer_far_texel == value: return
+		surface_writer_far_texel = value
+		emit_changed()
+## Largest side of the far writer layer in texels (8 bytes per texel, plus a third for mips).
+@export_enum("512:512", "1024:1024", "2048:2048", "4096:4096") var surface_writer_far_max_size := 2048:
+	set(value):
+		if value not in [512, 1024, 2048, 4096]: return
+		if surface_writer_far_max_size == value: return
+		surface_writer_far_max_size = value
 		emit_changed()
 ## Publish the cache as the strata_cache_* global shader parameters. Only one terrain per scene
 ## should publish.

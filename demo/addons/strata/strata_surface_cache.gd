@@ -13,6 +13,10 @@ extends RefCounted
 ##   height  R32F    layer 2k: base height at the cell corner g * texel (-1e30 in holes),
 ##                   layer 2k+1: material relief there (terrain_material_relief(), metres along the
 ##                   normal, before displacement_strength and the camera fade)
+##   cover   R8      how much of the cell surface writers replaced (StrataSurfaceWriter; 0 none)
+## Surface writers (meshes with a writer material, StrataSurfaceWriter) are drawn top-down by a
+## writer pass (strata_surface_writer_pass.gd) and composited over the terrain material by the
+## same compute fill, one frame after the pass drew them.
 ## The cache holds the near-UV material without custom fragment code (both depend on the view).
 ##
 ## StrataRenderer owns one cache per terrain (StrataRenderSettings.surface_cache_enabled). It
@@ -86,7 +90,17 @@ layout(set = 0, binding = 19, std430) restrict readonly buffer Parameters {
 layout(set = 0, binding = 20, rgba8) restrict writeonly uniform image2DArray albedo_out;
 layout(set = 0, binding = 21, rgba8) restrict writeonly uniform image2DArray normal_out;
 layout(set = 0, binding = 22, r32f) restrict writeonly uniform image2DArray height_out;
-layout(push_constant, std430) uniform Fill { ivec2 rect_origin; ivec2 rect_size; int level; int resolution; float texel; int pad; } fill;
+layout(set = 0, binding = 23, r8) restrict writeonly uniform image2DArray cover_out;
+// Writer pass tile (strata_surface_writer_pass.gd), premultiplied over-composite of the writers,
+// three outputs side by side (fill.tile_width texels each):
+//   0 albedo   linear albedo, A coverage
+//   1 normal   ground-space normal xz * 0.5 + 0.5, roughness, A coverage
+//   2 surface  AO, relief * 0.25 + 0.5, metallic, A coverage
+layout(set = 1, binding = 0) uniform sampler2D writer_tile;
+layout(push_constant, std430) uniform Fill { ivec2 rect_origin; ivec2 rect_size; int level; int resolution; float texel; int writers; ivec2 tile_origin; int tile_width; int pad; } fill;
+#define writer_albedo_at(t) texelFetch(writer_tile, (t), 0)
+#define writer_normal_at(t) texelFetch(writer_tile, (t) + ivec2(fill.tile_width, 0), 0)
+#define writer_surface_at(t) texelFetch(writer_tile, (t) + ivec2(2 * fill.tile_width, 0), 0)
 
 // The includes read the terrain shader's uniforms by name; these map them to the buffer.
 #define region_origin vec2(pf[0], pf[1])
@@ -135,6 +149,11 @@ vec2 cache_octahedral(vec3 n) {
 	return e * 0.5 + 0.5;
 }
 
+// Writer coverage-weighted sum of a tile texel (premultiplied: rgb is the sum of value * weight).
+vec4 writer_fetch_surface_corner(ivec2 t) {
+	return 0.25 * (writer_surface_at(t) + writer_surface_at(t - ivec2(1, 0)) + writer_surface_at(t - ivec2(0, 1)) + writer_surface_at(t - ivec2(1, 1)));
+}
+
 void main() {
 	ivec2 local = ivec2(gl_GlobalInvocationID.xy);
 	if (local.x >= fill.rect_size.x || local.y >= fill.rect_size.y) { return; }
@@ -156,14 +175,42 @@ void main() {
 	vec4 macro = terrain_macro_sample(centre);
 	color *= mix(vec3(1.0), macro.rgb, terrain_tint_strength);
 	float ao = clamp(orm.r, 0.0, 1.0) * mix(1.0, macro.a, terrain_ao_strength);
+	float roughness = clamp(orm.g, 0.04, 1.0);
+	float metallic = clamp(orm.b, 0.0, 1.0);
+	float cover = 0.0;
+	ivec2 tile = cell - fill.tile_origin;
+	if (fill.writers != 0) {
+		// Writers over the finished terrain surface (after the macro tint: writers keep their colour).
+		vec4 wa = writer_albedo_at(tile);
+		vec4 wn = writer_normal_at(tile);
+		vec4 ws = writer_surface_at(tile);
+		color = color * (1.0 - wa.a) + max(wa.rgb, vec3(0.0));
+		if (wn.a > 0.0001) {
+			// Ground-space detail (Y up over flat ground) laid onto the terrain's lighting normal,
+			// as the top projection's normal maps are: tangent x = +X, image up = -Z.
+			vec2 xz = clamp((wn.rg - 0.5 * wn.a) * 2.0 / wn.a, vec2(-1.0), vec2(1.0));
+			vec3 detail = vec3(xz.x, -xz.y, sqrt(max(0.0, 1.0 - dot(xz, xz))));
+			vec3 written = terrain_reoriented_normal(terrain_triplanar_frame(1, geometric_normal), geometric_normal, detail);
+			normal = normalize(mix(normal, normalize(written), clamp(wn.a, 0.0, 1.0)));
+			roughness = clamp(roughness * (1.0 - wn.a) + wn.b, 0.04, 1.0);
+		}
+		ao = clamp(ao * (1.0 - ws.a) + ws.r, 0.0, 1.0);
+		metallic = clamp(metallic * (1.0 - ws.a) + ws.b, 0.0, 1.0);
+		cover = clamp(max(wa.a, max(wn.a, ws.a)), 0.0, 1.0);
+	}
 	imageStore(albedo_out, store, vec4(cache_linear_to_srgb(color), ao));
-	imageStore(normal_out, store, vec4(cache_octahedral(normal), clamp(orm.g, 0.04, 1.0), clamp(orm.b, 0.0, 1.0)));
+	imageStore(normal_out, store, vec4(cache_octahedral(normal), roughness, metallic));
+	imageStore(cover_out, store, vec4(cover));
 	// Heights at the cell corner: displaced vertices on the level's lattice read their own value.
 	vec2 corner = vec2(cell) * texel;
 	vec2 corner_gradient = terrain_smooth_gradient(corner);
 	vec3 corner_normal = normalize(vec3(-corner_gradient.x, 1.0, -corner_gradient.y));
 	float corner_height = base_height(corner);
 	float relief = terrain_material_relief(vec3(corner.x, corner_height, corner.y), corner_normal, 0.0);
+	if (fill.writers != 0) {
+		vec4 ws = writer_fetch_surface_corner(tile);
+		if (ws.a > 0.0001) { relief = relief * (1.0 - ws.a) + (ws.g - 0.5 * ws.a) * 4.0; }
+	}
 	bool hole = has_holes && terrain_cell_hole(corner);
 	imageStore(height_out, ivec3(store.xy, fill.level * 2), vec4(hole ? -1.0e30 : corner_height));
 	imageStore(height_out, ivec3(store.xy, fill.level * 2 + 1), vec4(hole ? 0.0 : relief));
@@ -177,9 +224,14 @@ var levels := 6
 var publish_globals := true
 ## Full-window refills (start, teleports, material edits) evaluated per frame, finest first.
 var full_fills_per_frame := 1
+## Records GPU timestamps around the fill: stats.gpu_ms is the GPU time of the last fill that
+## did work (two frames late), stats.gpu_ms_total the sum over all fills.
+var measure_gpu := false
 var albedo_texture := Texture2DArrayRD.new()
 var normal_texture := Texture2DArrayRD.new()
 var height_texture := Texture2DArrayRD.new()
+## R8 per level: writer coverage of each cell (read by the terrain shader).
+var cover_texture := Texture2DArrayRD.new()
 
 var _rd: RenderingDevice
 var _textures: Array[RID] = []
@@ -198,6 +250,10 @@ var _origins: Array[Vector2i] = []
 var _valid: Array[bool] = []
 var _needs_full: Array[bool] = []
 var _pending: Array = []
+## Per level: rects where writers changed (refilled once the writer pass has drawn them).
+var _writer_pending: Array = []
+var _writer_sets := {}
+var _writer_fallback_set := RID()
 var _material_signature := ""
 var _parameter_bytes := PackedByteArray()
 var _parameter_dirty := true
@@ -210,7 +266,8 @@ var _fallbacks: Array[RID] = []
 var _globals_checked := -1
 ## Last value sent per global parameter.
 var _published := {}
-var stats := {"levels": 0, "resolution": 0, "texels_last_frame": 0, "dispatches_last_frame": 0, "full_fills": 0, "memory_mb": 0.0, "status": "Not configured"}
+var stats := {"levels": 0, "resolution": 0, "texels_last_frame": 0, "dispatches_last_frame": 0, "full_fills": 0, "memory_mb": 0.0, "status": "Not configured", "gpu_ms": 0.0, "gpu_ms_total": 0.0, "gpu_samples": 0}
+var _timestamp_frame := 0
 
 
 ## True when a RenderingDevice exists (Forward+ or Mobile; not Compatibility or headless).
@@ -254,14 +311,14 @@ func configure(level_count: int, cells: int, texels_per_metre: float) -> bool:
 	var key := "%d|%d|%f" % [levels, resolution, texel]
 	if key != _texture_key:
 		_texture_key = key
-		_origins.resize(levels); _valid.resize(levels); _needs_full.resize(levels); _pending.resize(levels)
+		_origins.resize(levels); _valid.resize(levels); _needs_full.resize(levels); _pending.resize(levels); _writer_pending.resize(levels)
 		for k in levels:
 			_origins[k] = Vector2i(2147483647, 2147483647)
-			_valid[k] = false; _needs_full[k] = true; _pending[k] = []
+			_valid[k] = false; _needs_full[k] = true; _pending[k] = []; _writer_pending[k] = []
 		_textures_dirty = true
 	stats.levels = levels
 	stats.resolution = resolution
-	stats.memory_mb = levels * resolution * resolution * 16.0 / 1048576.0
+	stats.memory_mb = levels * resolution * resolution * 17.0 / 1048576.0
 	return true
 
 
@@ -296,6 +353,17 @@ func invalidate(rect := Rect2()) -> void:
 		(_pending[k] as Array).append(Rect2i(first, last - first))
 
 
+## Surface writers changed over terrain-local [param rect]: refilled in every level once the
+## writer pass has drawn the rect, keeping the old content readable until then (no flicker).
+func invalidate_writers(rect: Rect2) -> void:
+	if not rect.has_area(): return
+	for k in levels:
+		var size := level_texel(k)
+		var first := Vector2i(floori(rect.position.x / size) - 1, floori(rect.position.y / size) - 1)
+		var last := Vector2i(ceili(rect.end.x / size) + 1, ceili(rect.end.y / size) + 1)
+		(_writer_pending[k] as Array).append(Rect2i(first, last - first))
+
+
 ## Material uniforms changed: re-read them on the next update and refill when they differ.
 func mark_material_dirty() -> void:
 	_parameter_dirty = true
@@ -304,7 +372,7 @@ func mark_material_dirty() -> void:
 ## Advances the cache for [param camera] (terrain-local) from the terrain's [param material]
 ## (the StrataRenderer ShaderMaterial; [param defines] its variant defines). Records the compute
 ## work on the render thread and returns true when every level is valid.
-func update(material: ShaderMaterial, defines: String, camera: Vector3) -> bool:
+func update(material: ShaderMaterial, defines: String, camera: Vector3, writers: Node = null) -> bool:
 	if _failed or material == null or material.shader == null: return false
 	if _rd == null:
 		_rd = RenderingServer.get_rendering_device()
@@ -321,6 +389,8 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3) -> bool:
 	var work := []
 	var full_budget := full_fills_per_frame
 	var texels := 0
+	# Tiles the writer pass drew last frame: composited after this frame's plain fills.
+	var ready: Array = writers.call("take_ready") if writers != null else []
 	for k in levels:
 		var size := level_texel(k)
 		var snapped := Vector2i(floori(camera.x / (size * SNAP)) * SNAP, floori(camera.z / (size * SNAP)) * SNAP)
@@ -339,24 +409,49 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3) -> bool:
 			_valid[k] = true
 			_needs_full[k] = false
 			_pending[k] = []
+			_writer_pending[k] = []
 			texels += resolution * resolution
 			stats.full_fills = int(stats.full_fills) + 1
+			# Plain terrain now, writers composited once the pass has drawn them.
+			if writers != null: writers.call("queue_rect", k, window)
 			continue
 		if shifted:
 			for strip: Rect2i in _exposed(Rect2i(previous, window.size), window):
 				work.append([k, strip])
 				texels += strip.get_area()
+				if writers != null: writers.call("queue_rect", k, strip)
 			_origins[k] = origin
 		for rect: Rect2i in _pending[k]:
 			var clipped := rect.intersection(window)
 			if clipped.has_area():
 				work.append([k, clipped])
 				texels += clipped.get_area()
+				if writers != null: writers.call("queue_rect", k, clipped)
 		_pending[k] = []
+		for rect: Rect2i in _writer_pending[k]:
+			var clipped := rect.intersection(window)
+			if not clipped.has_area(): continue
+			# Removed writers leave plain terrain: refill now. Otherwise keep the old content
+			# until the pass has drawn the new writers.
+			if writers == null or not bool(writers.call("queue_rect", k, clipped)):
+				work.append([k, clipped])
+				texels += clipped.get_area()
+		_writer_pending[k] = []
+	var sets := {}
+	for item: Array in ready:
+		var k := int(item[0])
+		if k >= levels or not _valid[k]: continue
+		var clipped := (item[1] as Rect2i).intersection(Rect2i(_origins[k], Vector2i(resolution, resolution)))
+		if not clipped.has_area(): continue
+		work.append([k, clipped, int(item[3]), item[2], int(item[4])])
+		texels += clipped.get_area()
+		if not sets.has(int(item[3])): sets[int(item[3])] = writers.call("set_texture", int(item[3]))
+	if writers != null: writers.call("dispatch")
 	stats.texels_last_frame = texels
 	stats.dispatches_last_frame = work.size()
 	if not work.is_empty() or _textures_dirty:
-		var request := {"work": work, "maps": _maps.duplicate(), "bytes": _parameter_bytes, "defines": defines, "allocate": _textures_dirty, "levels": levels, "resolution": resolution, "texel": texel}
+		_timestamp_frame += 1
+		var request := {"work": work, "maps": _maps.duplicate(), "bytes": _parameter_bytes, "defines": defines, "allocate": _textures_dirty, "levels": levels, "resolution": resolution, "texel": texel, "sets": sets, "measure": measure_gpu, "stamp": _timestamp_frame}
 		_textures_dirty = false
 		RenderingServer.call_on_render_thread(_render_update.bind(request))
 	stats.status = "Ready" if _valid.all(func(v: bool) -> bool: return v) else "Filling"
@@ -425,6 +520,9 @@ func release() -> void:
 	unpublish()
 	# Dependents first: the uniform set, then the pipeline before its shader.
 	var rids: Array[RID] = [_uniform_set, _pipeline, _shader, _params]
+	# Writer tile sets are freed with the shader they were made for.
+	_writer_sets = {}
+	_writer_fallback_set = RID()
 	rids.append_array(_textures)
 	rids.append_array(_samplers)
 	rids.append_array(_fallbacks)
@@ -435,7 +533,7 @@ func release() -> void:
 	_valid.fill(false); _needs_full.fill(true)
 	for k in _origins.size(): _origins[k] = Vector2i(2147483647, 2147483647)
 	if _rd != null and rids.any(func(rid: RID) -> bool: return rid.is_valid()):
-		RenderingServer.call_on_render_thread(_free_rids.bind(rids, [albedo_texture, normal_texture, height_texture]))
+		RenderingServer.call_on_render_thread(_free_rids.bind(rids, [albedo_texture, normal_texture, height_texture, cover_texture]))
 
 
 # ─────────────────────────────────────────────
@@ -540,21 +638,85 @@ func _render_update(request: Dictionary) -> void:
 		# A map is not uploaded yet: retry these rects with the next request.
 		for item: Array in request.work: (_pending[int(item[0])] as Array).append(item[1])
 		return
+	if bool(request.get("measure", false)): _read_timestamps(rd)
+	var writer_sets := {}
+	for index: int in request.sets:
+		var set_rid := _writer_set(rd, index, request.sets[index])
+		if set_rid.is_valid(): writer_sets[index] = set_rid
+	var fallback := _writer_fallback(rd)
 	var list := rd.compute_list_begin()
 	rd.compute_list_bind_compute_pipeline(list, _pipeline)
 	rd.compute_list_bind_uniform_set(list, _uniform_set, 0)
+	var bound := RID()
+	var stamp := "StrataSurfaceCache fill %d" % int(request.get("stamp", 0))
+	if bool(request.get("measure", false)): rd.capture_timestamp(stamp + " begin")
 	for item: Array in request.work:
 		var level := int(item[0])
 		var rect: Rect2i = item[1]
+		var tile_set := int(item[2]) if item.size() > 2 else -1
+		var writer_set: RID = writer_sets.get(tile_set, RID())
+		var origin: Vector2i = item[3] if writer_set.is_valid() else Vector2i.ZERO
+		var set_rid := writer_set if writer_set.is_valid() else fallback
+		if set_rid != bound:
+			rd.compute_list_bind_uniform_set(list, set_rid, 1)
+			bound = set_rid
 		var push := PackedByteArray()
-		push.resize(32)
+		push.resize(48)
 		push.encode_s32(0, rect.position.x); push.encode_s32(4, rect.position.y)
 		push.encode_s32(8, rect.size.x); push.encode_s32(12, rect.size.y)
 		push.encode_s32(16, level); push.encode_s32(20, int(request.resolution))
-		push.encode_float(24, float(request.texel) * float(1 << level)); push.encode_s32(28, 0)
+		push.encode_float(24, float(request.texel) * float(1 << level)); push.encode_s32(28, 1 if writer_set.is_valid() else 0)
+		push.encode_s32(32, origin.x); push.encode_s32(36, origin.y)
+		push.encode_s32(40, int(item[4]) if writer_set.is_valid() else 0)
 		rd.compute_list_set_push_constant(list, push, push.size())
 		rd.compute_list_dispatch(list, ceili(rect.size.x / 8.0), ceili(rect.size.y / 8.0), 1)
 	rd.compute_list_end()
+	if bool(request.get("measure", false)): rd.capture_timestamp(stamp + " end")
+
+
+## GPU time of fills recorded in an earlier frame (the device reports the frame before last).
+func _read_timestamps(rd: RenderingDevice) -> void:
+	var begins := {}
+	for i in rd.get_captured_timestamps_count():
+		var name := rd.get_captured_timestamp_name(i)
+		if not name.begins_with("StrataSurfaceCache fill "): continue
+		var key := name.trim_suffix(" begin").trim_suffix(" end")
+		if name.ends_with(" begin"): begins[key] = rd.get_captured_timestamp_gpu_time(i)
+		elif begins.has(key):
+			var ms := float(rd.get_captured_timestamp_gpu_time(i) - int(begins[key])) / 1000000.0
+			stats.gpu_ms = ms
+			stats.gpu_ms_total = float(stats.gpu_ms_total) + ms
+			stats.gpu_samples = int(stats.gpu_samples) + 1
+
+
+## Uniform set 1 for a writer tile: its viewport texture (the RD texture resolved now, so a
+## reallocated viewport rebinds).
+func _writer_set(rd: RenderingDevice, index: int, texture: RID) -> RID:
+	var rd_rid := RenderingServer.texture_get_rd_texture(texture)
+	if not rd_rid.is_valid(): return RID()
+	var joined := str(rd_rid.get_id()) + "|" + str(_shader.get_id())
+	var cached: Array = _writer_sets.get(index, [])
+	if not cached.is_empty() and cached[0] == joined and rd.uniform_set_is_valid(cached[1]): return cached[1]
+	if not cached.is_empty() and rd.uniform_set_is_valid(cached[1]): rd.free_rid(cached[1])
+	var rid := _texture_set(rd, rd_rid)
+	_writer_sets[index] = [joined, rid]
+	return rid
+
+
+## Uniform set 1 for plain fills: blank textures (fill.writers is 0, so they are not read).
+func _writer_fallback(rd: RenderingDevice) -> RID:
+	if _writer_fallback_set.is_valid() and rd.uniform_set_is_valid(_writer_fallback_set): return _writer_fallback_set
+	_writer_fallback_set = _texture_set(rd, _fallback_texture(rd, false))
+	return _writer_fallback_set
+
+
+func _texture_set(rd: RenderingDevice, texture: RID) -> RID:
+	var uniform := RDUniform.new()
+	uniform.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
+	uniform.binding = 0
+	uniform.add_id(_samplers[1])
+	uniform.add_id(texture)
+	return rd.uniform_set_create([uniform], _shader, 1)
 
 
 func _allocate(rd: RenderingDevice, level_count: int, cells: int) -> void:
@@ -563,10 +725,10 @@ func _allocate(rd: RenderingDevice, level_count: int, cells: int) -> void:
 	for rid: RID in _textures:
 		if rid.is_valid(): rd.free_rid(rid)
 	_textures = []
-	var formats := [RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R32_SFLOAT]
-	var layers := [level_count, level_count, level_count * 2]
-	var wrappers := [albedo_texture, normal_texture, height_texture]
-	for i in 3:
+	var formats := [RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R32_SFLOAT, RenderingDevice.DATA_FORMAT_R8_UNORM]
+	var layers := [level_count, level_count, level_count * 2, level_count]
+	var wrappers := [albedo_texture, normal_texture, height_texture, cover_texture]
+	for i in 4:
 		var format := RDTextureFormat.new()
 		format.format = formats[i]
 		format.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
@@ -583,6 +745,8 @@ func _ensure_pipeline(rd: RenderingDevice, defines: String) -> bool:
 	if _shader_key == defines and _pipeline.is_valid(): return true
 	if _shader.is_valid(): rd.free_rid(_shader)
 	_shader = RID(); _pipeline = RID(); _uniform_set = RID(); _uniform_key = ""
+	# Sets made for the old shader went with it.
+	_writer_sets = {}; _writer_fallback_set = RID()
 	_shader_key = defines
 	var code := "#version 450\n" + defines + _GLSL_PRELUDE
 	for name: String in _INCLUDES:
