@@ -399,7 +399,7 @@ All are binary `.res` resources, written through a temporary `<name>~.res` file.
 | AO overlay | 255 resident tiles (layers of one `Texture2DArray`), resolution a multiple of 4 |
 | Baked tint and AO map | at most 4097 texels per side: the default 4 m spacing covers terrains up to 16 km, a larger terrain needs a coarser `macro` spacing |
 | Bake | 512 MiB in total for all regions and their detail levels |
-| Heightfield exchanged with Houdini | 20 Mi samples per volume |
+| Heightfield exchanged with Houdini | 128 Mi samples per volume (`StrataProcedural.MAX_TRANSPORT_FIELD_SAMPLES`; an 8193² lattice at 0.5 m is 67 M). One native dense call takes at most 20 Mi (`MAX_FIELD_SAMPLES`), so larger snapshots and results are composed, validated and imported in row bands (`StrataProcedural.row_bands`) |
 | One input row | 64 Mi samples including companions; `terrain_max_samples` raises it to 512 Mi |
 | One cook's result | 512 Mi samples including ownership companions |
 | One Houdini exchange | 512 Mi samples and 64 volumes in total (the island's 1 m material pass moves 18 volumes of 4097² in and 8 out) |

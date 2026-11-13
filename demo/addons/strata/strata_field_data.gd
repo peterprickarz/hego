@@ -41,8 +41,19 @@ static func from_field(field: Dictionary) -> StrataFieldData:
 	result.sample_step_y = field.sample_step_y
 	result.resolution = field.image.get_size()
 	result.attrs = field.get("attrs", {}).duplicate(true)
-	if not result.data.replace_dense(result.channel, Vector2i.ZERO, field.image, field.get("ownership")):
-		return null
+	var image: Image = field.image
+	var ownership: Image = field.get("ownership")
+	# One native call takes at most StrataProcedural.MAX_FIELD_SAMPLES; a larger result (an
+	# 8193² lattice at 0.5 m) is written into the empty field band by band, the ownership image
+	# selecting the samples as replace_dense would.
+	var bands := StrataProcedural.row_bands(image.get_size())
+	if bands.size() == 1:
+		if not result.data.replace_dense(result.channel, Vector2i.ZERO, image, ownership):
+			return null
+		return result
+	for band in bands:
+		if not result.data.patch_dense(result.channel, band.position, image.get_region(band), ownership.get_region(band) if ownership != null else null):
+			return null
 	return result
 
 func copy_from(other: StrataFieldData) -> void:
