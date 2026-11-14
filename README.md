@@ -130,8 +130,8 @@ git add .gitmodules game/addons/hego
 git commit -m "Update HEGo development dependency"
 ```
 
-Use the actual repository-relative addon path; TheNetwork's Godot project is
-`game/`. A `.gitmodules` entry alone is insufficient: `git ls-files --stage --
+Use the actual repository-relative addon path; in this example the consumer's Godot
+project is `game/`. A `.gitmodules` entry alone is insufficient: `git ls-files --stage --
 game/addons/hego` must show one `160000` entry. If it lists individual addon files,
 preserve any local edits and migrate the vendored files to a proper submodule
 first. The switch script intentionally refuses this mixed state.
@@ -140,11 +140,11 @@ For live development, close the consumer's Godot editor before either switch
 (especially when changing native libraries), then run from the HEGo source repo:
 
 ```bash
-python3 scripts/hego-dev.py enable ../TheNetwork/game --checkout .
-python3 scripts/hego-dev.py status ../TheNetwork/game
-# Reopen TheNetwork and test; edits under addons/hego affect this HEGo checkout.
+python3 scripts/hego-dev.py enable ../MyGame/game --checkout .
+python3 scripts/hego-dev.py status ../MyGame/game
+# Reopen the consumer project and test; edits under addons/hego affect this HEGo checkout.
 # Close its editor again before restoring the published package.
-python3 scripts/hego-dev.py disable ../TheNetwork/game
+python3 scripts/hego-dev.py disable ../MyGame/game
 ```
 
 The script saves the initialized submodule directory under the consumer's Git

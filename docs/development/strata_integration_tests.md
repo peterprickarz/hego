@@ -30,7 +30,7 @@ Then run the disposable project harness, which stages all three addons:
 
 ```sh
 python3 scripts/run_terrain_houdini_integration.py \
-  --godot /home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64 \
+  --godot /path/to/godot-4.7.2 \
   --hfs /opt/hfs22.0 \
   --hego-library terrain/integration_bin/libhego.linux.template_debug.x86_64.so
 ```

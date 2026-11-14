@@ -41,7 +41,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "demo"
-GODOT = "/home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64"
+GODOT = "~/Godot/Godot_v4.7.2-stable_linux.x86_64"
 SHOWCASE = "res://island/island_showcase.tscn"
 EDITOR_SCENE = "res://scenes/terrain_island.tscn"
 

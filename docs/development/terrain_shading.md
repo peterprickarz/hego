@@ -40,7 +40,7 @@ The `STRATA_SURFACE_CACHE` variant (`StrataRenderSettings.surface_cache_displace
 Run the real Forward+ test after staging the standalone terrain addon into a disposable Godot project:
 
 ```sh
-DISPLAY=:0 /home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64 \
+DISPLAY=:0 /path/to/godot-4.7.2 \
   --path /path/to/disposable/terrain-project --rendering-method forward_plus \
   --resolution 1920x1080 --script res://tests/terrain_shading_test.gd \
   -- --output=/tmp/hego-terrain-prototype/smooth-shading

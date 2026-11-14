@@ -14,7 +14,7 @@ scons -f SConstruct.terrain platform=linux target=template_debug -j8
 Launch the visible demo, selecting the Godot 4.7.2 executable if it is not on `PATH`:
 
 ```sh
-python3 scripts/run_terrain_prototype.py --godot /home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64
+python3 scripts/run_terrain_prototype.py --godot /path/to/godot-4.7.2
 ```
 
 Open `demo/project.godot` and choose `res://scenes/terrain_prototype/main.tscn`, or use the optional launcher above. `--editor` opens that scene in the main demo editor. `--test` copies the installed Terrain addon, six suite scripts and prototype scenes into a disposable `/tmp/hego-terrain-tests-*` project, then imports and runs the four headless data, mesher, material-reference and frontend suites. `--test-renderer` uses the same isolation for its graphical suites. `--prepare-only` validates the installed addon directory without staging or starting Godot. Set `GODOT_BIN` to choose the executable without repeating `--godot`.
@@ -64,7 +64,7 @@ The renderer-process p95 is above the 1 ms planning target, so CPU work still ne
 Run `res://scenes/terrain_prototype/main.tscn` in the main demo project and use its **Save layers** control to write an editor fixture at `demo/generated/editor_example.tscn`. The runtime also accepts `--prepare-editor-example` to generate that fixture and exit. Open it with:
 
 ```sh
-/home/peter/Godot/Godot_v4.7.2-stable_linux.x86_64 --editor --path demo res://generated/editor_example.tscn
+/path/to/godot-4.7.2 --editor --path demo res://generated/editor_example.tscn
 ```
 
 The fixture contains the finite terrain and its three selectable layers. Its `.res` data and full-tile snapshots are experimental prototype formats, not production storage or a production undo format.

@@ -29,5 +29,10 @@ terrain/integration_bin/
 /demo/island/terrain/*~.res
 /demo/island/terrain/*/*~.res
 
-# Workstation-specific Godot MCP server entry (see docs/development/godot_mcp.md)
+# Workstation-specific Godot MCP server entries (see docs/development/godot_mcp.md)
 /.mcp.json
+/.codex/config.toml
+
+# HDA library list of the demo project: absolute paths of this workstation, written by the
+# HEGo library panel (Scan and Add rebuild it)
+/demo/hego_library.json

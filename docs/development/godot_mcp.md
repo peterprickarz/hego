@@ -30,7 +30,8 @@ sides must say 6560. The editor log shows `Server listening on 127.0.0.1:6560` w
 
 ## Client configuration
 
-`.mcp.json` is ignored by Git because the paths differ between workstations. A Claude Code entry:
+`.mcp.json` (Claude Code) and `.codex/config.toml` (Codex, the same server as `[mcp_servers.godot]`)
+are ignored by Git because the paths differ between workstations. A Claude Code entry:
 
 ```json
 {
