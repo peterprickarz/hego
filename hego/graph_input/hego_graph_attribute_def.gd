@@ -2,7 +2,7 @@
 class_name HEGoGraphAttributeDef
 extends Resource
 
-## One attribute a [HEGoGraphInput3D] can store on its points or connections.
+## One attribute a [HEGoGraph3D] can store on its points or connections.
 ##
 ## Lives in a [HEGoGraphAttributes] list on a child of the graph. The name, owner
 ## and value type decide what is sent to Houdini; the rest only shapes the editor UI.
@@ -16,6 +16,8 @@ enum ValueType {
 	FLOAT,
 	INT,
 	STRING,
+	## Three floats (a Houdini vector of tuple size 3), stored as a [PackedVector3Array].
+	VECTOR3,
 }
 
 ## Houdini attribute name. Must be unique per owner on one graph.
@@ -66,6 +68,14 @@ enum ValueType {
 		default_string = value
 		emit_changed()
 
+## Default for a newly created point or connection when [member value_type] is VECTOR3.
+@export var default_vector: Vector3 = Vector3.ZERO:
+	set(value):
+		if default_vector == value:
+			return
+		default_vector = value
+		emit_changed()
+
 ## When [member value_type] is INT, the editor shows a checkbox and stores 0 or 1.
 @export var int_as_toggle: bool = false:
 	set(value):
@@ -90,6 +100,8 @@ func default_value() -> Variant:
 			return default_int
 		ValueType.STRING:
 			return default_string
+		ValueType.VECTOR3:
+			return default_vector
 	return null
 
 
@@ -117,6 +129,11 @@ func make_array(size: int) -> Variant:
 			for i in size:
 				strings[i] = fill_str
 			return strings
+		ValueType.VECTOR3:
+			var vectors := PackedVector3Array()
+			vectors.resize(size)
+			vectors.fill(default_vector)
+			return vectors
 	return null
 
 
@@ -129,4 +146,20 @@ func matches_array(array: Variant) -> bool:
 			return array is PackedInt32Array
 		ValueType.STRING:
 			return array is PackedStringArray
+		ValueType.VECTOR3:
+			return array is PackedVector3Array
 	return false
+
+
+## The value type that stores [param array], or -1 when no type does. Used to declare the
+## attributes a cook sends back.
+static func value_type_of(array: Variant) -> int:
+	if array is PackedFloat32Array or array is PackedFloat64Array:
+		return ValueType.FLOAT
+	if array is PackedInt32Array or array is PackedInt64Array:
+		return ValueType.INT
+	if array is PackedStringArray:
+		return ValueType.STRING
+	if array is PackedVector3Array:
+		return ValueType.VECTOR3
+	return -1

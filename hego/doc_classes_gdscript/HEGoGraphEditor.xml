@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphEditor" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 	<brief_description>
-		Viewport editing for a selected [HEGoGraphInput3D].
+		Viewport editing for a selected [HEGoGraph3D].
 	</brief_description>
 	<description>
 		Point selection and the move/rotate/scale widget are Godot's built-in subgizmos. This object only handles Draw-mode clicks, connection picks, empty clicks that clear the selection, the right-click menu, and the attribute strip.
@@ -140,7 +140,7 @@
 		</member>
 		<member name="attrib_panel" type="Control" setter="" getter="">
 		</member>
-		<member name="graph" type="HEGoGraphInput3D" setter="" getter="">
+		<member name="graph" type="HEGoGraph3D" setter="" getter="">
 		</member>
 		<member name="mode" type="int" setter="" getter="" enum="HEGoGraphEditor.Mode" default="1">
 		</member>

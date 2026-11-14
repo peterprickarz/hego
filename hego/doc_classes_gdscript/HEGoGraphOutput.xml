@@ -1,0 +1,56 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphOutput" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Turns output points flagged as graph points into [HEGoGraph3D] nodes under [code]Outputs/[/code].
+	</brief_description>
+	<description>
+		Houdini polylines reach Godot through the loose-point output: the HDA keeps its curve points (Add SOP, "Delete Geometry But Keep the Points") and links each point to the one before it on its curve. 
+[b]Point attributes the HDA sets[/b] [br]- [code]hego_graph[/code] (int): 1 on every graph point. Other points are left to the other handlers. [br]- [code]hego_graph_path[/code] (string, optional): node path under [code]Outputs[/code] of the graph the point belongs to, default [code]Graph[/code]. One cook can build several graphs. [br]- [code]hego_graph_id[/code] (int, optional): an id unique within the cook, default the point number. [br]- [code]hego_graph_prev[/code] (int, optional): the id of the point this one connects to, -1 for none. A polyline links every point but the first to its predecessor; a shared id (a fork point) joins curves into one graph. [br]- [code]hego_graph_conn_&lt;name&gt;[/code]: becomes the connection attribute [code]&lt;name&gt;[/code] of the connection from this point to its predecessor. [br]- Every other point attribute except [code]P[/code] and the [code]hego_[/code] prefix becomes a point attribute of the graph, declared on an [code]Attributes[/code] child: floats, ints, strings and three-float vectors. 
+A graph built this way edits, saves and feeds another cook like an authored one.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="output_phase" qualifiers="static">
+			<return type="String" />
+			<description>
+				Name of the cook phase this handler is timed under.
+			</description>
+		</method>
+		<method name="should_handle" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="summary" type="Dictionary" />
+			<description>
+				Whether the cook produced graph points.
+			</description>
+		</method>
+		<method name="handle" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+				Fetches the graph points and builds one [HEGoGraph3D] per [code]hego_graph_path[/code].
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;output&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="FILTER_ATTRIB" value="&quot;hego_graph&quot;">
+		</constant>
+		<constant name="PATH_ATTRIB" value="&quot;hego_graph_path&quot;">
+		</constant>
+		<constant name="ID_ATTRIB" value="&quot;hego_graph_id&quot;">
+		</constant>
+		<constant name="PREV_ATTRIB" value="&quot;hego_graph_prev&quot;">
+		</constant>
+		<constant name="CONNECTION_PREFIX" value="&quot;hego_graph_conn_&quot;">
+		</constant>
+		<constant name="DEFAULT_PATH" value="&quot;Graph&quot;">
+			Folder used when a point does not name its graph.
+		</constant>
+		<constant name="ATTRIBUTES_NAME" value="&quot;Attributes&quot;">
+			Name of the attribute schema child the handler creates.
+		</constant>
+	</constants>
+</class>

@@ -27,6 +27,9 @@
 		<member name="read_attribs" type="PackedStringArray" setter="" getter="">
 			Further attribute names to read from the cook, beyond the toggles above.
 		</member>
+		<member name="custom_attribs" type="PackedStringArray" setter="" getter="">
+			Up to four point attributes exported as the custom vertex channels, in order ([code]ARRAY_CUSTOM0..3[/code], RGBA float). A blank entry skips that channel. Surfaces that carry them hold [code]custom_format_flags[/code], to pass as the flags argument of [method ArrayMesh.add_surface_from_arrays].
+		</member>
 		<member name="filter_attribs" type="PackedStringArray" setter="" getter="">
 			Attribute names to filter the primitives on, one per entry of [member filter_attrib_values].
 		</member>

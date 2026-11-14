@@ -1,7 +1,7 @@
 class_name HEGoGraphPathMesh
 extends RefCounted
 
-## Builds the path visualisation of a [HEGoGraphInput3D]: a translucent ribbon or tube
+## Builds the path visualisation of a [HEGoGraph3D]: a translucent ribbon or tube
 ## along every connection, with an outline, in the graph's local space.
 ##
 ## Ribbon rows are oriented to the surface normal (from a [HEGoGraphSurface], else up).
@@ -13,7 +13,7 @@ extends RefCounted
 const MAX_SEGMENTS := 512
 const MIN_EDGE := 0.0001
 
-var _graph: HEGoGraphInput3D
+var _graph: HEGoGraph3D
 var _surface: HEGoGraphSurface
 var _fill := PackedVector3Array()
 var _lines := PackedVector3Array()
@@ -32,12 +32,12 @@ var _conn_width := PackedFloat32Array()
 
 
 ## Builds the mesh for [param graph]. [param surface] may be null.
-static func build(graph: HEGoGraphInput3D, surface: HEGoGraphSurface) -> ArrayMesh:
+static func build(graph: HEGoGraph3D, surface: HEGoGraphSurface) -> ArrayMesh:
 	var builder := HEGoGraphPathMesh.new()
 	return builder._build(graph, surface)
 
 
-func _build(graph: HEGoGraphInput3D, surface: HEGoGraphSurface) -> ArrayMesh:
+func _build(graph: HEGoGraph3D, surface: HEGoGraphSurface) -> ArrayMesh:
 	_graph = graph
 	_surface = surface if surface != null and surface.is_available() else null
 	_drape = graph.path_drape
@@ -49,7 +49,7 @@ func _build(graph: HEGoGraphInput3D, surface: HEGoGraphSurface) -> ArrayMesh:
 	_read_widths()
 	_read_nodes()
 
-	if graph.path_shape == HEGoGraphInput3D.PathShape.TUBE:
+	if graph.path_shape == HEGoGraph3D.PathShape.TUBE:
 		_build_tube()
 	else:
 		_build_ribbon()

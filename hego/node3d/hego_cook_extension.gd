@@ -44,6 +44,15 @@ func cook_commit(_context: HEGoOutputContext) -> Dictionary:
 	return {"ok": true}
 
 
+## The cook finished: every output handler has run and the [code]Outputs[/code] subtree holds
+## the new result. Work that needs that result - post-processing it, saving files, telling
+## other nodes - goes here, so it runs on every cook of the host, however it was started
+## (the panel's Recook, a Session Sync update, a script). Return [code]ok: false[/code] to
+## mark the cook as failed; the output stays as built.
+func cook_finished(_context: HEGoOutputContext) -> Dictionary:
+	return {"ok": true}
+
+
 ## The cook stopped before finishing, at any step, with [param message] saying why.
 func cook_failed(_host: Node, _cook: Dictionary, _message: String) -> void:
 	pass

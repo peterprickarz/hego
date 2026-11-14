@@ -149,12 +149,22 @@ func cook() -> void:
 
 	if not skipped.is_empty():
 		HEGoLog.get_singleton().debug(LOG_CATEGORY, "Nothing to do for: " + ", ".join(skipped))
+
+	# Extensions follow up on the finished output (post-processing, saving).
+	for extension in extensions:
+		timings.begin_phase()
+		var finished: Dictionary = await extension.cook_finished(context)
+		timings.end_phase("extension_finish")
+		if not finished.get("ok", false):
+			_cook_failed(extensions, cook_state, String(finished.get("message", "A cook extension could not finish")), extension)
+			HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
+			return
 	HEGoLog.get_singleton().info(LOG_CATEGORY, timings.format_summary())
 	_last_cook_succeeded = true
 
 
-## The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh and
-## object output, then every [HEGoOutputHandler] other addons provide (see
+## The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh,
+## object and graph output, then every [HEGoOutputHandler] other addons provide (see
 ## [method HEGoOutputHandler.extension_handlers]), then curve output.
 ##
 ## Each has [code]output_phase()[/code], [code]should_handle(summary)[/code] and
@@ -169,6 +179,7 @@ func output_handlers() -> Array:
 		HEGoMeshOutput,
 		HEGoMultiMeshOutput,
 		HEGoObjectOutput,
+		HEGoGraphOutput,
 	]
 	handlers.append_array(HEGoOutputHandler.extension_handlers())
 	handlers.append(HEGoCurveOutput)

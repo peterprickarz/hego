@@ -5,9 +5,13 @@ extends RefCounted
 
 ## Bounds apply before native allocation. Value/coverage transport images share this
 ## aggregate budget (64 Mi by default, at most 512 Mi: nine 4097² channels with their
-## companions); each individual image also has a 20 Mi sample cap.
+## companions). One native dense call (compose, read, import, validate) handles at most
+## MAX_FIELD_SAMPLES (20 Mi); a snapshot or result image up to MAX_TRANSPORT_FIELD_SAMPLES
+## (128 Mi: an 8193² lattice at 0.5 m is 67 M) is composed, validated and imported in row
+## bands of at most MAX_FIELD_SAMPLES ([method row_bands]), bit for bit as one call would.
 const MAX_SAMPLES := 512 * 1024 * 1024
 const MAX_FIELD_SAMPLES := 20 * 1024 * 1024
+const MAX_TRANSPORT_FIELD_SAMPLES := 128 * 1024 * 1024
 const DEFAULT_SAMPLES := 64 * 1024 * 1024
 const OWNERSHIP_SUFFIX := "__ownership"
 static var _tickets: Dictionary = {}
@@ -229,7 +233,7 @@ static func create_snapshot(layer: StrataLayer, mode: String = "cumulative", opt
 			minimum = Vector2i(floor(low.x), floor(low.y)); maximum = Vector2i(ceil(high.x), ceil(high.y))
 		var width := maximum.x - minimum.x + 1
 		var height := maximum.y - minimum.y + 1
-		if width < 1 or height < 1 or width > MAX_FIELD_SAMPLES or height > MAX_FIELD_SAMPLES or width * height > MAX_FIELD_SAMPLES or width * height * 2 + sample_count > limit:
+		if width < 1 or height < 1 or width > MAX_FIELD_SAMPLES or height > MAX_FIELD_SAMPLES or width * height > MAX_TRANSPORT_FIELD_SAMPLES or width * height * 2 + sample_count > limit:
 			return _error("Snapshot exceeds its bounded sample budget; choose coarser input spacing/bounds")
 		sample_count += width * height * 2
 		var start := origin + step_x * minimum.x + step_y * minimum.y
@@ -242,13 +246,68 @@ static func create_snapshot(layer: StrataLayer, mode: String = "cumulative", opt
 		var name: String = layout.name
 		var dense: Dictionary
 		if mode == "raw":
-			dense = layout.storage.read_dense(StringName(name), layout.minimum, layout.resolution)
+			dense = _read_dense_banded(layout.storage, StringName(name), layout.minimum, layout.resolution)
 		else:
-			dense = StrataLayerData.compose_dense(_capture_layers(terrain, StringName(name), layer), StringName(name), layout.origin, layout.step_x, layout.step_y, layout.resolution, terrain.base_bounds, true, layout.height_offset)
+			dense = _compose_dense_banded(_capture_layers(terrain, StringName(name), layer), StringName(name), layout.origin, layout.step_x, layout.step_y, layout.resolution, terrain.base_bounds, layout.height_offset)
 		if not dense.ok: return dense
 		fields.append({"name": name, "image": dense.image, "sample_origin": layout.origin, "sample_step_x": layout.step_x, "sample_step_y": layout.step_y, "attrs": layout.attrs})
 		fields.append({"name": name + OWNERSHIP_SUFFIX, "image": dense.ownership if mode == "raw" else dense.coverage, "sample_origin": layout.origin, "sample_step_x": layout.step_x, "sample_step_y": layout.step_y, "attrs": {"role": "ownership" if mode == "raw" else "coverage", "channel": name, "snapshot_mode": mode}})
 	return {"ok": true, "message": "%s snapshot: %d fields, %d samples" % [mode, fields.size(), sample_count], "fields": fields, "token": _token(layer, mode), "mode": mode}
+
+## Row bands of at most MAX_FIELD_SAMPLES samples (one native dense call each) that tile a
+## lattice of [param resolution]; a single band when the lattice fits one call.
+static func row_bands(resolution: Vector2i) -> Array[Rect2i]:
+	var result: Array[Rect2i] = []
+	var rows := maxi(1, MAX_FIELD_SAMPLES / maxi(1, resolution.x))
+	var y := 0
+	while y < resolution.y:
+		var count := mini(rows, resolution.y - y)
+		result.append(Rect2i(0, y, resolution.x, count))
+		y += count
+	return result
+
+## StrataLayerData.compose_dense with coverage over a lattice that may exceed one native call:
+## each row band is composed with its index offset (the whole lattice's expression, so the
+## result is bit-identical to one call) and copied into one image and one coverage image.
+static func _compose_dense_banded(descriptors: Array, channel: StringName, origin: Vector3, step_x: Vector3, step_y: Vector3, size: Vector2i, bounds: Rect2, height_offset: float) -> Dictionary:
+	var bands := row_bands(size)
+	if bands.size() == 1:
+		return StrataLayerData.compose_dense(descriptors, channel, origin, step_x, step_y, size, bounds, true, height_offset)
+	var image := Image.create_empty(size.x, size.y, false, Image.FORMAT_RF)
+	var coverage := Image.create_empty(size.x, size.y, false, Image.FORMAT_RF)
+	for band in bands:
+		var part: Dictionary = StrataLayerData.compose_dense(descriptors, channel, origin, step_x, step_y, band.size, bounds, true, height_offset, band.position)
+		if not part.get("ok", false): return part
+		image.blit_rect(part.image, Rect2i(Vector2i.ZERO, band.size), band.position)
+		coverage.blit_rect(part.coverage, Rect2i(Vector2i.ZERO, band.size), band.position)
+	return {"ok": true, "image": image, "coverage": coverage}
+
+## StrataLayerData.read_dense over a rectangle that may exceed one native call, in row bands.
+static func _read_dense_banded(storage: StrataLayerData, channel: StringName, minimum: Vector2i, size: Vector2i) -> Dictionary:
+	var bands := row_bands(size)
+	if bands.size() == 1:
+		return storage.read_dense(channel, minimum, size)
+	var image := Image.create_empty(size.x, size.y, false, Image.FORMAT_RF)
+	var ownership := Image.create_empty(size.x, size.y, false, Image.FORMAT_RF)
+	var owned := 0
+	for band in bands:
+		var part: Dictionary = storage.read_dense(channel, minimum + band.position, band.size)
+		if not part.get("ok", false): return part
+		image.blit_rect(part.image, Rect2i(Vector2i.ZERO, band.size), band.position)
+		ownership.blit_rect(part.ownership, Rect2i(Vector2i.ZERO, band.size), band.position)
+		owned += int(part.get("owned_count", 0))
+	return {"ok": true, "image": image, "ownership": ownership, "owned_count": owned}
+
+## StrataLayerData.validate_dense for an image (and optional ownership) of up to
+## MAX_TRANSPORT_FIELD_SAMPLES, checked band by band.
+static func validate_dense_banded(image: Image, ownership: Image = null) -> Dictionary:
+	var bands := row_bands(image.get_size())
+	if bands.size() == 1:
+		return StrataLayerData.validate_dense(image, ownership)
+	for band in bands:
+		var checked: Dictionary = StrataLayerData.validate_dense(image.get_region(band), ownership.get_region(band) if ownership != null else null)
+		if not checked.get("ok", false): return checked
+	return {"ok": true, "message": "Dense field validated in %d row bands" % bands.size()}
 
 static func _target_order(layer: StrataLayer) -> Array:
 	var result: Array = []
@@ -359,7 +418,7 @@ static func reject(ticket: Dictionary, message: String) -> Dictionary:
 static func validate_field(field: Dictionary) -> Dictionary:
 	if not field.get("name") is String or String(field.name).strip_edges().is_empty() or String(field.name).ends_with(OWNERSHIP_SUFFIX): return _error("Invalid/reserved result channel name")
 	var image: Image = field.get("image")
-	if image == null or image.get_format() != Image.FORMAT_RF or image.get_width() < 1 or image.get_height() < 1 or image.get_width() * image.get_height() > MAX_FIELD_SAMPLES: return _error("Each result needs a bounded, nonempty RF image")
+	if image == null or image.get_format() != Image.FORMAT_RF or image.get_width() < 1 or image.get_height() < 1 or image.get_width() * image.get_height() > MAX_TRANSPORT_FIELD_SAMPLES: return _error("Each result needs a bounded, nonempty RF image")
 	for property in ["sample_origin", "sample_step_x", "sample_step_y"]:
 		if not field.get(property) is Vector3 or not field[property].is_finite(): return _error("Result field basis must be finite Vector3 values")
 	var x: Vector3 = field.sample_step_x; var y: Vector3 = field.sample_step_y
@@ -369,7 +428,7 @@ static func validate_field(field: Dictionary) -> Dictionary:
 	if field.get("attrs", {}).get("role", "value") != "value": return _error("Ownership/coverage metadata volumes cannot become ordinary scalar channels")
 	var owned: Image = field.get("ownership")
 	if owned != null and (owned.get_format() != Image.FORMAT_RF or owned.get_size() != image.get_size()): return _error("Ownership must be an independent matching RF image")
-	return StrataLayerData.validate_dense(image, owned)
+	return validate_dense_banded(image, owned)
 
 ## Checks a result field that carries a finished [StrataFieldData] as [code]field_data[/code]
 ## (see [method commit_fields]): a named scalar channel on a finite orthogonal horizontal

@@ -25,13 +25,15 @@
 		<method name="fetch_surface_groups" qualifiers="static">
 			<return type="Dictionary" />
 			<param index="0" name="context" type="HEGoOutputContext" />
+			<param index="1" name="custom_attribs" type="PackedStringArray" default="PackedStringArray(...)" />
 			<description>
-				Fetches the cook's surfaces and groups them the way the HDA asked for.  Returns [code]{ mesh_instance_key: { material_key: surface } }[/code], keyed by the hego_mesh_instance and hego_material attributes, with a [code]null[/code] key wherever the geometry does not name one. Empty when the fetch failed or produced nothing.  Nothing here touches the scene, so a node that wants to place the result itself can use this and [method build_array_mesh] instead of [method handle].
+				Fetches the cook's surfaces and groups them the way the HDA asked for.  Returns [code]{ mesh_instance_key: { material_key: surface } }[/code], keyed by the hego_mesh_instance and hego_material attributes, with a [code]null[/code] key wherever the geometry does not name one. Empty when the fetch failed or produced nothing.  Nothing here touches the scene, so a node that wants to place the result itself can use this and [method build_array_mesh] instead of [method handle]. [param custom_attribs] names the point attributes for the custom channels, see [constant CUSTOM_ATTRIBS] (at most four; a blank entry skips that channel).
 			</description>
 		</method>
 		<method name="fetch_meshes" qualifiers="static">
 			<return type="Dictionary" />
 			<param index="0" name="context" type="HEGoOutputContext" />
+			<param index="1" name="custom_attribs" type="PackedStringArray" default="PackedStringArray(...)" />
 			<description>
 				One [ArrayMesh] per mesh instance the HDA asked for, without touching the scene.  Returns [code]{ mesh_instance_key: ArrayMesh }[/code]. This is the half of [method handle] a custom node usually wants: it builds the meshes and leaves where they go, and whether they are saved as resources, to the caller.
 			</description>
@@ -66,6 +68,13 @@
 				Replaces the surfaces of [param target_mesh] with those of [param source_mesh].  Used instead of saving a new resource so the existing [ArrayMesh] object keeps its identity, and everything already pointing at it sees the update.
 			</description>
 		</method>
+		<method name="custom_format_flags" qualifiers="static">
+			<return type="int" />
+			<param index="0" name="format" type="int" />
+			<description>
+				The custom channel format bits of a surface format, which [method ArrayMesh.add_surface_from_arrays] needs again to rebuild that surface.
+			</description>
+		</method>
 		<method name="load_mesh_resource_fresh" qualifiers="static">
 			<return type="Mesh" />
 			<param index="0" name="save_path" type="String" />
@@ -80,6 +89,9 @@
 		</constant>
 		<constant name="POINT_ATTRIBS" value="[&quot;N&quot;, &quot;Cd&quot;, &quot;uv&quot;, &quot;uv2&quot;, &quot;tangents&quot;]">
 			Point attributes read for every surface. P always comes along.
+		</constant>
+		<constant name="CUSTOM_ATTRIBS" value="[&quot;hego_custom0&quot;, &quot;hego_custom1&quot;, &quot;hego_custom2&quot;, &quot;hego_custom3&quot;]">
+			Point attributes exported as the custom vertex channels, in order: the attribute at index i becomes [constant Mesh.ARRAY_CUSTOM0] + i, packed to RGBA float (a float or int of tuple size 1-4; missing components are 0). Shaders read them as CUSTOM0..CUSTOM3. A channel whose attribute the cook does not have is left out of the surface.
 		</constant>
 		<constant name="MESH_INSTANCE_ATTRIB" value="&quot;hego_mesh_instance&quot;">
 			Primitive attributes the output is grouped by: one mesh per instance name, one surface per material within it.
