@@ -19,6 +19,11 @@ class_name HEGoFetchSurfacesConfig
 @export var tangents: bool
 ## Further attribute names to read from the cook, beyond the toggles above.
 @export var read_attribs : PackedStringArray
+## Up to four point attributes exported as the custom vertex channels, in order
+## ([code]ARRAY_CUSTOM0..3[/code], RGBA float). A blank entry skips that channel. Surfaces
+## that carry them hold [code]custom_format_flags[/code], to pass as the flags argument of
+## [method ArrayMesh.add_surface_from_arrays].
+@export var custom_attribs : PackedStringArray
 ## Attribute names to filter the primitives on, one per entry of [member filter_attrib_values].
 @export var filter_attribs : PackedStringArray
 ## The value each attribute in [member filter_attribs] has to carry for a primitive to be kept.

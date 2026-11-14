@@ -114,6 +114,7 @@ Returns an empty dictionary when no points pass filters, when no mesh part exist
 <return type="HEGoTask" />
 <param index="0" name="point_attribs" type="PackedStringArray" default="PackedStringArray()" />
 <param index="1" name="preload_attribs" type="PackedStringArray" default="PackedStringArray()" />
+<param index="2" name="custom_attribs" type="PackedStringArray" default="PackedStringArray()" />
 <description>
 Submits a task returning a [HEGoSurfaceOutput]: the cooked surfaces, read and split from code rather than through a fetch configuration.
 
@@ -123,6 +124,8 @@ var output = await agent.task(asset_node.get_surface_output(["N", "uv"], ["hego_
 for material in output.split_by("hego_material"):
     var surface = by_material[material].get_surface()
 [/codeblock]
+
+[code]custom_attribs[/code] names up to four point attributes, in channel order, that each surface carries as [constant Mesh.ARRAY_CUSTOM0] to [constant Mesh.ARRAY_CUSTOM3], packed to RGBA float per vertex (float or int, tuple size 1 to 4; missing components are 0). A blank name, or an attribute the cook does not have, leaves that channel out. Surfaces with custom channels also hold [code]custom_format_flags[/code], the flags argument [method ArrayMesh.add_surface_from_arrays] needs to add them; [method HEGoMeshOutput.build_array_mesh] passes it.
 
 Attribute values are cached per cook and shared with [method fetch_surfaces] and [method get_point_output].
 </description>
@@ -137,6 +140,7 @@ Submits a task to fetch surface data using a surface-fetch configuration resourc
 
 Config fields are interpreted as follows:
 [code]normal[/code], [code]color[/code], [code]uv[/code], [code]uv2[/code], [code]tangents[/code]: toggles for point-derived channels included in generated Godot surface arrays.
+[code]custom_attribs[/code]: up to four point attributes exported as [code]ARRAY_CUSTOM0..3[/code] (RGBA float), as in [method get_surface_output].
 [code]read_attribs[/code], [code]filter_attribs[/code], [code]filter_attrib_values[/code], [code]split_attribs[/code]: primitive-attribute lists used for metadata readback, filtering, and grouping.
 [code]filter_attribs[/code] and [code]filter_attrib_values[/code] are paired by index.
 [code]filter_attribs[/code] and [code]filter_attrib_values[/code] should have the same length.

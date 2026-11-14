@@ -19,7 +19,7 @@ func _ready() -> void:
 ## Every schema row is always built, disabled when nothing of its owner is
 ## selected, so the strip (and the viewport above it) never changes height
 ## as the selection changes.
-func rebuild(graph: HEGoGraphInput3D, selected_points: PackedInt32Array, selected_connections: PackedInt32Array) -> void:
+func rebuild(graph: HEGoGraph3D, selected_points: PackedInt32Array, selected_connections: PackedInt32Array) -> void:
 	for child in get_children():
 		if child != _status:
 			# Detach now: queue_free alone leaves the old rows in the layout
@@ -115,6 +115,27 @@ func _add_row(def: HEGoGraphAttributeDef, owner_kind: int, value: Variant, enabl
 			attrib_changed.emit(owner_kind, def.attribute_name, text)
 		)
 		row.add_child(edit)
+	elif def.value_type == HEGoGraphAttributeDef.ValueType.VECTOR3:
+		# One spin box per component; a change keeps the other two of the shown value.
+		# Shared through an array: lambdas capture locals by value.
+		var shown: Array = [value if not mixed and value is Vector3 else def.default_vector]
+		for axis in 3:
+			var spin := SpinBox.new()
+			spin.allow_greater = true
+			spin.allow_lesser = true
+			spin.step = 0.001
+			spin.custom_minimum_size.x = 70
+			spin.prefix = "xyz"[axis]
+			if not mixed:
+				spin.value = shown[0][axis]
+			spin.editable = enabled
+			spin.value_changed.connect(func(v: float) -> void:
+				var next: Vector3 = shown[0]
+				next[axis] = v
+				shown[0] = next
+				attrib_changed.emit(owner_kind, def.attribute_name, next)
+			)
+			row.add_child(spin)
 	else:
 		var spin := SpinBox.new()
 		spin.allow_greater = true

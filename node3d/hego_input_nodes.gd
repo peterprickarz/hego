@@ -5,7 +5,7 @@ extends RefCounted
 ## Turns the Godot nodes wired into a [HEGoNode3D] into HEGo input nodes.
 ##
 ## Which input node a Godot node needs depends on its type: paths become curve
-## inputs, meshes and CSG shapes become geometry inputs, and a [HEGoGraphInput3D]
+## inputs, meshes and CSG shapes become geometry inputs, and a [HEGoGraph3D]
 ## becomes points and polyline primitives. Other addons add kinds of their own, such as
 ## terrains, through [HEGoInputHandler], which is consulted first. The node path of the
 ## source is always sent along as [code]_hego_node_path[/code] so an HDA can tell its
@@ -121,7 +121,7 @@ static func resolve_paths(host: Node, paths: Array, settings: Dictionary) -> Arr
 static func is_compatible_source(node: Node) -> bool:
 	if handler_for(node) != null:
 		return true
-	if node is HEGoGraphInput3D:
+	if node is HEGoGraph3D:
 		return not node.points.is_empty()
 	if node is Path3D:
 		return node.curve != null and node.curve.point_count > 0
@@ -195,7 +195,7 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 		"value": input_node_path,
 	}]
 
-	if input is HEGoGraphInput3D:
+	if input is HEGoGraph3D:
 		var counts := PackedInt32Array()
 		counts.resize(input.connection_count())
 		counts.fill(2)
@@ -251,7 +251,7 @@ static func sync(host: Node, existing_node: Variant, input_node_path: Variant, s
 		await _input_task(host, csg_node.set_transform(input.global_transform), settings)
 		return csg_node
 
-	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s is not a Path3D, HEGoGraphInput3D, MeshInstance3D or CSGShape3D, and no input handler accepts it." % str(input_node_path))
+	HEGoLog.get_singleton().warning(LOG_CATEGORY, "Input %s is not a Path3D, HEGoGraph3D, MeshInstance3D or CSGShape3D, and no input handler accepts it." % str(input_node_path))
 	return existing_node
 
 
@@ -283,9 +283,9 @@ static func _resolve_input_node(host: Node, input_node_path: Variant) -> Node:
 	return host.get_node_or_null(input_node_path)
 
 
-## Point and connection attributes from a [HEGoGraphInput3D], skipped when that
+## Point and connection attributes from a [HEGoGraph3D], skipped when that
 ## owner currently has no elements.
-static func _graph_attribs(graph: HEGoGraphInput3D) -> Array:
+static func _graph_attribs(graph: HEGoGraph3D) -> Array:
 	var attrs := []
 	if graph.points.size() > 0:
 		for name in graph.point_attribs:

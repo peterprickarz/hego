@@ -1,0 +1,261 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraph3D" inherits="Node3D" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		A 3D graph of points and connections: authored as a [HEGoNode3D] input, or built by a cook's graph output (see [HEGoGraphOutput]).
+	</brief_description>
+	<description>
+		Add a [HEGoGraphAttributes] child to declare the attributes each point and connection can carry; a graph built by a cook gets one listing what the HDA sent. Positions are stored in local space. Connections are undirected unique pairs; a point with three or more connections is an intersection. Any graph can feed another cook's input.  Large graphs (tens of thousands of points) draw only their connection lines while they are not being edited; point markers appear when the graph is selected, up to [member marker_limit].
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="connection_count">
+			<return type="int" />
+			<description>
+				Number of connections, i.e. half of [member connections].
+			</description>
+		</method>
+		<method name="get_connection">
+			<return type="Vector2i" />
+			<param index="0" name="index" type="int" />
+			<description>
+				The two point indices of connection [param index], smaller first.
+			</description>
+		</method>
+		<method name="add_point">
+			<return type="int" />
+			<param index="0" name="position" type="Vector3" />
+			<description>
+				Appends a point at [param position] and returns its index.
+			</description>
+		</method>
+		<method name="set_point_position">
+			<return type="void" />
+			<param index="0" name="index" type="int" />
+			<param index="1" name="position" type="Vector3" />
+			<description>
+				Moves point [param index] to [param position].
+			</description>
+		</method>
+		<method name="set_point_position_live">
+			<return type="void" />
+			<param index="0" name="index" type="int" />
+			<param index="1" name="position" type="Vector3" />
+			<description>
+				Sets a point during a live gizmo drag without emitting [signal graph_changed].
+			</description>
+		</method>
+		<method name="snapped_to_surface">
+			<return type="Vector3" />
+			<param index="0" name="position" type="Vector3" />
+			<param index="1" name="surface" type="HEGoGraphSurface" />
+			<description>
+				[param position] (graph local) with its height replaced by the surface under it plus [member surface_offset]. Unchanged where there is no surface.
+			</description>
+		</method>
+		<method name="snap_all_to_surface">
+			<return type="int" />
+			<description>
+				Moves every point onto the surface under it ([member surface_provider], else physics) plus [member surface_offset]. Returns the number of points that moved.
+			</description>
+		</method>
+		<method name="request_snap_all">
+			<return type="void" />
+			<description>
+				What the "Snap all points to surface" button calls: lets an editor do it as an undoable action through [signal snap_all_requested], else snaps directly.
+			</description>
+		</method>
+		<method name="get_path_mesh">
+			<return type="ArrayMesh" />
+			<description>
+				The path visualisation mesh (fill and outline surfaces, in local space), rebuilt only when the graph or a visualisation property changed since the last call. Null when [member path_mode] is off. The editor gizmo draws it.
+			</description>
+		</method>
+		<method name="remove_points">
+			<return type="void" />
+			<param index="0" name="indices" type="PackedInt32Array" />
+			<description>
+				Deletes the given point indices and any connection that used them. Remaining connection indices are remapped.
+			</description>
+		</method>
+		<method name="add_connection">
+			<return type="int" />
+			<param index="0" name="a" type="int" />
+			<param index="1" name="b" type="int" />
+			<description>
+				Adds an undirected connection between [param a] and [param b]. Returns the new connection index, or [code]-1[/code] if the pair is invalid or already present.
+			</description>
+		</method>
+		<method name="has_connection">
+			<return type="bool" />
+			<param index="0" name="a" type="int" />
+			<param index="1" name="b" type="int" />
+			<description>
+				Whether an undirected connection between [param a] and [param b] already exists.
+			</description>
+		</method>
+		<method name="remove_connections">
+			<return type="void" />
+			<param index="0" name="indices" type="PackedInt32Array" />
+			<description>
+				Deletes the given connection indices. Points are left in place.
+			</description>
+		</method>
+		<method name="split_connection">
+			<return type="int" />
+			<param index="0" name="conn_index" type="int" />
+			<param index="1" name="position" type="Vector3" />
+			<description>
+				Inserts a point at [param position] on connection [param conn_index], replacing that connection with two that inherit its attributes. Returns the new point index, or [code]-1[/code] if the connection does not exist.
+			</description>
+		</method>
+		<method name="set_point_attrib_on">
+			<return type="void" />
+			<param index="0" name="name" type="String" />
+			<param index="1" name="indices" type="PackedInt32Array" />
+			<param index="2" name="value" type="Variant" />
+			<description>
+				Sets attribute [param name] on each of [param indices] to [param value].
+			</description>
+		</method>
+		<method name="set_connection_attrib_on">
+			<return type="void" />
+			<param index="0" name="name" type="String" />
+			<param index="1" name="indices" type="PackedInt32Array" />
+			<param index="2" name="value" type="Variant" />
+			<description>
+				Sets attribute [param name] on each of [param indices] to [param value].
+			</description>
+		</method>
+		<method name="sync_schema">
+			<return type="void" />
+			<description>
+				Rebuilds stored attribute arrays from [HEGoGraphAttributes] children: adds missing keys at their defaults, drops keys that are no longer defined, and resizes to the current point and connection counts.
+			</description>
+		</method>
+		<method name="collect_schema">
+			<return type="Array" />
+			<param index="0" name="warn" type="bool" default="true" />
+			<description>
+				Attribute definitions from every [HEGoGraphAttributes] child, in tree order. Reserved and duplicate names are skipped with a warning.
+			</description>
+		</method>
+		<method name="is_reserved_name" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="name" type="String" />
+			<description>
+				Whether [param name] is reserved for Houdini or HEGo metadata.
+			</description>
+		</method>
+		<method name="capture_state">
+			<return type="Dictionary" />
+			<description>
+				A copy of the topology and attribute arrays, for undo.
+			</description>
+		</method>
+		<method name="apply_state">
+			<return type="void" />
+			<param index="0" name="state" type="Dictionary" />
+			<description>
+				Restores a state produced by [method capture_state].
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="points" type="PackedVector3Array" setter="@points_setter" getter="" default="PackedVector3Array()">
+			Point positions, in this node's local space.
+		</member>
+		<member name="connections" type="PackedInt32Array" setter="@connections_setter" getter="" default="PackedInt32Array()">
+			Connection endpoints as index pairs [code][a0, b0, a1, b1, ...][/code]. Each pair is stored with the smaller index first.
+		</member>
+		<member name="point_attribs" type="Dictionary" setter="@point_attribs_setter" getter="" default="{}">
+			Per-point attribute values, keyed by name. Each value is a packed array the same length as [member points].
+		</member>
+		<member name="connection_attribs" type="Dictionary" setter="@connection_attribs_setter" getter="" default="{}">
+			Per-connection attribute values, keyed by name. Each value is a packed array the same length as [method connection_count].
+		</member>
+		<member name="path_mode" type="bool" setter="@path_mode_setter" getter="" default="false">
+			Draws the graph as a path: a translucent ribbon or tube along every connection whose width comes from an attribute, with an outline. It is part of the graph's editor gizmo, so it only exists in the editor and View &gt; Gizmos hides it.
+		</member>
+		<member name="path_width_attribute" type="StringName" setter="@path_width_attribute_setter" getter="" default="&amp;&quot;path_width&quot;">
+			Name of the attribute that gives the path width in metres. A connection attribute of that name wins over a point attribute, which is interpolated between the ends of a connection. Missing or zero values use [member path_default_width].
+		</member>
+		<member name="path_default_width" type="float" setter="@path_default_width_setter" getter="" default="2.0">
+			Width in metres where [member path_width_attribute] gives none.
+		</member>
+		<member name="path_shape" type="int" setter="@path_shape_setter" getter="" enum="HEGoGraph3D.PathShape" default="0">
+			Ribbon or tube. A tube uses the width as its diameter.
+		</member>
+		<member name="path_color" type="Color" setter="@path_color_setter" getter="" default="Color(1, 0.72, 0.2, 0.35)">
+			Colour and opacity of the ribbon or tube.
+		</member>
+		<member name="path_outline" type="bool" setter="@path_outline_setter" getter="" default="true">
+			Draws the boundary: both ribbon edges and the end caps, or the tube's silhouette lines and end rings.
+		</member>
+		<member name="path_outline_color" type="Color" setter="@path_outline_color_setter" getter="" default="Color(1, 0.85, 0.35, 1)">
+			Colour of the outline.
+		</member>
+		<member name="path_drape" type="bool" setter="@path_drape_setter" getter="" default="true">
+			Lays the path on the surface between points, and orients the ribbon to its normal, using the [member surface_provider] or physics colliders. Without a surface the path runs straight between points and the ribbon faces up.
+		</member>
+		<member name="path_sample_spacing" type="float" setter="@path_sample_spacing_setter" getter="" default="3.0">
+			Distance in metres between samples when draping.
+		</member>
+		<member name="path_lift" type="float" setter="@path_lift_setter" getter="" default="0.25">
+			Height of the path above the surface along its normal, to avoid z-fighting.
+		</member>
+		<member name="path_tube_sides" type="int" setter="@path_tube_sides_setter" getter="" default="12">
+			Segments around a tube.
+		</member>
+		<member name="preview_unselected" type="bool" setter="@preview_unselected_setter" getter="" default="true">
+			Draws the connection lines while the graph is not selected. Point markers only appear while it is selected.
+		</member>
+		<member name="marker_limit" type="int" setter="@marker_limit_setter" getter="" default="20000">
+			While the graph is selected, every point gets a marker up to this many points; larger graphs mark only the selected and hovered points, so a cooked graph with tens of thousands of points stays responsive.
+		</member>
+		<member name="surface_provider" type="NodePath" setter="@surface_provider_setter" getter="" default="NodePath(&quot;&quot;)">
+			Optional node that gives the ground height, for snapping and for the path visualisation. It needs [code]sample_height(Vector2) -&gt; float[/code], taking a local x/z position and returning the local height, and may have [code]contains_position(Vector2) -&gt; bool[/code]. Without one, a physics ray from above is used. HEGo does not depend on any terrain addon.
+		</member>
+		<member name="snap_to_surface" type="bool" setter="" getter="" default="false">
+			Puts every point added or moved in the editor on the surface.
+		</member>
+		<member name="surface_offset" type="float" setter="" getter="" default="0.0">
+			Height above the surface in metres that snapped points get.
+		</member>
+		<member name="snap_all_button" type="Callable" setter="" getter="" default="request_snap_all">
+			Moves every point onto the surface now, as one undoable step.
+		</member>
+		<member name="graph_version" type="int" setter="" getter="" default="0">
+			Increments whenever the graph changes, so editor previews can cache what they build.
+		</member>
+	</members>
+	<signals>
+		<signal name="graph_changed">
+			<description>
+				The graph's topology or attribute values changed.
+			</description>
+		</signal>
+		<signal name="snap_all_requested">
+			<description>
+				Emitted by [method request_snap_all] when an editor wants to apply the snap as an undoable action. Without a listener the snap is applied directly.
+			</description>
+		</signal>
+	</signals>
+	<constants>
+		<constant name="LOG_CATEGORY" value="&quot;input&quot;">
+			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="RESERVED_NAMES" value="[&quot;P&quot;, &quot;Cd&quot;]">
+			Names that already mean something on Houdini input geometry.
+		</constant>
+		<constant name="RESERVED_PREFIX" value="&quot;_hego_&quot;">
+			Prefix reserved for HEGo's own metadata attributes.
+		</constant>
+		<constant name="RIBBON" value="0" enum="PathShape">
+			A flat translucent band lying on the surface.
+		</constant>
+		<constant name="TUBE" value="1" enum="PathShape">
+			A cylinder per connection with a sphere at each point.
+		</constant>
+	</constants>
+</class>
