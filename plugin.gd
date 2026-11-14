@@ -29,6 +29,10 @@ var _cursor: StrataBrushCursor
 var _hover_point := Vector2(INF, INF)
 
 func _enter_tree() -> void:
+	# Shaders including strata_surface_cache.gdshaderinc need the cache's global shader
+	# parameters in the project settings, or they do not compile.
+	if preload("res://addons/strata/strata_surface_cache.gd").register_project_globals():
+		ProjectSettings.save()
 	_toolbar = HBoxContainer.new()
 	var title := Label.new()
 	title.text = "Terrain brush"
