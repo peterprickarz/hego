@@ -74,20 +74,26 @@ disabled.
    where a dab would be refused (a procedural layer, or a radius too dense for the layer's
    grid).
 5. Paint with the left mouse button. Hold **Alt** to use the mouse for viewport navigation
-   instead. Each stroke is one undo step (**Ctrl+Z**).
+   instead. Each stroke is one undo step (**Ctrl+Z**). While **Shift** is held the brush
+   smooths, and while **Ctrl** (**Cmd** on macOS) is held **Raise** lowers and **Lower** raises;
+   the toolbar shows the operation in effect, and the selected one returns with the key.
 
 The toolbar:
 
 | Control | What it does |
 | --- | --- |
-| Operation | **Raise** and **Lower** add or subtract `strength` metres at the centre, falling off smoothly to the edge. **Flatten** pulls toward the value under the point where the stroke started. **Smooth** pulls toward the average of neighbouring samples. **Erase** releases the samples, so this layer stops overriding and the layers below show through. On a material weight channel the same operations paint coverage instead; see [Materials](#materials). |
+| Operation | **Raise** and **Lower** add or subtract height at the centre, falling off smoothly to the edge; the amount grows with the radius, so a dab keeps its shape at any size. **Flatten** pulls toward the value under the point where the stroke started. **Smooth** pulls toward the average of the samples within a tenth of the radius (at least the eight surrounding samples), so a large brush rounds large shapes. **Erase** releases the samples, so this layer stops overriding and the layers below show through. On a material weight channel the same operations paint coverage instead; see [Materials](#materials). |
 | Radius | In metres, up to 4096. One dab touches at most 65,536 samples of the layer's grid; if a radius is too large for the layer's spacing, the toolbar says so and suggests a radius, or a new, coarser layer. |
-| Strength | How much each dab changes: metres for `height` and other scalar channels, the share moved (0 to 1) for material channels. |
+| Strength | **Raise**/**Lower**: metres of height per metre of stroke at the brush centre (a dab moves `strength × 0.1 × radius`, and dabs are a tenth of the radius apart). **Flatten**/**Smooth**: the share of the way to the target each dab moves (1 is all the way). Material channels: the share of coverage moved (0 to 1). |
 | Channel | The channel to paint, `height` by default. The **▾** menu next to the field lists the channels this terrain already has: `height`, the material weight channels (with their material names), the `hole` and `nav_exclusion` masks, and anything the layers hold or cook. Type a name to paint a channel that does not exist yet. |
 | Show overrides | Tints in orange every sample the selected layer owns in that channel, including samples whose value happens to equal the ground below. |
 | Show channel | Shows the channel's values in greyscale. The geometry is always the height. |
 
 While a layer is selected, the viewport shows the stack up to and including that layer.
+With nothing of the terrain selected it shows the complete stack, or the stack through the
+terrain's **Editor Preview Lock** layer when one is set: lock a cooked stage (say an erosion
+layer), sculpt its input layer (the preview follows the selection), then select the cook node
+and recook to see the stage with the edits.
 Procedural layers refuse the brush: select or add a manual layer above them.
 
 ### Replace or Add
@@ -139,9 +145,12 @@ you paint or cook like any other.
 
    The remaining settings tune the look: `triplanar_sharpness`, `displacement_strength`,
    `height_blend_contrast` and `height_blend_bias` (let one material's peaks push through
-   another), and `roughness_scale` and `roughness_bias`. Material edits show immediately and
-   need no bake.
-2. **Assign them to the terrain.** Turn on `textured_editor_preview`, then fill
+   another), and `roughness_scale` and `roughness_bias`. A material with a top texture set can
+   displace that set separately (`top_displacement_strength`; negative uses
+   `displacement_strength`). `cell_bombing_mode` sets how texture bombing treats the material
+   (see below). Material edits show immediately and need no bake.
+2. **Assign them to the terrain.** Turn on `textured_editor_preview` (without it the preview
+   shows the height in one neutral material), then fill
    `editor_materials` with your materials. A material's position in the list is its ID
    (0 to 31).
 3. **Name a weight channel for each material.** Fill `editor_material_channels` with one
@@ -234,6 +243,19 @@ instead of smooth. Normal detail follows the same pixel grid. Turning it on swit
 variant (a compile-time `STRATA_PIXEL_SAMPLING` define), so the default look and cost are
 unchanged when it is off. Nearest filtering is best with textures that are authored at their
 intended pixel size and imported with mipmaps.
+
+**Texture bombing** (`cell_bombing`, under *Material sampling*, off by default) hides tile
+repetition. Every material read blends three copies of the tile from the corners of a triangle
+grid, each with its own random offset; the copies compete by the material's height, so a
+point usually shows one copy and the seams follow the texture's own relief. `cell_bombing_size`
+sets the grid's corner spacing in tile repeats. Offsets are multiples of 1/256 of a tile, so
+pixel sampling keeps its texel grid for textures of 256 texels or more. Each material chooses
+its treatment with `cell_bombing_mode`: *Off* (plain tiling, no extra reads, for textures that
+do not repeat visibly), *Offsets* (the default: offset and mirrored copies, which keep the
+texture's direction, as layered rock needs) or *Offsets and turns* (also 90° turns, for
+textures without a direction such as sand). Bombing costs about three times the texture reads
+of plain tiling. With surface cache shading the cache holds the bombed surface and directly
+shaded pixels use plain tiling, unless `cell_bombing_outside_cache` is on.
 
 ## Bake
 

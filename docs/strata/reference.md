@@ -33,6 +33,13 @@ mask channels must be exactly 0 or 1, unless you pass
 `"cell_masks": {"continuous_channels": PackedStringArray(["hole"])}` to the bake, which
 thresholds them at 0.5 (or at your own value in `thresholds`).
 
+**Holes in rendering** are cut in the vertex shader: a mesh vertex inside or on the edge of a
+hole cell is dropped with every triangle that uses it, so a rendered hole covers all of its cells
+and at most one vertex spacing more (`displacement_vertex_spacing` near the camera, wider in
+distant LOD rings). The terrain shader has no `discard`, which keeps the depth prepass and shadow
+passes on early depth testing; the vertex hole lookups run only while a loaded region or the
+coarse hole map has a hole cell.
+
 ## Composition
 
 Each layer composes each channel in one mode, set in its `composition_modes` (missing
@@ -227,7 +234,9 @@ order. 2048² texels per 256 m tile (0.125 m) take 1-3 MB on disk.
 **Node.** `StrataAOOverlay` (child of a `StrataTerrain3D`, or `terrain` set) streams the tiles
 within `load_radius` of the camera on threads into `slots` array layers (mipmaps built on a
 worker thread, one layer upload per frame, about 0.5 ms), frees those beyond `unload_radius`, and
-binds every `StrataRenderer` child and the editor preview (`editor_preview`). Each slot costs
+binds every `StrataRenderer` child and the editor preview (`editor_preview`). With
+`editor_from_layer` set to the stage the sources belong to, the editor preview draws the overlay
+only while it shows that layer or a later one. Each slot costs
 resolution² × 4/3 bytes of video memory (5.6 MB at 2048²). `rebake_tiles(tiles)` (and the
 inspector button **Rebake tiles near the camera**) bakes from the nodes in `source_group`
 (default `strata_ao_sources`; a group on a parent covers its subtree, hand-placed objects
@@ -266,10 +275,20 @@ cover a cell. Beyond the cache's coarsest window the terrain reads the far write
 (2 m), drawn once, 8 bytes per texel plus a third for mips (43 MB for a 4 km terrain at 2 m). See
 "Surface writers" in the addon's `README.md`.
 
-The cache holds the near material (no far-tile blend) without custom fragment code, evaluated
-by the same functions as the terrain shader (`terrain_surface_core.gdshaderinc`, which the
-compute fill splices into GLSL). View-dependent code cannot be cached, so the terrain keeps
-shading its pixels directly.
+The cache holds the material without custom fragment code, evaluated by the same functions as
+the terrain shader (`terrain_surface_core.gdshaderinc`, which the compute fill splices into
+GLSL), with texture bombing applied.
+
+**Shading from the cache (prototype, off by default).** With `surface_cache_shading` the terrain
+takes colour, normal, roughness, metallic and AO of ground up to
+`surface_cache_shading_max_slope` (45°) from the cache instead of evaluating its materials: the
+level matching the pixel footprint plus `surface_cache_shading_lod_bias`, blended with the next
+level as mipmaps are, or the finest level whose window covers the point when that level's does
+not. Steeper ground (the top-down cells stretch there), materials with custom fragment code and
+points outside every window are shaded directly. The far UV blend then follows the pixel
+footprint instead of the camera distance, so each level holds its share: a footprint counts as
+the distance at which flat ground seen from `surface_cache_shading_eye_height` has it.
+`surface_cache_shading_debug` tints cached pixels green and directly shaded ones red.
 
 **Displacement.** With `surface_cache_displacement` (default on) the terrain shader is built
 with `STRATA_SURFACE_CACHE` and reads near relief from the level whose cell matches

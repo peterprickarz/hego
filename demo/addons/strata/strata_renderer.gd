@@ -137,7 +137,7 @@ const _WriterPass := preload("res://addons/strata/strata_surface_writer_pass.gd"
 const _WriterFar := preload("res://addons/strata/strata_surface_writer_far.gd")
 ## Terrain material uniforms copied into StrataSurfaceWriter materials that use the terrain
 ## material helper (STRATA_WRITER_TERRAIN_MATERIALS in strata_surface_writer.gdshaderinc).
-const _WRITER_MATERIAL_UNIFORMS := ["color_maps", "normal_maps", "ormh_maps", "uv_scales", "top_texture_slots", "top_uv_scales", "material_displacement", "material_roughness_scales", "material_roughness_biases"]
+const _WRITER_MATERIAL_UNIFORMS := ["color_maps", "normal_maps", "ormh_maps", "uv_scales", "top_texture_slots", "top_uv_scales", "material_displacement", "top_material_displacement", "material_roughness_scales", "material_roughness_biases"]
 const _HOOK_MARKER := "STRATA_MATERIAL_HOOK_FUNCTIONS"
 ## Seconds of editor idle time after a custom_fragment_code edit before the
 ## shader is regenerated, so typing does not compile every keystroke.
@@ -229,6 +229,11 @@ var _macro_image: Image
 var _macro_bounds := Rect2()
 var _controls_resampled := false
 var _holes_enabled := false
+# Regions whose hole map has a hole cell, and whether the coarse hole map has one: the vertex
+# shader looks holes up (has_holes) only while either does (_holes_present).
+var _hole_regions: Dictionary = {}
+var _coarse_holes := false
+var _holes_present := true
 var _macro_enabled := false
 var _ownership_texture: ImageTexture
 var _channel_preview_texture: ImageTexture
@@ -240,6 +245,7 @@ var _height_max := 0.0
 var _bound_displacement_multiplier := 1.0
 var _last_camera := Vector2(INF, INF)
 var _last_projection_scale := -1.0
+var _pixel_angle := -1.0
 var _last_refinement_active := false
 var _refinement_warning_emitted := false
 var _lod_settings_dirty := false
@@ -473,6 +479,13 @@ func _enter_tree() -> void:
 	if wireframe:
 		_apply_wireframe_state()
 
+## Another configured editor renderer of the same terrain that is in the tree, or null.
+func _drawing_sibling() -> StrataRenderer:
+	for child in _source.get_children(true):
+		if child != self and child is StrataRenderer and child.is_inside_tree() and not child.is_queued_for_deletion() and not child._runtime_mode and child._shader_material != null and child._source == _source:
+			return child
+	return null
+
 func _apply_wireframe_state() -> void:
 	if wireframe:
 		if not _owns_wireframe:
@@ -488,7 +501,11 @@ func _exit_tree() -> void:
 	_unwatch_materials()
 	_release_surface_cache()
 	if _owns_preview_disable and is_instance_valid(_source) and not (_source as StrataTerrain3D).is_preview_enabled():
-		(_source as StrataTerrain3D).set_preview_enabled(true)
+		# Another renderer still drawing the terrain takes the preview over; turning the
+		# prototype preview back on under it would rebuild that mesh after every edit.
+		var successor := _drawing_sibling()
+		if successor != null: successor._owns_preview_disable = true
+		else: (_source as StrataTerrain3D).set_preview_enabled(true)
 	if _owns_wireframe and get_viewport().debug_draw == Viewport.DEBUG_DRAW_WIREFRAME:
 		get_viewport().debug_draw = _previous_debug_draw
 	_owns_preview_disable = false
@@ -511,6 +528,7 @@ func _process(_delta: float) -> void:
 	if not local_camera.is_finite():
 		return
 	_shader_material.set_shader_parameter("camera_position", local_camera)
+	_update_pixel_angle()
 	_update_surface_cache(local_camera)
 	if _refinement_requested() and _mesher != null and not _mesher.has_method("select_refined_patches") and _refinement_warning_emitted and not _lod_settings_dirty: return
 	if _lod_settings_dirty or not _last_camera.is_finite() or _last_camera.distance_to(Vector2(local_camera.x, local_camera.z)) >= _camera_update_threshold(_render_bounds) or _last_refinement_active != _refinement_zone_active() or not is_equal_approx(_last_projection_scale, _projection_scale()):
@@ -742,6 +760,16 @@ func _bind_material_pool() -> void:
 	top_slots.resize(32)
 	var top_scales := PackedFloat32Array()
 	top_scales.resize(32)
+	# Displacement of each material's top set (its own displacement when it has none).
+	var top_displacements := displacements.duplicate()
+	# Each material's texture bombing mode (StrataMaterial.cell_bombing_mode: 0 off, 1 offsets,
+	# 2 offsets and turns).
+	var bombing_modes := PackedFloat32Array()
+	bombing_modes.resize(32)
+	for index in range(mini(_materials.size(), 32)):
+		var material := _materials[index]
+		var mode: Variant = material.get(&"cell_bombing_mode") if material != null else 0
+		bombing_modes[index] = float(mode) if mode != null else 1.0
 	var next_free := 31
 	for index in range(mini(_materials.size(), 32)):
 		var source := _materials[index]
@@ -754,6 +782,9 @@ func _bind_material_pool() -> void:
 		packed[next_free] = source.top_ormh_texture if source.top_ormh_texture != null else default_ormh
 		top_slots[index] = next_free + 1
 		top_scales[index] = maxf(0.001, source.top_uv_scale if source.top_uv_scale > 0.0 else source.uv_scale)
+		var top_strength := maxf(0.0, source.top_displacement())
+		top_displacements[index] = top_strength
+		_bound_displacement_multiplier = maxf(_bound_displacement_multiplier, top_strength)
 		next_free -= 1
 	_shader_material.set_shader_parameter("top_texture_slots", top_slots)
 	_shader_material.set_shader_parameter("top_uv_scales", top_scales)
@@ -764,6 +795,8 @@ func _bind_material_pool() -> void:
 	_shader_material.set_shader_parameter("triplanar_sharpnesses", sharpnesses)
 	_shader_material.set_shader_parameter("projection_modes", projections)
 	_shader_material.set_shader_parameter("material_displacement", displacements)
+	_shader_material.set_shader_parameter("top_material_displacement", top_displacements)
+	_shader_material.set_shader_parameter("material_bombing", bombing_modes)
 	_shader_material.set_shader_parameter("height_blend_contrasts", contrasts)
 	_shader_material.set_shader_parameter("height_blend_biases", biases)
 	_shader_material.set_shader_parameter("material_roughness_scales", roughness_scales)
@@ -802,6 +835,8 @@ func _update_shading_variant() -> void:
 	_surface_cache_variant = wants_cache
 	_active_shader_key = key
 	_bind_hook_parameters()
+	# direct_bombing depends on whether this variant has the cache.
+	_update_cache_shading_settings()
 
 ## The plain shader file, its cached crease variant, or a shader generated for
 ## the applied custom fragment code. Code that does not compile is reported per
@@ -974,6 +1009,8 @@ func _update_material_settings() -> void:
 	_shader_material.set_shader_parameter("surface_wetness", surface_wetness)
 	_shader_material.set_shader_parameter("distance_uv_enabled", distance_uv_enabled)
 	_shader_material.set_shader_parameter("far_uv_factor", far_uv_factor)
+	_shader_material.set_shader_parameter("cell_bombing", render_settings.cell_bombing if render_settings != null else false)
+	_shader_material.set_shader_parameter("cell_bombing_size", render_settings.cell_bombing_size if render_settings != null else 1.0)
 	_shader_material.set_shader_parameter("uv_near_distance", uv_near_distance)
 	_shader_material.set_shader_parameter("uv_far_distance", maxf(uv_far_distance, uv_near_distance + 0.01))
 	_shader_material.set_shader_parameter("displacement_enabled", displacement_enabled and displacement_refinement_radius > 0.0)
@@ -983,6 +1020,7 @@ func _update_material_settings() -> void:
 	_shader_material.set_shader_parameter("debug_discarded", debug_discarded)
 	_shader_material.set_shader_parameter("debug_surface_writers", debug_surface_writers)
 	_update_parallax_settings()
+	_update_cache_shading_settings()
 	if _surface_cache != null: _surface_cache.mark_material_dirty()
 	_apply_ao_overlay()
 	for patch in _patches.values():
@@ -1000,6 +1038,20 @@ func _update_parallax_settings() -> void:
 	_shader_material.set_shader_parameter("parallax_steps", render_settings.parallax_steps)
 	_shader_material.set_shader_parameter("parallax_wall_shade", render_settings.parallax_wall_shade)
 	_shader_material.set_shader_parameter("parallax_debug", render_settings.parallax_debug)
+
+## Shading from the cache (prototype) reads only fragment shader uniforms.
+func _update_cache_shading_settings() -> void:
+	if _shader_material == null or render_settings == null: return
+	var max_slope: Variant = render_settings.get(&"surface_cache_shading_max_slope")
+	_shader_material.set_shader_parameter("surface_cache_shading", render_settings.get(&"surface_cache_shading") == true)
+	_shader_material.set_shader_parameter("surface_cache_shading_min_normal_y", cos(deg_to_rad(float(max_slope) if max_slope != null else 45.0)))
+	_shader_material.set_shader_parameter("surface_cache_shading_debug", render_settings.get(&"surface_cache_shading_debug") == true)
+	var lod_bias: Variant = render_settings.get(&"surface_cache_shading_lod_bias")
+	_shader_material.set_shader_parameter("surface_cache_shading_lod_bias", float(lod_bias) if lod_bias != null else -1.0)
+	var eye_height: Variant = render_settings.get(&"surface_cache_shading_eye_height")
+	_shader_material.set_shader_parameter("surface_cache_shading_eye_height", float(eye_height) if eye_height != null else 1.7)
+	var cache_shades: bool = _surface_cache_variant and render_settings.get(&"surface_cache_shading") == true
+	_shader_material.set_shader_parameter("direct_bombing", not cache_shades or render_settings.get(&"cell_bombing_outside_cache") == true)
 
 func refresh_heightfield() -> bool:
 	if not is_instance_valid(_source) or _shader_material == null:
@@ -1455,6 +1507,7 @@ func _quality_changed() -> void:
 	if _shader_material != null and _surface_cache_variant != _surface_cache_wanted():
 		_update_shading_variant()
 	_update_parallax_settings()
+	_update_cache_shading_settings()
 	if _surface_cache != null: _surface_cache.mark_material_dirty()
 	_invalidate_geometry_lod()
 
@@ -1473,6 +1526,22 @@ func _projection_scale() -> float:
 		var aspect := float(_camera.get_viewport().get_visible_rect().size.x) / maxf(height, 1.0)
 		fov = rad_to_deg(2.0 * atan(tan(deg_to_rad(fov) * 0.5) / maxf(aspect, 0.01)))
 	return clampf(sqrt(maxf(height, 1.0) / 1080.0) * tan(deg_to_rad(75.0) * 0.5) / tan(deg_to_rad(fov) * 0.5), 1.0, 3.0)
+
+## The camera's vertical angle per pixel (radians), for the cache shading's footprint-based far
+## UV blend. Quantized to 2 % steps: each change refills the surface cache.
+func _update_pixel_angle() -> void:
+	var angle := 0.0
+	var height := float(_camera.get_viewport().get_visible_rect().size.y)
+	if _camera.projection == Camera3D.PROJECTION_PERSPECTIVE and height > 0.0:
+		var fov := clampf(_camera.fov, 1.0, 170.0)
+		if _camera.keep_aspect == Camera3D.KEEP_WIDTH:
+			var aspect := float(_camera.get_viewport().get_visible_rect().size.x) / height
+			fov = rad_to_deg(2.0 * atan(tan(deg_to_rad(fov) * 0.5) / maxf(aspect, 0.01)))
+		angle = pow(2.0, roundf(log(2.0 * tan(deg_to_rad(fov) * 0.5) / height) / log(2.0) * 50.0) / 50.0)
+	if angle == _pixel_angle: return
+	_pixel_angle = angle
+	_shader_material.set_shader_parameter("surface_cache_pixel_angle", angle)
+	if _surface_cache != null: _surface_cache.mark_material_dirty()
 
 func _invalidate_geometry_lod() -> void:
 	_lod_settings_dirty = true
@@ -1942,6 +2011,7 @@ func _recompute_region_extrema(data: StrataRegionData) -> void:
 		data.height_min = float(extrema.min); data.height_max = float(extrema.max)
 
 func _region_changed(xy: Vector2i, was_active: bool) -> void:
+	_refresh_hole_presence(xy)
 	_invalidate_surface_cache(StrataRegions.region_bounds(_region_spec, xy).grow(4.0 * float(_region_spec.get("spacing", 1.0))))
 	_refresh_height_extrema()
 	if was_active != _refinement_zone_active(): _invalidate_geometry_lod()
@@ -2293,9 +2363,38 @@ func _bind_region_flags() -> void:
 	if _shader_material == null: return
 	var maps: Dictionary = _region_spec.get("maps", {})
 	_shader_material.set_shader_parameter("has_material_maps", maps.has(StrataRegions.MAP_MATERIAL_IDS))
-	_shader_material.set_shader_parameter("has_holes", _holes_enabled and maps.has(StrataRegions.MAP_HOLES))
 	_shader_material.set_shader_parameter("has_terrain_macro_map", _macro_enabled and maps.has(StrataRegions.MAP_MACRO))
 	_invalidate_surface_cache()
+	_refresh_hole_presence()
+
+## Whether a region's hole map has a hole cell (its finest level held).
+static func _region_has_holes(data: StrataRegionData) -> bool:
+	if data == null: return false
+	var entry: Variant = data.maps.get(StrataRegions.MAP_HOLES)
+	if not entry is Dictionary: return false
+	var levels: Array = (entry as Dictionary).get("levels", [])
+	if levels.is_empty(): return false
+	var bytes: PackedByteArray = levels[0]
+	return bytes.count(0) != bytes.size()
+
+## Rescans the region at [param xy] for hole cells, or every region and the coarse hole map when
+## it is null, and sets has_holes: the vertex shader's hole lookups cost four region fetches per
+## vertex, spent only while the terrain has a hole.
+func _refresh_hole_presence(xy: Variant = null) -> void:
+	if xy == null:
+		_hole_regions.clear()
+		for key: Vector2i in _regions:
+			if _region_has_holes(_regions[key]): _hole_regions[key] = true
+		var coarse: Image = _coarse_images.get(StrataRegions.MAP_HOLES)
+		_coarse_holes = coarse != null and coarse.get_data().count(0) != coarse.get_data_size()
+	elif _region_has_holes(_regions.get(xy)): _hole_regions[xy] = true
+	else: _hole_regions.erase(xy)
+	var present: bool = _holes_enabled and _region_spec.get("maps", {}).has(StrataRegions.MAP_HOLES) and (not _hole_regions.is_empty() or _coarse_holes)
+	if _shader_material != null: _shader_material.set_shader_parameter("has_holes", present)
+	if present == _holes_present: return
+	_holes_present = present
+	# The cache's fill reads has_holes for its relief.
+	if _surface_cache != null: _surface_cache.mark_material_dirty()
 
 static func _array_placeholder(map: String) -> Texture2DArray:
 	if not _placeholder_arrays.has(map):

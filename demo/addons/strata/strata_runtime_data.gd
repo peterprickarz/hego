@@ -1,3 +1,4 @@
+@tool
 class_name StrataRuntimeData
 extends Resource
 ## Compiled runtime terrain, format 2: the manifest of a region grid (see

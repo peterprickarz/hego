@@ -148,6 +148,15 @@ bool terrain_cell_hole(vec2 position) {
 	return false;
 }
 
+// Whether a mesh vertex at position touches a hole cell: the cell it lies in, or any cell whose
+// edge or corner it lies on. The terrain drops every triangle of such a vertex, so a hole shows
+// all of its cells and at most one vertex spacing more.
+bool terrain_vertex_hole(vec2 position) {
+	float e = region_spacing * float(holes_scale) * 0.001;
+	return terrain_cell_hole(position + vec2(-e, -e)) || terrain_cell_hole(position + vec2(e, -e)) || terrain_cell_hole(position + vec2(-e, e)) || terrain_cell_hole(position + vec2(e, e));
+}
+
+
 vec4 terrain_macro_sample(vec2 position) {
 	if (!has_terrain_macro_map) { return vec4(1.0); }
 	vec2 local;

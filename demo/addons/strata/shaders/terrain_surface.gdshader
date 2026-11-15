@@ -23,6 +23,9 @@ uniform float triplanar_sharpnesses[32];
 // Per-material projection: 0 triplanar, 1 biplanar, 2 sides (X+Z), 3 top (Y).
 uniform int projection_modes[32];
 uniform float material_displacement[32];
+uniform float top_material_displacement[32];
+// Texture bombing mode per material (StrataMaterial.cell_bombing_mode): 0 off, 1 offsets, 2 offsets and turns.
+uniform float material_bombing[32];
 uniform float height_blend_contrasts[32];
 uniform float height_blend_biases[32];
 uniform float material_roughness_scales[32];
@@ -122,6 +125,9 @@ uniform bool distance_uv_enabled = false;
 uniform float far_uv_factor = 0.125;
 uniform float uv_near_distance = 16.0;
 uniform float uv_far_distance = 128.0;
+// Three-cell texture bombing (terrain_bombing.gdshaderinc); corner spacing in tile repeats.
+uniform bool cell_bombing = false;
+uniform float cell_bombing_size = 1.0;
 uniform bool debug_lod = false;
 uniform bool debug_surface_writers = false;
 uniform bool debug_discarded = false;
@@ -135,6 +141,11 @@ varying vec2 terrain_position;
 #include "terrain_texture_dispatch.gdshaderinc"
 #include "terrain_normals.gdshaderinc"
 #include "terrain_height_blend.gdshaderinc"
+// False while the surface cache shades the terrain and holds the bombed surface
+// (StrataRenderSettings.cell_bombing_outside_cache off): pixels shaded here use plain tiling.
+uniform bool direct_bombing = true;
+#define STRATA_DIRECT_BOMBING direct_bombing
+#include "terrain_bombing.gdshaderinc"
 #include "terrain_triplanar.gdshaderinc"
 #include "terrain_surface_core.gdshaderinc"
 
@@ -339,6 +350,56 @@ float surface_cache_writers(vec2 position, float footprint, out vec4 albedo, out
 	return 0.0;
 }
 
+// Shading from the cache (prototype, StrataRenderSettings.surface_cache_shading): the resolved
+// surface of the two levels around the pixel footprint (nearest cell in each, blended like the
+// materials' nearest-texel, linear-mipmap filtering). False where a level is outside its window.
+uniform bool surface_cache_shading = false;
+uniform float surface_cache_shading_min_normal_y = 0.7071;
+uniform bool surface_cache_shading_debug = false;
+// Added to the level the pixel footprint selects (negative: finer).
+uniform float surface_cache_shading_lod_bias = -1.0;
+// The far UV blend by footprint (cache shading): the camera's vertical angle per pixel and the eye
+// height at which a footprint counts as a distance over flat ground.
+uniform float surface_cache_pixel_angle = 0.0;
+uniform float surface_cache_shading_eye_height = 1.7;
+
+// Far UV blend for a pixel footprint (metres), as the cache fill bakes it per level.
+float uv_blend_footprint(float footprint) {
+	if (!distance_uv_enabled || surface_cache_pixel_angle <= 0.0) { return 0.0; }
+	return smoothstep(uv_near_distance, uv_far_distance, sqrt(footprint * surface_cache_shading_eye_height / surface_cache_pixel_angle));
+}
+
+bool surface_cache_surface(vec2 position, float footprint, out vec3 color, out vec3 orm, out vec3 normal) {
+	color = vec3(0.0); orm = vec3(1.0, 1.0, 0.0); normal = vec3(0.0, 1.0, 0.0);
+	int resolution = int(surface_cache_params.y);
+	int levels = int(surface_cache_params.z);
+	if (resolution <= 0 || levels <= 0) { return false; }
+	float lod = max(log2(max(footprint, 0.000001) / surface_cache_params.x) + surface_cache_shading_lod_bias, 0.0);
+	int k0 = int(floor(lod));
+	float t = fract(lod);
+	// Near the camera the footprint can ask for a level whose window (camera-centred, halving with
+	// each finer level) ends short of the point: the finest level that covers it is used instead,
+	// unblended, so near ground stays in the cache, usually one level softer.
+	while (k0 < levels && !surface_cache_level_covers(position, k0, 0.0)) { k0++; t = 0.0; }
+	if (k0 >= levels) { return false; }
+	int k1 = min(k0 + 1, levels - 1);
+	if (k1 == k0 || !surface_cache_level_covers(position, k1, 0.0)) { t = 0.0; }
+	ivec2 mask = ivec2(resolution - 1);
+	ivec3 at = ivec3(ivec2(floor(position / (surface_cache_params.x * exp2(float(k0))))) & mask, k0);
+	vec4 a = texelFetch(surface_cache_albedo, at, 0);
+	vec4 n = texelFetch(surface_cache_normal, at, 0);
+	color = surface_cache_srgb_to_linear(a.rgb); orm = vec3(a.a, n.b, n.a); normal = surface_cache_octahedral_decode(n.rg);
+	if (t > 0.0) {
+		at = ivec3(ivec2(floor(position / (surface_cache_params.x * exp2(float(k1))))) & mask, k1);
+		a = texelFetch(surface_cache_albedo, at, 0);
+		n = texelFetch(surface_cache_normal, at, 0);
+		color = mix(color, surface_cache_srgb_to_linear(a.rgb), t);
+		orm = mix(orm, vec3(a.a, n.b, n.a), t);
+		normal = normalize(mix(normal, surface_cache_octahedral_decode(n.rg), t));
+	}
+	return true;
+}
+
 // Far writer layer (StrataSurfaceWriterFar): every writer over the whole terrain at a coarse
 // texel, premultiplied. surface_writer_far_rect: terrain-local XZ origin and size (zero: none).
 uniform sampler2D surface_writer_far_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
@@ -421,19 +482,21 @@ void vertex() {
 #endif
 	float offset = material_height_offset(vec3(terrain_position.x, height, terrain_position.y), direction);
 	VERTEX = vec3(terrain_position.x, height, terrain_position.y) + direction * offset;
+	// Holes: a NaN position drops every triangle that uses this vertex (terrain_vertex_hole()).
+	// The fragment shader has no discard, so depth and shadow passes keep early depth testing.
+	if (has_holes && terrain_vertex_hole(terrain_position)) { VERTEX = vec3(uintBitsToFloat(0x7fc00000u)); }
 }
 
 void fragment() {
 	// Projections use the undisplaced terrain-local point and the continuous RF
 	// normal, functions of terrain position alone: displacement, patch/LOD and
 	// shading settings cannot move UV phase or axis weights. TextureGrad
-	// derivatives are taken here, before holes and all per-ID/per-axis flow.
+	// derivatives are taken here, before all per-ID/per-axis flow.
 	vec3 base_point = vec3(terrain_position.x, base_height(terrain_position), terrain_position.y);
 	vec3 point_dx = dFdx(base_point);
 	vec3 point_dy = dFdy(base_point);
 	vec2 smooth_gradient = terrain_smooth_gradient(terrain_position);
 	vec3 projection_normal = normalize(vec3(-smooth_gradient.x, 1.0, -smooth_gradient.y));
-	if (has_holes && terrain_cell_hole(terrain_position)) { discard; }
 	// The position the pixel shows: the interpolated one, or where parallax moved it. Screen
 	// derivatives stay those of the unmoved point (the moved one jumps between pixels).
 	vec2 surface_position = terrain_position;
@@ -446,13 +509,32 @@ void fragment() {
 	}
 #endif
 	float far_mix = uv_blend(base_point);
-	vec3 color; vec3 orm; vec3 final_normal; float discarded;
+	vec3 color; vec3 orm; vec3 final_normal; float discarded = 0.0;
+	// Shading from the surface cache (prototype). Each cache level holds the far UV blend of its
+	// footprint, so with cache shading every pixel blends by footprint.
+	bool from_cache = false;
+	vec3 cache_color = vec3(0.0); vec3 cache_orm = vec3(0.0); vec3 cache_normal = vec3(0.0, 1.0, 0.0);
+#ifdef STRATA_SURFACE_CACHE
+	if (surface_cache_shading) {
+		float footprint = max(length(point_dx.xz), length(point_dy.xz));
+		far_mix = uv_blend_footprint(footprint);
+		if (projection_normal.y >= surface_cache_shading_min_normal_y) {
+			from_cache = surface_cache_surface(surface_position, footprint, cache_color, cache_orm, cache_normal);
+		}
+	}
+#endif
+	// Keep lighting smooth independently of canonical triangle height sampling.
+	vec2 gradient = base_shading_gradient(surface_position, smooth_gradient);
+	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 #ifdef STRATA_MATERIAL_HOOKS
 	vec3 emission = vec3(0.0);
 	// Materials with custom code are completed one by one before blending, so this
 	// variant keeps the per-slot loop inline (terrain_surface_evaluate() is the plain path).
 	ivec4 ids; vec4 weights;
 	terrain_blend(surface_position, ids, weights, discarded);
+	// Custom code depends on the view: the cache does not hold it.
+	for (int slot = 0; slot < 4; slot++) { if (weights[slot] > 0.0 && strata_material_has_hook(ids[slot])) { from_cache = false; } }
+	if (!from_cache) {
 	color = vec3(0.0); orm = vec3(0.0);
 	mat3 frames[3];
 	for (int axis = 0; axis < 3; axis++) { frames[axis] = terrain_triplanar_frame(axis, projection_normal); }
@@ -460,6 +542,10 @@ void fragment() {
 	// material's axis weights are shared by all families and by height competition.
 	// Exactly zero axis weights are skipped; no threshold is applied.
 	vec4 packed_samples[4]; vec3 slot_axis_weights[4]; vec4 heights = vec4(0.5); vec4 contrasts = vec4(0.0); vec4 biases = vec4(0.0);
+	// Corner weights of the bombed ORMH reads (terrain_bombed()), per slot and axis, for the colour
+	// and normal reads of the second pass.
+	vec3 cell_weights[12];
+	for (int i = 0; i < 12; i++) { cell_weights[i] = vec3(0.0); }
 	for (int slot = 0; slot < 4; slot++) {
 		packed_samples[slot] = vec4(0.0); slot_axis_weights[slot] = vec3(0.0);
 		if (weights[slot] > 0.0) {
@@ -473,7 +559,12 @@ void fragment() {
 					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
 					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
 					vec2 dx = terrain_triplanar_uv(frames[axis], point_dx) * axis_scale; vec2 dy = terrain_triplanar_uv(frames[axis], point_dy) * axis_scale;
-					vec4 projected = terrain_ormh_grad(tid, uv, dx, dy);
+					vec4 projected;
+					if (terrain_bombed(id)) {
+						vec3 corner_weights;
+						projected = terrain_bomb_ormh(tid, id, uv, dx, dy, corner_weights);
+						cell_weights[slot * 3 + axis] = corner_weights;
+					} else { projected = terrain_ormh_grad(tid, uv, dx, dy); }
 					if (far_mix > 0.0) { projected = mix(projected, terrain_ormh_grad(tid, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor), far_mix); }
 					packed_samples[slot] += projected * axis_weight;
 				}
@@ -483,10 +574,6 @@ void fragment() {
 		}
 	}
 	weights = terrain_height_blend_weights(weights, heights, contrasts, biases);
-	// Materials with custom code are completed one by one before blending, so
-	// they need the lighting normal now. It depends on terrain position alone.
-	vec2 gradient = base_shading_gradient(surface_position, smooth_gradient);
-	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 	vec3 hooked_normal = vec3(0.0);
 	StrataContext context;
 	context.position = base_point;
@@ -512,8 +599,15 @@ void fragment() {
 					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
 					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
 					vec2 dx = terrain_triplanar_uv(frames[axis], point_dx) * axis_scale; vec2 dy = terrain_triplanar_uv(frames[axis], point_dy) * axis_scale;
-					vec3 sampled_color = terrain_color_grad(tid, uv, dx, dy).rgb;
-					vec2 near_rg = terrain_normal_grad(tid, uv, dx, dy).rg * 2.0 - 1.0;
+					vec3 sampled_color; vec2 near_rg;
+					if (terrain_bombed(id)) {
+						vec3 corner_weights = cell_weights[slot * 3 + axis];
+						sampled_color = terrain_bomb_color(tid, id, uv, dx, dy, corner_weights);
+						near_rg = terrain_bomb_normal_rg(tid, id, uv, dx, dy, corner_weights);
+					} else {
+						sampled_color = terrain_color_grad(tid, uv, dx, dy).rgb;
+						near_rg = terrain_normal_grad(tid, uv, dx, dy).rg * 2.0 - 1.0;
+					}
 					vec3 near_normal = vec3(near_rg, sqrt(max(0.0, 1.0 - dot(near_rg, near_rg))));
 					if (far_mix > 0.0) {
 						sampled_color = mix(sampled_color, terrain_color_grad(tid, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor).rgb, far_mix);
@@ -564,21 +658,23 @@ void fragment() {
 	final_normal += hooked_normal;
 	float final_length_squared = dot(final_normal, final_normal);
 	final_normal = final_length_squared > 0.00000001 ? final_normal * inversesqrt(final_length_squared) : geometric_normal;
+	}
 #else
-	// Keep lighting smooth independently of canonical triangle height sampling.
-	vec2 gradient = base_shading_gradient(surface_position, smooth_gradient);
-	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
-	terrain_surface_evaluate(surface_position, base_point, point_dx, point_dy, projection_normal, geometric_normal, far_mix, color, orm, final_normal, discarded);
+	if (!from_cache) { terrain_surface_evaluate(surface_position, base_point, point_dx, point_dy, projection_normal, geometric_normal, far_mix, color, orm, final_normal, discarded); }
 #endif
+	if (from_cache) { color = cache_color; orm = cache_orm; final_normal = cache_normal; }
 	ALBEDO = color;
 	// RGBAH is linear terrain-scale data, separate from repeating source UVs.
 	// AO affects indirect occlusion only; it is not baked into albedo here.
-	vec4 terrain_macro = terrain_macro_sample(surface_position);
+	// The cache's colour and AO already include the macro map.
+	vec4 terrain_macro = from_cache ? vec4(1.0) : terrain_macro_sample(surface_position);
 	ALBEDO *= mix(vec3(1.0), terrain_macro.rgb, terrain_tint_strength);
 	float writer_cover = 0.0;
 	float far_writer_cover = 0.0;
 	vec4 writer_albedo = vec4(0.0);
 #ifdef STRATA_SURFACE_CACHE
+	// The cache's surface already has its writers composited.
+	if (!from_cache) {
 	vec4 writer_normal;
 	float cache_reach;
 	float cached_cover = surface_cache_writers(surface_position, max(length(point_dx), length(point_dy)), writer_albedo, writer_normal, cache_reach);
@@ -608,6 +704,7 @@ void fragment() {
 		orm.g = mix(far_roughness, orm.g, cache_reach);
 	}
 	writer_cover = cached_cover * cache_reach;
+	}
 	// Column walls have no texels of their own: they show their column's, darkened.
 	ALBEDO *= mix(1.0, parallax_wall_shade, parallax_info.y);
 #endif
@@ -646,6 +743,9 @@ void fragment() {
 #ifdef STRATA_SURFACE_CACHE
 	if (parallax_debug == 1) { EMISSION = vec3(max(parallax_info.x, 0.0), parallax_info.y, max(-parallax_info.x, 0.0)); ALBEDO = vec3(0.0); ROUGHNESS = 1.0; METALLIC = 0.0; AO = 1.0; }
 	if (parallax_debug == 2) { EMISSION = vec3(parallax_info.z * 0.25, parallax_info.w, 0.0); ALBEDO = vec3(0.0); ROUGHNESS = 1.0; METALLIC = 0.0; AO = 1.0; }
+#endif
+#ifdef STRATA_SURFACE_CACHE
+	if (surface_cache_shading_debug) { ALBEDO = mix(ALBEDO, from_cache ? vec3(0.1, 0.9, 0.2) : vec3(0.9, 0.15, 0.1), 0.5); }
 #endif
 	if (debug_surface_writers) { ALBEDO = mix(ALBEDO, vec3(0.0, 0.9, 1.0), writer_cover); ALBEDO = mix(ALBEDO, vec3(1.0, 0.0, 0.85), far_writer_cover); }
 	if (debug_lod) { ALBEDO = mix(ALBEDO, vec3(fract(patch_level * 0.37), fract(patch_level * 0.61 + 0.3), fract(patch_level * 0.19 + 0.6)), 0.65); }

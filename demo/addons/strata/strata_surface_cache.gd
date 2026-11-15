@@ -50,12 +50,12 @@ const GLOBAL_PARAMETERS := {
 }
 
 const _SHADER_DIR := "res://addons/strata/shaders/"
-const _INCLUDES := ["terrain_regions", "terrain_controls", "terrain_texture_dispatch", "terrain_normals", "terrain_height_blend", "terrain_triplanar", "terrain_surface_core"]
-const _MATERIAL_ARRAYS := ["uv_scales", "top_texture_slots", "top_uv_scales", "triplanar_sharpnesses", "projection_modes", "material_displacement", "height_blend_contrasts", "height_blend_biases", "material_roughness_scales", "material_roughness_biases"]
+const _INCLUDES := ["terrain_regions", "terrain_controls", "terrain_texture_dispatch", "terrain_normals", "terrain_height_blend", "terrain_bombing", "terrain_triplanar", "terrain_surface_core"]
+const _MATERIAL_ARRAYS := ["uv_scales", "top_texture_slots", "top_uv_scales", "triplanar_sharpnesses", "projection_modes", "material_displacement", "height_blend_contrasts", "height_blend_biases", "material_roughness_scales", "material_roughness_biases", "top_material_displacement", "material_bombing"]
 const _INT_ARRAYS := ["top_texture_slots", "projection_modes"]
 ## Scalar uniforms read by the includes, in the float/int slots of the parameter buffer.
-const _FLOAT_SLOTS := {"region_origin": 0, "region_extent": 2, "region_spacing": 3, "field_origin": 4, "field_size": 6, "crease_cosine": 8, "terrain_tint_strength": 9, "terrain_ao_strength": 10, "far_uv_factor": 11}
-const _INT_SLOTS := {"region_cells": 0, "region_grid": 1, "region_lattice": 3, "height_scale": 5, "height_apron": 6, "material_ids_scale": 7, "material_ids_apron": 8, "holes_scale": 9, "holes_apron": 10, "macro_scale": 11, "macro_apron": 12, "far_level": 13, "coarse_level": 14, "has_far_tier": 15, "has_coarse_maps": 16, "has_material_maps": 17, "has_holes": 18, "has_terrain_macro_map": 19, "height_blend_enabled": 20, "triangle_height_sampling": 21, "smooth_shading": 22}
+const _FLOAT_SLOTS := {"region_origin": 0, "region_extent": 2, "region_spacing": 3, "field_origin": 4, "field_size": 6, "crease_cosine": 8, "terrain_tint_strength": 9, "terrain_ao_strength": 10, "far_uv_factor": 11, "cell_bombing_size": 12, "uv_near_distance": 13, "uv_far_distance": 14, "surface_cache_pixel_angle": 15, "surface_cache_shading_lod_bias": 16, "surface_cache_shading_eye_height": 17}
+const _INT_SLOTS := {"region_cells": 0, "region_grid": 1, "region_lattice": 3, "height_scale": 5, "height_apron": 6, "material_ids_scale": 7, "material_ids_apron": 8, "holes_scale": 9, "holes_apron": 10, "macro_scale": 11, "macro_apron": 12, "far_level": 13, "coarse_level": 14, "has_far_tier": 15, "has_coarse_maps": 16, "has_material_maps": 17, "has_holes": 18, "has_terrain_macro_map": 19, "height_blend_enabled": 20, "triangle_height_sampling": 21, "smooth_shading": 22, "cell_bombing": 23, "distance_uv_enabled": 24, "surface_cache_shading": 25}
 const _VECTOR_UNIFORMS := ["region_origin", "field_origin", "field_size", "region_grid", "region_lattice"]
 ## Sampled maps after the three material arrays (bindings 3-18): name, filter (0 nearest, 1 linear).
 const _MAP_BINDINGS := [["region_table", 0], ["height_regions", 1], ["material_ids_regions", 0], ["material_weights_regions", 0], ["holes_regions", 0], ["macro_regions", 1], ["height_far_regions", 1], ["material_ids_far_regions", 0], ["material_weights_far_regions", 0], ["holes_far_regions", 0], ["macro_far_regions", 1], ["coarse_height", 1], ["coarse_material_ids", 0], ["coarse_material_weights", 0], ["coarse_holes", 0], ["coarse_macro", 1]]
@@ -84,7 +84,7 @@ layout(set = 0, binding = 18) uniform sampler2D coarse_macro;
 layout(set = 0, binding = 19, std430) restrict readonly buffer Parameters {
 	float uv_scales[32]; int top_texture_slots[32]; float top_uv_scales[32]; float triplanar_sharpnesses[32];
 	int projection_modes[32]; float material_displacement[32]; float height_blend_contrasts[32]; float height_blend_biases[32];
-	float material_roughness_scales[32]; float material_roughness_biases[32];
+	float material_roughness_scales[32]; float material_roughness_biases[32]; float top_material_displacement[32]; float material_bombing[32];
 	float pf[32]; int pi[32];
 };
 layout(set = 0, binding = 20, rgba8) restrict writeonly uniform image2DArray albedo_out;
@@ -112,6 +112,12 @@ layout(push_constant, std430) uniform Fill { ivec2 rect_origin; ivec2 rect_size;
 #define terrain_tint_strength pf[9]
 #define terrain_ao_strength pf[10]
 #define far_uv_factor pf[11]
+#define cell_bombing_size pf[12]
+#define uv_near_distance pf[13]
+#define uv_far_distance pf[14]
+#define surface_cache_pixel_angle pf[15]
+#define surface_cache_shading_lod_bias pf[16]
+#define surface_cache_shading_eye_height pf[17]
 #define region_cells pi[0]
 #define region_grid ivec2(pi[1], pi[2])
 #define region_lattice ivec2(pi[3], pi[4])
@@ -133,6 +139,9 @@ layout(push_constant, std430) uniform Fill { ivec2 rect_origin; ivec2 rect_size;
 #define height_blend_enabled (pi[20] != 0)
 #define triangle_height_sampling (pi[21] != 0)
 #define smooth_shading (pi[22] != 0)
+#define cell_bombing (pi[23] != 0)
+#define distance_uv_enabled (pi[24] != 0)
+#define surface_cache_shading (pi[25] != 0)
 """
 
 const _GLSL_MAIN := """
@@ -147,6 +156,15 @@ vec2 cache_octahedral(vec3 n) {
 	vec2 e = n.xz;
 	if (n.y < 0.0) { e = (vec2(1.0) - abs(e.yx)) * vec2(e.x >= 0.0 ? 1.0 : -1.0, e.y >= 0.0 ? 1.0 : -1.0); }
 	return e * 0.5 + 0.5;
+}
+
+// With cache shading the terrain reads colour, normal and ORM from the cache, far UV blend
+// included: a level holds the blend of the footprint that reads it (uv_blend_footprint() in
+// terrain_surface.gdshader). Without it the cache holds the near UVs.
+float cache_far_mix(float texel) {
+	if (!surface_cache_shading || !distance_uv_enabled || surface_cache_pixel_angle <= 0.0) { return 0.0; }
+	float footprint = texel * exp2(-surface_cache_shading_lod_bias);
+	return smoothstep(uv_near_distance, uv_far_distance, sqrt(footprint * surface_cache_shading_eye_height / surface_cache_pixel_angle));
 }
 
 // Writer coverage-weighted sum of a tile texel (premultiplied: rgb is the sum of value * weight).
@@ -171,7 +189,7 @@ void main() {
 	vec2 gradient = base_shading_gradient(centre, smooth_gradient);
 	vec3 geometric_normal = normalize(vec3(-gradient.x, 1.0, -gradient.y));
 	vec3 color; vec3 orm; vec3 normal; float discarded;
-	terrain_surface_evaluate(centre, base_point, point_dx, point_dy, projection_normal, geometric_normal, 0.0, color, orm, normal, discarded);
+	terrain_surface_evaluate(centre, base_point, point_dx, point_dy, projection_normal, geometric_normal, cache_far_mix(texel), color, orm, normal, discarded);
 	vec4 macro = terrain_macro_sample(centre);
 	color *= mix(vec3(1.0), macro.rgb, terrain_tint_strength);
 	float ao = clamp(orm.r, 0.0, 1.0) * mix(1.0, macro.a, terrain_ao_strength);
@@ -242,6 +260,7 @@ var _shader_key := ""
 var _samplers: Array[RID] = []
 var _sampler_key := ""
 var _params := RID()
+var _params_size := 0
 var _uniform_set := RID()
 var _uniform_key := ""
 ## Per level: published window origin (cells), whether it holds valid data, whether a full
@@ -391,11 +410,13 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 	var texels := 0
 	# Tiles the writer pass drew last frame: composited after this frame's plain fills.
 	var ready: Array = writers.call("take_ready") if writers != null else []
+	var windows := []
 	for k in levels:
 		var size := level_texel(k)
 		var snapped := Vector2i(floori(camera.x / (size * SNAP)) * SNAP, floori(camera.z / (size * SNAP)) * SNAP)
 		var origin := snapped - Vector2i(resolution / 2, resolution / 2)
 		var window := Rect2i(origin, Vector2i(resolution, resolution))
+		windows.append(window)
 		var previous: Vector2i = _origins[k]
 		var shifted := origin != previous
 		if _needs_full[k] or (not _valid[k] and shifted) or absi(origin.x - previous.x) >= resolution or absi(origin.y - previous.y) >= resolution:
@@ -446,7 +467,9 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 		work.append([k, clipped, int(item[3]), item[2], int(item[4])])
 		texels += clipped.get_area()
 		if not sets.has(int(item[3])): sets[int(item[3])] = writers.call("set_texture", int(item[3]))
-	if writers != null: writers.call("dispatch")
+	if writers != null:
+		writers.call("drop_outside", windows)
+		writers.call("dispatch")
 	stats.texels_last_frame = texels
 	stats.dispatches_last_frame = work.size()
 	if not work.is_empty() or _textures_dirty:
@@ -630,8 +653,14 @@ func _render_update(request: Dictionary) -> void:
 		_allocate(rd, int(request.levels), int(request.resolution))
 	if (request.work as Array).is_empty(): return
 	if not _ensure_pipeline(rd, String(request.defines)): return
+	var params_size := (request.bytes as PackedByteArray).size()
+	if _params.is_valid() and _params_size != params_size:
+		# The parameter layout grew or shrank (a reloaded script): a new buffer and uniform set.
+		rd.free_rid(_params)
+		_params = RID()
 	if not _params.is_valid():
-		_params = rd.storage_buffer_create((request.bytes as PackedByteArray).size(), request.bytes)
+		_params = rd.storage_buffer_create(params_size, request.bytes)
+		_params_size = params_size
 	else:
 		rd.buffer_update(_params, 0, (request.bytes as PackedByteArray).size(), request.bytes)
 	if not _ensure_uniform_set(rd, request.maps):
@@ -722,12 +751,14 @@ func _texture_set(rd: RenderingDevice, texture: RID) -> RID:
 func _allocate(rd: RenderingDevice, level_count: int, cells: int) -> void:
 	_uniform_set = RID()
 	_uniform_key = ""
-	for rid: RID in _textures:
-		if rid.is_valid(): rd.free_rid(rid)
+	var wrappers := [albedo_texture, normal_texture, height_texture, cover_texture]
+	# The wrappers keep their rendering-server texture (materials hold its RID) and swap what it
+	# shows when reassigned below, which may already free the old RenderingDevice textures:
+	# only those still valid afterwards are freed here.
+	var old_textures := _textures
 	_textures = []
 	var formats := [RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R32_SFLOAT, RenderingDevice.DATA_FORMAT_R8_UNORM]
 	var layers := [level_count, level_count, level_count * 2, level_count]
-	var wrappers := [albedo_texture, normal_texture, height_texture, cover_texture]
 	for i in 4:
 		var format := RDTextureFormat.new()
 		format.format = formats[i]
@@ -739,6 +770,8 @@ func _allocate(rd: RenderingDevice, level_count: int, cells: int) -> void:
 		var rid := rd.texture_create(format, RDTextureView.new(), [])
 		_textures.append(rid)
 		(wrappers[i] as Texture2DArrayRD).texture_rd_rid = rid
+	for rid: RID in old_textures:
+		if rid.is_valid() and rd.texture_is_valid(rid): rd.free_rid(rid)
 
 
 func _ensure_pipeline(rd: RenderingDevice, defines: String) -> bool:

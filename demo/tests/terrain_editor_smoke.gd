@@ -186,10 +186,10 @@ func _run() -> void:
 	await _frames(30)
 	terrain.textured_editor_preview = false
 	await _frames(30)
-	check(not is_instance_valid(terrain.editor_renderer) and terrain.is_preview_enabled(), "disabling textured preview restores legacy mesh")
+	check(is_instance_valid(terrain.editor_renderer) and not terrain.is_preview_enabled() and terrain.editor_renderer._materials.size() == 1 and not terrain.editor_preview_bridge.get_spec().maps.has(StrataRegions.MAP_MATERIAL_IDS), "without textures the region preview keeps drawing the height with one neutral material and no material maps")
 	terrain.textured_editor_preview = true
 	await _frames(40)
-	check(is_instance_valid(terrain.editor_renderer) and not terrain.is_preview_enabled(), "reenabling textured preview rebuilds real renderer")
+	check(is_instance_valid(terrain.editor_renderer) and not terrain.is_preview_enabled() and terrain.editor_renderer._materials.size() == terrain.editor_materials.size(), "reenabling textured preview binds the material pool again")
 	var saved := EditorInterface.save_scene()
 	check(saved == OK, "editor saved editable scene")
 	var reopened := ResourceLoader.load(scene.scene_file_path, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene

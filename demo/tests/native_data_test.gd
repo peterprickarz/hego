@@ -148,7 +148,7 @@ func _run_layer_composition_and_brush_checks() -> void:
 
 	var touched := StrataBrush.apply_brush(edits, Vector2.ZERO, 1.5, 2.0, "raise")
 	check(touched > 0, "raise brush authors samples on the selected layer")
-	close_to(brush_terrain.sample_height(Vector2.ZERO), 12.0, "Replace raise brush changes the base surface")
+	close_to(brush_terrain.sample_height(Vector2.ZERO), 10.0 + 2.0 * StrataBrush.DAB_SPACING * 1.5, "Replace raise brush changes the base surface by strength x dab spacing x radius")
 	check(ground.data.snapshot() == ground_before, "brush does not write to lower layers")
 	var soft_before := brush_terrain.sample_height(Vector2(1.0, 0.0))
 	check(soft_before > 10.0 and soft_before < 12.0, "brush preserves a soft falloff away from its center")
@@ -171,9 +171,9 @@ func _run_layer_composition_and_brush_checks() -> void:
 	_fill_flat(additive_base.data, 10.0)
 	additive_edits.set_composition(&"height", StrataLayer.Composition.ADD)
 	StrataBrush.apply_brush(additive_edits, Vector2.ZERO, 1.5, 2.0, "raise")
-	close_to(additive_terrain.sample_height(Vector2.ZERO), 12.0, "Add brush authors a delta over the base")
+	close_to(additive_terrain.sample_height(Vector2.ZERO), 10.0 + 2.0 * StrataBrush.DAB_SPACING * 1.5, "Add brush authors a delta over the base")
 	_fill_flat(additive_base.data, 20.0)
-	close_to(additive_terrain.sample_height(Vector2.ZERO), 22.0, "Add delta survives base regeneration")
+	close_to(additive_terrain.sample_height(Vector2.ZERO), 20.0 + 2.0 * StrataBrush.DAB_SPACING * 1.5, "Add delta survives base regeneration")
 
 	terrain.queue_free()
 	brush_terrain.queue_free()

@@ -69,6 +69,29 @@ func parameters() -> Dictionary:
 		if pixel_sampling == value: return
 		pixel_sampling = value
 		emit_changed()
+## Three-cell texture bombing (hex tiling): every material texture read blends three randomly
+## offset and turned copies of its tile, chosen by the material's height, so the tile grid
+## stops repeating. About three times the texture reads of plain tiling.
+@export var cell_bombing := false:
+	set(value):
+		if cell_bombing == value: return
+		cell_bombing = value
+		emit_changed()
+## With surface cache shading, bombing is baked into the cache and pixels the terrain shades
+## itself (outside the cache's windows, steeper than surface_cache_shading_max_slope, custom
+## fragment code) show plain tiling. On: those pixels are bombed too, at about three times the
+## texture reads. Without cache shading every pixel is bombed.
+@export var cell_bombing_outside_cache := false:
+	set(value):
+		if cell_bombing_outside_cache == value: return
+		cell_bombing_outside_cache = value
+		emit_changed()
+## Spacing of the bombing cells' corners in tile repeats (1: about one tile).
+@export_range(0.25, 4.0, 0.05) var cell_bombing_size := 1.0:
+	set(value):
+		if not is_finite(value) or value <= 0.0: return
+		cell_bombing_size = value
+		emit_changed()
 @export_group("Terrain-wide tint and AO")
 @export_range(0.0, 1.0, 0.01) var terrain_tint_strength := 1.0:
 	set(value):
@@ -168,6 +191,46 @@ func parameters() -> Dictionary:
 	set(value):
 		if surface_cache_displacement == value: return
 		surface_cache_displacement = value
+		emit_changed()
+## Prototype. The terrain shades flat and gentle ground from the cache's resolved surface
+## (colour, normal, roughness, metallic, AO, writers) instead of evaluating its materials, at the
+## level matching the pixel footprint, blending two levels as the materials' mipmaps do. Ground
+## steeper than surface_cache_shading_max_slope (where the top-down cells stretch), pixels with a
+## far UV blend, materials with custom_fragment_code (view-dependent) and anything outside the
+## cache windows keep direct shading.
+@export var surface_cache_shading := false:
+	set(value):
+		if surface_cache_shading == value: return
+		surface_cache_shading = value
+		emit_changed()
+## Steepest ground, in degrees, that is shaded from the cache.
+@export_range(0.0, 90.0, 0.5) var surface_cache_shading_max_slope := 45.0:
+	set(value):
+		if not is_finite(value) or value < 0.0 or value > 90.0: return
+		if surface_cache_shading_max_slope == value: return
+		surface_cache_shading_max_slope = value
+		emit_changed()
+## Added to the cache level the pixel footprint selects (negative: finer). The GPU picks material
+## mips about one level finer than the footprint formula; -1 matches direct shading by eye.
+@export_range(-2.0, 2.0, 0.25) var surface_cache_shading_lod_bias := -1.0:
+	set(value):
+		if not is_finite(value) or surface_cache_shading_lod_bias == value: return
+		surface_cache_shading_lod_bias = value
+		emit_changed()
+## With cache shading, the far UV blend (distance_uv_*) follows the pixel footprint instead of
+## the camera distance, so each cache level can hold its share: a footprint counts as the distance
+## at which flat ground seen from this eye height has it. A standing player sees the same blend
+## as before; higher views see the far tiles later, grazing views on slopes sooner.
+@export_range(0.1, 100.0, 0.1) var surface_cache_shading_eye_height := 1.7:
+	set(value):
+		if not is_finite(value) or value <= 0.0 or surface_cache_shading_eye_height == value: return
+		surface_cache_shading_eye_height = value
+		emit_changed()
+## Tints pixels shaded from the cache green and directly shaded ones red.
+@export var surface_cache_shading_debug := false:
+	set(value):
+		if surface_cache_shading_debug == value: return
+		surface_cache_shading_debug = value
 		emit_changed()
 ## Prototype. Per-pixel parallax of the relief that is finer than the displaced mesh, marched
 ## through the surface cache's relief (needs surface_cache_enabled). The mesh keeps the relief of

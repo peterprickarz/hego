@@ -92,6 +92,18 @@ static func apply_brush(layer: StrataLayer, position: Vector2, radius: float, st
 	var values := Image.create(grid.width, grid.height, false, Image.FORMAT_RF)
 	var mask := Image.create(grid.width, grid.height, false, Image.FORMAT_RF)
 	var count := 0
+	# The terrain through this layer on the grid, sampled once before anything is written; NAN
+	# outside the terrain. Smooth also reads a border as wide as its averaging window.
+	var border := mini(smooth_window(radius, spacing), maxi(grid.width, grid.height)) if operation == "smooth" else 0
+	var cache_width: int = grid.width + 2 * border
+	var cache := PackedFloat64Array() if operation == "erase" else _composed_grid(terrain, layer, channel, origin, spacing, first - Vector2i.ONE * border, Vector2i(cache_width, grid.height + 2 * border))
+	var means := _box_means(cache, cache_width, border) if operation == "smooth" else PackedFloat64Array()
+	# Raise and lower scale with the brush: a dab moves the centre by strength x DAB_SPACING x
+	# radius, and dabs are DAB_SPACING x radius apart along a stroke, so strength is metres of
+	# height per metre of stroke at any size and a dab keeps its shape (height to radius).
+	# The radius is clipped to the terrain's extent (a brush larger than the terrain raises it as
+	# a terrain-sized one would).
+	var step := strength * DAB_SPACING * minf(radius, terrain.base_bounds.size.length())
 	for z in range(first.y, last.y + 1):
 		for x in range(first.x, last.x + 1):
 			var index := Vector2i(x, z)
@@ -109,22 +121,17 @@ static func apply_brush(layer: StrataLayer, position: Vector2, radius: float, st
 					mask.set_pixel(x - first.x, z - first.y, Color(1.0, 0.0, 0.0, 1.0))
 					count += 1
 				continue
-			var current := terrain.sample_channel(channel, point, layer)
+			var at: int = (z - first.y + border) * cache_width + (x - first.x + border)
+			var current: float = cache[at]
 			var desired := current
 			match operation:
-				"raise": desired += strength * influence
-				"lower": desired -= strength * influence
+				"raise": desired += step * influence
+				"lower": desired -= step * influence
 				"flatten": desired = lerpf(current, target_flat, clampf(strength * influence, 0.0, 1.0))
 				"smooth":
-					var total := 0.0
-					var neighbours := 0
-					for offset in [Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
-						var neighbour: Vector2 = point + offset * spacing
-						if terrain.contains_position(neighbour):
-							total += terrain.sample_channel(channel, neighbour, layer)
-							neighbours += 1
-					if neighbours > 0:
-						desired = lerpf(current, total / neighbours, clampf(strength * influence, 0.0, 1.0))
+					var mean: float = means[(z - first.y) * grid.width + (x - first.x)]
+					if not is_nan(mean):
+						desired = lerpf(current, mean, clampf(strength * influence, 0.0, 1.0))
 				_: return 0
 			if layer.get_composition(channel) == StrataLayer.Composition.ADD:
 				desired -= terrain.sample_below(channel, point, layer)
@@ -136,6 +143,75 @@ static func apply_brush(layer: StrataLayer, position: Vector2, radius: float, st
 		return 0
 	var written: bool = data.erase_dense(channel, first, mask) if operation == "erase" else data.patch_dense(channel, first, values, mask)
 	return count if written else 0
+
+## Dab spacing along a stroke as a share of the radius (the plugin's stroke uses the same).
+const DAB_SPACING := 0.1
+## Smooth averages over a square window of 2 x this + 1 samples: a tenth of the radius, at
+## least one sample, so a mountain-sized brush rounds mountain-sized shapes.
+static func smooth_window(radius: float, spacing: float) -> int:
+	return maxi(1, roundi(minf(0.1 * radius / spacing, 4096.0)))
+
+## Mean of the non-NAN neighbours in the (2 [param border] + 1)-sample square around every
+## interior point of [param cache] (the point itself excluded, so the smallest window is the
+## eight surrounding samples; row width [param width], the interior inset by [param border]),
+## row by row over the interior; NAN where the window holds no other value. Summed-area tables,
+## so the cost does not grow with the window.
+static func _box_means(cache: PackedFloat64Array, width: int, border: int) -> PackedFloat64Array:
+	var height := floori(cache.size() / float(width))
+	var stride := width + 1
+	var sums := PackedFloat64Array()
+	var counts := PackedFloat64Array()
+	sums.resize(stride * (height + 1))
+	counts.resize(stride * (height + 1))
+	for z in range(height):
+		var row_sum := 0.0
+		var row_count := 0.0
+		for x in range(width):
+			var value: float = cache[z * width + x]
+			if not is_nan(value):
+				row_sum += value
+				row_count += 1.0
+			var at := (z + 1) * stride + x + 1
+			sums[at] = sums[at - stride] + row_sum
+			counts[at] = counts[at - stride] + row_count
+	var inner := Vector2i(width - 2 * border, height - 2 * border)
+	var means := PackedFloat64Array()
+	means.resize(inner.x * inner.y)
+	var span := 2 * border + 1
+	for z in range(inner.y):
+		for x in range(inner.x):
+			var top := z * stride + x
+			var bottom := (z + span) * stride + x
+			var count := counts[bottom + span] - counts[bottom] - counts[top + span] + counts[top]
+			var total := sums[bottom + span] - sums[bottom] - sums[top + span] + sums[top]
+			var centre: float = cache[(z + border) * width + x + border]
+			if not is_nan(centre):
+				total -= centre
+				count -= 1.0
+			means[z * inner.x + x] = total / count if count > 0.0 else NAN
+	return means
+
+## The channel composed through [param layer] at the lattice points [param first] ..
+## first + size - 1 of a lattice with [param origin] and [param spacing], row by row; NAN at
+## points outside the terrain. One native composition (StrataLayerData.compose_dense, equal to
+## StrataTerrain3D.sample_channel at each point and about a hundred times faster); macro
+## channels, and builds where it fails, sample point by point.
+static func _composed_grid(terrain: StrataTerrain3D, layer: StrataLayer, channel: StringName, origin: Vector2, spacing: float, first: Vector2i, size: Vector2i) -> PackedFloat64Array:
+	var result := PackedFloat64Array()
+	result.resize(size.x * size.y)
+	var start := origin + Vector2(first) * spacing
+	var native := PackedFloat32Array()
+	if not StrataMacro.is_macro_channel(channel):
+		var composed: Dictionary = StrataLayerData.compose_dense(StrataProcedural._capture_layers(terrain, channel, layer), channel, Vector3(start.x, 0.0, start.y), Vector3(spacing, 0.0, 0.0), Vector3(0.0, 0.0, spacing), size, terrain.base_bounds, false, 0.0)
+		var image: Image = composed.get("image") if composed.get("ok", false) else null
+		if image != null and image.get_format() == Image.FORMAT_RF and image.get_size() == size: native = image.get_data().to_float32_array()
+	for z in range(size.y):
+		for x in range(size.x):
+			var point := origin + Vector2(first + Vector2i(x, z)) * spacing
+			if not terrain.contains_position(point): result[z * size.x + x] = NAN
+			elif not native.is_empty(): result[z * size.x + x] = native[z * size.x + x]
+			else: result[z * size.x + x] = terrain.sample_channel(channel, point, layer)
+	return result
 
 
 # ─────────────────────────────────────────────

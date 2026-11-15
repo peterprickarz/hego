@@ -235,26 +235,44 @@ func _watch_material(value: Material, watch: bool) -> void:
 
 
 var _poll_elapsed := 0.0
-var _material_signature := ""
+var _material_values: Variant = null
+# Shader -> its uniform names, until the shader changes (an edit can add or remove uniforms).
+var _uniform_names := {}
 
 
-## Editor only: material parameter edits (the inspector, tool scripts) rewrite the cache.
+## Material parameter edits (the inspector, tool scripts) rewrite the cache. The values are
+## compared as they are (resources by identity): building strings of them took about 15 ms per
+## check for a writer with three road materials.
 func _process(delta: float) -> void:
 	_poll_elapsed += delta
 	if _poll_elapsed < 0.25: return
 	_poll_elapsed = 0.0
-	var parts := PackedStringArray()
+	var values := []
 	for watched in _watched_materials:
 		var shader_material := watched as ShaderMaterial
 		if shader_material == null or shader_material.shader == null: continue
-		parts.append(str(shader_material.shader.get_rid().get_id()))
-		for uniform in shader_material.shader.get_shader_uniform_list():
-			parts.append(var_to_str(shader_material.get_shader_parameter(uniform.name)))
-	var signature := str(hash("|".join(parts)))
-	if signature != _material_signature:
-		var first := _material_signature.is_empty()
-		_material_signature = signature
-		if not first: invalidate()
+		var shader := shader_material.shader
+		values.append(shader.get_rid())
+		for name: StringName in _uniforms_of(shader):
+			values.append(shader_material.get_shader_parameter(name))
+	if _material_values == null:
+		_material_values = values
+	elif values != _material_values:
+		_material_values = values
+		invalidate()
+
+
+func _uniforms_of(shader: Shader) -> Array:
+	if not _uniform_names.has(shader):
+		var names := []
+		for uniform in shader.get_shader_uniform_list(): names.append(StringName(uniform.name))
+		_uniform_names[shader] = names
+		shader.changed.connect(_forget_shader.bind(shader), CONNECT_ONE_SHOT)
+	return _uniform_names[shader]
+
+
+func _forget_shader(shader: Shader) -> void:
+	_uniform_names.erase(shader)
 
 
 func _on_material_changed() -> void:

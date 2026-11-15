@@ -76,6 +76,10 @@ const PROVIDER_GROUP := &"strata_ao_source_providers"
 	set(value):
 		editor_preview = value
 		if Engine.is_editor_hint() and not value: _unbind()
+## The stage the overlay's sources belong to (for example the layer whose cook places them). In
+## the editor the overlay draws only while the terrain preview shows this layer or a later one,
+## so a selected (or locked) earlier layer is seen without it. Empty: always.
+@export var editor_from_layer: StrataLayer
 
 @export_group("Baking")
 @export var source_group := &"strata_ao_sources"
@@ -124,8 +128,19 @@ func _active() -> bool:
 	return enabled and (editor_preview if Engine.is_editor_hint() else true)
 
 
+## False in the editor while the terrain preview stops at a layer below [member editor_from_layer].
+func _stage_shown() -> bool:
+	if not Engine.is_editor_hint() or not is_instance_valid(editor_from_layer) or terrain == null or editor_from_layer.get_parent() != terrain:
+		return true
+	var cutoff := terrain.preview_through_layer
+	return not is_instance_valid(cutoff) or cutoff.get_index() >= editor_from_layer.get_index()
+
+
 func _process(delta: float) -> void:
 	if not _active():
+		return
+	if not _stage_shown():
+		if not _bound.is_empty(): _unbind()
 		return
 	_poll_loads()
 	_elapsed += delta

@@ -130,6 +130,22 @@ func _queue_pieces(level: int, rect: Rect2i, shape: Vector2i, target: int, queue
 	return queued
 
 
+## Drops queued cache tiles outside the window of their level ([param windows] by level, in
+## cells): a moving camera queues tiles faster than they are drawn, and those it has left behind
+## would only be drawn and thrown away.
+func drop_outside(windows: Array) -> void:
+	if _queue.is_empty(): return
+	var kept := []
+	for item: Array in _queue:
+		var level := int(item[0])
+		if level < windows.size() and (windows[level] as Rect2i).intersects(item[1]):
+			kept.append(item)
+		else:
+			_queued.erase([item[1], level, int(item[3])])
+	_queue = kept
+	stats.tiles_queued = _queue.size()
+
+
 ## Tiles of [param target] drawn by Godot since they were dispatched: [level, rect, origin, set
 ## index, tile width]. Their viewport texture stays valid until that set is drawn again (end of
 ## this frame at the earliest), so compute work queued this frame can read it. Call it before
@@ -152,7 +168,9 @@ func set_texture(index: int) -> RID:
 	return (_sets[index].viewport as SubViewport).get_texture().get_rid()
 
 
-## Starts drawing queued tiles on free sets (at most tiles_per_frame).
+## Starts drawing queued tiles on free sets (at most tiles_per_frame), oldest first. Tiles
+## whose shape has no free set stay queued in place; the scan stops once no shape in the queue
+## can take one (a long queue costs nothing while every set is busy).
 func dispatch() -> void:
 	var drawn := 0
 	var frame := Engine.get_process_frames()
@@ -160,17 +178,27 @@ func dispatch() -> void:
 	var far_drawn := 0
 	for far: bool in [false, true]:
 		var queue: Array = _far_queue if far else _queue
-		var skipped := []
-		while not queue.is_empty() and (far_drawn < far_tiles_per_frame if far else drawn < tiles_per_frame):
-			var item: Array = queue.pop_front()
-			var index := _free_set(item[2])
-			if index < 0:
-				skipped.append(item)
+		var limit := far_tiles_per_frame if far else tiles_per_frame
+		var count := 0
+		var busy := {}
+		var shapes := 1 if far else 3
+		var i := 0
+		while i < queue.size() and count < limit and busy.size() < shapes:
+			var item: Array = queue[i]
+			var shape: Vector2i = item[2]
+			if busy.has(shape):
+				i += 1
 				continue
+			var index := _free_set(shape)
+			if index < 0:
+				busy[shape] = true
+				i += 1
+				continue
+			queue.remove_at(i)
 			_draw(index, item, frame)
-			drawn += 1
-			if far: far_drawn += 1
-		for i in range(skipped.size() - 1, -1, -1): queue.push_front(skipped[i])
+			count += 1
+		if far: far_drawn = count
+		else: drawn = count
 	_release_idle()
 	stats.tiles_last_frame = drawn
 	stats.tiles_total = int(stats.tiles_total) + drawn
