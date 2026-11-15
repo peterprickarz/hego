@@ -135,9 +135,10 @@ func run() -> void:
 	var intent := layer.producer_intent_revision
 	HEGoStrataOutput.poll(scene)
 	check(layer.procedural_stale and layer.procedural_status == HEGoStrataOutput.STALE_PRODUCER and layer.producer_intent_revision == intent + 1, "the editor poll marks a layer stale when its producer changed")
+	HEGoStrataOutput.watch_all(scene)
 	var watched := host.cook_inputs_changed.get_connections().size()
-	HEGoStrataOutput.poll(scene)
-	check(watched == 1 and host.cook_inputs_changed.get_connections().size() == 1, "the poll connects every HEGo node's change signal once")
+	HEGoStrataOutput.watch_all(scene)
+	check(watched == 1 and host.cook_inputs_changed.get_connections().size() == 1, "watch_all connects every HEGo node's change signal once")
 	host.hego_notify_cook_inputs_changed()
 	check(layer.producer_intent_revision == intent + 2, "a change the panel reports reaches the published layer at once")
 
