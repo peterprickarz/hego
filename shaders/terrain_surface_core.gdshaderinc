@@ -5,7 +5,7 @@
 // host's uniforms of the same names (see terrain_surface.gdshader):
 //   triangle_height_sampling, smooth_shading, crease_cosine, field_origin, uv_scales,
 //   top_texture_slots, top_uv_scales, triplanar_sharpnesses, projection_modes,
-//   material_displacement, height_blend_contrasts, height_blend_biases, far_uv_factor,
+//   material_displacement, top_material_displacement, height_blend_contrasts, height_blend_biases, far_uv_factor,
 //   material_roughness_scales, material_roughness_biases
 // plus the uniforms of terrain_regions, terrain_controls, terrain_texture_dispatch,
 // terrain_normals, terrain_height_blend and terrain_triplanar, included before this file.
@@ -58,22 +58,24 @@ float terrain_material_relief(vec3 base_point, vec3 projection_normal, float far
 	float height_detail = 0.0;
 	mat3 frames[3];
 	for (int axis = 0; axis < 3; axis++) { frames[axis] = terrain_triplanar_frame(axis, projection_normal); }
-	vec4 heights = vec4(0.5); vec4 blend_heights = vec4(0.5); vec4 contrasts = vec4(0.0); vec4 biases = vec4(0.0);
+	// reliefs: each material's displaced height; the top set's projection uses its own strength.
+	vec4 reliefs = vec4(0.0); vec4 blend_heights = vec4(0.5); vec4 contrasts = vec4(0.0); vec4 biases = vec4(0.0);
 	for (int slot = 0; slot < 4; slot++) {
 		if (weights[slot] > 0.0) {
 			int id = ids[slot];
 			vec3 axis_weights = terrain_projection_weights(projection_normal, triplanar_sharpnesses[id], projection_modes[id]);
-			blend_heights[slot] = 0.0; heights[slot] = 0.0;
+			blend_heights[slot] = 0.0;
 			for (int axis = 0; axis < 3; axis++) {
 				float axis_weight = axis_weights[axis];
 				if (axis_weight > 0.0) {
 					float axis_scale = uv_scales[id];
 					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
+					float strength = tid != id ? top_material_displacement[id] : material_displacement[id];
 					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
-					vec2 sampled_alpha = vec2(terrain_ormh_lod(tid, uv, 0.0).a);
+					vec2 sampled_alpha = vec2(terrain_bombed(id) ? terrain_bomb_height_lod(tid, id, uv, 0.0) : terrain_ormh_lod(tid, uv, 0.0).a);
 					if (far_mix > 0.0) { sampled_alpha.y = terrain_ormh_lod(tid, uv * far_uv_factor, 0.0).a; }
 					blend_heights[slot] += mix(sampled_alpha.x, sampled_alpha.y, far_mix) * axis_weight;
-					heights[slot] += mix(terrain_finite_height(sampled_alpha.x), terrain_finite_height(sampled_alpha.y), far_mix) * axis_weight;
+					reliefs[slot] += (mix(terrain_finite_height(sampled_alpha.x), terrain_finite_height(sampled_alpha.y), far_mix) - 0.5) * strength * axis_weight;
 				}
 			}
 			contrasts[slot] = height_blend_contrasts[id]; biases[slot] = height_blend_biases[id];
@@ -81,7 +83,7 @@ float terrain_material_relief(vec3 base_point, vec3 projection_normal, float far
 	}
 	weights = terrain_height_blend_weights(weights, blend_heights, contrasts, biases);
 	for (int slot = 0; slot < 4; slot++) {
-		if (weights[slot] > 0.0) { height_detail += (heights[slot] - 0.5) * material_displacement[ids[slot]] * weights[slot]; }
+		if (weights[slot] > 0.0) { height_detail += reliefs[slot] * weights[slot]; }
 	}
 	return height_detail;
 }
@@ -104,6 +106,10 @@ void terrain_surface_evaluate(vec2 position, vec3 base_point, vec3 point_dx, vec
 	// material's axis weights are shared by all families and by height competition.
 	// Exactly zero axis weights are skipped; no threshold is applied.
 	vec4 packed_samples[4]; vec3 slot_axis_weights[4]; vec4 heights = vec4(0.5); vec4 contrasts = vec4(0.0); vec4 biases = vec4(0.0);
+	// Corner weights of the bombed ORMH reads (terrain_bombed()), per slot and axis, for the colour
+	// and normal reads of the second pass.
+	vec3 cell_weights[12];
+	for (int i = 0; i < 12; i++) { cell_weights[i] = vec3(0.0); }
 	for (int slot = 0; slot < 4; slot++) {
 		packed_samples[slot] = vec4(0.0); slot_axis_weights[slot] = vec3(0.0);
 		if (weights[slot] > 0.0) {
@@ -117,7 +123,12 @@ void terrain_surface_evaluate(vec2 position, vec3 base_point, vec3 point_dx, vec
 					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
 					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
 					vec2 dx = terrain_triplanar_uv(frames[axis], point_dx) * axis_scale; vec2 dy = terrain_triplanar_uv(frames[axis], point_dy) * axis_scale;
-					vec4 projected = terrain_ormh_grad(tid, uv, dx, dy);
+					vec4 projected;
+					if (terrain_bombed(id)) {
+						vec3 corner_weights;
+						projected = terrain_bomb_ormh(tid, id, uv, dx, dy, corner_weights);
+						cell_weights[slot * 3 + axis] = corner_weights;
+					} else { projected = terrain_ormh_grad(tid, uv, dx, dy); }
 					if (far_mix > 0.0) { projected = mix(projected, terrain_ormh_grad(tid, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor), far_mix); }
 					packed_samples[slot] += projected * axis_weight;
 				}
@@ -142,8 +153,15 @@ void terrain_surface_evaluate(vec2 position, vec3 base_point, vec3 point_dx, vec
 					int tid = terrain_axis_texture(id, axis, projection_normal, axis_scale);
 					vec2 uv = terrain_triplanar_uv(frames[axis], base_point) * axis_scale;
 					vec2 dx = terrain_triplanar_uv(frames[axis], point_dx) * axis_scale; vec2 dy = terrain_triplanar_uv(frames[axis], point_dy) * axis_scale;
-					vec3 sampled_color = terrain_color_grad(tid, uv, dx, dy).rgb;
-					vec2 near_rg = terrain_normal_grad(tid, uv, dx, dy).rg * 2.0 - 1.0;
+					vec3 sampled_color; vec2 near_rg;
+					if (terrain_bombed(id)) {
+						vec3 corner_weights = cell_weights[slot * 3 + axis];
+						sampled_color = terrain_bomb_color(tid, id, uv, dx, dy, corner_weights);
+						near_rg = terrain_bomb_normal_rg(tid, id, uv, dx, dy, corner_weights);
+					} else {
+						sampled_color = terrain_color_grad(tid, uv, dx, dy).rgb;
+						near_rg = terrain_normal_grad(tid, uv, dx, dy).rg * 2.0 - 1.0;
+					}
 					vec3 near_normal = vec3(near_rg, sqrt(max(0.0, 1.0 - dot(near_rg, near_rg))));
 					if (far_mix > 0.0) {
 						sampled_color = mix(sampled_color, terrain_color_grad(tid, uv * far_uv_factor, dx * far_uv_factor, dy * far_uv_factor).rgb, far_mix);

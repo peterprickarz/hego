@@ -22,7 +22,9 @@ signal authoring_preview_changed
 		if stats.get("refinement_limited", false):
 			return "Limited: %s (requested %s m)" % [detail, String.num(float(stats.get("refinement_requested_vertex_spacing", 0.0)), 6)]
 		return detail
-## The editor plugin uses the real Forward+ renderer when these are supplied.
+## Show the terrain's materials (editor_materials, editor_material_channels) in the editor's region
+## preview. The preview shows the height at the region spacing either way; without materials it
+## uses one neutral material and composes no material maps.
 @export var textured_editor_preview := false:
 	set(value):
 		textured_editor_preview = value
@@ -45,6 +47,14 @@ signal authoring_preview_changed
 ## Minimum camera clip distance while viewing this terrain in the editor.
 ## This changes the editor camera only, not global EditorSettings.
 @export_range(100.0, 100000.0, 100.0) var editor_far_clip := 24000.0
+## The layer the editor preview stops at while no layer of this terrain is selected (for
+## example while a cook node is selected to recook the layer); empty shows the complete stack.
+## Selecting a layer still shows the stack through that layer, so its input can be sculpted
+## with its own surface in view.
+@export var editor_preview_lock: StrataLayer:
+	set(value):
+		editor_preview_lock = value
+		_apply_preview_cutoff()
 ## Deprecated alias of [member region_spacing] (same storage), kept so existing scenes and
 ## scripts keep working. It is no longer shown in the inspector.
 @export_range(0.25, 8.0, 0.25) var editor_compile_spacing: float:
@@ -94,6 +104,20 @@ var preview_through_layer: StrataLayer:
 		preview_through_layer = value
 		if changed:
 			queue_preview_update()
+## The layer selected in the editor (set by the Strata plugin, never saved). The preview stops at
+## it, or at [member editor_preview_lock] while it is null.
+var editor_selected_layer: StrataLayer:
+	set(value):
+		editor_selected_layer = value
+		_apply_preview_cutoff()
+
+## The layer the preview stops at without a selection: [member editor_preview_lock] when it is a
+## layer of this terrain, otherwise null (the complete stack).
+func locked_preview_layer() -> StrataLayer:
+	return editor_preview_lock if is_instance_valid(editor_preview_lock) and editor_preview_lock.get_parent() == self else null
+
+func _apply_preview_cutoff() -> void:
+	preview_through_layer = editor_selected_layer if is_instance_valid(editor_selected_layer) and editor_selected_layer.get_parent() == self else locked_preview_layer()
 ## Coverage is computed from explicit owned samples of the selected layer.
 ## It is an interpolated display mask, never a second kind of ownership.
 @export var show_overrides := false:
@@ -144,6 +168,12 @@ var _runtime_signature: Variant = null
 ## Seconds between checks of the procedural layers' [member StrataLayer.source_tokens].
 const SOURCE_POLL_INTERVAL := 0.25
 var _source_poll_elapsed := 0.0
+## Group of every terrain in the tree (not saved with the scene), so editor tools find terrains
+## without walking the scene.
+const GROUP := &"strata_terrains"
+
+func _enter_tree() -> void:
+	add_to_group(GROUP)
 
 func _ready() -> void:
 	set_notify_transform(true)
@@ -226,10 +256,9 @@ func _children_changed() -> void:
 	queue_preview_update()
 
 func _sanitize_preview_layer() -> void:
-	if not is_instance_valid(preview_through_layer):
-		preview_through_layer = null
-	elif preview_through_layer.get_parent() != self:
-		preview_through_layer = null
+	if is_instance_valid(editor_selected_layer) and editor_selected_layer.get_parent() != self: editor_selected_layer = null
+	if not is_instance_valid(preview_through_layer) or preview_through_layer.get_parent() != self:
+		preview_through_layer = editor_selected_layer if is_instance_valid(editor_selected_layer) else locked_preview_layer()
 
 func is_transform_valid() -> bool:
 	var basis := global_transform.basis
