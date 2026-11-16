@@ -226,23 +226,34 @@ static func inputs_changed(host: Node) -> void:
 		layer.mark_stale(STALE_PRODUCER)
 
 
-## One pass of the bridge's editor watch over the scene under [param root]: [method watch]es
-## every HEGo node, and marks every current procedural layer stale whose producer changed
-## since it published ([method producer_changed]). The bridge's editor plugin runs this a few
-## times a second; a changed input layer is Strata's own check
+## One pass of the bridge's editor watch over the scene under [param root]: marks every current
+## procedural layer of its terrains stale whose producer changed since it published
+## ([method producer_changed]). The bridge's editor plugin runs this a few times a second; a
+## changed input layer is Strata's own check
 ## ([method StrataTerrain3D.check_procedural_sources]).
 static func poll(root: Node) -> void:
+	if root == null or not root.is_inside_tree(): return
+	# The terrains' group, not a walk of the scene: streamed content can add tens of thousands
+	# of nodes, and this runs a few times a second. HEGo nodes are watched by watch_all() when
+	# the scene opens and by the plugin as they enter the tree.
+	for terrain in root.get_tree().get_nodes_in_group(StrataTerrain3D.GROUP):
+		if terrain != root and not root.is_ancestor_of(terrain): continue
+		for layer: StrataLayer in terrain.get_layers():
+			if layer.procedural and not layer.procedural_stale and producer_changed(layer):
+				layer.mark_stale(STALE_PRODUCER)
+
+
+## [method watch]es every HEGo node under [param root] (once, when a scene opens) and puts
+## terrains that entered the tree before their script added them to their group (a script
+## reload) in it.
+static func watch_all(root: Node) -> void:
 	if root == null: return
-	_poll_node(root)
-
-
-static func _poll_node(node: Node) -> void:
-	if node is HEGoNode3D:
-		watch(node)
-	elif node is StrataLayer and node.procedural and not node.procedural_stale and producer_changed(node):
-		node.mark_stale(STALE_PRODUCER)
-	for child in node.get_children():
-		_poll_node(child)
+	if root is HEGoNode3D:
+		watch(root)
+	elif root is StrataTerrain3D and not root.is_in_group(StrataTerrain3D.GROUP):
+		root.add_to_group(StrataTerrain3D.GROUP)
+	for child in root.get_children():
+		watch_all(child)
 
 
 # ─────────────────────────────────────────────

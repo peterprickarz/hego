@@ -2,6 +2,6 @@
   "format_version": 1,
   "package": "hego-strata",
   "addon_path": "addons/hego_strata",
-  "source_commit": "314ac0f3e5d0dd2933b84fd6ed6e51bc2846d1c3",
-  "requires": [{"package": "hego", "branch": "release-next", "addon_path": "addons/hego", "source_commit": "314ac0f3e5d0dd2933b84fd6ed6e51bc2846d1c3"}, {"package": "strata", "branch": "strata-release-next", "addon_path": "addons/strata", "source_commit": "314ac0f3e5d0dd2933b84fd6ed6e51bc2846d1c3"}]
+  "source_commit": "d78df6c01663f4587703a2750f2e057c46197608",
+  "requires": [{"package": "hego", "branch": "release-next", "addon_path": "addons/hego", "source_commit": "d78df6c01663f4587703a2750f2e057c46197608"}, {"package": "strata", "branch": "strata-release-next", "addon_path": "addons/strata", "source_commit": "d78df6c01663f4587703a2750f2e057c46197608"}]
 }
