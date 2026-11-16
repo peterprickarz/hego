@@ -149,6 +149,33 @@ enum ProjectionMode { TRIPLANAR, BIPLANAR, SIDES, TOP }
 		if top_uv_scale == value: return
 		top_uv_scale = value
 		emit_changed()
+## Displacement of the top set's ORMH height, in the units of displacement_strength; negative
+## (the default, -1) uses displacement_strength. A rock face can then displace strongly while
+## the ground on top of it stays nearly flat.
+@export_range(-1.0, 8.0, 0.01) var top_displacement_strength := -1.0:
+	set(value):
+		if not is_finite(value):
+			push_warning("Terrain material top displacement strength must be finite")
+			return
+		if top_displacement_strength == value: return
+		top_displacement_strength = value
+		emit_changed()
+
+## How texture bombing (StrataRenderSettings.cell_bombing) treats this material. Off reads the
+## plain tiling (no extra texture reads: textures that do not repeat visibly, such as large rock
+## faces). Offsets (the default) blends randomly offset and mirrored copies, which keeps the
+## texture's direction, as layered rock needs. Offsets and turns also turns copies by 90 degrees,
+## for textures without a direction such as sand or gravel.
+@export_enum("Off:0", "Offsets:1", "Offsets and turns:2") var cell_bombing_mode := 1:
+	set(value):
+		if value < 0 or value > 2 or cell_bombing_mode == value: return
+		cell_bombing_mode = value
+		emit_changed()
+
+## The top set's displacement: top_displacement_strength, or displacement_strength when that
+## is negative.
+func top_displacement() -> float:
+	return top_displacement_strength if top_displacement_strength >= 0.0 else displacement_strength
 @export_group("Custom Shader", "custom_")
 ## Optional GLSL statements that adjust this material in the terrain's fragment
 ## shader, for example a fresnel rim. They become the body of
@@ -201,6 +228,8 @@ func _sync_source_profile() -> void:
 	top_normal_texture = _source_profile.top_normal_texture
 	top_ormh_texture = _source_profile.top_ormh_texture
 	top_uv_scale = _source_profile.top_uv_scale * _source_uv_multiplier
+	top_displacement_strength = _source_profile.top_displacement_strength
+	cell_bombing_mode = _source_profile.cell_bombing_mode
 	uv_scale = _source_profile.uv_scale * _source_uv_multiplier
 	triplanar_sharpness = _source_profile.triplanar_sharpness
 	projection = _source_profile.projection

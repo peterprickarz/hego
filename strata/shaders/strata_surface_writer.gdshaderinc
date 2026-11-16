@@ -123,6 +123,7 @@ uniform float uv_scales[32];
 uniform int top_texture_slots[32];
 uniform float top_uv_scales[32];
 uniform float material_displacement[32];
+uniform float top_material_displacement[32];
 uniform float material_roughness_scales[32];
 uniform float material_roughness_biases[32];
 
@@ -158,7 +159,7 @@ StrataWriterMaterial strata_writer_terrain_material(int id, vec2 uv, vec2 uv_dx,
 	m.metallic = ormh.b;
 	m.ao = ormh.r;
 	m.height = ormh.a;
-	m.relief = (ormh.a - 0.5) * material_displacement[slot];
+	m.relief = (ormh.a - 0.5) * (top_texture_slots[slot] > 0 ? top_material_displacement[slot] : material_displacement[slot]);
 	return m;
 }
 #endif

@@ -102,7 +102,14 @@
 			<return type="void" />
 			<param index="0" name="root" type="Node" />
 			<description>
-				One pass of the bridge's editor watch over the scene under [param root]: [method watch]es every HEGo node, and marks every current procedural layer stale whose producer changed since it published ([method producer_changed]). The bridge's editor plugin runs this a few times a second; a changed input layer is Strata's own check ([method StrataTerrain3D.check_procedural_sources]).
+				One pass of the bridge's editor watch over the scene under [param root]: marks every current procedural layer of its terrains stale whose producer changed since it published ([method producer_changed]). The bridge's editor plugin runs this a few times a second; a changed input layer is Strata's own check ([method StrataTerrain3D.check_procedural_sources]).
+			</description>
+		</method>
+		<method name="watch_all" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="root" type="Node" />
+			<description>
+				[method watch]es every HEGo node under [param root] (once, when a scene opens) and puts terrains that entered the tree before their script added them to their group (a script reload) in it.
 			</description>
 		</method>
 		<method name="to_houdini_attrs" qualifiers="static">

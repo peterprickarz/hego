@@ -134,6 +134,8 @@ var _owned_keys: Dictionary = {}
 # Last scalar channel preview, kept so a dab can recompose only its rectangle.
 var _channel_image: Image
 var _channel_image_name: StringName
+# The neutral material of an untextured preview (see _pool).
+var _neutral: StrataMaterial
 
 func setup(source: StrataTerrain3D) -> void:
 	terrain = source
@@ -144,7 +146,7 @@ func setup(source: StrataTerrain3D) -> void:
 
 func sync_configuration() -> void:
 	if not is_instance_valid(terrain): return
-	var state: Array = [terrain.region_spacing, terrain.region_cells, terrain.editor_material_channels.duplicate()]
+	var state: Array = [terrain.region_spacing, terrain.region_cells, terrain.editor_material_channels.duplicate(), _textured()]
 	for material in terrain.editor_materials: state.append(material.get_instance_id() if is_instance_valid(material) else 0)
 	if state != _configuration:
 		_configuration = state
@@ -197,13 +199,31 @@ func refresh_now() -> bool:
 
 ## Why material ids and weights cannot be composed, or "" when the mapping is usable.
 func _material_problem() -> String:
+	if not _textured(): return ""
 	var channels := terrain.editor_material_channels
 	if channels.is_empty(): return "Materials unassigned; configure ordered material channels for stage previews"
 	if channels.size() != terrain.editor_materials.size(): return "Materials unassigned; channel mapping must match the material pool"
 	return ""
 
 func _make_spec() -> Dictionary:
-	return terrain.region_spec()
+	var spec := terrain.region_spec()
+	if not _textured():
+		spec.maps.erase(StrataRegions.MAP_MATERIAL_IDS)
+		spec.maps.erase(StrataRegions.MAP_MATERIAL_WEIGHTS)
+	return spec
+
+## Whether the preview shows the terrain's materials: textured_editor_preview with a material
+## pool. Without them it still shows the height (and holes and macro tint) at the region
+## spacing, with one neutral material and no material maps.
+func _textured() -> bool:
+	return terrain.textured_editor_preview and not terrain.editor_materials.is_empty()
+
+## The material pool the renderer is configured with.
+func _pool() -> Array[StrataMaterial]:
+	if _textured(): return terrain.editor_materials
+	if _neutral == null: _neutral = StrataMaterial.new()
+	var pool: Array[StrataMaterial] = [_neutral]
+	return pool
 
 ## Channels a map class depends on.
 func _class_channels(cls: String) -> PackedStringArray:
@@ -299,14 +319,14 @@ func _configure_renderer() -> bool:
 		created.render_settings = terrain.render_settings
 		terrain.add_child(created, false, Node.INTERNAL_MODE_BACK)
 		created.set_camera(_camera)
-		if not created.configure_regions(terrain, terrain.editor_materials, spec, {}, residency):
+		if not created.configure_regions(terrain, _pool(), spec, {}, residency):
 			created.queue_free()
 			status = "Textured preview requires Forward+ and valid materials"
 			_configuration_failed = true
 			return false
 		renderer = created
 		terrain.editor_renderer = created
-	elif not renderer.configure_regions(terrain, terrain.editor_materials, spec, {}, residency):
+	elif not renderer.configure_regions(terrain, _pool(), spec, {}, residency):
 		# Configuration is transactional, including the rendered regions.
 		status = "Invalid material/control configuration; previous rendered terrain retained"
 		_configuration_failed = true
@@ -907,6 +927,13 @@ func _bind_pass() -> bool:
 				continue
 			if renderer.free_slots(level) <= 0:
 				waiting = true
+				if pass_index == 0 and renderer.free_slots(0) <= 0:
+					# Both tiers full and regions swapping between them: the far slot this
+					# demotion needs is held by a region waiting for this near slot. Unbinding
+					# the demoted region (coarse until it binds far) breaks the cycle.
+					renderer.release_region(xy)
+					_bound.erase(xy)
+					_progress = true
 				continue
 			if not renderer.set_region_level(xy, data, level):
 				_fail("The renderer rejected region %s at level %d" % [xy, level])
@@ -951,6 +978,7 @@ func _finish() -> void:
 		_material_status = "Materials unassigned at this stage"
 	status = "Live stack through %s · %d regions · no automatic cook" % [_cutoff.name if _cutoff != null else "final layer", _region_count_of(_spec)]
 	if _tiered: status += " · %d near, %d far, coarse %s" % [_count_bound(0), _count_bound(1), "ready" if _stale(_gens_coarse).is_empty() else "pending"]
+	if not _textured(): status += " · untextured"
 	if not _material_status.is_empty(): status += " · " + _material_status
 	refreshed.emit()
 
@@ -1119,30 +1147,40 @@ func flush_coarse() -> void:
 # ─────────────────────────────────────────────
 
 ## Small brush dirty rectangle; the caches describe exactly the updated stack afterwards.
-## Call just before the dab; also records which map classes are current. When composition is
-## outstanding this waits for the tasks in flight (they read the layers the dab is about to
-## change), drops them and returns false, so the dab falls back to a refresh.
+## Call just before the dab; also records which map classes are current. Composition may still
+## be outstanding: the tasks in flight read the stack as it is before the dab, so they are
+## finished and bound first; the entries still stale afterwards are skipped by the patch and
+## composed later from a capture that includes the dab. A stroke therefore never restarts the
+## composition of the whole terrain.
 func can_patch_region() -> bool:
 	sync_configuration()
 	_patchable.clear()
-	if not _flight.is_empty():
-		_cancel_work()
-		_queue_refresh()
-		return false
-	if _configuration_dirty or not _attached() or _working or _spec.is_empty(): return false
+	if not _flight.is_empty() and not _finish_flight(): return false
+	if _configuration_dirty or not _attached() or _spec.is_empty(): return false
 	var selected := terrain.preview_through_layer
 	if _make_spec() != _spec or is_instance_valid(renderer) and renderer._render_bounds != terrain.base_bounds: return false
 	for cls in CLASSES:
 		if _present(cls, _spec):
-			_patchable[cls] = _signatures.has(cls) and _signatures[cls] == _class_state(cls, selected) and _stale_free(cls)
+			_patchable[cls] = _signatures.has(cls) and _signatures[cls] == _class_state(cls, selected)
 			_owned_keys[cls] = _owned_key(cls, selected)
 	return true
 
-## True when every entry the dab could touch is composed from the class's current generation.
-func _stale_free(cls: String) -> bool:
-	for xy: Vector2i in _wanted:
-		if int((_gens_far if int(_wanted[xy]) > 0 else _gens_near).get(xy, {}).get(cls, -1)) != int(_gen.get(cls, 0)): return false
-	return not _tiered or int(_gens_coarse.get(cls, -1)) == int(_gen.get(cls, 0))
+## Waits for every task in flight and binds the results of the current epoch. False when one
+## failed (the work then stopped, see _fail).
+func _finish_flight() -> bool:
+	var finished := _flight
+	_flight = []
+	_flight_keys.clear()
+	for entry: Dictionary in finished: WorkerThreadPool.wait_for_task_completion(int(entry.id))
+	for entry: Dictionary in finished:
+		var task: Dictionary = entry.task
+		if int(task.epoch) == _epoch and not _apply_task(task): return false
+	return true
+
+## True when the cache entry was composed from the class's current generation; a stale entry
+## is composed again by the pump, so a dab leaves it alone.
+func _current(gens: Dictionary, cls: String) -> bool:
+	return int(gens.get(cls, -1)) == int(_gen.get(cls, 0))
 
 func refresh_region(point: Vector2, radius: float, native_spacing: float, channel: StringName = &"height", was_current: bool = false) -> void:
 	# Only a dab that began on the current complete surface may update the caches.
@@ -1150,7 +1188,7 @@ func refresh_region(point: Vector2, radius: float, native_spacing: float, channe
 	var patchable := _patchable
 	_patchable = {}
 	var step := terrain.region_spacing if is_instance_valid(terrain) else 0.0
-	if not was_current or _configuration_dirty or not _attached() or _working or not _flight.is_empty() or _spec.is_empty() or _cutoff != terrain.preview_through_layer or _make_spec() != _spec or not is_finite(step) or step <= 0.0:
+	if not was_current or _configuration_dirty or not _attached() or not _flight.is_empty() or _spec.is_empty() or _cutoff != terrain.preview_through_layer or _make_spec() != _spec or not is_finite(step) or step <= 0.0:
 		request_refresh(); return
 	var selected := terrain.preview_through_layer
 	var margin := radius + maxf(step * 2.0, native_spacing * 2.0)
@@ -1195,14 +1233,19 @@ func _patch_class(cls: String, area: Rect2, selected: StrataLayer) -> bool:
 	var exact := _exact_windows()
 	var size := StrataRegions.map_size(_spec.cells, description)
 	var far_level_used := _far_level_of(_spec)
+	# The windows are composed together on the worker pool (a 200 m dab covers about twenty
+	# regions, 4 ms each at 0.5 m), then written here in region order.
+	var jobs: Array[Dictionary] = []
 	for xy in StrataRegions.regions_touching(_spec, area, description):
 		if not _wanted.has(xy) and not _regions.has(xy) and not _far.has(xy):
 			if _tiered: continue
 			return false
-		if _far.has(xy) and far_level_used > 0 and not _patch_far(cls, xy): return false
+		# Stale entries are left to the pump, which composes them from a capture with the dab.
+		if _far.has(xy) and far_level_used > 0 and _current(_gens_far.get(xy, {}), cls): jobs.append({"xy": xy, "level": far_level_used, "rect": Rect2i(), "far": true})
 		if not _regions.has(xy):
 			if _tiered: continue
 			return false
+		if not _current(_gens_near.get(xy, {}), cls): continue
 		var rect := StrataRegions.texel_rect(_spec, xy, description, area)
 		if not rect.has_area(): continue
 		var window := StrataRegions.map_window(_spec, xy, description)
@@ -1224,19 +1267,47 @@ func _patch_class(cls: String, area: Rect2, selected: StrataLayer) -> bool:
 				end = begin + Vector2i(side, side)
 			rect = Rect2i(begin, end - begin)
 		var whole := rect == Rect2i(Vector2i.ZERO, size)
-		var images := _compose_sync(cls, xy, 0, Rect2i() if whole else rect)
-		if images.is_empty(): return false
-		for name in images:
-			if not _store(xy, name, images[name], rect.position): return false
-		_touch(xy)
+		jobs.append({"xy": xy, "level": 0, "rect": Rect2i() if whole else rect, "origin": rect.position, "far": false})
+	if not _compose_jobs(cls, selected, jobs): return false
+	for job in jobs:
+		if job.far:
+			if not _apply_far(job.xy, job.images): return false
+			continue
+		for name in job.images:
+			if not _store(job.xy, name, job.images[name], job.origin): return false
+		_touch(job.xy)
 	if _tiered and not _patch_coarse(cls, area): return false
 	return true
 
-## Recomposes a far region's far-level maps of a class and rebinds them.
-func _patch_far(cls: String, xy: Vector2i) -> bool:
+## Composes every job's window ({xy, level, rect}) of a class from one capture of the stack,
+## on the worker pool when there are several, and stores the images in job.images. False (with
+## the reason in [member status]) when any fails.
+func _compose_jobs(cls: String, selected: StrataLayer, jobs: Array[Dictionary]) -> bool:
+	if jobs.is_empty(): return true
+	var cap := StrataRegionCompose.capture(terrain, selected, _spec)
+	if not cap.get("ok", false):
+		status = String(cap.get("message", "The stack could not be captured"))
+		return false
+	var ctx := {"terrain": terrain, "selected": selected, "spec": _spec, "capture": cap, "material_ok": _material_problem().is_empty()}
+	var compose := func(index: int) -> void:
+		var job: Dictionary = jobs[index]
+		job.result = _compose_class(ctx, cls, false, job.xy, int(job.level), job.rect)
+	if OS.has_feature("threads") and jobs.size() > 1:
+		WorkerThreadPool.wait_for_group_task_completion(WorkerThreadPool.add_group_task(compose, jobs.size(), -1, true, "Strata preview dab"))
+	else:
+		for index in range(jobs.size()): compose.call(index)
+	for job in jobs:
+		_region_compositions += 1
+		var composed: Dictionary = job.result
+		if not composed.get("ok", false):
+			status = String(composed.get("message", "Composition returned nothing"))
+			return false
+		job.images = composed.images
+	return true
+
+## Stores a far region's recomposed far-level maps of a class and rebinds them.
+func _apply_far(xy: Vector2i, images: Dictionary) -> bool:
 	var level := _far_level_of(_spec)
-	var images := _compose_sync(cls, xy, level, Rect2i())
-	if images.is_empty(): return false
 	var data: StrataRegionData = _far[xy]
 	for name in images:
 		if not _set_level_image(data, name, images[name], level): return false
@@ -1248,8 +1319,9 @@ func _patch_far(cls: String, xy: Vector2i) -> bool:
 	return true
 
 ## Recomposes the coarse texels a dab over [param area] covers and marks the maps for upload.
+## A stale coarse class is left to the pump.
 func _patch_coarse(cls: String, area: Rect2) -> bool:
-	if not _stale(_gens_coarse).is_empty(): return false
+	if not _current(_gens_coarse, cls): return true
 	var description: Dictionary = _spec.maps[(_class_maps(cls) as Array)[0]]
 	var window := StrataRegions.coarse_window(_spec, description, _coarse_level)
 	var size: Vector2i = window.size
@@ -1351,6 +1423,13 @@ func get_spec() -> Dictionary:
 func _exit_tree() -> void:
 	_cancel_work()
 	if is_instance_valid(terrain):
-		terrain.editor_renderer = null
-		terrain.editor_preview_bridge = null
-	if renderer is Node and is_instance_valid(renderer): (renderer as Node).queue_free()
+		# A newer bridge may own the terrain already; leave its references alone.
+		if terrain.editor_preview_bridge == self:
+			terrain.editor_renderer = null
+			terrain.editor_preview_bridge = null
+		if terrain.authoring_preview_changed.is_connected(request_refresh): terrain.authoring_preview_changed.disconnect(request_refresh)
+	if is_instance_valid(renderer) and renderer is Node: (renderer as Node).queue_free()
+	# A bridge that left the tree is never used again: when the scene comes back (a scene tab
+	# switched away and back, faster than the plugin's scan notices) the plugin gives the
+	# terrain a new one. Kept, this one would recompose the whole view after every edit.
+	if not is_queued_for_deletion(): queue_free()

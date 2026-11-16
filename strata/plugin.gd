@@ -23,6 +23,10 @@ var _scene: Node
 var _bridges: Array[StrataEditorPreview] = []
 var _scan_elapsed := 0.0
 var _status: Label
+# The operation a held modifier selects ("" when none; see _current_operation).
+var _held_operation := ""
+# True while the status label shows the preview's composition progress.
+var _showing_progress := false
 var _editor_camera: Camera3D
 var _cursor: StrataBrushCursor
 # Terrain-local point under the pointer, so a radius change redraws the cursor in place.
@@ -40,6 +44,7 @@ func _enter_tree() -> void:
 	_operation = OptionButton.new()
 	for operation in ["raise", "lower", "flatten", "smooth", "erase"]:
 		_operation.add_item(operation.capitalize())
+	_operation.tooltip_text = "Hold Shift to Smooth, or Ctrl (Cmd on macOS) to Lower instead of Raise and Raise instead of Lower; the toolbar operation returns when the key is released."
 	_toolbar.add_child(_operation)
 	_radius = _number("Radius", 0.25, StrataBrush.MAX_RADIUS_METERS, 4.0)
 	_radius.step = 0.25
@@ -48,6 +53,8 @@ func _enter_tree() -> void:
 	_radius.tooltip_text = "Type a radius up to 4096 m. Dabs keep the 65,536-sample budget; select a coarse manual layer or add a new one for broad mountains. Existing layer spacing must not be changed to resize a brush."
 	_radius.value_changed.connect(func(_value: float): _update_cursor())
 	_strength = _number("Strength", 0.01, 10.0, 0.6)
+	_strength.step = 0.01
+	_strength.tooltip_text = "Raise/Lower: metres of height per metre of stroke at the brush centre, at any radius (a dab keeps its shape as the brush grows). Smooth/Flatten: how far a dab moves toward the local average (over a tenth of the radius) or the flatten height, 1 = all the way. Material channels: rate of coverage change."
 	_channel = LineEdit.new()
 	_channel.text = "height"
 	_channel.placeholder_text = "Channel"
@@ -160,26 +167,45 @@ func _process(delta: float) -> void:
 			if is_instance_valid(bridge): bridge.queue_free()
 		_bridges.clear()
 		_scene = scene
-		if is_instance_valid(scene): _discover_terrains(scene)
-	elif is_instance_valid(scene): _discover_terrains(scene)
+		# Once per scene: terrains that entered the tree before their script added them to the
+		# group (a script reload) join it now. Later checks read only the group, so their cost
+		# does not grow with the scene (streamed cells add thousands of nodes).
+		if is_instance_valid(scene): _join_group(scene)
+	if is_instance_valid(scene): _discover_terrains(scene)
 	for bridge in _bridges:
-		if is_instance_valid(bridge) and (not is_instance_valid(bridge.terrain) or not bridge.terrain.textured_editor_preview): bridge.queue_free()
+		if is_instance_valid(bridge) and not is_instance_valid(bridge.terrain): bridge.queue_free()
 	var viewport := EditorInterface.get_editor_viewport_3d(0)
 	if viewport != null:
 		for bridge in _bridges:
 			if is_instance_valid(bridge):
 				bridge.sync_configuration()
 				bridge.set_camera(_editor_camera if is_instance_valid(_editor_camera) else viewport.get_camera_3d())
-				# Composition progress (coarse terrain, then regions near the camera) while no stroke is active.
-				if _stroke_layer == null and is_instance_valid(_status) and not bridge.progress_text().is_empty(): _status.text = bridge.progress_text()
+				# Composition progress (coarse terrain, then regions near the camera) while no stroke
+				# is active; once it finishes, the preview's final status replaces it.
+				if _stroke_layer == null and is_instance_valid(_status):
+					var progress: String = bridge.progress_text()
+					if not progress.is_empty():
+						_status.text = progress
+						_showing_progress = true
+					elif _showing_progress:
+						_status.text = "Live preview ready"
+						_status.tooltip_text = bridge.status
+						_showing_progress = false
 
-func _discover_terrains(node: Node) -> void:
-	if node is StrataTerrain3D and node.textured_editor_preview and not node.editor_materials.is_empty() and not is_instance_valid(node.editor_preview_bridge):
-		var bridge := StrataEditorPreview.new()
-		node.add_child(bridge, false, Node.INTERNAL_MODE_BACK)
-		bridge.setup(node)
-		_bridges.append(bridge)
-	for child in node.get_children(): _discover_terrains(child)
+func _discover_terrains(scene: Node) -> void:
+	for node in scene.get_tree().get_nodes_in_group(StrataTerrain3D.GROUP):
+		if not node is StrataTerrain3D or not (node == scene or scene.is_ancestor_of(node)): continue
+		# Every terrain gets the region preview, so the height shows at the region spacing;
+		# textured_editor_preview only decides whether it shows the materials.
+		if not is_instance_valid(node.editor_preview_bridge):
+			var bridge := StrataEditorPreview.new()
+			node.add_child(bridge, false, Node.INTERNAL_MODE_BACK)
+			bridge.setup(node)
+			_bridges.append(bridge)
+
+func _join_group(node: Node) -> void:
+	if node is StrataTerrain3D and not node.is_in_group(StrataTerrain3D.GROUP): node.add_to_group(StrataTerrain3D.GROUP)
+	for child in node.get_children(): _join_group(child)
 
 func _exit_tree() -> void:
 	_finish_stroke()
@@ -196,10 +222,10 @@ func _edit(object: Object) -> void:
 	_finish_stroke()
 	_hide_cursor()
 	if is_instance_valid(_layer) and _layer.get_parent() is StrataTerrain3D:
-		_layer.get_parent().preview_through_layer = null
+		_layer.get_parent().editor_selected_layer = null
 	_layer = object as StrataLayer
 	if _layer != null and _layer.get_parent() is StrataTerrain3D:
-		_layer.get_parent().preview_through_layer = _layer
+		_layer.get_parent().editor_selected_layer = _layer
 		_layer.get_parent().override_channel = StringName(_channel.text)
 		_overrides.set_pressed_no_signal(_layer.get_parent().show_overrides)
 
@@ -208,8 +234,9 @@ func _make_visible(visible: bool) -> void:
 	if not visible:
 		_finish_stroke()
 		_hide_cursor()
+		# The preview falls back to the terrain's editor_preview_lock (or the complete stack).
 		if is_instance_valid(_layer) and _layer.get_parent() is StrataTerrain3D:
-			_layer.get_parent().preview_through_layer = null
+			_layer.get_parent().editor_selected_layer = null
 		_layer = null
 
 func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
@@ -217,6 +244,7 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 	if is_instance_valid(_layer) and _layer.get_parent() is StrataTerrain3D and is_instance_valid(_layer.get_parent().editor_preview_bridge): _layer.get_parent().editor_preview_bridge.set_camera(camera)
 	if not is_instance_valid(_layer) or not (_layer.get_parent() is StrataTerrain3D):
 		return AFTER_GUI_INPUT_PASS
+	if event is InputEventWithModifiers: _update_held_operation(event)
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		if _stroke_layer != null:
 			_finish_stroke()
@@ -235,6 +263,12 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 		_dab(hit.local_position)
 		return AFTER_GUI_INPUT_STOP
 	if event is InputEventMouseMotion:
+		# Camera navigation (right or middle button held) skips the pick and the cursor redraw,
+		# which cost several milliseconds per motion event; the cursor returns with the next
+		# plain motion.
+		if _stroke_layer == null and event.button_mask & (MOUSE_BUTTON_MASK_RIGHT | MOUSE_BUTTON_MASK_MIDDLE):
+			_hide_cursor()
+			return AFTER_GUI_INPUT_PASS
 		# The cursor follows the pointer whether or not a stroke is in progress.
 		if event.alt_pressed:
 			_hide_cursor()
@@ -250,6 +284,22 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 				_dab(_hover_point)
 			return AFTER_GUI_INPUT_STOP
 	return AFTER_GUI_INPUT_PASS
+
+## The operation a dab uses: the toolbar's, or while a modifier is held, Shift for Smooth and
+## Ctrl (Cmd on macOS) for the opposite of Raise or Lower. Read from every event with
+## modifiers, so it changes mid-stroke and ends with the key.
+func _current_operation() -> String:
+	return _held_operation if _held_operation else _operation.get_item_text(_operation.selected).to_lower()
+
+func _update_held_operation(event: InputEventWithModifiers) -> void:
+	var selected := _operation.get_item_text(_operation.selected).to_lower()
+	var held := ""
+	if event.shift_pressed: held = "smooth"
+	elif event.is_command_or_control_pressed() and selected in ["raise", "lower"]: held = "lower" if selected == "raise" else "raise"
+	if held == _held_operation: return
+	_held_operation = held
+	# The toolbar shows the operation in effect while the key is held.
+	_operation.text = held.capitalize() if not held.is_empty() else _operation.get_item_text(_operation.selected)
 
 func _pick(camera: Camera3D, point: Vector2) -> Dictionary:
 	return (_layer.get_parent() as StrataTerrain3D).raycast_surface(camera.project_ray_origin(point), camera.project_ray_normal(point))
@@ -279,7 +329,7 @@ func _free_cursor() -> void:
 	_cursor = null
 
 func _dab(point: Vector2) -> void:
-	if _last_point.is_finite() and _last_point.distance_to(point) < _radius.value * 0.1:
+	if _last_point.is_finite() and _last_point.distance_to(point) < _radius.value * StrataBrush.DAB_SPACING:
 		return
 	_last_point = point
 	var limit_message := StrataBrush.sample_limit_message(_stroke_layer, point, _radius.value)
@@ -291,7 +341,7 @@ func _dab(point: Vector2) -> void:
 	var bridge: Node = _stroke_layer.get_parent().editor_preview_bridge
 	var can_patch: bool = is_instance_valid(bridge) and bridge.can_patch_region()
 	var channel := StringName(_channel.text)
-	var operation := _operation.get_item_text(_operation.selected).to_lower()
+	var operation := _current_operation()
 	var grid := StrataBrush.candidate_grid(_stroke_layer, point, _radius.value)
 	if grid.is_empty(): return
 	# A material dab writes every material channel, so undo must capture all of them.
