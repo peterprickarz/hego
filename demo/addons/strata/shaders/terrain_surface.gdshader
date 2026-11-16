@@ -160,119 +160,129 @@ vec2 endpoint_field_uv(vec2 position, vec2 origin, vec2 size, ivec2 dimensions) 
 }
 
 #ifdef STRATA_SURFACE_CACHE
-// Relief from StrataSurfaceCache (StrataRenderSettings.surface_cache_*): the cache's relief
-// layers hold terrain_material_relief() at texel corners (cell g at g * texel), so a vertex on
-// that lattice reads its own value and others interpolate bilinearly. surface_cache_params:
-// level-0 texel size (m), resolution (power of two), level count, relief level. The window of
-// level k starts at cell surface_cache_origins[k] (a huge value while the level is unfilled).
-uniform sampler2DArray surface_cache_height : filter_nearest, repeat_disable;
-uniform vec4 surface_cache_params = vec4(0.0);
-uniform vec2 surface_cache_origins[8];
+// The surface cache (StrataSurfaceCache, StrataRenderSettings.surface_cache_*): a sparse virtual
+// texture of the resolved terrain surface, read through strata_virtual_texture.gdshaderinc.
+// The atlas arrays hold, per slot: albedo (sRGB) and AO, octahedral normal with roughness and
+// metallic, base height and material relief at the cell corners (two layers per atlas layer),
+// and how much of each cell surface writers replaced.
+uniform sampler2D vt_page_table : filter_nearest, repeat_disable;
+uniform sampler2DArray vt_albedo : filter_nearest, repeat_disable;
+uniform sampler2DArray vt_normal : filter_nearest, repeat_disable;
+uniform sampler2DArray vt_albedo_linear : filter_linear, repeat_disable;
+uniform sampler2DArray vt_normal_linear : filter_linear, repeat_disable;
+uniform sampler2DArray vt_albedo_anisotropic : filter_linear_mipmap_anisotropic, repeat_disable;
+uniform sampler2DArray vt_normal_anisotropic : filter_linear_mipmap_anisotropic, repeat_disable;
+uniform sampler2DArray vt_height : filter_nearest, repeat_disable;
+uniform sampler2DArray vt_height_linear : filter_linear, repeat_disable;
+uniform sampler2DArray vt_cover : filter_nearest, repeat_disable;
+uniform vec4 vt_params = vec4(0.0);
+uniform ivec4 vt_layout = ivec4(0);
+// Mip whose cells match the displaced vertex spacing: the mesh carries its relief (-1: none).
+uniform int vt_relief_mip = -1;
+// Added to the mip a pixel footprint selects (negative: finer). The screen's page requests use it.
+// It rises while more pages are requested than the pool holds.
+uniform float surface_cache_lod_bias = -1.0;
+// The bias without that rise: the cache fill bakes each mip's far UV blend for it.
+uniform float surface_cache_bake_lod_bias = -1.0;
+#define STRATA_VT_TABLE vt_page_table
+#define STRATA_VT_PARAMS vt_params
+#define STRATA_VT_LAYOUT vt_layout
+#include "strata_virtual_texture.gdshaderinc"
 
-bool surface_cache_relief(vec2 position, out float relief) {
+// Relief of a mip at an atlas position, bilinear between the cell corners (texel g holds the
+// corner of cell g) or of the cell itself.
+float vt_relief_linear(vec3 at) {
+	return textureLod(vt_height_linear, vec3((at.xy + vec2(0.5)) / vec2(textureSize(vt_height_linear, 0).xy), at.z * 2.0 + 1.0), 0.0).r;
+}
+
+float vt_relief_cell(vec3 at) {
+	return texelFetch(vt_height, ivec3(ivec2(floor(at.xy)), int(at.z) * 2 + 1), 0).r;
+}
+
+// Displacement relief (terrain_material_relief() as the cache holds it) from the relief mip: a
+// vertex on that mip's cell corners reads its own value, others interpolate bilinearly. False
+// while the page is not resident.
+bool vt_relief(vec2 position, out float relief) {
 	relief = 0.0;
-	int level = int(surface_cache_params.w);
-	int resolution = int(surface_cache_params.y);
-	if (resolution <= 0 || level < 0 || level >= int(surface_cache_params.z)) { return false; }
-	float texel = surface_cache_params.x * exp2(float(level));
-	vec2 grid = position / texel;
-	ivec2 first = ivec2(floor(grid));
-	ivec2 origin = ivec2(surface_cache_origins[level]);
-	// Two cells of margin: the window edge may be refilled this frame.
-	if (any(lessThan(first, origin + ivec2(2))) || any(greaterThanEqual(first + ivec2(1), origin + ivec2(resolution - 2)))) { return false; }
-	vec2 f = grid - vec2(first);
-	ivec2 mask = ivec2(resolution - 1);
-	int layer = level * 2 + 1;
-	float a = texelFetch(surface_cache_height, ivec3(first & mask, layer), 0).r;
-	float b = texelFetch(surface_cache_height, ivec3((first + ivec2(1, 0)) & mask, layer), 0).r;
-	float c = texelFetch(surface_cache_height, ivec3((first + ivec2(0, 1)) & mask, layer), 0).r;
-	float d = texelFetch(surface_cache_height, ivec3((first + ivec2(1, 1)) & mask, layer), 0).r;
+	vec3 at;
+	if (vt_relief_mip < 0 || !strata_vt_locate(position, vt_relief_mip, at)) { return false; }
+	ivec2 first = ivec2(floor(at.xy));
+	vec2 f = at.xy - vec2(first);
+	int layer = int(at.z) * 2 + 1;
+	float a = texelFetch(vt_height, ivec3(first, layer), 0).r;
+	float b = texelFetch(vt_height, ivec3(first + ivec2(1, 0), layer), 0).r;
+	float c = texelFetch(vt_height, ivec3(first + ivec2(0, 1), layer), 0).r;
+	float d = texelFetch(vt_height, ivec3(first + ivec2(1, 1), layer), 0).r;
 	relief = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 	return true;
 }
 
 // Parallax (prototype, StrataRenderSettings.parallax_*): per-pixel relief finer than the
-// displaced mesh. The mesh already carries the relief of the relief level, bilinear between its
-// vertices, so the ray is marched through the residual: the relief of the level matching the
-// pixel footprint minus the relief level's, inside a shell of +-parallax_depth metres around the
-// mesh surface along the smooth normal. Mode 1 reads the fine level bilinearly (a smooth
+// displaced mesh. The mesh already carries the relief of the relief mip, bilinear between its
+// vertices, so the ray is marched through the residual: the relief of the mip matching the
+// pixel footprint minus the relief mip's, inside a shell of +-parallax_depth metres around the
+// mesh surface along the smooth normal. Mode 1 reads the fine mip bilinearly (a smooth
 // surface; the texel grid shears with the view), mode 2 per cell (flat-topped columns of one
 // cache cell, with walls). With displacement off the whole relief is marched instead. No depth
 // is written and nothing is cast into shadow maps.
-uniform sampler2DArray surface_cache_height_linear : filter_linear, repeat_enable;
 uniform int parallax_mode = 0;
 uniform float parallax_radius = 8.0;
 uniform float parallax_depth = 0.02;
 // Share of the residual the ray sees. Material displacement is tuned for lumps of the mesh's
 // vertex spacing; at full strength single texels stand out as spikes several centimetres tall.
 uniform float parallax_strength = 0.25;
-// Finest cache level the ray reads. Level 0 is one material texel: scanned height maps are
-// noisy at that size. Level 2 keeps features of about 3 cm and up.
+// Finest mip the ray reads. Mip 0 is one material texel: scanned height maps are noisy at that
+// size. Mip 2 keeps features of about 3 cm and up.
 uniform int parallax_min_level = 0;
 uniform int parallax_steps = 24;
 uniform float parallax_wall_shade = 0.75;
-// 1: hit height (red above the mesh, blue below), walls green. 2: cache level and step count.
+// 1: hit height (red above the mesh, blue below), walls green. 2: mip and step count.
 uniform int parallax_debug = 0;
 
-bool surface_cache_level_covers(vec2 position, int level, float margin) {
-	float texel = surface_cache_params.x * exp2(float(level));
-	vec2 grid = position / texel;
-	vec2 origin = surface_cache_origins[level];
-	float cells = 3.0 + margin / texel;
-	return all(greaterThanEqual(grid, origin + vec2(cells))) && all(lessThan(grid, origin + vec2(surface_cache_params.y - cells)));
-}
-
-// Relief of a level, bilinear between its cell corners like surface_cache_relief().
-float surface_cache_relief_linear(vec2 position, int level) {
-	float resolution = surface_cache_params.y;
-	vec2 grid = position / (surface_cache_params.x * exp2(float(level)));
-	vec2 cell = floor(grid);
-	// Wrapped before the division, which keeps the fraction's precision far from the origin.
-	vec2 wrapped = mod(cell, resolution) + (grid - cell);
-	return textureLod(surface_cache_height_linear, vec3((wrapped + vec2(0.5)) / resolution, float(level * 2 + 1)), 0.0).r;
-}
-
-float surface_cache_relief_cell(vec2 position, int level) {
-	ivec2 cell = ivec2(floor(position / (surface_cache_params.x * exp2(float(level)))));
-	return texelFetch(surface_cache_height, ivec3(cell & ivec2(int(surface_cache_params.y) - 1), level * 2 + 1), 0).r;
-}
-
-// Height of the fine surface above the displaced mesh, in metres along the normal.
+// Height of the fine surface above the displaced mesh, in metres along the normal (0 where a
+// page the ray crosses is not resident).
 float terrain_parallax_residual(vec2 position, int level, int mesh_level, float mesh_fade, float amplitude) {
-	float fine = parallax_mode == 2 ? surface_cache_relief_cell(position, level) : surface_cache_relief_linear(position, level);
-	float mesh = mesh_fade > 0.0 ? surface_cache_relief_linear(position, mesh_level) * mesh_fade : 0.0;
+	vec3 at;
+	if (!strata_vt_locate(position, level, at)) { return 0.0; }
+	float fine = parallax_mode == 2 ? vt_relief_cell(at) : vt_relief_linear(at);
+	float mesh = 0.0;
+	if (mesh_fade > 0.0) {
+		if (!strata_vt_locate(position, mesh_level, at)) { return 0.0; }
+		mesh = vt_relief_linear(at) * mesh_fade;
+	}
 	return clamp((fine - mesh) * amplitude, -parallax_depth, parallax_depth);
 }
 
 // The terrain position a pixel shows: where its view ray meets the fine relief. position and
 // base_point are the pixel's undisplaced surface point, view the unit terrain-local direction
 // to the camera, footprint the pixel's size on the surface in metres. info: hit height above
-// the mesh in shell units (-1..1), 1 on a column wall, cache level, share of parallax_steps.
+// the mesh in shell units (-1..1), 1 on a column wall, mip, share of parallax_steps.
 vec2 terrain_parallax(vec2 position, vec3 base_point, vec3 normal, vec3 view, float footprint, out vec4 info) {
 	info = vec4(0.0);
-	int levels = int(surface_cache_params.z);
-	if (parallax_mode == 0 || parallax_depth <= 0.0 || surface_cache_params.y <= 0.0 || levels <= 0) { return position; }
+	int top = int(vt_params.w);
+	if (parallax_mode == 0 || parallax_depth <= 0.0 || vt_params.y <= 0.0) { return position; }
 	float view_distance = distance(base_point, camera_position);
 	float fade = 1.0 - smoothstep(parallax_radius * 0.6, parallax_radius, view_distance);
 	if (fade <= 0.0) { return position; }
 	float mesh_fade = displacement_enabled ? 1.0 - smoothstep(displacement_radius * 0.55, displacement_radius, view_distance) : 0.0;
-	int mesh_level = int(surface_cache_params.w);
+	int mesh_level = vt_relief_mip;
 	if (mesh_level < 0) {
 		// Without cached displacement the mesh evaluates its relief itself: only the
 		// undisplaced terrain is handled here.
 		if (mesh_fade > 0.0) { return position; }
-		mesh_level = min(4, levels - 1);
+		mesh_level = min(4, top);
 	}
 	// Travel across the surface per metre of height along the normal. The limit on the cosine
 	// keeps grazing rays short: they flatten instead of sliding far.
 	float cosine = dot(view, normal);
 	vec2 slide = (view - normal * cosine).xz / max(cosine, 0.25);
 	float reach = length(slide) * parallax_depth;
-	int level = clamp(int(floor(log2(max(footprint, 0.000001) / surface_cache_params.x) + 0.5)), max(parallax_min_level, 0), levels - 1);
-	while (level < mesh_level && !surface_cache_level_covers(position, level, reach)) { level++; }
+	int level = clamp(strata_vt_footprint_mip(footprint, surface_cache_lod_bias), min(max(parallax_min_level, 0), top), top);
+	vec3 probe;
+	while (level < mesh_level && !strata_vt_locate(position, level, probe)) { level++; }
 	if (level >= mesh_level) { return position; }
-	if (mesh_fade > 0.0 && !surface_cache_level_covers(position, mesh_level, reach)) { return position; }
-	float texel = surface_cache_params.x * exp2(float(level));
+	if (mesh_fade > 0.0 && !strata_vt_locate(position, mesh_level, probe)) { return position; }
+	float texel = vt_params.x * exp2(float(level));
 	// One step per cell crossed (columns: finer, so thin ones are not stepped over).
 	float crossed = 2.0 * reach / texel * (parallax_mode == 2 ? 1.5 : 1.0);
 	int count = clamp(int(ceil(crossed)) + 2, 4, max(parallax_steps, 4));
@@ -302,14 +312,6 @@ vec2 terrain_parallax(vec2 position, vec3 base_point, vec3 normal, vec3 view, fl
 	return shown;
 }
 
-// Surface writers (StrataSurfaceWriter): where they covered a cell, the cache holds the
-// composited surface, and the terrain takes it from there instead of its own evaluation (as an
-// Unreal landscape samples its runtime virtual texture). The level follows the pixel footprint
-// like nearest mipmap selection; beyond the coarsest window writers fade out.
-uniform sampler2DArray surface_cache_albedo : filter_nearest, repeat_disable;
-uniform sampler2DArray surface_cache_normal : filter_nearest, repeat_disable;
-uniform sampler2DArray surface_cache_cover : filter_nearest, repeat_disable;
-
 vec3 surface_cache_srgb_to_linear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
 }
@@ -321,101 +323,98 @@ vec3 surface_cache_octahedral_decode(vec2 encoded) {
 	return normalize(n);
 }
 
-// Writer coverage at a terrain-local point (0 outside the cache) and the cached surface there.
-// reach: 1 where the cache has the point, fading to 0 over the outer quarter of the coarsest
-// window and 0 outside every window (the far layer takes over there).
-float surface_cache_writers(vec2 position, float footprint, out vec4 albedo, out vec4 normal_data, out float reach_weight) {
-	albedo = vec4(0.0); normal_data = vec4(0.0); reach_weight = 0.0;
-	int resolution = int(surface_cache_params.y);
-	int levels = int(surface_cache_params.z);
-	if (resolution <= 0 || levels <= 0) { return 0.0; }
-	// Fade over the outer quarter of the coarsest window so writers do not pop.
-	float reach = surface_cache_params.x * exp2(float(levels - 1)) * (float(resolution) * 0.5 - 18.0);
-	float d = max(abs(position.x - camera_position.x), abs(position.y - camera_position.z));
-	float fade = 1.0 - smoothstep(reach * 0.75, reach, d);
-	int first = clamp(int(floor(log2(max(footprint, 0.000001) / surface_cache_params.x) + 0.5)), 0, levels - 1);
-	for (int k = first; k < levels; k++) {
-		float texel = surface_cache_params.x * exp2(float(k));
-		ivec2 cell = ivec2(floor(position / texel));
-		ivec2 origin = ivec2(surface_cache_origins[k]);
-		if (any(lessThan(cell, origin + ivec2(2))) || any(greaterThanEqual(cell, origin + ivec2(resolution - 2)))) { continue; }
-		ivec3 at = ivec3(cell & ivec2(resolution - 1), k);
-		reach_weight = fade;
-		float cover = texelFetch(surface_cache_cover, at, 0).r;
-		if (cover <= 0.0) { return 0.0; }
-		albedo = texelFetch(surface_cache_albedo, at, 0);
-		normal_data = texelFetch(surface_cache_normal, at, 0);
-		return cover;
-	}
-	return 0.0;
+// Surface writers (StrataSurfaceWriter) for pixels the terrain shades itself: where they
+// covered a cell, the cache holds the composited surface, and the terrain takes it from there
+// (as an Unreal landscape samples its runtime virtual texture). Read from the finest resident
+// page at or above the footprint's mip. Returns the coverage (0: no writer, or no page yet).
+float vt_writers(vec2 position, float footprint, out vec4 albedo, out vec4 normal_data) {
+	albedo = vec4(0.0); normal_data = vec4(0.0);
+	if (vt_params.y <= 0.0) { return 0.0; }
+	vec3 at;
+	if (strata_vt_find(position, strata_vt_footprint_mip(footprint, surface_cache_lod_bias), at) < 0) { return 0.0; }
+	ivec3 texel = ivec3(ivec2(floor(at.xy)), int(at.z));
+	float cover = texelFetch(vt_cover, texel, 0).r;
+	if (cover <= 0.0) { return 0.0; }
+	albedo = texelFetch(vt_albedo, texel, 0);
+	normal_data = texelFetch(vt_normal, texel, 0);
+	return cover;
 }
 
-// Shading from the cache (prototype, StrataRenderSettings.surface_cache_shading): the resolved
-// surface of the two levels around the pixel footprint (nearest cell in each, blended like the
-// materials' nearest-texel, linear-mipmap filtering). False where a level is outside its window.
+// Shading from the cache (StrataRenderSettings.surface_cache_shading): the resolved surface of
+// the mips around the pixel footprint, filtered by surface_cache_filter.
 uniform bool surface_cache_shading = false;
 uniform float surface_cache_shading_min_normal_y = 0.7071;
 uniform bool surface_cache_shading_debug = false;
-// Added to the level the pixel footprint selects (negative: finer).
-uniform float surface_cache_shading_lod_bias = -1.0;
+// 0 nearest cell, two mips blended (the materials' nearest-texel, linear-mipmap filtering);
+// 1 bilinear in the nearest mip; 2 bilinear, two mips blended; 3 anisotropic: the mip of the
+// footprint's short axis (up to surface_cache_anisotropy times finer), sampled along the long one.
+uniform int surface_cache_filter = 0;
+uniform float surface_cache_anisotropy = 4.0;
 // The far UV blend by footprint (cache shading): the camera's vertical angle per pixel and the eye
 // height at which a footprint counts as a distance over flat ground.
 uniform float surface_cache_pixel_angle = 0.0;
 uniform float surface_cache_shading_eye_height = 1.7;
 
-// Far UV blend for a pixel footprint (metres), as the cache fill bakes it per level.
+// Far UV blend for a pixel footprint (metres), as the cache fill bakes it per mip.
 float uv_blend_footprint(float footprint) {
 	if (!distance_uv_enabled || surface_cache_pixel_angle <= 0.0) { return 0.0; }
 	return smoothstep(uv_near_distance, uv_far_distance, sqrt(footprint * surface_cache_shading_eye_height / surface_cache_pixel_angle));
 }
 
-bool surface_cache_surface(vec2 position, float footprint, out vec3 color, out vec3 orm, out vec3 normal) {
+// A page's albedo and normal texels at an atlas position. axis_x and axis_y are the pixel's
+// extent in cells of the page's mip (anisotropic filtering).
+void vt_fetch(vec3 at, vec2 axis_x, vec2 axis_y, out vec4 a, out vec4 n) {
+	if (surface_cache_filter == 0) {
+		ivec3 texel = ivec3(ivec2(floor(at.xy)), int(at.z));
+		a = texelFetch(vt_albedo, texel, 0);
+		n = texelFetch(vt_normal, texel, 0);
+		return;
+	}
+	vec2 size = vec2(textureSize(vt_albedo, 0).xy);
+	vec3 uv = vec3(at.xy / size, at.z);
+	if (surface_cache_filter == 3) {
+		// The samples stay inside the slot's border (less the half cell bilinear reads).
+		float keep = min(1.0, (2.0 * vt_params.z - 1.0) / max(max(length(axis_x), length(axis_y)), 0.0001));
+		a = textureGrad(vt_albedo_anisotropic, uv, axis_x * keep / size, axis_y * keep / size);
+		n = textureGrad(vt_normal_anisotropic, uv, axis_x * keep / size, axis_y * keep / size);
+		return;
+	}
+	a = textureLod(vt_albedo_linear, uv, 0.0);
+	n = textureLod(vt_normal_linear, uv, 0.0);
+}
+
+// The resolved surface at a terrain-local position whose pixel extends over axis_x and axis_y
+// (metres). A missing page falls back one mip; past that the pixel is shaded directly (false),
+// so missing pages never show as blur.
+bool vt_surface(vec2 position, vec2 axis_x, vec2 axis_y, out vec3 color, out vec3 orm, out vec3 normal) {
 	color = vec3(0.0); orm = vec3(1.0, 1.0, 0.0); normal = vec3(0.0, 1.0, 0.0);
-	int resolution = int(surface_cache_params.y);
-	int levels = int(surface_cache_params.z);
-	if (resolution <= 0 || levels <= 0) { return false; }
-	float lod = max(log2(max(footprint, 0.000001) / surface_cache_params.x) + surface_cache_shading_lod_bias, 0.0);
-	int k0 = int(floor(lod));
-	float t = fract(lod);
-	// Near the camera the footprint can ask for a level whose window (camera-centred, halving with
-	// each finer level) ends short of the point: the finest level that covers it is used instead,
-	// unblended, so near ground stays in the cache, usually one level softer.
-	while (k0 < levels && !surface_cache_level_covers(position, k0, 0.0)) { k0++; t = 0.0; }
-	if (k0 >= levels) { return false; }
-	int k1 = min(k0 + 1, levels - 1);
-	if (k1 == k0 || !surface_cache_level_covers(position, k1, 0.0)) { t = 0.0; }
-	ivec2 mask = ivec2(resolution - 1);
-	ivec3 at = ivec3(ivec2(floor(position / (surface_cache_params.x * exp2(float(k0))))) & mask, k0);
-	vec4 a = texelFetch(surface_cache_albedo, at, 0);
-	vec4 n = texelFetch(surface_cache_normal, at, 0);
+	if (vt_params.y <= 0.0) { return false; }
+	int top = int(vt_params.w);
+	float long_axis = max(length(axis_x), length(axis_y));
+	float short_axis = min(length(axis_x), length(axis_y));
+	float ratio = surface_cache_filter == 3 ? clamp(long_axis / max(short_axis, 0.000001), 1.0, min(surface_cache_anisotropy, 2.0 * vt_params.z)) : 1.0;
+	float lod = max(log2(max(long_axis / ratio, 0.000001) / vt_params.x) + surface_cache_lod_bias, 0.0);
+	int k0 = min(int(floor(lod)), top);
+	float t = k0 < top ? fract(lod) : 0.0;
+	if (surface_cache_filter == 1) {
+		if (t >= 0.5) { k0++; }
+		t = 0.0;
+	}
+	vec3 at;
+	if (!strata_vt_locate(position, k0, at)) {
+		k0++; t = 0.0;
+		if (k0 > top || !strata_vt_locate(position, k0, at)) { return false; }
+	}
+	float cell = vt_params.x * exp2(float(k0));
+	vec4 a; vec4 n;
+	vt_fetch(at, axis_x / cell, axis_y / cell, a, n);
 	color = surface_cache_srgb_to_linear(a.rgb); orm = vec3(a.a, n.b, n.a); normal = surface_cache_octahedral_decode(n.rg);
-	if (t > 0.0) {
-		at = ivec3(ivec2(floor(position / (surface_cache_params.x * exp2(float(k1))))) & mask, k1);
-		a = texelFetch(surface_cache_albedo, at, 0);
-		n = texelFetch(surface_cache_normal, at, 0);
+	if (t > 0.0 && strata_vt_locate(position, k0 + 1, at)) {
+		vt_fetch(at, axis_x / (cell * 2.0), axis_y / (cell * 2.0), a, n);
 		color = mix(color, surface_cache_srgb_to_linear(a.rgb), t);
 		orm = mix(orm, vec3(a.a, n.b, n.a), t);
 		normal = normalize(mix(normal, surface_cache_octahedral_decode(n.rg), t));
 	}
-	return true;
-}
-
-// Far writer layer (StrataSurfaceWriterFar): every writer over the whole terrain at a coarse
-// texel, premultiplied. surface_writer_far_rect: terrain-local XZ origin and size (zero: none).
-uniform sampler2D surface_writer_far_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
-uniform sampler2D surface_writer_far_normal : filter_linear_mipmap_anisotropic, repeat_disable;
-uniform vec4 surface_writer_far_rect = vec4(0.0);
-
-bool surface_writer_far_sample(vec2 position, vec2 position_dx, vec2 position_dy, out vec4 albedo, out vec4 normal_data) {
-	albedo = vec4(0.0); normal_data = vec4(0.0);
-	if (surface_writer_far_rect.z <= 0.0) { return false; }
-	vec2 uv = (position - surface_writer_far_rect.xy) / surface_writer_far_rect.zw;
-	if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) { return false; }
-	vec2 scale = 1.0 / surface_writer_far_rect.zw;
-	albedo = textureGrad(surface_writer_far_albedo, uv, position_dx * scale, position_dy * scale);
-	// Writers set albedo and normal together almost always: one fetch away from them.
-	if (albedo.a <= 0.0005) { return false; }
-	normal_data = textureGrad(surface_writer_far_normal, uv, position_dx * scale, position_dy * scale);
 	return true;
 }
 #endif
@@ -431,7 +430,7 @@ float material_height_offset(vec3 base_point, vec3 projection_normal) {
 #ifdef STRATA_SURFACE_CACHE
 	// The cache holds the near-UV relief only.
 	float cached = 0.0;
-	if (far_mix <= 0.0 && surface_cache_relief(base_point.xz, cached)) { return cached * displacement_strength * fade; }
+	if (far_mix <= 0.0 && vt_relief(base_point.xz, cached)) { return cached * displacement_strength * fade; }
 #endif
 	float relief = terrain_material_relief(base_point, projection_normal, far_mix);
 	return relief * displacement_strength * fade;
@@ -510,8 +509,8 @@ void fragment() {
 #endif
 	float far_mix = uv_blend(base_point);
 	vec3 color; vec3 orm; vec3 final_normal; float discarded = 0.0;
-	// Shading from the surface cache (prototype). Each cache level holds the far UV blend of its
-	// footprint, so with cache shading every pixel blends by footprint.
+	// Shading from the surface cache. Each mip holds the far UV blend of its footprint, so with
+	// cache shading every pixel blends by footprint.
 	bool from_cache = false;
 	vec3 cache_color = vec3(0.0); vec3 cache_orm = vec3(0.0); vec3 cache_normal = vec3(0.0, 1.0, 0.0);
 #ifdef STRATA_SURFACE_CACHE
@@ -519,7 +518,7 @@ void fragment() {
 		float footprint = max(length(point_dx.xz), length(point_dy.xz));
 		far_mix = uv_blend_footprint(footprint);
 		if (projection_normal.y >= surface_cache_shading_min_normal_y) {
-			from_cache = surface_cache_surface(surface_position, footprint, cache_color, cache_orm, cache_normal);
+			from_cache = vt_surface(surface_position, point_dx.xz, point_dy.xz, cache_color, cache_orm, cache_normal);
 		}
 	}
 #endif
@@ -670,40 +669,18 @@ void fragment() {
 	vec4 terrain_macro = from_cache ? vec4(1.0) : terrain_macro_sample(surface_position);
 	ALBEDO *= mix(vec3(1.0), terrain_macro.rgb, terrain_tint_strength);
 	float writer_cover = 0.0;
-	float far_writer_cover = 0.0;
 	vec4 writer_albedo = vec4(0.0);
 #ifdef STRATA_SURFACE_CACHE
 	// The cache's surface already has its writers composited.
 	if (!from_cache) {
-	vec4 writer_normal;
-	float cache_reach;
-	float cached_cover = surface_cache_writers(surface_position, max(length(point_dx), length(point_dy)), writer_albedo, writer_normal, cache_reach);
-	// Where the cache fades out, the far layer takes over: the same writers over the terrain's
-	// own surface, as the cache's fill composites them.
-	vec3 far_color = ALBEDO; vec3 far_shading_normal = final_normal; float far_roughness = orm.g;
-	vec4 far_albedo; vec4 far_normal;
-	if (cache_reach < 1.0 && surface_writer_far_sample(surface_position, point_dx.xz, point_dy.xz, far_albedo, far_normal)) {
-		far_color = ALBEDO * (1.0 - far_albedo.a) + far_albedo.rgb;
-		far_writer_cover = far_albedo.a * (1.0 - cache_reach);
-		if (far_normal.a > 0.002) {
-			vec2 xz = clamp((far_normal.rg - 0.5 * far_normal.a) * 2.0 / far_normal.a, vec2(-1.0), vec2(1.0));
-			vec3 written = terrain_reoriented_normal(terrain_triplanar_frame(1, geometric_normal), geometric_normal, vec3(xz.x, -xz.y, sqrt(max(0.0, 1.0 - dot(xz, xz)))));
-			far_shading_normal = normalize(mix(final_normal, normalize(written), far_normal.a));
-			far_roughness = orm.g * (1.0 - far_normal.a) + far_normal.b;
+		vec4 writer_normal;
+		writer_cover = vt_writers(surface_position, max(length(point_dx), length(point_dy)), writer_albedo, writer_normal);
+		if (writer_cover > 0.0) {
+			ALBEDO = mix(ALBEDO, surface_cache_srgb_to_linear(writer_albedo.rgb), writer_cover);
+			final_normal = normalize(mix(final_normal, surface_cache_octahedral_decode(writer_normal.rg), writer_cover));
+			orm.g = mix(orm.g, writer_normal.b, writer_cover);
+			orm.b = mix(orm.b, writer_normal.a, writer_cover);
 		}
-	}
-	if (cached_cover > 0.0) {
-		ALBEDO = mix(ALBEDO, surface_cache_srgb_to_linear(writer_albedo.rgb), cached_cover);
-		final_normal = normalize(mix(final_normal, surface_cache_octahedral_decode(writer_normal.rg), cached_cover));
-		orm.g = mix(orm.g, writer_normal.b, cached_cover);
-		orm.b = mix(orm.b, writer_normal.a, cached_cover * cache_reach);
-	}
-	if (cache_reach < 1.0) {
-		ALBEDO = mix(far_color, ALBEDO, cache_reach);
-		final_normal = normalize(mix(far_shading_normal, final_normal, cache_reach));
-		orm.g = mix(far_roughness, orm.g, cache_reach);
-	}
-	writer_cover = cached_cover * cache_reach;
 	}
 	// Column walls have no texels of their own: they show their column's, darkened.
 	ALBEDO *= mix(1.0, parallax_wall_shade, parallax_info.y);
@@ -747,7 +724,7 @@ void fragment() {
 #ifdef STRATA_SURFACE_CACHE
 	if (surface_cache_shading_debug) { ALBEDO = mix(ALBEDO, from_cache ? vec3(0.1, 0.9, 0.2) : vec3(0.9, 0.15, 0.1), 0.5); }
 #endif
-	if (debug_surface_writers) { ALBEDO = mix(ALBEDO, vec3(0.0, 0.9, 1.0), writer_cover); ALBEDO = mix(ALBEDO, vec3(1.0, 0.0, 0.85), far_writer_cover); }
+	if (debug_surface_writers) { ALBEDO = mix(ALBEDO, vec3(0.0, 0.9, 1.0), writer_cover); }
 	if (debug_lod) { ALBEDO = mix(ALBEDO, vec3(fract(patch_level * 0.37), fract(patch_level * 0.61 + 0.3), fract(patch_level * 0.19 + 0.6)), 0.65); }
 	if (debug_discarded) { ALBEDO = mix(vec3(0.05, 0.15, 0.05), vec3(1.0, 0.0, 0.25), clamp(discarded * 2.0, 0.0, 1.0)); }
 	if (show_channel_preview) {

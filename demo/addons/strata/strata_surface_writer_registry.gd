@@ -16,6 +16,10 @@ signal materials_changed
 ## Writer outputs, each drawn by its own instance into its third of a writer tile: albedo,
 ## normal + roughness, AO + relief + metallic.
 const PASS_COUNT := 3
+## Edge in metres of the cells of an entry's footprint grid (see add_entry()).
+const FOOTPRINT_CELL := 16.0
+const _MAX_FOOTPRINT_CELLS := 1 << 20
+const _MAX_LOOKUP_CELLS := 1024
 const _META := &"strata_surface_writer_registry"
 
 var world := World3D.new()
@@ -65,21 +69,24 @@ func scenario() -> RID:
 	return world.scenario
 
 
-## Adds an entry; returns its id.
-func add_entry(bounds: AABB, materials: Array) -> int:
+## Adds an entry; returns its id. [param boxes] are the global boxes of its meshes: with them,
+## overlaps_xz() tests the FOOTPRINT_CELL cells they touch instead of [param bounds] alone (a
+## writer of many meshes spread over the terrain does not claim the ground between them).
+func add_entry(bounds: AABB, materials: Array, boxes: Array = []) -> int:
 	var id := _next_id
 	_next_id += 1
-	_entries[id] = {"bounds": bounds, "materials": []}
+	_entries[id] = {"bounds": bounds, "materials": [], "cells": _footprint(boxes)}
 	_set_materials(id, materials)
 	if bounds.has_volume() or bounds.size != Vector3.ZERO: changed.emit(bounds)
 	return id
 
 
 ## Moves or reshapes an entry; emits the union of its old and new bounds.
-func update_entry(id: int, bounds: AABB, materials: Array) -> void:
+func update_entry(id: int, bounds: AABB, materials: Array, boxes: Array = []) -> void:
 	if not _entries.has(id): return
 	var old: AABB = _entries[id].bounds
 	_entries[id].bounds = bounds
+	_entries[id].cells = _footprint(boxes)
 	_set_materials(id, materials)
 	changed.emit(old.merge(bounds))
 
@@ -101,12 +108,36 @@ func entry_count() -> int:
 	return _entries.size()
 
 
-## True when any writer's XZ footprint intersects the global XZ rectangle.
+## True when any writer's XZ footprint intersects the global XZ rectangle. Never false where a
+## writer draws; true for some ground beside one.
 func overlaps_xz(rect: Rect2) -> bool:
 	for entry: Dictionary in _entries.values():
 		var bounds: AABB = entry.bounds
-		if Rect2(bounds.position.x, bounds.position.z, bounds.size.x, bounds.size.z).intersects(rect, true): return true
+		if not Rect2(bounds.position.x, bounds.position.z, bounds.size.x, bounds.size.z).intersects(rect, true): continue
+		var cells: Variant = entry.get("cells")
+		if cells == null: return true
+		var first := Vector2i((rect.position / FOOTPRINT_CELL).floor())
+		var last := Vector2i((rect.end / FOOTPRINT_CELL).floor())
+		if (last.x - first.x + 1) * (last.y - first.y + 1) > _MAX_LOOKUP_CELLS: return true
+		for y in range(first.y, last.y + 1):
+			for x in range(first.x, last.x + 1):
+				if (cells as Dictionary).has(Vector2i(x, y)): return true
 	return false
+
+
+## The footprint grid cells the boxes touch, or null (the entry's bounds are its footprint)
+## without boxes or when they would take too many cells.
+static func _footprint(boxes: Array) -> Variant:
+	if boxes.is_empty(): return null
+	var cells := {}
+	for box: AABB in boxes:
+		var first := Vector2i((Vector2(box.position.x, box.position.z) / FOOTPRINT_CELL).floor())
+		var last := Vector2i((Vector2(box.end.x, box.end.z) / FOOTPRINT_CELL).floor())
+		if cells.size() + (last.x - first.x + 1) * (last.y - first.y + 1) > _MAX_FOOTPRINT_CELLS: return null
+		for y in range(first.y, last.y + 1):
+			for x in range(first.x, last.x + 1):
+				cells[Vector2i(x, y)] = true
+	return cells
 
 
 ## The writer ShaderMaterials currently in use.

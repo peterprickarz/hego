@@ -118,8 +118,8 @@ extends Node3D
 	set(value):
 		debug_discarded = value
 		_update_material_settings()
-## Tints surface writers: cyan where the terrain takes them from the surface cache, magenta where
-## from the far writer layer (StrataSurfaceWriterFar), in proportion to their coverage.
+## Tints surface writers cyan where a pixel the terrain shades itself takes them from the surface
+## cache, in proportion to their coverage.
 @export var debug_surface_writers := false:
 	set(value):
 		debug_surface_writers = value
@@ -133,8 +133,8 @@ extends Node3D
 const SURFACE_SHADER_PATH := "res://addons/strata/shaders/terrain_surface.gdshader"
 ## Preloaded so the renderer does not depend on the global class cache listing StrataSurfaceCache.
 const _SurfaceCache := preload("res://addons/strata/strata_surface_cache.gd")
+const _VirtualTextureFeedback := preload("res://addons/strata/strata_virtual_texture_feedback.gd")
 const _WriterPass := preload("res://addons/strata/strata_surface_writer_pass.gd")
-const _WriterFar := preload("res://addons/strata/strata_surface_writer_far.gd")
 ## Terrain material uniforms copied into StrataSurfaceWriter materials that use the terrain
 ## material helper (STRATA_WRITER_TERRAIN_MATERIALS in strata_surface_writer.gdshaderinc).
 const _WRITER_MATERIAL_UNIFORMS := ["color_maps", "normal_maps", "ormh_maps", "uv_scales", "top_texture_slots", "top_uv_scales", "material_displacement", "top_material_displacement", "material_roughness_scales", "material_roughness_biases"]
@@ -169,10 +169,15 @@ var _active_crease_variant := false
 ## StrataSurfaceCache while StrataRenderSettings.surface_cache_enabled (Forward+/Mobile only).
 var _surface_cache: _SurfaceCache
 var _surface_cache_variant := false
+# The feedback effect, the first compositor it was added to and the camera it follows.
+var _vt_feedback: _VirtualTextureFeedback
+var _feedback_host: Compositor
+var _feedback_camera: Camera3D
+## Per camera the effect is on: [camera, the compositor holding it, the camera's compositor before].
+var _feedback_hosts: Array = []
+var _feedback_checked := 0
 ## Draws StrataSurfaceWriter meshes for the cache (internal child while the cache runs).
 var _writer_pass: Node
-## Whole-terrain far layer of the writers (StrataRenderSettings.surface_writer_far_texel > 0).
-var _writer_far: _WriterFar
 # "smooth|" or "creases|" plus the applied custom-code key: the shader in use.
 var _active_shader_key := ""
 # Custom fragment code requested by the materials, the request the shader was
@@ -547,16 +552,15 @@ func _surface_cache_wanted() -> bool:
 func _surface_cache_displacement_wanted() -> bool:
 	return _surface_cache_wanted() and render_settings.surface_cache_displacement
 
-## The cache level whose cells match the near displacement vertex spacing.
+## The cache mip whose cells match the near displacement vertex spacing.
 func _surface_cache_relief_level() -> int:
 	if _surface_cache == null: return -1
 	var level := roundi(log(maxf(displacement_vertex_spacing, 0.0001) / _surface_cache.texel) / log(2.0))
-	return clampi(level, 0, _surface_cache.levels - 1)
+	return clampi(level, 0, _surface_cache.top_mip)
 
 ## Re-evaluates terrain-local [param rect] (everything when empty) in the surface cache.
 func _on_writers_changed(local_rect: Rect2) -> void:
 	if _surface_cache != null: _surface_cache.invalidate_writers(local_rect)
-	if _writer_far != null: _writer_far.invalidate(local_rect)
 
 func _ensure_writer_pass() -> void:
 	if _writer_pass != null and is_instance_valid(_writer_pass): return
@@ -612,6 +616,108 @@ func _invalidate_surface_cache(rect := Rect2()) -> void:
 	_surface_cache.invalidate(rect)
 	_surface_cache.mark_material_dirty()
 
+## The terrain material's uniforms changed: the cache re-reads them on its next update.
+func _mark_cache_material_dirty() -> void:
+	if _surface_cache != null: _surface_cache.mark_material_dirty()
+
+## The WorldEnvironment of a camera's world: Godot keeps them in a group per scenario.
+func _world_environment(camera: Camera3D) -> WorldEnvironment:
+	var world := camera.get_world_3d()
+	if world == null or not is_inside_tree(): return null
+	var nodes := get_tree().get_nodes_in_group("_world_environment_%d" % world.scenario.get_id())
+	return nodes[0] as WorldEnvironment if not nodes.is_empty() else null
+
+## The compositor a camera renders with: its own, or its world's.
+func _effective_compositor(camera: Camera3D) -> Compositor:
+	if camera.compositor != null: return camera.compositor
+	var world_environment := _world_environment(camera)
+	return world_environment.compositor if world_environment != null else null
+
+## The cameras whose view requests pages: _camera and, in the editor, the camera of every 3D
+## viewport showing the same world (split views).
+func _feedback_cameras() -> Array[Camera3D]:
+	var cameras: Array[Camera3D] = [_camera]
+	if Engine.is_editor_hint() and Engine.has_singleton(&"EditorInterface"):
+		var editor := Engine.get_singleton(&"EditorInterface")
+		for index in 4:
+			var viewport := editor.call(&"get_editor_viewport_3d", index) as SubViewport
+			var camera := viewport.get_camera_3d() if viewport != null else null
+			if camera != null and not cameras.has(camera) and camera.get_world_3d() == _camera.get_world_3d(): cameras.append(camera)
+	return cameras
+
+## Keeps the feedback effect on the compositors the feedback cameras render with. At runtime it
+## joins the compositor in effect (the camera's, else the WorldEnvironment's, created when there
+## is none). An editor camera is never saved, so it gets a compositor of its own holding the
+## scene's effects and the feedback; the scene's WorldEnvironment is not touched.
+func _sync_feedback() -> void:
+	if _vt_feedback == null: _vt_feedback = _VirtualTextureFeedback.new()
+	if not is_instance_valid(_camera):
+		_remove_feedback()
+		return
+	_feedback_checked += 1
+	if _feedback_camera == _camera and not _feedback_hosts.is_empty() and _feedback_checked % 30 != 0: return
+	var cameras := _feedback_cameras()
+	var current := _feedback_camera == _camera and cameras.size() == _feedback_hosts.size()
+	if current:
+		for index in cameras.size():
+			var entry: Array = _feedback_hosts[index]
+			if entry[0] != cameras[index] or _effective_compositor(cameras[index]) != entry[1] or not (entry[1] as Compositor).compositor_effects.has(_vt_feedback): current = false
+	if current: return
+	_remove_feedback()
+	for camera in cameras:
+		var effects: Array[CompositorEffect] = []
+		var previous: Compositor = null
+		var host: Compositor
+		if Engine.is_editor_hint():
+			previous = camera.compositor
+			var source := _effective_compositor(camera)
+			if source != null: effects.assign(source.compositor_effects)
+			effects.erase(_vt_feedback)
+			effects.append(_vt_feedback)
+			host = Compositor.new()
+			host.compositor_effects = effects
+			camera.compositor = host
+		else:
+			host = _effective_compositor(camera)
+			if host == null:
+				host = Compositor.new()
+				var world_environment := _world_environment(camera)
+				if world_environment != null: world_environment.compositor = host
+				else: camera.compositor = host
+			effects.assign(host.compositor_effects)
+			effects.erase(_vt_feedback)
+			effects.append(_vt_feedback)
+			host.compositor_effects = effects
+		_feedback_hosts.append([camera, host, previous])
+	_feedback_camera = _camera
+	_feedback_host = _feedback_hosts[0][1]
+
+## Takes the feedback effect off its compositors and gives editor cameras their compositor back.
+func _remove_feedback() -> void:
+	for entry: Array in _feedback_hosts:
+		var host: Compositor = entry[1]
+		if host == null or _vt_feedback == null: continue
+		if Engine.is_editor_hint():
+			var camera: Camera3D = entry[0] if is_instance_valid(entry[0]) else null
+			if camera != null and camera.compositor == host: camera.compositor = entry[2]
+		else:
+			var effects: Array[CompositorEffect] = []
+			effects.assign(host.compositor_effects)
+			effects.erase(_vt_feedback)
+			host.compositor_effects = effects
+	_feedback_hosts.clear()
+	_feedback_host = null
+	_feedback_camera = null
+
+func _release_feedback() -> void:
+	_remove_feedback()
+	if _vt_feedback == null: return
+	_vt_feedback.release()
+	_vt_feedback = null
+	_stats.erase("surface_cache_feedback")
+
+## The surface cache (StrataRenderSettings.surface_cache_enabled): created, configured over the
+## terrain bounds, updated for what the screen reads, published and bound to the terrain shader.
 func _update_surface_cache(local_camera: Vector3) -> void:
 	if not _surface_cache_wanted():
 		if _surface_cache != null: _release_surface_cache()
@@ -619,71 +725,57 @@ func _update_surface_cache(local_camera: Vector3) -> void:
 	if _surface_cache == null:
 		_surface_cache = _SurfaceCache.new()
 		_surface_cache.mark_material_dirty()
-	_surface_cache.configure(render_settings.surface_cache_levels, render_settings.surface_cache_resolution, render_settings.surface_cache_texels_per_metre)
+	_surface_cache.page_fills_per_frame = render_settings.surface_cache_page_fills_per_frame
 	_surface_cache.publish_globals = render_settings.surface_cache_publish_globals
-	var creases := smooth_shading and crease_angle_degrees < 180.0
+	var configured := _surface_cache.configure(_render_bounds, render_settings.surface_cache_texels_per_metre, render_settings.surface_cache_page_size, render_settings.surface_cache_pool_pages)
+	_stats.surface_cache = _surface_cache.stats
+	if not configured:
+		# The page table would be too large (stats.surface_cache.status says so): no cache.
+		_release_feedback()
+		_surface_cache.unpublish()
+		if _shader_material.get_shader_parameter("vt_params") != Vector4.ZERO: _shader_material.set_shader_parameter("vt_params", Vector4.ZERO)
+		return
 	_ensure_writer_pass()
 	_writer_pass.terrain_transform = _source.global_transform
 	_writer_pass.texel = _surface_cache.texel
 	_writer_pass.measure = _surface_cache.measure_gpu
-	# Before the cache update, which dispatches this frame's tiles.
-	_update_writer_far()
+	if render_settings.surface_cache_feedback: _sync_feedback()
+	else: _release_feedback()
+	var filter: int = render_settings.surface_cache_filter if render_settings.surface_cache_shading else 0
+	_surface_cache.lod_bias = render_settings.surface_cache_shading_lod_bias
+	var lod_bias := _surface_cache.effective_lod_bias()
+	var anisotropy := minf(float(render_settings.surface_cache_anisotropy), 2.0 * _SurfaceCache.BORDER) if filter == 3 else 1.0
+	_surface_cache.feedback_active = _vt_feedback != null and _feedback_host != null
+	if _surface_cache.feedback_active:
+		var layout := _surface_cache.lookup_layout()
+		_vt_feedback.set_lookup(_source.global_transform.affine_inverse(), _surface_cache.texel, _surface_cache.page_size, _surface_cache.top_mip, lod_bias, anisotropy, Vector2i(layout.x, layout.y), layout.z, _render_bounds)
+		_surface_cache.feedback_keys = _vt_feedback.take_requests()
+		_stats.surface_cache_feedback = _vt_feedback.get_stats()
+	# Other shaders read the displaced ground, whether or not the terrain takes its relief here.
+	_surface_cache.relief_mip = _surface_cache_relief_level() if displacement_enabled else -1
+	_surface_cache.relief_radius = displacement_refinement_radius * 1.25 + 4.0
+	_surface_cache.bilinear_readers = filter != 0
+	var creases := smooth_shading and crease_angle_degrees < 180.0
 	_surface_cache.update(_shader_material, _variant_defines(creases, pixel_sampling), local_camera, _writer_pass)
-	var radius := displacement_refinement_radius if displacement_enabled else 0.0
-	_surface_cache.publish(_source.global_transform, local_camera, radius, displacement_strength, render_settings.terrain_specular, _surface_cache_relief_level())
+	_surface_cache.publish(_source.global_transform, local_camera, displacement_refinement_radius if displacement_enabled else 0.0, displacement_strength, render_settings.terrain_specular)
 	if _surface_cache_variant:
-		var origins := PackedVector2Array()
-		for k in _SurfaceCache.MAX_LEVELS:
-			origins.append(Vector2(_surface_cache.level_origin(k)))
+		var relief_mip := _surface_cache.relief_mip if render_settings.surface_cache_displacement else -1
 		# Set on change only: a texture parameter rebuilds the material's uniform set.
-		var relief_level := _surface_cache_relief_level() if render_settings.surface_cache_displacement else -1
-		var params := Vector4(_surface_cache.texel, _surface_cache.resolution, _surface_cache.levels, relief_level)
-		for pair: Array in [["surface_cache_height", _surface_cache.height_texture], ["surface_cache_height_linear", _surface_cache.height_texture], ["surface_cache_albedo", _surface_cache.albedo_texture], ["surface_cache_normal", _surface_cache.normal_texture], ["surface_cache_cover", _surface_cache.cover_texture]]:
+		for pair: Array in [["vt_page_table", _surface_cache.page_table_texture], ["vt_albedo", _surface_cache.albedo_texture], ["vt_albedo_linear", _surface_cache.albedo_texture], ["vt_albedo_anisotropic", _surface_cache.albedo_texture], ["vt_normal", _surface_cache.normal_texture], ["vt_normal_linear", _surface_cache.normal_texture], ["vt_normal_anisotropic", _surface_cache.normal_texture], ["vt_height", _surface_cache.height_texture], ["vt_height_linear", _surface_cache.height_texture], ["vt_cover", _surface_cache.cover_texture], ["vt_params", _surface_cache.lookup_params()], ["vt_layout", _surface_cache.lookup_layout()], ["vt_relief_mip", relief_mip], ["surface_cache_filter", filter], ["surface_cache_anisotropy", maxf(anisotropy, 1.0)], ["surface_cache_lod_bias", lod_bias]]:
 			if _shader_material.get_shader_parameter(pair[0]) != pair[1]:
 				_shader_material.set_shader_parameter(pair[0], pair[1])
-		if _shader_material.get_shader_parameter("surface_cache_origins") != origins:
-			_shader_material.set_shader_parameter("surface_cache_origins", origins)
-		if _shader_material.get_shader_parameter("surface_cache_params") != params:
-			_shader_material.set_shader_parameter("surface_cache_params", params)
-	_stats.surface_cache = _surface_cache.stats
 	_stats.surface_writers = _writer_pass.stats.merged({"writers": _writer_pass.registry.entry_count()})
 
-## Keeps the far writer layer sized to the terrain and fed by the writer pass, and binds it.
-func _update_writer_far() -> void:
-	if render_settings.surface_writer_far_texel <= 0.0:
-		_release_writer_far()
-		return
-	if _writer_far == null: _writer_far = _WriterFar.new()
-	_writer_far.configure(_source.base_bounds, _surface_cache.texel, render_settings.surface_writer_far_texel, render_settings.surface_writer_far_max_size)
-	_writer_far.update(_writer_pass)
-	var area := _writer_far.local_rect()
-	var rect := Vector4(area.position.x, area.position.y, area.size.x, area.size.y)
-	for pair: Array in [["surface_writer_far_albedo", _writer_far.albedo_texture], ["surface_writer_far_normal", _writer_far.normal_texture], ["surface_writer_far_rect", rect]]:
-		if _shader_material.get_shader_parameter(pair[0]) != pair[1]:
-			_shader_material.set_shader_parameter(pair[0], pair[1])
-	_stats.surface_writer_far = _writer_far.stats
-
-func _release_writer_far() -> void:
-	if _writer_far == null: return
-	_writer_far.release()
-	_writer_far = null
-	_stats.erase("surface_writer_far")
-	if _shader_material != null: _shader_material.set_shader_parameter("surface_writer_far_rect", Vector4.ZERO)
-
-## The far writer layer of this renderer, or null while it is disabled.
-func get_surface_writer_far() -> RefCounted:
-	return _writer_far
-
 func _release_surface_cache() -> void:
-	_release_writer_far()
+	_release_feedback()
 	_release_writer_pass()
 	_stats.erase("surface_writers")
+	_stats.erase("surface_cache_feedback")
 	if _surface_cache == null: return
 	_surface_cache.release()
 	_surface_cache = null
 	_stats.erase("surface_cache")
-	if _shader_material != null:
-		_shader_material.set_shader_parameter("surface_cache_params", Vector4.ZERO)
+	if _shader_material != null: _shader_material.set_shader_parameter("vt_params", Vector4.ZERO)
 
 ## The surface cache of this renderer, or null while it is disabled.
 func get_surface_cache() -> RefCounted:
@@ -803,7 +895,7 @@ func _bind_material_pool() -> void:
 	_shader_material.set_shader_parameter("material_roughness_biases", roughness_biases)
 	_bind_writer_materials()
 	_stats.material_count = _materials.size()
-	if _surface_cache != null: _surface_cache.mark_material_dirty()
+	_mark_cache_material_dirty()
 	_hook_spec_pending = _material_hook_spec()
 	_hook_key_pending = "" if _hook_spec_pending.is_empty() else var_to_str(_hook_spec_pending.map(func(entry: Dictionary) -> Array: return [entry.id, entry.code, entry.parameters.map(func(parameter: Dictionary) -> Array: return [parameter.name, parameter.type])]))
 	_bind_hook_parameters()
@@ -1021,7 +1113,7 @@ func _update_material_settings() -> void:
 	_shader_material.set_shader_parameter("debug_surface_writers", debug_surface_writers)
 	_update_parallax_settings()
 	_update_cache_shading_settings()
-	if _surface_cache != null: _surface_cache.mark_material_dirty()
+	_mark_cache_material_dirty()
 	_apply_ao_overlay()
 	for patch in _patches.values():
 		_update_patch_bounds(patch)
@@ -1047,7 +1139,7 @@ func _update_cache_shading_settings() -> void:
 	_shader_material.set_shader_parameter("surface_cache_shading_min_normal_y", cos(deg_to_rad(float(max_slope) if max_slope != null else 45.0)))
 	_shader_material.set_shader_parameter("surface_cache_shading_debug", render_settings.get(&"surface_cache_shading_debug") == true)
 	var lod_bias: Variant = render_settings.get(&"surface_cache_shading_lod_bias")
-	_shader_material.set_shader_parameter("surface_cache_shading_lod_bias", float(lod_bias) if lod_bias != null else -1.0)
+	_shader_material.set_shader_parameter("surface_cache_bake_lod_bias", float(lod_bias) if lod_bias != null else -1.0)
 	var eye_height: Variant = render_settings.get(&"surface_cache_shading_eye_height")
 	_shader_material.set_shader_parameter("surface_cache_shading_eye_height", float(eye_height) if eye_height != null else 1.7)
 	var cache_shades: bool = _surface_cache_variant and render_settings.get(&"surface_cache_shading") == true
@@ -1508,7 +1600,7 @@ func _quality_changed() -> void:
 		_update_shading_variant()
 	_update_parallax_settings()
 	_update_cache_shading_settings()
-	if _surface_cache != null: _surface_cache.mark_material_dirty()
+	_mark_cache_material_dirty()
 	_invalidate_geometry_lod()
 
 func _projection_scale() -> float:
@@ -1541,7 +1633,7 @@ func _update_pixel_angle() -> void:
 	if angle == _pixel_angle: return
 	_pixel_angle = angle
 	_shader_material.set_shader_parameter("surface_cache_pixel_angle", angle)
-	if _surface_cache != null: _surface_cache.mark_material_dirty()
+	_mark_cache_material_dirty()
 
 func _invalidate_geometry_lod() -> void:
 	_lod_settings_dirty = true
@@ -2394,7 +2486,7 @@ func _refresh_hole_presence(xy: Variant = null) -> void:
 	if present == _holes_present: return
 	_holes_present = present
 	# The cache's fill reads has_holes for its relief.
-	if _surface_cache != null: _surface_cache.mark_material_dirty()
+	_mark_cache_material_dirty()
 
 static func _array_placeholder(map: String) -> Texture2DArray:
 	if not _placeholder_arrays.has(map):

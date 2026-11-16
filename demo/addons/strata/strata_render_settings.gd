@@ -78,7 +78,7 @@ func parameters() -> Dictionary:
 		cell_bombing = value
 		emit_changed()
 ## With surface cache shading, bombing is baked into the cache and pixels the terrain shades
-## itself (outside the cache's windows, steeper than surface_cache_shading_max_slope, custom
+## itself (pages not resident yet, steeper than surface_cache_shading_max_slope, custom
 ## fragment code) show plain tiling. On: those pixels are bombed too, at about three times the
 ## texture reads. Without cache shading every pixel is bombed.
 @export var cell_bombing_outside_cache := false:
@@ -153,8 +153,10 @@ func parameters() -> Dictionary:
 		emit_changed()
 
 @export_group("Surface cache")
-## Camera-centred clipmap of the resolved terrain surface (StrataSurfaceCache), filled on the
-## GPU from the terrain material. Near displacement reads its relief, and other shaders read the
+## Virtual texture of the resolved terrain surface (StrataSurfaceCache): pages over the whole
+## terrain in a mip chain, of which those the screen reads are kept in a pool and filled on the
+## GPU from the terrain material. Near displacement reads its relief, surface writers are drawn
+## into it, the terrain can shade from it (surface_cache_shading), and other shaders read the
 ## ground below them through shaders/strata_surface_cache.gdshaderinc (blending props, rocks and
 ## cliffs into the terrain). Needs Forward+ or Mobile. See "Surface cache" in docs/strata/reference.md.
 @export var surface_cache_enabled := false:
@@ -162,22 +164,9 @@ func parameters() -> Dictionary:
 		if surface_cache_enabled == value: return
 		surface_cache_enabled = value
 		emit_changed()
-## Levels of doubling cell size. Level k covers resolution x texel x 2^k metres around the camera.
-@export_range(1, 8, 1) var surface_cache_levels := 6:
-	set(value):
-		if value < 1 or value > 8: return
-		if surface_cache_levels == value: return
-		surface_cache_levels = value
-		emit_changed()
-## Cells per side of every level (17 bytes per cell and level).
-@export_enum("256:256", "512:512", "1024:1024", "2048:2048") var surface_cache_resolution := 1024:
-	set(value):
-		if value not in [256, 512, 1024, 2048]: return
-		if surface_cache_resolution == value: return
-		surface_cache_resolution = value
-		emit_changed()
-## Cells per metre of level 0. Match the material texel density (128 for 128 texels/m materials)
-## so level 0 copies material texels one to one.
+## Cells per metre of mip 0. Match the material texel density (128 for 128 texels/m materials)
+## so mip 0 copies material texels one to one. The page table has one texel per page of mip 0:
+## it may not exceed 4096 pages per side (raise surface_cache_page_size on large terrains).
 @export_range(8.0, 512.0, 1.0) var surface_cache_texels_per_metre := 128.0:
 	set(value):
 		if not is_finite(value) or value <= 0.0: return
@@ -185,19 +174,20 @@ func parameters() -> Dictionary:
 		surface_cache_texels_per_metre = value
 		emit_changed()
 ## Near displacement reads the material relief from the cache instead of sampling every
-## material per vertex. The cache level whose cells match displacement_vertex_spacing must cover
-## the displacement radius; vertices outside it evaluate the material directly.
+## material per vertex: the pages of the mip whose cells match displacement_vertex_spacing are
+## kept around the camera, and a vertex whose page is not there yet evaluates the material
+## directly.
 @export var surface_cache_displacement := true:
 	set(value):
 		if surface_cache_displacement == value: return
 		surface_cache_displacement = value
 		emit_changed()
-## Prototype. The terrain shades flat and gentle ground from the cache's resolved surface
-## (colour, normal, roughness, metallic, AO, writers) instead of evaluating its materials, at the
-## level matching the pixel footprint, blending two levels as the materials' mipmaps do. Ground
-## steeper than surface_cache_shading_max_slope (where the top-down cells stretch), pixels with a
-## far UV blend, materials with custom_fragment_code (view-dependent) and anything outside the
-## cache windows keep direct shading.
+## The terrain shades flat and gentle ground from the cache's resolved surface (colour, normal,
+## roughness, metallic, AO, writers) instead of evaluating its materials, at the mip matching
+## the pixel footprint, filtered by surface_cache_filter. Ground steeper than
+## surface_cache_shading_max_slope (where the top-down cells stretch), materials with
+## custom_fragment_code (view-dependent) and pixels whose pages are not resident yet keep direct
+## shading.
 @export var surface_cache_shading := false:
 	set(value):
 		if surface_cache_shading == value: return
@@ -210,7 +200,8 @@ func parameters() -> Dictionary:
 		if surface_cache_shading_max_slope == value: return
 		surface_cache_shading_max_slope = value
 		emit_changed()
-## Added to the cache level the pixel footprint selects (negative: finer). The GPU picks material
+## Added to the cache mip a pixel footprint selects (negative: finer), for shading, for the
+## pages the screen requests and for other shaders reading the ground. The GPU picks material
 ## mips about one level finer than the footprint formula; -1 matches direct shading by eye.
 @export_range(-2.0, 2.0, 0.25) var surface_cache_shading_lod_bias := -1.0:
 	set(value):
@@ -218,13 +209,63 @@ func parameters() -> Dictionary:
 		surface_cache_shading_lod_bias = value
 		emit_changed()
 ## With cache shading, the far UV blend (distance_uv_*) follows the pixel footprint instead of
-## the camera distance, so each cache level can hold its share: a footprint counts as the distance
+## the camera distance, so each cache mip can hold its share: a footprint counts as the distance
 ## at which flat ground seen from this eye height has it. A standing player sees the same blend
 ## as before; higher views see the far tiles later, grazing views on slopes sooner.
 @export_range(0.1, 100.0, 0.1) var surface_cache_shading_eye_height := 1.7:
 	set(value):
 		if not is_finite(value) or value <= 0.0 or surface_cache_shading_eye_height == value: return
 		surface_cache_shading_eye_height = value
+		emit_changed()
+## How cache shading filters the cells it reads. Nearest takes one cell and blends two mips, as
+## nearest-texel materials with mipmaps look. Linear is bilinear in the nearest mip, Trilinear
+## bilinear with two mips blended. Anisotropic reads the mip of the footprint's short axis (up
+## to surface_cache_anisotropy times finer) along the long one, which keeps grazing ground sharp
+## and requests more pages. Other shaders reading the ground take the nearest cell with Nearest, else bilinear.
+@export_enum("Nearest:0", "Linear:1", "Trilinear:2", "Anisotropic:3") var surface_cache_filter := 0:
+	set(value):
+		if value < 0 or value > 3 or surface_cache_filter == value: return
+		surface_cache_filter = value
+		emit_changed()
+## Largest ratio of a pixel's long axis on the ground to its short one that Anisotropic follows.
+## Each doubling reads one mip finer at grazing angles and needs up to four times the pages
+## there: raise surface_cache_pool_pages with it.
+@export_enum("2:2", "4:4", "8:8") var surface_cache_anisotropy := 4:
+	set(value):
+		if value not in [2, 4, 8] or surface_cache_anisotropy == value: return
+		surface_cache_anisotropy = value
+		emit_changed()
+## The cache's pages are requested by what the screen shows: a compute pass after the opaque
+## pass (StrataVirtualTextureFeedback, on the camera's compositor) reads the depth buffer and
+## reports the pages under the visible pixels. Off: the pages around the camera at every mip
+## (about 3.5 m around it at mip 0, doubling per mip), whatever the view.
+@export var surface_cache_feedback := true:
+	set(value):
+		if surface_cache_feedback == value: return
+		surface_cache_feedback = value
+		emit_changed()
+## Cells per page side. Larger pages need a smaller page table and fewer lookups of new pages,
+## and keep more cells nobody reads.
+@export_enum("64:64", "128:128", "256:256") var surface_cache_page_size := 128:
+	set(value):
+		if value not in [64, 128, 256] or surface_cache_page_size == value: return
+		surface_cache_page_size = value
+		emit_changed()
+## Pages the pool holds (about 0.3 MB each at 128 cells): those on screen plus a reserve that
+## saves evaluating them again. When the screen requests more than fit, the cache reads coarser
+## mips until they do (stats.surface_cache.pressure_bias, a softer surface): a 4K view at lod
+## bias 0 requests about 1,500 to 2,500 pages, a 1440p view about a third of that.
+@export_range(64, 8192, 1) var surface_cache_pool_pages := 1024:
+	set(value):
+		if value < 64 or value > 8192 or surface_cache_pool_pages == value: return
+		surface_cache_pool_pages = value
+		emit_changed()
+## Pages evaluated per frame at most (pages a surface writer touches come on top, as their
+## writer tiles are drawn).
+@export_range(1, 256, 1) var surface_cache_page_fills_per_frame := 32:
+	set(value):
+		if value < 1 or value > 256 or surface_cache_page_fills_per_frame == value: return
+		surface_cache_page_fills_per_frame = value
 		emit_changed()
 ## Tints pixels shaded from the cache green and directly shaded ones red.
 @export var surface_cache_shading_debug := false:
@@ -295,23 +336,6 @@ func parameters() -> Dictionary:
 	set(value):
 		if parallax_debug == value: return
 		parallax_debug = value
-		emit_changed()
-## Edge in metres of the far writer layer's texels (StrataSurfaceWriterFar): every surface writer
-## drawn once over the whole terrain, which the terrain shows beyond the cache's reach. Snapped to
-## a power-of-two multiple of the level-0 cell and doubled until surface_writer_far_max_size
-## holds the terrain. 0 disables the layer (writers then end at the cache's coarsest window).
-@export_range(0.0, 64.0, 0.25) var surface_writer_far_texel := 2.0:
-	set(value):
-		if not is_finite(value) or value < 0.0: return
-		if surface_writer_far_texel == value: return
-		surface_writer_far_texel = value
-		emit_changed()
-## Largest side of the far writer layer in texels (8 bytes per texel, plus a third for mips).
-@export_enum("512:512", "1024:1024", "2048:2048", "4096:4096") var surface_writer_far_max_size := 2048:
-	set(value):
-		if value not in [512, 1024, 2048, 4096]: return
-		if surface_writer_far_max_size == value: return
-		surface_writer_far_max_size = value
 		emit_changed()
 ## Publish the cache as the strata_cache_* global shader parameters. Only one terrain per scene
 ## should publish.

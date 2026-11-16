@@ -246,102 +246,163 @@ the scene tree are freed after the bake). `get_stats()` reports residency, uploa
 
 ## Surface cache
 
-A camera-centred clipmap of the evaluated terrain surface (`StrataSurfaceCache`,
-`strata_surface_cache.gd`), filled on the GPU from the terrain material. Other shaders read the
-ground below a point from it (rocks, cliffs and props that blend into the terrain), and the
-terrain reads its near displacement relief from it instead of sampling four materials per
-vertex. Off by default (`StrataRenderSettings.surface_cache_enabled`); needs Forward+ or Mobile.
+A sparse virtual texture of the evaluated terrain surface (`StrataSurfaceCache`,
+`strata_surface_cache.gd`), filled on the GPU from the terrain material. The terrain can shade
+from it, reads its near displacement relief from it instead of sampling four materials per
+vertex, and shows surface writers through it. Other shaders read the ground below a point from
+it (rocks, cliffs and props that blend into the terrain). Off by default
+(`StrataRenderSettings.surface_cache_enabled`); needs Forward+ or Mobile.
 
-**Layout.** `surface_cache_levels` levels (default 6, at most 8) of `surface_cache_resolution`²
-cells (default 1024). Level 0 has one cell per material texel (`surface_cache_texels_per_metre`,
-default 128: 1/128 m); each further level doubles the cell, so six levels of 1024 cells reach
-±128 m. Each level's window is centred on the camera, snapped to 16 cells, and stored
-toroidally (cell `g` at `g & (resolution − 1)`), so a moving camera refills only the exposed
-strips. Full refills (start, teleports, material edits) are limited to one level per frame,
-finest first. Terrain edits (heights, holes, controls, region changes, macro and coarse maps)
-refill the affected rectangle. Memory is 17 bytes per cell per level: 102 MB at the defaults.
+**Layout.** The cache covers the whole terrain in a mip chain. Mip 0 has one cell per material
+texel (`surface_cache_texels_per_metre`, default 128: 1/128 m) and each further mip doubles the
+cell; cells are world-aligned at every mip. A mip is cut into pages of
+`surface_cache_page_size`² cells (default 128). Only the pages something reads are kept, in a
+pool of `surface_cache_pool_pages` slots (default 1024) laid out in atlas textures. A slot is a
+page with a border of 4 cells of its neighbours on every side, so filtering and corner heights
+never leave the slot. A page table (one R16 texture with a mip per page mip, one texel per
+page) holds each resident page's slot. It may not exceed 4096 texels per side: a terrain wider
+than 4096 pages of mip 0 needs larger pages or fewer texels per metre, and the cache says so
+in its status and stays off. Memory is 17 bytes per cell, 0.31 MB per slot of a 128-cell page:
+360 MB at the defaults, plus the page table (45 MB at 4096 pages per side).
 
-| Texture (2D array) | Per cell |
+| Atlas (2D array) | Per cell |
 | --- | --- |
 | albedo, RGBA8 | sRGB albedo after the terrain tint map; A: material AO × macro AO |
 | normal, RGBA8 | octahedral unit normal (terrain-local, around +Y); B: roughness; A: metallic |
-| height, R32F, two layers per level | at the cell corner: base height (−1e30 in holes), and the raw material relief before `displacement_strength` and the camera fade |
+| height, R32F, two layers per atlas layer | at the cell corner: base height (−1e30 in holes), and the raw material relief before `displacement_strength` and the camera fade |
 | cover, R8 | how much of the cell surface writers replaced (0 none) |
 
+**Which pages are resident.** Three things request pages each frame:
+
+- The screen. With `surface_cache_feedback` (default on) a compute pass after the opaque pass
+  (`StrataVirtualTextureFeedback`, a `CompositorEffect`) reads the depth of one pixel per 8 × 8
+  tile, a different one each frame, and reports the page under it at the two mips around its
+  footprint plus `surface_cache_shading_lod_bias`. Every drawn pixel counts, not only terrain:
+  a rock requests the ground below it. The renderer adds the effect to the compositor its
+  camera renders with (the camera's, else the `WorldEnvironment`'s, created when there is
+  none). In the editor each 3D viewport camera gets a compositor of its own with the scene's
+  effects and the feedback, so nothing is written into the scene. With feedback off the pages
+  around the camera are requested at every mip, whatever the view.
+- The displaced mesh: the pages of the mip matching `displacement_vertex_spacing` around the
+  camera, since vertices cannot wait for the screen.
+- The coarsest mips, which stay resident while they hold at most 64 pages together. Every
+  lookup ends there at the latest.
+
+At most `surface_cache_page_fills_per_frame` pages (default 32) are evaluated per frame,
+coarse mips first. A full pool evicts the pages requested longest ago, never those of the last
+two frames. When one frame requests more than 85 % of the pool, the cache raises the lod bias
+of every lookup until the requests fit (`stats.pressure_bias`): the surface gets softer instead
+of pages going missing. It falls back once requests drop below 60 %. A 4K view at lod bias 0
+requests about 1,500 to 2,500 pages, a 1440p view about a third of that. Terrain edits
+(heights, holes, controls, region changes, macro and coarse maps) mark the pages over the
+edited rectangle stale; they keep their content until evaluated again.
+
 **Surface writers.** Meshes with a writer material (`StrataSurfaceWriter`) are drawn top-down and
-composited over the terrain material by the same fill, and the terrain shows them where they
-cover a cell. Beyond the cache's coarsest window the terrain reads the far writer layer
-(`StrataSurfaceWriterFar`): every writer over the whole terrain at `surface_writer_far_texel`
-(2 m), drawn once, 8 bytes per texel plus a third for mips (43 MB for a 4 km terrain at 2 m). See
-"Surface writers" in the addon's `README.md`.
+composited over the terrain material by the same fill. A page a writer touches waits for its
+writer tile and is evaluated once, with the writers, so a road never appears a moment after
+its ground. Writers show at every distance, in the coarse mips too. See "Surface writers" in
+the addon's `README.md`.
 
 The cache holds the material without custom fragment code, evaluated by the same functions as
 the terrain shader (`terrain_surface_core.gdshaderinc`, which the compute fill splices into
 GLSL), with texture bombing applied.
 
-**Shading from the cache (prototype, off by default).** With `surface_cache_shading` the terrain
-takes colour, normal, roughness, metallic and AO of ground up to
-`surface_cache_shading_max_slope` (45°) from the cache instead of evaluating its materials: the
-level matching the pixel footprint plus `surface_cache_shading_lod_bias`, blended with the next
-level as mipmaps are, or the finest level whose window covers the point when that level's does
-not. Steeper ground (the top-down cells stretch there), materials with custom fragment code and
-points outside every window are shaded directly. The far UV blend then follows the pixel
-footprint instead of the camera distance, so each level holds its share: a footprint counts as
-the distance at which flat ground seen from `surface_cache_shading_eye_height` has it.
-`surface_cache_shading_debug` tints cached pixels green and directly shaded ones red.
+**Shading from the cache (off by default).** With `surface_cache_shading` the terrain takes
+colour, normal, roughness, metallic and AO of ground up to `surface_cache_shading_max_slope`
+(45°) from the cache instead of evaluating its materials, at the mip matching the pixel
+footprint plus `surface_cache_shading_lod_bias`. `surface_cache_filter` sets how cells are
+read:
 
-**Displacement.** With `surface_cache_displacement` (default on) the terrain shader is built
-with `STRATA_SURFACE_CACHE` and reads near relief from the level whose cell matches
-`displacement_vertex_spacing` (bilinear between corner heights), falling back to direct
-evaluation outside it and beyond the near UV distance.
+| Filter | Reads |
+| --- | --- |
+| Nearest (default) | the nearest cell, two mips blended: the look of nearest-texel materials with mipmaps |
+| Linear | bilinear in the nearest mip |
+| Trilinear | bilinear, two mips blended |
+| Anisotropic | the mip of the footprint's short axis, up to `surface_cache_anisotropy` (2, 4 or 8) times finer, sampled along the long axis; grazing ground stays sharp and requests up to that factor squared more pages there |
+
+A page that is not resident yet falls back one mip; past that the pixel is shaded directly, as
+are steeper ground (the top-down cells stretch there) and materials with custom fragment code.
+The far UV blend follows the pixel footprint instead of the camera distance, so each mip holds
+its share: a footprint counts as the distance at which flat ground seen from
+`surface_cache_shading_eye_height` has it. `surface_cache_shading_debug` tints cached pixels
+green and directly shaded ones red. Albedo is stored sRGB-encoded, so the bilinear filters
+blend it in that encoding.
+
+**Displacement.** With `surface_cache_displacement` (default on) the terrain shader reads near
+relief from the mip whose cell matches `displacement_vertex_spacing` (bilinear between corner
+heights), and evaluates the material directly where that page is not resident yet and beyond
+the near UV distance.
 
 **Parallax (prototype, off by default).** `parallax_mode` marches each near pixel's view ray
-through the relief the displaced mesh does not carry: the relief of the cache level matching
-the pixel footprint minus the relief level's, scaled by `parallax_strength`, inside a shell of
+through the relief the displaced mesh does not carry: the relief of the mip matching the pixel
+footprint minus the relief mip's, scaled by `parallax_strength`, inside a shell of
 ±`parallax_depth` metres around the mesh surface along the smooth normal. Smooth reads the
-fine level bilinearly; Columns reads it per cell (flat-topped columns whose walls show the
-column's texel darkened by `parallax_wall_shade`). `parallax_min_level` sets the finest level
+fine mip bilinearly; Columns reads it per cell (flat-topped columns whose walls show the
+column's texel darkened by `parallax_wall_shade`). `parallax_min_level` sets the finest mip
 read, `parallax_radius` the fade distance, `parallax_steps` the step limit (one step per cell
 crossed, plus five to refine the hit) and `parallax_debug` shows hit height and walls (1) or
-level and step share (2). With displacement off the whole relief is marched. It moves only the
+mip and step share (2). With displacement off the whole relief is marched. It moves only the
 position the material is evaluated at: no depth is written, nothing is cast into shadow maps,
-and readers of the cache see the mesh surface as before. Each cache level holds the height
-maps point-sampled at mip 0, so on noisy scanned heights single texels stand out as spikes and
-the residual also contains the mesh's own sampling error; a filtered relief per level would be
-needed before this is usable.
+and readers of the cache see the mesh surface as before. Each step looks its page up in the
+page table; where a page the ray crosses is not resident the ray sees flat ground. Each mip
+holds the height maps point-sampled at mip 0, so on noisy scanned heights single texels stand
+out as spikes and the residual also contains the mesh's own sampling error; a filtered relief
+per mip would be needed before this is usable.
 
 **Readers.** With `surface_cache_publish_globals` (default on) the cache is published as the
-`strata_cache_*` global shader parameters. The Strata plugin adds them to the project's
-`[shader_globals]` when it loads (or call `StrataSurfaceCache.register_project_globals()` and
-save the project settings); a shader using them does not compile without them. Include
+`strata_cache_*` global shader parameters. The Strata plugin brings the project's
+`[shader_globals]` up to date when it loads (or call
+`StrataSurfaceCache.register_project_globals()` and save the project settings); a shader using
+them does not compile without them. Include
 `res://addons/strata/shaders/strata_surface_cache.gdshaderinc` in any spatial shader:
 
 ```glsl
 float footprint = strata_ground_footprint(world_position);   // uniform control flow
 StrataGround ground;
 if (strata_ground_sample(world_position, footprint, ground)) {
-    float w = strata_ground_blend_weight(ground, world_position, world_normal, 0.3, 1.0)
-        * strata_cache_edge_fade(world_position);
+    float w = strata_ground_blend_weight(ground, world_position, world_normal, 0.3, 1.0);
     // mix albedo, normal, roughness, ao, specular toward ground.* by w
 }
 ```
 
-`strata_ground_sample()` picks the finest level at or above the pixel footprint whose window
-holds the point and returns the ground's linear albedo, AO, world normal, roughness, metallic,
-the terrain's specular level and the rendered ground height. Inside the displacement radius
-that height includes the relief as the terrain mesh shows it: read at the level whose cells
-match `displacement_vertex_spacing` (published in `strata_cache_surface.z`), interpolated
-between those vertices, along the smooth terrain normal, with the terrain's distance fade. It returns
-false outside the cache, in holes and while the cache is disabled. Cells are read without
-filtering (texel-exact, matching pixel sampling). `strata_ground_blend_weight()` is 1 at and
-below the ground and fades to 0 at `band` metres above it, reduced on faces turned away from the
-sky by `facing`; `strata_cache_edge_fade()` fades it out over the outer quarter of the coarsest
-window, so effects do not pop at the cache edge.
+`strata_ground_sample()` takes the finest resident mip at or above the pixel footprint's and
+returns the ground's linear albedo, AO, world normal, roughness, metallic, the terrain's
+specular level and the rendered ground height. Inside the displacement radius that height
+includes the relief as the terrain mesh shows it: read at the mip whose cells match
+`displacement_vertex_spacing` (published in `strata_cache_surface.z`), interpolated between
+those vertices, along the smooth terrain normal, with the terrain's distance fade. It returns
+false outside the terrain, in holes, before a page holding the point is resident and while the
+cache is disabled. Cells are read as the terrain filters them: the nearest cell with the
+Nearest filter (texel-exact, matching pixel sampling), bilinear otherwise.
+`strata_ground_blend_weight()` is 1 at and below the ground and fades to 0 at `band` metres
+above it, reduced on faces turned away from the sky by `facing`. The cache reaches every
+distance, so a blend needs no fade toward an edge; `strata_cache_edge_fade()` remains for
+shaders written against the earlier clipmap and returns 1 while the cache is enabled.
 
-The cache only rewrites what changes and parameters are sent only when they change (a global
-texture parameter dirties every material using it). `StrataRenderer.get_stats().surface_cache`
-reports the status, levels, memory, full fills and the cells filled in the last frame;
-`get_surface_cache()` returns the cache.
+The page lookup itself is `shaders/strata_virtual_texture.gdshaderinc`: define
+`STRATA_VT_TABLE`, `STRATA_VT_PARAMS` and `STRATA_VT_LAYOUT` to your page table sampler and
+the two parameter vectors, include it, and call `strata_vt_locate(position, mip, atlas)` or
+`strata_vt_find(position, first_mip, atlas)`.
+
+Parameters are sent only when they change (a global texture parameter dirties every material
+using it). `StrataRenderer.get_stats().surface_cache` reports the status, the pages resident,
+requested and missing, those waiting for a writer tile, the pressure bias, memory and the
+cells filled in the last frame; `surface_cache_feedback` and `surface_writers` report the
+feedback pass and the writer tiles. `get_surface_cache()` returns the cache.
+
+**Cost** (RX 9070 XT, 2386 × 1200 editor viewport; a 4 km island level of a game using Strata,
+128 cells per metre, 1,058 slots, lod bias 0):
+
+- Evaluating a page costs 0.06 ms GPU (136² cells), a writer tile 0.04 ms GPU and 0.04 to
+  0.1 ms CPU.
+- A cold start over a road reached 631 resident pages in under 120 frames, 314 of them drawn
+  with a writer tile.
+- Flying 180 m at 0.75 m per frame: frame time 10.0 ms median and 13.9 ms at the 90th
+  percentile, at most 32 pages missing at a time.
+- The feedback pass and the page lookup did not show in the frame time: the same road view
+  rendered in 4.1 ms GPU with the pages against 5.3 ms with the clipmap this cache replaced.
+- Anisotropic at ratio 4 fitted the 1,058 slots with a pressure bias of 0.36; at ratio 8 the
+  view requested 1,316 pages.
 
 ## Custom material shader code
 

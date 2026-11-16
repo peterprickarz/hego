@@ -152,6 +152,7 @@ func _rebuild() -> void:
 	_watch_source(get_node_or_null(source) if not source.is_empty() else null)
 	var scenario := _registry.scenario()
 	var bounds := AABB()
+	var boxes := []
 	var first := true
 	var used: Array[Material] = []
 	for item in _collect():
@@ -176,6 +177,7 @@ func _rebuild() -> void:
 		if hide.is_valid(): RenderingServer.instance_set_visible(hide, false)
 		_items.append({"instances": instances, "hide": hide})
 		var box: AABB = (item.transform as Transform3D) * (item.mesh as Mesh).get_aabb()
+		boxes.append(box)
 		bounds = box if first else bounds.merge(box)
 		first = false
 	_watch_materials(used)
@@ -183,9 +185,9 @@ func _rebuild() -> void:
 		if _entry >= 0: _registry.remove_entry(_entry)
 		_entry = -1
 	elif _entry < 0:
-		_entry = _registry.add_entry(bounds, used)
+		_entry = _registry.add_entry(bounds, used, boxes)
 	else:
-		_registry.update_entry(_entry, bounds, used)
+		_registry.update_entry(_entry, bounds, used, boxes)
 
 
 func _clear() -> void:

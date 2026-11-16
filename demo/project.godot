@@ -97,22 +97,6 @@ strata_cache_params={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)
 }
-strata_cache_windows_a={
-"type": "vec4",
-"value": Vector4(0, 0, 0, 0)
-}
-strata_cache_windows_b={
-"type": "vec4",
-"value": Vector4(0, 0, 0, 0)
-}
-strata_cache_windows_c={
-"type": "vec4",
-"value": Vector4(0, 0, 0, 0)
-}
-strata_cache_windows_d={
-"type": "vec4",
-"value": Vector4(0, 0, 0, 0)
-}
 strata_cache_camera={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)
@@ -124,4 +108,16 @@ strata_cache_surface={
 strata_cache_world_to_local={
 "type": "transform",
 "value": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+}
+strata_cache_page_table={
+"type": "sampler2D",
+"value": ""
+}
+strata_cache_layout={
+"type": "ivec4",
+"value": Vector4i(0, 0, 0, 0)
+}
+strata_cache_sampling={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
 }
