@@ -58,6 +58,8 @@ Methods
    +-------------------------------------------+-------------------------------------------------------------------------------------------------------------+
    | ``bool``                                  | :ref:`hego_use_bottom_panel<class_HEGoNode3D_method_hego_use_bottom_panel>`\ (\ )                           |
    +-------------------------------------------+-------------------------------------------------------------------------------------------------------------+
+   | ``bool``                                  | :ref:`hego_rebuild<class_HEGoNode3D_method_hego_rebuild>`\ (\ )                                             |
+   +-------------------------------------------+-------------------------------------------------------------------------------------------------------------+
    | ``bool``                                  | :ref:`hego_did_last_cook_succeed<class_HEGoNode3D_method_hego_did_last_cook_succeed>`\ (\ )                 |
    +-------------------------------------------+-------------------------------------------------------------------------------------------------------------+
    | |void|                                    | :ref:`hego_notify_cook_inputs_changed<class_HEGoNode3D_method_hego_notify_cook_inputs_changed>`\ (\ )       |
@@ -230,6 +232,18 @@ The children that take part in this node's cooks, in child order: every direct c
 ``bool`` **hego_use_bottom_panel**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_hego_use_bottom_panel>`
 
 Tells the plugin this node can be edited from the HEGo bottom panel.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoNode3D_method_hego_rebuild:
+
+.. rst-class:: classref-method
+
+``bool`` **hego_rebuild**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_hego_rebuild>`
+
+Reloads this HDA from disk, uploads all scene inputs again and cooks the replacement with the current parameter values.
 
 .. rst-class:: classref-item-separator
 

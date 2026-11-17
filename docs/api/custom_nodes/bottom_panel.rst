@@ -18,6 +18,9 @@ exactly the same panel.
      - Required. Returning ``true`` is what puts this node in the panel at all
    * - ``cook() -> void``
      - What the Recook button calls
+   * - ``hego_rebuild() -> bool``
+     - Enables Rebuild. Reload the definition, reupload the inputs, and cook.
+       Return ``true`` when the new instance has cooked successfully.
    * - ``hego_get_asset_node() -> HEGoAssetNode``
      - The HDA whose parameters the panel shows
    * - ``hego_get_asset_name() -> String``
@@ -40,6 +43,8 @@ What each one costs you to leave out
   on purpose.
 - Without ``hego_get_asset_name()`` there is no preset list, because presets are stored per
   operator.
+- A custom host can use ``await agent.rebuild_asset(asset, stashed_parameters)`` for
+  each HDA it owns, then run its cook to reconnect the inputs and publish the output.
 - Without ``hego_set_parm_stash()`` the panel has nowhere to put the parameters after a
   recook. A node whose own ``cook()`` ends with ``agent.save_parameters()`` has already
   stored them and loses nothing; one that does not will find the user's panel edits gone on

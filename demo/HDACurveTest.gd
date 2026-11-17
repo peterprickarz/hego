@@ -32,26 +32,36 @@ var curve_input: HEGoCurveInputNode
 
 
 ## Sends the curve to Houdini, cooks the HDA and puts the mesh it produced on this node.
-func cook() -> void:
+func cook(force_input_upload := false) -> bool:
 	var fence := agent.asset(ASSET_NAME, ASSET_LABEL)
 	if not await agent.instantiate(fence, parm_stash):
-		return
+		return false
 
 	if input_node is Path3D:
 		if curve_input == null:
 			curve_input = HEGoCurveInputNode.new()
 		await agent.task(curve_input.instantiate())
-		await agent.task(curve_input.set_curve_from_path_3d(input_node, CURVE_SAMPLE_LENGTH))
+		var upload := await HEGoNodeUtil.checked_task(self, curve_input.set_curve_from_path_3d(input_node, CURVE_SAMPLE_LENGTH, force_input_upload))
+		if not upload.ok:
+			HEGoLog.get_singleton().error("cook", upload.message)
+			return false
 		await agent.task(fence.connect_input(curve_input, 0))
 
 	# A cook Houdini rejects fails its task, so null is the whole check.
 	if await agent.task(fence.cook()) == null:
-		return
+		return false
 
 	var meshes := await HEGoMeshOutput.fetch_meshes(await agent.output_context(fence))
 	mesh = meshes.values()[0] if not meshes.is_empty() else null
 
 	parm_stash = await agent.save_parameters(fence)
+	return true
+
+
+func hego_rebuild() -> bool:
+	if not await agent.rebuild_asset(agent.asset(ASSET_NAME, ASSET_LABEL), parm_stash):
+		return false
+	return await cook(true)
 
 
 # ─────────────────────────────────────────────

@@ -79,6 +79,8 @@ Methods
    +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``PackedByteArray``                               | :ref:`save_parameters<class_HEGoAssetAgent_method_save_parameters>`\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`\ )                                                                                  |
    +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``                                          | :ref:`rebuild_asset<class_HEGoAssetAgent_method_rebuild_asset>`\ (\ previous\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, stashed_parameters\: ``PackedByteArray`` = PackedByteArray()\ )                     |
+   +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``bool``                                          | :ref:`sync_inputs<class_HEGoAssetAgent_method_sync_inputs>`\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, skip_indices\: ``Array`` = [], cook\: ``Dictionary`` = {}\ )                               |
    +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | |void|                                            | :ref:`set_input<class_HEGoAssetAgent_method_set_input>`\ (\ index\: ``int``, sources\: ``Variant``\ )                                                                                                         |
@@ -230,6 +232,18 @@ Makes ``asset`` exist in Houdini. False when it could not be created.  Pushes th
 ``PackedByteArray`` **save_parameters**\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`\ ) :ref:`🔗<class_HEGoAssetAgent_method_save_parameters>`
 
 The asset's current parameters, as a blob to store on the node so they survive a session restart and a scene reload. Empty when they could not be read.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetAgent_method_rebuild_asset:
+
+.. rst-class:: classref-method
+
+``bool`` **rebuild_asset**\ (\ previous\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, stashed_parameters\: ``PackedByteArray`` = PackedByteArray()\ ) :ref:`🔗<class_HEGoAssetAgent_method_rebuild_asset>`
+
+Reloads the library that supplies ``previous``, replaces its instance and clears its input chains. Look up the replacement with :ref:`asset()<class_HEGoAssetAgent_method_asset>` and run the host's usual cook to upload the current Godot inputs. Live parameters are captured before reloading. Before the first cook the replacement uses ``stashed_parameters``.
 
 .. rst-class:: classref-item-separator
 

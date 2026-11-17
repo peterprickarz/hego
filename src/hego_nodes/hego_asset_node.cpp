@@ -16,7 +16,13 @@
 #include "util/parm/presets.h"
 #include "util/parm/set_parms.h"
 #include "util/hego_enums.h"
+#include "util/hego_util.h"
 #include "util/task/task_helpers.h"
+
+#include <godot_cpp/classes/dir_access.hpp>
+#include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/os.hpp>
+#include <vector>
 
 using HEGo::Util::Task::fail;
 using HEGo::Util::Task::make_failed;
@@ -29,6 +35,19 @@ namespace HEGo
 HEGoAssetNode::HEGoAssetNode() {}
 
 HEGoAssetNode::~HEGoAssetNode() {}
+
+bool HEGoAssetNode::refresh_definition_source(const HAPI_Session *session, HAPI_NodeId id)
+{
+	HAPI_AssetInfo info = HoudiniApi::AssetInfo_Create();
+	if (HoudiniApi::GetAssetInfo(session, id, &info) != HAPI_RESULT_SUCCESS) return false;
+	const godot::String path = Util::Hapi::get_godot_string(session, info.filePathSH);
+	if (!path.is_empty())
+	{
+		definition_path = path;
+		definition_name = Util::Hapi::get_godot_string(session, info.fullOpNameSH);
+	}
+	return true;
+}
 
 godot::Ref<HEGoTask> HEGoAssetNode::instantiate()
 {
@@ -49,6 +68,12 @@ godot::Ref<HEGoTask> HEGoAssetNode::instantiate()
 
 		if (result_id >= 0)
 		{
+			if (result_id != nid)
+			{
+				self->definition_path = godot::String();
+				self->definition_name = godot::String();
+				self->refresh_definition_source(mgr->get_session(), result_id);
+			}
 			mgr->register_node(self.ptr());
 			HEGo::Util::Log::debug(HEGo::Util::Log::Category::NODE, "Successfully instantiated HDA: " + op);
 		}
@@ -58,6 +83,96 @@ godot::Ref<HEGoTask> HEGoAssetNode::instantiate()
 		}
 
 		return result_id;
+	});
+}
+
+namespace
+{
+#ifdef _WIN32
+constexpr const char *HOTL_EXECUTABLE = "bin/hotl.exe";
+#else
+constexpr const char *HOTL_EXECUTABLE = "bin/hotl";
+#endif
+
+// HAPI can return the previous library id, with no warning, when a file has
+// disappeared or become unreadable since it was installed. hotl reads the source
+// independently, including Houdini's expanded (directory) form of an HDA.
+bool check_library_source(const godot::String &path, const godot::String &full_name, const godot::String &hotl, godot::String &error)
+{
+	if (godot::FileAccess::file_exists(hotl))
+	{
+		godot::PackedStringArray args;
+		args.append("-B");
+		args.append(path);
+		godot::Array output;
+		if (godot::OS::get_singleton()->execute(hotl, args, output, true) != 0)
+		{
+			error = "Could not read the HDA library at " + path;
+			if (!output.is_empty()) error += "\n" + godot::String(output[0]).strip_edges();
+			return false;
+		}
+		if (!output.is_empty() && godot::String(output[0]).replace("\r", "").split("\n", false).has(full_name)) return true;
+		error = "Could not find " + full_name + " in " + path;
+		return false;
+	}
+	if (godot::DirAccess::dir_exists_absolute(path)) return true;
+	godot::Ref<godot::FileAccess> source = godot::FileAccess::open(path, godot::FileAccess::READ);
+	if (source.is_valid() && source->get_length() > 0) return true;
+	error = "Could not read the HDA library at " + path;
+	return false;
+}
+} // namespace
+
+godot::Ref<HEGoTask> HEGoAssetNode::reload_definition()
+{
+	const HAPI_NodeId nid = node_id;
+	if (nid < 0) return make_failed("Instantiate the HDA before reloading its definition.", "Reload definition");
+	const uint64_t generation = get_generation();
+	const godot::String op = op_name;
+	const godot::String hotl = HEGoAPI::get_singleton()->get_houdini_installation_path().path_join(HOTL_EXECUTABLE);
+	godot::Ref<HEGoAssetNode> self = this;
+	return submit_failable("Reload definition " + op, nid, [self, nid, generation, op, hotl](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		HAPI_Session *session = mgr->get_session();
+		if (self->get_generation() != generation || self->get_id() != nid || !self->refresh_definition_source(session, nid))
+		{
+			fail(task, "Could not read the live definition of " + op);
+			return {};
+		}
+		// Resolve the library Houdini actually chose, including namespaces and versions.
+		const godot::String path = self->definition_path;
+		const godot::String full_name = self->definition_name;
+		if (path.is_empty())
+		{
+			fail(task, "Houdini reported no on-disk library for " + op);
+			return {};
+		}
+		godot::String read_error;
+		if (!check_library_source(path, full_name.is_empty() ? op : full_name, hotl, read_error))
+		{
+			fail(task, read_error);
+			return {};
+		}
+		HAPI_AssetLibraryId library = -1;
+		if (HoudiniApi::LoadAssetLibraryFromFile(session, path.utf8().get_data(), true, &library) != HAPI_RESULT_SUCCESS)
+		{
+			fail(task, "Could not reload " + path + ": " + godot::String::utf8(Util::Hapi::get_last_error(session).c_str()));
+			return {};
+		}
+		int count = 0;
+		if (HoudiniApi::GetAvailableAssetCount(session, library, &count) == HAPI_RESULT_SUCCESS && count > 0)
+		{
+			std::vector<HAPI_StringHandle> names(count);
+			if (HoudiniApi::GetAvailableAssets(session, library, names.data(), count) == HAPI_RESULT_SUCCESS)
+			{
+				for (const auto name : names)
+				{
+					const godot::String available = Util::Hapi::get_godot_string(session, name);
+					if (available == full_name || available == op) return path;
+				}
+			}
+		}
+		fail(task, "Could not find " + op + " in the reloaded library " + path);
+		return {};
 	});
 }
 
@@ -480,6 +595,7 @@ godot::String HEGoAssetNode::get_op_name() const { return op_name; }
 
 void HEGoAssetNode::_bind_methods()
 {
+	godot::ClassDB::bind_method(godot::D_METHOD("reload_definition"), &HEGoAssetNode::reload_definition);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_parm", "parm_name", "value"), &HEGoAssetNode::set_parm);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_parms_batch", "parms"), &HEGoAssetNode::set_parms_batch);
 	godot::ClassDB::bind_method(godot::D_METHOD("insert_multiparm_instance", "parm_id", "index"), &HEGoAssetNode::insert_multiparm_instance);

@@ -27,14 +27,14 @@ var agent := HEGoAssetAgent.new(self)
 
 
 ## Cooks the HDA and puts the mesh it produced on this node.
-func cook() -> void:
+func cook() -> bool:
 	var pighead := agent.asset(ASSET_NAME, ASSET_LABEL)
 	if not await agent.instantiate(pighead, parm_stash):
-		return
+		return false
 
 	# A cook Houdini rejects fails its task, so null is the whole check.
 	if await agent.task(pighead.cook()) == null:
-		return
+		return false
 
 	# This HDA writes a hego_lod primitive attribute, which fetch_meshes turns into Godot
 	# LODs on the mesh it builds. One mesh instance, so take the first.
@@ -42,6 +42,13 @@ func cook() -> void:
 	mesh = meshes.values()[0] if not meshes.is_empty() else null
 
 	parm_stash = await agent.save_parameters(pighead)
+	return true
+
+
+func hego_rebuild() -> bool:
+	if not await agent.rebuild_asset(agent.asset(ASSET_NAME, ASSET_LABEL), parm_stash):
+		return false
+	return await cook()
 
 
 # ─────────────────────────────────────────────

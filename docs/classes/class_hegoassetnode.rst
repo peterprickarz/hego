@@ -59,6 +59,8 @@ Methods
    :widths: auto
 
    +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`reload_definition<class_HEGoAssetNode_method_reload_definition>`\ (\ )                                                                                                                               |
+   +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`cook<class_HEGoAssetNode_method_cook>`\ (\ )                                                                                                                                                         |
    +---------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_curves<class_HEGoAssetNode_method_fetch_curves>`\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray(), read_point_attribs\: ``PackedStringArray`` = PackedStringArray()\ )      |
@@ -126,6 +128,18 @@ Houdini operator name used by :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNod
 
 Method Descriptions
 -------------------
+
+.. _class_HEGoAssetNode_method_reload_definition:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **reload_definition**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_reload_definition>`
+
+Reloads the on-disk library that Houdini selected for this instance. The task returns the library path after confirming it contains the selected operator. :ref:`HEGoAssetAgent.rebuild_asset()<class_HEGoAssetAgent_method_rebuild_asset>` also replaces the instance and clears the host's input chains.
+
+.. rst-class:: classref-item-separator
+
+----
 
 .. _class_HEGoAssetNode_method_cook:
 

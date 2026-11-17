@@ -38,6 +38,9 @@ public:
 	bool start_session(int connection_type = SESSION_NAMED_PIPE, const godot::String &connection_data = DEFAULT_NAMED_PIPE);
 	bool stop_session();
 	bool is_session_active();
+	godot::String get_hip_file_extension();
+	godot::Ref<HEGoTask> save_hip_file(const godot::String &path);
+	godot::Ref<HEGoTask> open_hip_file();
 	HEGoSessionManager *get_session_manager();
 	void set_houdini_installation_path(const godot::String &path);
 	godot::String get_houdini_installation_path() const;

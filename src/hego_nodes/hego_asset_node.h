@@ -21,12 +21,20 @@ class HEGoAssetNode : public HEGoTransformableInputReceiverNode
 protected:
 	godot::String op_name;
 
+private:
+	// Worker-thread state for the live instance. A bad library edit can leave
+	// HAPI unable to report its path until that library is reinstalled.
+	godot::String definition_path;
+	godot::String definition_name;
+	bool refresh_definition_source(const HAPI_Session *session, HAPI_NodeId id);
+
 public:
 	HEGoAssetNode();
 	~HEGoAssetNode();
 
 	// Returns a task — all HAPI work happens on the scheduler thread
 	godot::Ref<HEGoTask> instantiate() override;
+	godot::Ref<HEGoTask> reload_definition();
 	godot::Ref<HEGoTask> cook();
 	godot::Ref<HEGoTask> set_parm(godot::String parm_name, godot::Variant value);
 	godot::Ref<HEGoTask> set_parms_batch(godot::Dictionary parms);

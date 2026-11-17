@@ -19,6 +19,12 @@ var result = await agent.task(task)
 <tutorials>
 </tutorials>
 <methods>
+<method name="reload_definition">
+<return type="HEGoTask" />
+<description>
+Reloads the on-disk library that Houdini selected for this instance. The task returns the library path after confirming it contains the selected operator. [method HEGoAssetAgent.rebuild_asset] also replaces the instance and clears the host's input chains.
+</description>
+</method>
 <method name="cook">
 <return type="HEGoTask" />
 <description>

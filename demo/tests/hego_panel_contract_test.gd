@@ -45,7 +45,12 @@ class FixedHDANode extends StubNode:
 ## A node that lets the panel change its HDA.
 class PickableNode extends StubNode:
 	var chosen := ""
+	var rebuild_count := 0
 	func hego_set_asset_name(name: String) -> void: chosen = name
+	func hego_rebuild() -> bool:
+		rebuild_count += 1
+		await get_tree().process_frame
+		return true
 
 
 ## A node that puts several HDAs in the panel and says which of them to show, in what order.
@@ -70,6 +75,8 @@ func _initialize() -> void:
 		check(modes.get_item_text(index) == expected[0] and modes.get_selected_id() == expected[1], "session mode %s has its API ID" % expected[0])
 	var tab := panel.get_node("TabContainer/HDA")
 	check(tab != null, "the HDA tab is reachable in the panel scene")
+	check(panel.save_hip_button.disabled and panel.open_hip_button.disabled, "HIP actions require an active session")
+	check(panel.save_hip_dialog.file_mode == FileDialog.FILE_MODE_SAVE_FILE and panel.save_hip_dialog.access == FileDialog.ACCESS_FILESYSTEM, "the HIP chooser can save outside the Godot project")
 
 	# --- a node that is not a HEGoNode3D is driven ---------------------------
 	var custom := StubNode.new()
@@ -78,6 +85,7 @@ func _initialize() -> void:
 	await tab.set_selected_node(custom)
 	check(tab.hego_tool_node == custom, "a non-HEGoNode3D implementing the interface is accepted")
 	check(not tab.recook_button.disabled, "its Recook button is enabled")
+	check(tab.rebuild_button.disabled, "custom nodes opt into Rebuild independently of Recook")
 
 	# Its asset node is null until cooked, so the panel shows the hint rather than erroring.
 	check(tab.parm_vbox.get_child_count() == 1, "an uninstantiated node shows one hint label")
@@ -114,6 +122,14 @@ func _initialize() -> void:
 	check(tab.asset_picker_button.visible, "so the button is shown")
 	await tab._on_asset_picked("Sop/chosen")
 	check(pickable.chosen == "Sop/chosen", "picking an asset goes through the node, not around it")
+	tab.auto_start_session_toggle.button_pressed = false
+	check(not tab.rebuild_button.disabled, "a custom rebuild hook enables Rebuild")
+	tab.rebuild_button.pressed.emit()
+	check(pickable.rebuild_count == 1 and tab.rebuild_button.disabled and tab.recook_button.disabled, "Rebuild calls the hook and locks both actions")
+	await tab.recook()
+	check(not pickable.cooked, "Recook waits for Rebuild to finish")
+	await process_frame
+	check(not tab.rebuild_button.disabled and not tab.recook_button.disabled, "both actions are available again after rebuilding")
 
 	# --- deselection clears the panel ---------------------------------------
 	await tab.set_selected_node(null)
@@ -121,6 +137,7 @@ func _initialize() -> void:
 	check(tab.parm_vbox.get_child_count() == 0, "no parameter widget from the previous node survives")
 	check(tab.input_vbox.get_child_count() == 0, "and no input row either")
 	check(tab.recook_button.disabled, "Recook is disabled with nothing selected")
+	check(tab.rebuild_button.disabled, "Rebuild is disabled with nothing selected")
 
 	# --- a cook already running is not started twice -------------------------
 	var busy := StubNode.new()

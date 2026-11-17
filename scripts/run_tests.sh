@@ -147,6 +147,7 @@ if [[ "$HOUDINI" == true ]] && run_group houdini; then
     done
     # Drives demo/tests/hego_named_pipe_session_test.gd against disposable HAPI servers.
     ( cd "$ROOT_DIR" && unset HOUDINI_OTLSCAN_PATH HOUDINI_PACKAGE_DIR && timeout 1800 "$HYTHON" scripts/test_named_pipe_sessions.py --godot "$GODOT" > "$LOG_DIR/hego_named_pipe_session_test.log" 2>&1 ); record $? hego_named_pipe_session_test
+    ( cd "$ROOT_DIR" && timeout 300 "$HYTHON" scripts/test_rebuild_hip.py --godot "$GODOT" > "$LOG_DIR/hego_rebuild_hip_test.log" 2>&1 ); record $? hego_rebuild_hip_test
     for name in "${HYTHON_TESTS[@]}"; do
         ( cd "$ROOT_DIR" && unset HOUDINI_OTLSCAN_PATH && HOUDINI_PATH="$ROOT_DIR:&" timeout 1800 "$HYTHON" "scripts/houdini/$name.py" > "$LOG_DIR/$name.log" 2>&1 ); record $? "$name"
     done

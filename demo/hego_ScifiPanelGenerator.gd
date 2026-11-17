@@ -43,22 +43,30 @@ var input_stash: Array = []
 
 
 ## Sends the input meshes to Houdini, cooks the HDA and puts the panelled mesh on this node.
-func cook() -> void:
+func cook() -> bool:
 	var panels := agent.asset(ASSET_NAME, ASSET_LABEL)
 	if not await agent.instantiate(panels, parm_stash):
-		return
+		return false
 
 	# One input taking several meshes: set_input records them all and sync_inputs wires them
 	# through a merge node, reusing the Houdini input nodes it made last cook.
 	agent.set_input(0, input_nodes)
-	await agent.sync_inputs(panels)
+	if not await agent.sync_inputs(panels):
+		return false
 
 	# A cook Houdini rejects fails its task, so null is the whole check.
 	if await agent.task(panels.cook()) == null:
-		return
+		return false
 
 	mesh = await _build_mesh(await agent.output_context(panels))
 	parm_stash = await agent.save_parameters(panels)
+	return true
+
+
+func hego_rebuild() -> bool:
+	if not await agent.rebuild_asset(agent.asset(ASSET_NAME, ASSET_LABEL), parm_stash):
+		return false
+	return await cook()
 
 
 ## One surface per material name the HDA tagged its geometry with.

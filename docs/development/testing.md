@@ -38,6 +38,10 @@ of the same project never shows the problem.
 The Houdini group unsets `HOUDINI_OTLSCAN_PATH` and `HOUDINI_PACKAGE_DIR` so the editor test
 discovers the island HDAs through `otls/` at Houdini startup, as a user's session would.
 
+The rebuild and HIP export regression uses two temporary versions of a two-input HDA
+in a private session. It changes the definition on disk, presses Rebuild, and reopens
+the saved HIP to verify the inputs, parameters, and cooked geometry.
+
 ### Where tests stage projects
 
 Scripts that copy the demo project or its addons into a disposable project stage it under

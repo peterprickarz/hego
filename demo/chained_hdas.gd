@@ -46,7 +46,7 @@ var agent := HEGoAssetAgent.new(self)
 
 
 ## Cooks the chain and rebuilds the multimesh of scattered instances under Outputs/.
-func cook() -> void:
+func cook() -> bool:
 	var base := agent.asset(BASE_ASSET, BASE_LABEL)
 	var scatter := agent.asset(SCATTER_ASSET, SCATTER_LABEL)
 
@@ -56,9 +56,9 @@ func cook() -> void:
 	agent.show_in_panel([SCATTER_LABEL, BASE_LABEL])
 
 	if not await agent.instantiate(base, base_parm_stash):
-		return
+		return false
 	if not await agent.instantiate(scatter, scatter_parm_stash):
-		return
+		return false
 
 	# The chain itself. Both stages carry this node's transform, which instantiate() does:
 	# leaving an upstream stage at the origin moves everything downstream of it by however
@@ -68,11 +68,12 @@ func cook() -> void:
 	# Everything except the chained input comes from the stash as usual. Without the skip the
 	# next cook would replace the chain with an empty merge node and the scatter would have
 	# nothing to scatter over.
-	await agent.sync_inputs(scatter, [CHAINED_INPUT])
+	if not await agent.sync_inputs(scatter, [CHAINED_INPUT]):
+		return false
 
 	# Only the last stage is cooked. Houdini cooks base because scatter asks it for geometry.
 	if await agent.task(scatter.cook()) == null:
-		return
+		return false
 
 	# Cleared only now the cook has succeeded, so a failure leaves the last result visible.
 	var outputs_node := get_node_or_null(HEGoNodeUtil.OUTPUTS_ROOT_NAME)
@@ -86,6 +87,15 @@ func cook() -> void:
 
 	base_parm_stash = await agent.save_parameters(base)
 	scatter_parm_stash = await agent.save_parameters(scatter)
+	return true
+
+
+func hego_rebuild() -> bool:
+	if not await agent.rebuild_asset(agent.asset(BASE_ASSET, BASE_LABEL), base_parm_stash):
+		return false
+	if not await agent.rebuild_asset(agent.asset(SCATTER_ASSET, SCATTER_LABEL), scatter_parm_stash):
+		return false
+	return await cook()
 
 
 ## Every point of the cook, with the attributes an instance transform is built from.

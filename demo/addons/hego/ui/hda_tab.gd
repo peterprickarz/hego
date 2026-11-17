@@ -55,7 +55,8 @@ var new_preset_name_line_edit: LineEdit
 @onready var auto_recook_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer/CheckButton
 @onready var auto_start_session_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2/CheckButton
 @onready var asset_picker_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/AssetPickerButton
-@onready var recook_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/ButtonRecook
+@onready var recook_button: Button = %ButtonRecook
+@onready var rebuild_button: Button = %ButtonRebuild
 @onready var load_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/LoadPresetButton
 @onready var save_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/SavePresetButton
 @onready var new_preset_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/MarginContainer/PanelContainer/VBoxContainer/HBoxContainer3/NewPresetButton
@@ -86,7 +87,7 @@ func _print_bottom_panel_timing(trigger: String, session_start_msec: float, reco
 	var lines = PackedStringArray()
 	lines.append("[HEGoBottomPanel]: Timing summary (%s)" % trigger)
 	lines.append("[HEGoBottomPanel]:   Session start: %.3f ms" % session_start_msec)
-	lines.append("[HEGoBottomPanel]:   Recook call: %.3f ms" % recook_msec)
+	lines.append("[HEGoBottomPanel]:   Asset operation: %.3f ms" % recook_msec)
 	lines.append("[HEGoBottomPanel]:   UI rebuild: %.3f ms" % ui_rebuild_msec)
 	lines.append("[HEGoBottomPanel]:   Total bottom-panel flow: %.3f ms" % total_msec)
 	print("\n".join(lines))
@@ -95,7 +96,8 @@ func _ready():
 	new_preset_name_diag = preload("res://addons/hego/ui/new_preset_name_diag.tscn").instantiate()
 	new_preset_name_line_edit = new_preset_name_diag.get_node("%LineEdit")
 	add_child(new_preset_name_diag)
-	recook_button.button_down.connect(_on_recook_button_pressed)
+	recook_button.pressed.connect(_on_recook_button_pressed)
+	rebuild_button.pressed.connect(_on_recook_button_pressed.bind(true))
 	asset_picker_button.pressed.connect(_on_asset_picker_button_pressed)
 	root_control.selected_hego_node_changed.connect(set_selected_node)
 	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
@@ -129,6 +131,7 @@ func _clear_widgets():
 
 func _set_buttons_disabled(disabled: bool):
 	recook_button.disabled = disabled
+	rebuild_button.disabled = disabled or not is_instance_valid(hego_tool_node) or not hego_tool_node.has_method("hego_rebuild")
 	asset_picker_button.disabled = disabled
 	load_preset_button.disabled = disabled
 	save_preset_button.disabled = disabled
@@ -500,7 +503,10 @@ func _notify_inputs_changed() -> void:
 		hego_tool_node.hego_notify_cook_inputs_changed()
 	
 
-func _on_recook_button_pressed():
+func _on_recook_button_pressed(rebuild_asset := false):
+	if _cooking or not is_instance_valid(hego_tool_node):
+		return
+	var selected_node := hego_tool_node
 	var total_start_usec = Time.get_ticks_usec()
 	var session_start_msec = 0.0
 	var recook_msec = 0.0
@@ -509,47 +515,60 @@ func _on_recook_button_pressed():
 	if auto_start_session_toggle.button_pressed:
 		var phase_start_usec = Time.get_ticks_usec()
 		if not HEGoAPI.get_singleton().is_session_active():
-			HEGoAPI.get_singleton().start_session(2, 'hapi')
+			HEGoAPI.get_singleton().start_session(HEGoAPI.SESSION_NAMED_PIPE, "hapi")
 		session_start_msec = _elapsed_msec(phase_start_usec)
 
 	var recook_start_usec = Time.get_ticks_usec()
-	await recook()
+	await recook(rebuild_asset)
 	recook_msec = _elapsed_msec(recook_start_usec)
 
-	var preset_index = preset_dropdown.get_selected_id()
+	if not is_instance_valid(selected_node) or selected_node != hego_tool_node:
+		return
+	var preset_index := preset_dropdown.selected
 	var ui_start_usec = Time.get_ticks_usec()
 	await update_ui()
-	preset_dropdown.select(preset_index)
+	if selected_node == hego_tool_node and preset_index >= 0 and preset_index < preset_dropdown.item_count:
+		preset_dropdown.select(preset_index)
 	ui_rebuild_msec = _elapsed_msec(ui_start_usec)
 
-	_print_bottom_panel_timing("recook_button", session_start_msec, recook_msec, ui_rebuild_msec, _elapsed_msec(total_start_usec))
+	_print_bottom_panel_timing("rebuild_button" if rebuild_asset else "recook_button", session_start_msec, recook_msec, ui_rebuild_msec, _elapsed_msec(total_start_usec))
 		
 		
-func recook():
+func recook(rebuild_asset := false):
 	if not is_instance_valid(hego_tool_node) or _cooking:
 		return
 
+	var selected_node := hego_tool_node
 	_cooking = true
 	_set_buttons_disabled(true)
-	if hego_tool_node.has_method("cook"):
-		await hego_tool_node.cook()
+	var succeeded := true
+	if rebuild_asset:
+		# Widgets from the old definition hold parameter IDs and input indices.
+		_rebuild_generation += 1
+		_clear_widgets()
+		succeeded = selected_node.has_method("hego_rebuild") and await selected_node.hego_rebuild()
+	elif selected_node.has_method("cook"):
+		await selected_node.cook()
+	if succeeded and is_instance_valid(selected_node) and selected_node == hego_tool_node:
+		await _stash_cooked_parameters(selected_node)
 	_cooking = false
-	_set_buttons_disabled(false)
+	_set_buttons_disabled(not is_instance_valid(hego_tool_node))
+
+
+func _stash_cooked_parameters(selected_node: Node) -> void:
 	# A failed preset restore can leave a valid HAPI node ID. Do not replace
 	# the saved stash with that incomplete instance or provoke a second error.
-	if hego_tool_node.has_method("hego_did_last_cook_succeed") and not hego_tool_node.hego_did_last_cook_succeed(): return
+	if selected_node.has_method("hego_did_last_cook_succeed") and not selected_node.hego_did_last_cook_succeed():
+		return
 
-	# Read the parameters back so they survive a scene reload. Guarded because a node whose
-	# cook did not instantiate anything - a missing HDA, or no session - still has no asset
-	# node here, and asking a null for its preset is an error rather than an empty result.
-	if hego_tool_node.has_method("hego_set_parm_stash"):
-		if not hego_asset_node:
-			var entries := _panel_assets()
-			hego_asset_node = entries[0]["asset"] if not entries.is_empty() else null
-		if _is_instantiated(hego_asset_node):
+	# A rebuild may have replaced the instance that the panel previously displayed.
+	if selected_node.has_method("hego_set_parm_stash"):
+		var entries := _panel_assets()
+		hego_asset_node = entries[0]["asset"] if not entries.is_empty() else null
+		if hego_asset_node:
 			var preset = await _await_task(hego_asset_node.get_preset())
-			if preset != null:
-				hego_tool_node.hego_set_parm_stash(preset)
+			if preset != null and is_instance_valid(selected_node):
+				selected_node.hego_set_parm_stash(preset)
 		
 
 func create_preset_file(preset_name: String) -> void:

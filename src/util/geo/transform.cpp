@@ -19,7 +19,8 @@ bool set_object_transform(HEGoSessionManager *session_mgr, const HAPI_NodeId nod
 		return false;
 	}
 	HAPI_TransformEuler houdini_transform = godot_to_houdini_transform(transform);
-	return HoudiniApi::SetObjectTransform(session_mgr->get_session(), info.parentId, &houdini_transform) == HAPI_RESULT_SUCCESS;
+	const HAPI_NodeId object_id = info.type == HAPI_NODETYPE_OBJ ? node_id : info.parentId;
+	return HoudiniApi::SetObjectTransform(session_mgr->get_session(), object_id, &houdini_transform) == HAPI_RESULT_SUCCESS;
 }
 
 HAPI_TransformEuler godot_to_houdini_transform(const godot::Transform3D &transform)

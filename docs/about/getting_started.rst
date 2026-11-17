@@ -62,6 +62,10 @@ Then bring in an HDA:
 The HDA's parameters appear in the panel, and its output appears in the scene tree
 under a child node called ``Outputs``.
 
+After saving changes to the HDA definition in Houdini, press **Rebuild** next to
+**Recook**. HEGo reloads the library from disk, creates a fresh asset instance,
+restores its parameters, uploads the current Godot inputs, and cooks it.
+
 If nothing appears, the HDA is probably not marking its output. HEGo does not guess:
 geometry becomes a mesh, but points only spawn objects if they carry ``hego_spawn``,
 only instance if they carry ``hego_use_multimesh``, and so on. The
@@ -90,6 +94,18 @@ session resets every HEGo node's Houdini state; the next cook re-instantiates fr
 parameters stashed in the scene. When attached to an existing server, stopping
 HEGo only closes its connection and preserves the Houdini scene. Servers started
 by HEGo are cleaned up when it disconnects.
+
+Saving and Opening the Session
+------------------------------
+
+The **Session** tab offers two file actions while a session is running.
+
+- **Save HIP File…** opens a file chooser. Pick a location to save the entire
+  Houdini Engine scene, including the other assets in the session.
+- **Open HIP File** writes the scene to a fresh temporary directory and launches
+  Houdini with that copy. You can inspect the nodes and inputs there while
+  continuing to work in Godot. Use **Save As** in Houdini to keep your edits
+  somewhere permanent.
 
 Examples
 --------

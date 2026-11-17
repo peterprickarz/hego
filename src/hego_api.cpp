@@ -8,8 +8,10 @@
 #include "util/log/log.h"
 #include "util/node/create_nodes.h"
 #include "util/parm/set_parms.h"
+#include "util/task/task_helpers.h"
 
 #include <godot_cpp/classes/dir_access.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
@@ -21,6 +23,35 @@ namespace
 {
 // Project setting holding the Houdini install HEGo talks to.
 const char *HOUDINI_PATH_SETTING = "hego/houdini_installation_path";
+
+godot::String hip_extension(const HAPI_Session *session)
+{
+	int license = HAPI_LICENSE_NONE;
+	if (HoudiniApi::GetSessionEnvInt(session, HAPI_SESSIONENVINT_LICENSE, &license) == HAPI_RESULT_SUCCESS)
+	{
+		if (license == HAPI_LICENSE_HOUDINI_ENGINE_INDIE || license == HAPI_LICENSE_HOUDINI_INDIE)
+			return "hiplc";
+		if (license == HAPI_LICENSE_HOUDINI_ENGINE_EDUCATION || license == HAPI_LICENSE_HOUDINI_EDUCATION)
+			return "hipnc";
+	}
+	return "hip";
+}
+
+bool save_hip_snapshot(HEGoSessionManager *mgr, HEGoTask *task, const godot::String &path)
+{
+	HAPI_Session *session = mgr->get_session();
+	if (!Util::Hapi::save_to_hip(session, path.utf8().get_data()))
+	{
+		Util::Task::fail(task, "Could not save the Houdini session to " + path + ". " + godot::String::utf8(Util::Hapi::get_last_error(session).c_str()));
+		return false;
+	}
+	if (godot::FileAccess::get_size(path) <= 0)
+	{
+		Util::Task::fail(task, "Houdini did not write a HIP file to " + path + ".");
+		return false;
+	}
+	return true;
+}
 } // namespace
 
 HEGoAPI *HEGoAPI::singleton = nullptr;
@@ -93,6 +124,65 @@ bool HEGoAPI::stop_session()
 
 bool HEGoAPI::is_session_active() { return session_mgr.is_session_active(); }
 
+godot::String HEGoAPI::get_hip_file_extension()
+{
+	return is_session_active() ? hip_extension(session_mgr.get_session()) : godot::String("hip");
+}
+
+godot::Ref<HEGoTask> HEGoAPI::save_hip_file(const godot::String &path)
+{
+	const godot::String description = "Save HIP File";
+	if (path.is_empty() || path.get_file().is_empty())
+		return Util::Task::make_failed("Choose a filename for the Houdini session.", description);
+
+	const godot::String absolute_path = godot::ProjectSettings::get_singleton()->globalize_path(path);
+	if (!absolute_path.is_absolute_path())
+		return Util::Task::make_failed("Choose an absolute path for the HIP file.", description);
+
+	return Util::Task::submit_failable(description, -1, [absolute_path](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		if (!save_hip_snapshot(mgr, task, absolute_path))
+			return {};
+		return absolute_path;
+	});
+}
+
+godot::Ref<HEGoTask> HEGoAPI::open_hip_file()
+{
+#if defined(_WIN32)
+	const char *program = "bin/houdini.exe";
+#else
+	const char *program = "bin/houdini";
+#endif
+	const godot::String executable = get_houdini_installation_path().path_join(program);
+	return Util::Task::submit_failable("Open HIP File", -1, [executable](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		// Houdini owns the snapshot after launch and may outlive the editor.
+		godot::Ref<godot::DirAccess> directory = godot::DirAccess::create_temp("hego-session", true);
+		if (directory.is_null())
+		{
+			Util::Task::fail(task, "Could not create a temporary directory for the Houdini session.");
+			return {};
+		}
+		const godot::String extension = hip_extension(mgr->get_session());
+		const godot::String path = directory->get_current_dir().path_join("session." + extension);
+		if (!save_hip_snapshot(mgr, task, path))
+		{
+			godot::DirAccess::remove_absolute(path.get_base_dir());
+			return {};
+		}
+
+		godot::PackedStringArray arguments;
+		if (extension == "hiplc")
+			arguments.push_back("-indie");
+		arguments.push_back(path);
+		if (!godot::FileAccess::file_exists(executable) || godot::OS::get_singleton()->create_process(executable, arguments) <= 0)
+		{
+			Util::Task::fail(task, "Could not start Houdini at " + executable + ". The HIP file was saved to " + path + ".");
+			return {};
+		}
+		return path;
+	});
+}
+
 HEGoSessionManager *HEGoAPI::get_session_manager() { return &session_mgr; }
 
 void HEGoAPI::set_houdini_installation_path(const godot::String &path)
@@ -107,7 +197,7 @@ godot::String HEGoAPI::get_houdini_installation_path() const
 	// platform's default are consulted in that order. Reading the setting directly
 	// would hand back an empty string when it is set but blank, and an empty prefix
 	// makes every library look built-in in get_hda_libraries().
-	return godot::String(HEGoPlatform::get_houdini_path());
+	return godot::String::utf8(HEGoPlatform::get_houdini_path());
 }
 
 godot::Dictionary HEGoAPI::get_hda_libraries()
@@ -252,6 +342,9 @@ void HEGoAPI::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("start_session", "connection_type", "connection_data"), &HEGoAPI::start_session);
 	godot::ClassDB::bind_method(godot::D_METHOD("stop_session"), &HEGoAPI::stop_session);
 	godot::ClassDB::bind_method(godot::D_METHOD("is_session_active"), &HEGoAPI::is_session_active);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_hip_file_extension"), &HEGoAPI::get_hip_file_extension);
+	godot::ClassDB::bind_method(godot::D_METHOD("save_hip_file", "path"), &HEGoAPI::save_hip_file);
+	godot::ClassDB::bind_method(godot::D_METHOD("open_hip_file"), &HEGoAPI::open_hip_file);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_houdini_installation_path", "path"), &HEGoAPI::set_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_houdini_installation_path"), &HEGoAPI::get_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_hda_libraries"), &HEGoAPI::get_hda_libraries);

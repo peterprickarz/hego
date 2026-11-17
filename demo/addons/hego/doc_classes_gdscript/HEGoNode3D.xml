@@ -33,6 +33,12 @@
 				Tells the plugin this node can be edited from the HEGo bottom panel.
 			</description>
 		</method>
+		<method name="hego_rebuild">
+			<return type="bool" />
+			<description>
+				Reloads this HDA from disk, uploads all scene inputs again and cooks the replacement with the current parameter values.
+			</description>
+		</method>
 		<method name="hego_did_last_cook_succeed">
 			<return type="bool" />
 			<description>

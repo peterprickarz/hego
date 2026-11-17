@@ -54,14 +54,15 @@ var input_stash: Array = []
 
 
 ## Cooks the HDA and rebuilds the multimesh of scattered instances under Outputs/.
-func cook() -> void:
+func cook() -> bool:
 	var scatter := agent.asset(ASSET_NAME, ASSET_LABEL)
 	if not await agent.instantiate(scatter, parm_stash):
-		return
+		return false
 
 	agent.set_input(0, input_nodes)
 	agent.set_input(1, dist_input_nodes)
-	await agent.sync_inputs(scatter)
+	if not await agent.sync_inputs(scatter):
+		return false
 
 	# Pushed after instantiate(), which is where a stashed preset would have been restored,
 	# so these properties are what the HDA ends up cooking with.
@@ -73,7 +74,7 @@ func cook() -> void:
 
 	# A cook Houdini rejects fails its task, so null is the whole check.
 	if await agent.task(scatter.cook()) == null:
-		return
+		return false
 
 	# Cleared only now the cook has succeeded, so a failure leaves the last result visible.
 	var outputs_node := get_node_or_null(HEGoNodeUtil.OUTPUTS_ROOT_NAME)
@@ -83,7 +84,7 @@ func cook() -> void:
 	var context := await agent.output_context(scatter)
 	var points := await _fetch_points(scatter)
 	if points.is_empty():
-		return
+		return true
 
 	HEGoMultiMeshOutput.setup_multimesh(context, load(INSTANCED_MESH), MULTIMESH_NAME, points)
 
@@ -94,6 +95,13 @@ func cook() -> void:
 		multimesh_instance.material_override = shader_material
 
 	parm_stash = await agent.save_parameters(scatter)
+	return true
+
+
+func hego_rebuild() -> bool:
+	if not await agent.rebuild_asset(agent.asset(ASSET_NAME, ASSET_LABEL), parm_stash):
+		return false
+	return await cook()
 
 
 ## Every point of the cook, with the attributes an instance transform is built from.

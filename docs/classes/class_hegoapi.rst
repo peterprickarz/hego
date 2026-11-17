@@ -50,6 +50,8 @@ Methods
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | ``Dictionary``                  | :ref:`get_hda_libraries<class_HEGoAPI_method_get_hda_libraries>`\ (\ )                                                  |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | ``String``                      | :ref:`get_hip_file_extension<class_HEGoAPI_method_get_hip_file_extension>`\ (\ )                                        |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | ``String``                      | :ref:`get_houdini_installation_path<class_HEGoAPI_method_get_houdini_installation_path>`\ (\ ) |const|                  |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | ``Array``                       | :ref:`get_pending_tasks<class_HEGoAPI_method_get_pending_tasks>`\ (\ )                                                  |
@@ -59,6 +61,10 @@ Methods
    | ``int``                         | :ref:`get_task_pending_count<class_HEGoAPI_method_get_task_pending_count>`\ (\ )                                        |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | ``bool``                        | :ref:`is_session_active<class_HEGoAPI_method_is_session_active>`\ (\ )                                                  |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`open_hip_file<class_HEGoAPI_method_open_hip_file>`\ (\ )                                                          |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`save_hip_file<class_HEGoAPI_method_save_hip_file>`\ (\ path\: ``String``\ )                                       |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | |void|                          | :ref:`set_houdini_installation_path<class_HEGoAPI_method_set_houdini_installation_path>`\ (\ path\: ``String``\ )       |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
@@ -189,6 +195,18 @@ Returns an empty dictionary if no session is active, if no libraries are loaded,
 
 ----
 
+.. _class_HEGoAPI_method_get_hip_file_extension:
+
+.. rst-class:: classref-method
+
+``String`` **get_hip_file_extension**\ (\ ) :ref:`🔗<class_HEGoAPI_method_get_hip_file_extension>`
+
+Returns the filename extension for the session license. Indie uses ``hiplc`` and Education uses ``hipnc``. The default is ``hip``.
+
+.. rst-class:: classref-item-separator
+
+----
+
 .. _class_HEGoAPI_method_get_houdini_installation_path:
 
 .. rst-class:: classref-method
@@ -252,6 +270,30 @@ This count does not include the currently running task.
 ``bool`` **is_session_active**\ (\ ) :ref:`🔗<class_HEGoAPI_method_is_session_active>`
 
 Returns ``true`` when the Houdini Engine session is currently active.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAPI_method_open_hip_file:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **open_hip_file**\ (\ ) :ref:`🔗<class_HEGoAPI_method_open_hip_file>`
+
+Saves the current Houdini Engine scene to a new temporary directory and launches the configured Houdini executable with that file. The temporary copy remains available after the Godot session closes. On success, the task result contains its absolute path.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAPI_method_save_hip_file:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **save_hip_file**\ (\ path\: ``String``\ ) :ref:`🔗<class_HEGoAPI_method_save_hip_file>`
+
+Queues a save of the current Houdini Engine scene to ``path``. Accepts absolute filesystem paths and Godot project or user paths. Use :ref:`get_hip_file_extension()<class_HEGoAPI_method_get_hip_file_extension>` to suggest a filename. On success, the task result contains the absolute path to the file.
 
 .. rst-class:: classref-item-separator
 

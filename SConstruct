@@ -76,7 +76,7 @@ else:
 # whole ar command is one argument, and Linux caps a single argument at 128 KiB; the long
 # container/profile build paths push the static-library link over that. Hand GNU ar a
 # response file instead (GNU ar on Linux and MinGW accepts @file; Apple's ar does not).
-if env["platform"] in ("linux", "windows"):
+if env["platform"] == "linux" or (env["platform"] == "windows" and env.get("use_mingw", False)):
     env["MAXLINELENGTH"] = 64 * 1024
     env["ARCOM"] = "${TEMPFILE('$AR $ARFLAGS $TARGET $SOURCES', '$ARCOMSTR')}"
 
