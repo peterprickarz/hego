@@ -52,6 +52,8 @@ GODOT_TESTS=(
     procedural_transaction_test region_geometry_test region_streamer_test stage_material_persistence_test stage_material_transport_test
     terrain_bulk_test terrain_cell_mask_test terrain_material_soft_limit_test terrain_mesher_test terrain_refinement_test
     large_world_test physics_tracking_test terrain_runtime_intent_test terrain_setup_test terrain_transport_lifetime_test
+    copia_build_test copia_demo_test copia_drawer_test copia_points_test copia_resources_test copia_sets_test
+    copia_sources_test copia_store_test copia_streamer_test hego_copia_bridge_test
 )
 # These read the saved island under demo/island/terrain (Git LFS).
 ISLAND_DATA_TESTS=(island_storage_test terrain_demo_scene_test)
@@ -60,7 +62,7 @@ ISLAND_DATA_TESTS=(island_storage_test terrain_demo_scene_test)
 HOUDINI_GODOT_TESTS=(
     editor_hda_package_test hego_graph_native_test hego_heightfield_fields_native_test
     hego_input_children_native_test hego_parameter_native_test hego_surface_preload_test
-    hego_custom_channels_test hego_point_split_test
+    hego_custom_channels_test hego_point_split_test hego_copia_roundtrip_test
 )
 HYTHON_TESTS=(test_hda_package_graphs test_island_stage_materials test_material_distribution test_material_tiling test_terrain_tint test_island_transition)
 # Forward+ on a real display.

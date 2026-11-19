@@ -31,14 +31,18 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     (bridge/"plugin.cfg").write_text("bridge plugin")
     terrain3d_bridge=source/"demo/addons/hego_terrain3d"; terrain3d_bridge.mkdir(parents=True)
     (terrain3d_bridge/"plugin.cfg").write_text("terrain3d bridge plugin")
+    copia=source/"demo/addons/copia"; copia.mkdir(parents=True)
+    copia_bridge=source/"demo/addons/hego_copia"; copia_bridge.mkdir(parents=True)
+    (copia_bridge/"plugin.cfg").write_text("copia bridge plugin")
     for addon, extension, libs in (
         (hego, "hego", ("libhego.linux.template_debug.x86_64.so", "libhego.linux.template_release.x86_64.so")),
         (terrain, "strata", ("libstrata.linux.template_debug.x86_64.so", "libstrata.linux.template_release.x86_64.so")),
+        (copia, "copia", ("libcopia.linux.template_debug.x86_64.so", "libcopia.linux.template_release.x86_64.so")),
     ):
         binary_dir=addon/"bin"; binary_dir.mkdir()
         (addon/"plugin.cfg").write_text("plugin")
         (binary_dir/f"{extension}.gdextension").write_text("[libraries]\n" + "\n".join(
-            f'linux.{"debug" if "debug" in lib else "release"}.x86_64 = "res://addons/{"hego" if extension == "hego" else "strata"}/bin/{lib}"'
+            f'linux.{"debug" if "debug" in lib else "release"}.x86_64 = "res://addons/{extension}/bin/{lib}"'
             for lib in libs
         ) + "\n")
         for lib in libs:
@@ -47,8 +51,10 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     (source/"SConstruct.terrain").write_text("terrain build settings")
     (source/"src").mkdir(); (source/"src/native.cpp").write_text("native")
     (source/"terrain/src").mkdir(parents=True); (source/"terrain/src/native.cpp").write_text("terrain native")
+    (source/"SConstruct.copia").write_text("copia build settings")
+    (source/"copia/src").mkdir(parents=True); (source/"copia/src/native.cpp").write_text("copia native")
     scripts=source/"scripts"; scripts.mkdir()
-    for name in ("build.sh", "build-terrain.sh"):
+    for name in ("build.sh", "build-terrain.sh", "build-copia.sh"):
         (scripts/name).write_text(name)
     (scripts/"native_build_manifest.py").write_bytes((repo/"scripts/native_build_manifest.py").read_bytes())
     (source/"README.md").write_text("demo/addons/hego/assets/logo.png")
@@ -56,6 +62,7 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     for addon_name, libs in (
         ("hego", ("libhego.linux.template_debug.x86_64.so", "libhego.linux.template_release.x86_64.so")),
         ("strata", ("libstrata.linux.template_debug.x86_64.so", "libstrata.linux.template_release.x86_64.so")),
+        ("copia", ("libcopia.linux.template_debug.x86_64.so", "libcopia.linux.template_release.x86_64.so")),
     ):
         args=["python3", scripts/"native_build_manifest.py", "record", "--addon", addon_name]
         for lib in libs:
@@ -82,6 +89,15 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     (source/"src/native.cpp").write_text("native")
     git(source,"add","src/native.cpp"); git(source,"commit","--amend","--no-edit","--allow-empty")
     assert git(source,"rev-parse","HEAD^{tree}")==git(source,"rev-parse",f"{original_head}^{{tree}}")
+    # A stale Copia native source is refused too, while HEGo and Strata stay valid.
+    (source/"copia/src/native.cpp").write_text("copia native changed after build")
+    git(source,"add","copia/src/native.cpp"); git(source,"commit","-m","stale copia source")
+    run(repo/"scripts/publish-next.sh","origin","HEAD","--dry-run",cwd=source,ok=False)
+    run("python3",scripts/"native_build_manifest.py","validate","--addon","copia","--ref","HEAD",cwd=source,ok=False)
+    run("python3",scripts/"native_build_manifest.py","validate","--addon","hego","--ref","HEAD",cwd=source)
+    (source/"copia/src/native.cpp").write_text("copia native")
+    git(source,"add","copia/src/native.cpp"); git(source,"commit","--amend","--no-edit","--allow-empty")
+    assert git(source,"rev-parse","HEAD^{tree}")==git(source,"rev-parse",f"{original_head}^{{tree}}")
     binary=hego/"bin/libhego.linux.template_debug.x86_64.so"
     good_binary=binary.read_bytes()
     binary.write_bytes(b"replaced by stale native binary")
@@ -98,6 +114,7 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     dry=publish("--dry-run")
     assert "DRY RUN release-next" in dry and "DRY RUN strata-release-next" in dry and "DRY RUN hego-strata-release-next" in dry and "DRY RUN release-next-bundle" in dry
     assert "DRY RUN hego-terrain3d-release-next" in dry
+    assert "DRY RUN copia-release-next" in dry and "DRY RUN hego-copia-release-next" in dry
     assert not git(remote,"branch","--list")
     publish()
     first=git(remote,"rev-parse","release-next")
@@ -129,6 +146,20 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     terrain3d_package=json.loads(git(remote,"show","hego-terrain3d-release-next:PACKAGE.json"))
     assert [(item["package"], item["branch"]) for item in terrain3d_package["requires"]]==[("hego","release-next")]
     assert terrain3d_package["external_requires"][0]["name"]=="Terrain3D" and terrain3d_package["external_requires"][0]["addon_path"]=="addons/terrain_3d"
+    # Copia stands alone; its bridge requires HEGo and Copia at its own source revision.
+    copia_package=json.loads(git(remote,"show","copia-release-next:PACKAGE.json"))
+    assert copia_package["requires"]==[] and copia_package["requires_hego"] is False
+    assert copia_package["source_commit"]==hego_package["source_commit"]
+    assert git(remote,"show","copia-release-next:bin/copia.gdextension").startswith("[libraries]")
+    assert git(remote,"show","copia-release-next:bin/libcopia.linux.template_debug.x86_64.so")=="fresh-copia-libcopia.linux.template_debug.x86_64.so"
+    copia_receipt=json.loads(git(remote,"show","copia-release-next:native-build.json"))
+    assert copia_receipt["format_version"]==1 and copia_receipt["source_fingerprint"]
+    assert "target=template_release" in copia_receipt["artifacts"]["bin/libcopia.linux.template_release.x86_64.so"]["build_context"]
+    copia_bridge_package=json.loads(git(remote,"show","hego-copia-release-next:PACKAGE.json"))
+    assert [(item["package"], item["branch"]) for item in copia_bridge_package["requires"]]==[("hego","release-next"),("copia","copia-release-next")]
+    assert all(item["source_commit"]==copia_bridge_package["source_commit"]==hego_package["source_commit"] for item in copia_bridge_package["requires"])
+    assert git(remote,"show","hego-copia-release-next:plugin.cfg")=="copia bridge plugin"
+    assert "`addons/hego`" in git(remote,"show","hego-copia-release-next:README.md") and "`addons/copia`" in git(remote,"show","hego-copia-release-next:README.md")
     assert git(remote,"show","release-next-bundle:hego/bin/libhego.linux.template_debug.x86_64.so")=="fresh-hego-libhego.linux.template_debug.x86_64.so"
     assert git(remote,"show","release-next-bundle:strata/bin/libstrata.linux.template_debug.x86_64.so")=="fresh-strata-libstrata.linux.template_debug.x86_64.so"
     publish(); assert git(remote,"rev-parse","release-next")==first
@@ -142,7 +173,7 @@ with tempfile.TemporaryDirectory(prefix="hego-distribution-") as d:
     assert before==git(source,"status","--porcelain")
     assert git(remote,"rev-parse","release-next^")==first
     assert ".hidden" not in git(remote,"ls-tree","--name-only","release-next")
-    print("PASS publisher: dry-run, one-way dependency manifests, standalone HEGo and Strata, bridge package, bundled consumer layout, receipts, history, untouched index")
+    print("PASS publisher: dry-run, one-way dependency manifests, standalone HEGo, Strata and Copia, bridge packages, bundled consumer layout, receipts, history, untouched index")
     project.mkdir(parents=True); (project/"project.godot").touch()
     git(project.parent,"init")
     git(project.parent,"-c","protocol.file.allow=always","submodule","add","-b","release-next",str(remote),"game/addons/hego")

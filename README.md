@@ -55,8 +55,9 @@ Strata documentation:
 - [Reference](docs/strata/reference.md): channels, attributes, files and bake options
 
 The `next` channel publishes the addons as `release-next` (HEGo), `strata-release-next`,
-`hego-strata-release-next`, `hego-terrain3d-release-next` and `release-next-bundle`
-(all four of ours).
+`hego-strata-release-next`, `hego-terrain3d-release-next`, `copia-release-next`,
+`hego-copia-release-next` and `release-next-bundle` (HEGo, Strata and their two
+bridges).
 
 > **Note**: The demo island's cooked terrain data and textures are stored with
 > [Git LFS](https://git-lfs.com). Run `git lfs install` once before cloning (or
@@ -93,13 +94,15 @@ headless island commands. Artificial prototype scenes remain under
 ### Testing HEGo in another project
 
 `next` is the development source branch. The **Publish next addon** workflow
-stages five matched refs: `release-next` (HEGo), `strata-release-next`
+stages seven matched refs: `release-next` (HEGo), `strata-release-next`
 (Strata, the standalone terrain), `hego-strata-release-next` (the bridge that cooks HDAs
-into terrain layers), `hego-terrain3d-release-next` (the Terrain3D bridge), and
-`release-next-bundle` (all four in a consumer layout).
-HEGo and Strata each stand alone; only the bridges' package manifests declare
-dependencies: HEGo Strata on the other two, HEGo Terrain3D on HEGo, each at the same
-source revision. HEGo Terrain3D also names Terrain3D as an external requirement.
+into terrain layers), `hego-terrain3d-release-next` (the Terrain3D bridge),
+`copia-release-next` (Copia, the standalone instancing store), `hego-copia-release-next`
+(the bridge that writes HDA points into Copia stores), and `release-next-bundle`
+(HEGo, Strata and their two bridges in a consumer layout).
+HEGo, Strata and Copia each stand alone; only the bridges' package manifests declare
+dependencies: HEGo Strata on HEGo and Strata, HEGo Copia on HEGo and Copia, HEGo
+Terrain3D on HEGo, each at the same source revision. HEGo Terrain3D also names Terrain3D as an external requirement.
 Every package records `SOURCE_COMMIT`; native build receipts must match the
 selected source revision before staging. Each publication is a child of its
 previous publication, uses an atomic non-force push, and does not
@@ -117,8 +120,10 @@ That is all HEGo needs. To cook HDAs into Strata layers, also install
 at `addons/hego_strata`. For Terrain3D, install `hego-terrain3d-release-next` at
 `addons/hego_terrain3d` and Terrain3D itself at `addons/terrain_3d`. Or use
 `release-next-bundle` and place its four directories in the project's `addons/`
-directory (Terrain3D is not in it). Strata can also be installed alone, without
-HEGo or Houdini.
+directory (Terrain3D is not in it). For Copia instancing, install
+`copia-release-next` at `addons/copia` and `hego-copia-release-next` at
+`addons/hego_copia`. Strata and Copia can also be installed alone, without HEGo or
+Houdini.
 
 For an existing, genuine submodule, change its tracking branch from the consumer's
 repository root, then deliberately update and commit the tested pin:

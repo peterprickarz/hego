@@ -33,6 +33,9 @@ jobs:
       - name: Build Strata (debug, host toolchain)
         run: scripts/build-terrain.sh linux template_debug
 
+      - name: Build Copia (debug, host toolchain)
+        run: scripts/build-copia.sh linux template_debug
+
       - name: Install Godot 4.7.2
         run: |
           curl -sSL -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip

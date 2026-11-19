@@ -9,10 +9,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
-import stat
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,8 +22,11 @@ COMMON_INPUT_FILES = ("scripts/native_build_manifest.py",)
 MANIFEST_NAME = "native-build.json"
 
 
-def _run(*args: str, cwd: Path = ROOT) -> bytes:
-    return subprocess.check_output(args, cwd=cwd)
+ADDONS = ("hego", "strata", "copia")
+
+
+def _run(*args: str, cwd: Path = ROOT, env: dict | None = None) -> bytes:
+    return subprocess.check_output(args, cwd=cwd, env=env)
 
 
 def _is_native_input(path: str, addon: str) -> bool:
@@ -29,6 +34,12 @@ def _is_native_input(path: str, addon: str) -> bool:
         return True
     if addon == "hego":
         return path in ("SConstruct", "scripts/build.sh") or path.startswith("src/")
+    if addon == "copia":
+        return path in (
+            "SConstruct.copia",
+            "scripts/build-copia.sh",
+            "scripts/linux-compat-copia.Containerfile",
+        ) or path.startswith("copia/src/")
     return path in (
         "SConstruct.terrain",
         "scripts/build-terrain.sh",
@@ -71,38 +82,42 @@ def fingerprint(addon: str, ref: str | None = None) -> str:
                 digest.update(b"\0")
         return digest.hexdigest()
 
+    return fingerprint(addon, worktree_tree(addon))
+
+
+def worktree_tree(addon: str) -> str:
+    """Stage the addon's native inputs as they are on disk into a private index and
+    return the tree a commit of them would have.
+
+    The fingerprint must equal the one validate() computes from the committed revision,
+    so the files go through Git's own clean step (line endings, filters) and keep the
+    modes Git would commit. Reading them straight from disk does not match on a Windows
+    checkout with CRLF files and no executable bits. The real index and the working tree
+    are untouched; only blob objects are written.
+    """
     paths = _run("git", "ls-files", "-z", "--cached", "--others", "--exclude-standard").split(b"\0")
-    worktree_paths = sorted({raw.decode() for raw in paths if raw and _is_native_input(raw.decode(), addon)})
-    for path in worktree_paths:
-        if path == "godot-cpp":
-            mode = "160000"
-        else:
-            try:
-                executable = bool((ROOT / path).stat().st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
-            except OSError:
-                executable = False
-            mode = "100755" if executable else "100644"
-        digest.update(path.encode() + b"\0" + mode.encode() + b"\0")
-        if path == "godot-cpp":
-            submodule = ROOT / path
-            if not submodule.is_dir():
-                raise ValueError("godot-cpp submodule is not initialized; initialize it before recording native builds")
-            dirty = _run("git", "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none", cwd=submodule)
-            if dirty.strip():
-                raise ValueError("godot-cpp submodule has modified or untracked files; clean it before recording native builds")
-            commit = _run("git", "rev-parse", "HEAD", cwd=submodule).decode().strip()
-            digest.update(commit.encode() + b"\0")
-            continue
-        file_path = ROOT / path
-        if not file_path.is_file():
-            digest.update(b"deleted\0")
-            continue
-        digest.update(file_path.read_bytes() + b"\0")
-    return digest.hexdigest()
+    inputs = sorted({raw.decode() for raw in paths if raw and _is_native_input(raw.decode(), addon)})
+    if "godot-cpp" in inputs:
+        submodule = ROOT / "godot-cpp"
+        if not submodule.is_dir():
+            raise ValueError("godot-cpp submodule is not initialized; initialize it before recording native builds")
+        dirty = _run("git", "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none", cwd=submodule)
+        if dirty.strip():
+            raise ValueError("godot-cpp submodule has modified or untracked files; clean it before recording native builds")
+    with tempfile.TemporaryDirectory() as folder:
+        index = Path(folder) / "index"
+        real_index = Path(_run("git", "rev-parse", "--path-format=absolute", "--git-path", "index").decode().strip())
+        if real_index.is_file():
+            shutil.copyfile(real_index, index)
+        env = dict(os.environ, GIT_INDEX_FILE=str(index))
+        # --all also drops tracked inputs that were deleted from disk.
+        if inputs:
+            _run("git", "add", "--all", "--", *inputs, env=env)
+        return _run("git", "write-tree", env=env).decode().strip()
 
 
 def package_root(addon: str) -> str:
-    roots = {"hego": "demo/addons/hego", "strata": "demo/addons/strata"}
+    roots = {"hego": "demo/addons/hego", "strata": "demo/addons/strata", "copia": "demo/addons/copia"}
     if addon not in roots:
         raise ValueError(f"unknown addon: {addon}")
     return roots[addon]
@@ -159,7 +174,7 @@ def validate(addon: str, ref: str) -> list[str]:
     if manifest.get("source_fingerprint") != expected_fp:
         errors.append(f"{addon}: native build fingerprint does not match source {ref}")
     try:
-        extension = read_at(ref, f"{root}/bin/{'hego' if addon == 'hego' else 'strata'}.gdextension").decode()
+        extension = read_at(ref, f"{root}/bin/{addon}.gdextension").decode()
     except subprocess.CalledProcessError as exc:
         return errors + [f"{addon}: extension descriptor missing: {exc}"]
     referenced = re.findall(r'^\s*[\w.]+\s*=\s*"res://addons/[^/]+/bin/([^"]+)"', extension, re.M)
@@ -193,11 +208,11 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=ROOT, help=argparse.SUPPRESS)
     commands = parser.add_subparsers(dest="command", required=True)
     record_parser = commands.add_parser("record")
-    record_parser.add_argument("--addon", choices=("hego", "strata"), required=True)
+    record_parser.add_argument("--addon", choices=ADDONS, required=True)
     record_parser.add_argument("--artifact", action="append", required=True, help="package-relative path; repeatable")
     record_parser.add_argument("--context", action="append", help="build config paired with --artifact; a single value applies to all artifacts")
     validate_parser = commands.add_parser("validate")
-    validate_parser.add_argument("--addon", choices=("hego", "strata"), required=True)
+    validate_parser.add_argument("--addon", choices=ADDONS, required=True)
     validate_parser.add_argument("--ref", required=True)
     args = parser.parse_args()
     ROOT = args.repo_root.resolve()

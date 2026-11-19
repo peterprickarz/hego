@@ -1,7 +1,8 @@
 # Development package layout
 
-`scripts/publish-next.sh` creates five matched package refs from one committed
-source revision. The publisher validates both native build manifests before it
+`scripts/publish-next.sh` creates seven matched package refs from one committed
+source revision. The publisher validates the HEGo, Strata and Copia native build
+manifests before it
 stages or pushes anything. Each package records its source revision in
 `SOURCE_COMMIT` and `PACKAGE.json`.
 The branch refs are updated with one atomic push, so a remote that cannot
@@ -13,21 +14,26 @@ accept the matched update leaves all published refs unchanged.
 | `strata-release-next` | Strata addon root | Standalone Strata at `addons/strata`; it needs neither HEGo nor Houdini. |
 | `hego-strata-release-next` | HEGo Strata addon root | The bridge at `addons/hego_strata`, for cooking HDAs into Strata layers. Requires HEGo and Strata. |
 | `hego-terrain3d-release-next` | HEGo Terrain3D addon root | The Terrain3D bridge at `addons/hego_terrain3d`: Terrain3D heightfield inputs, terrains and instancing. Requires HEGo and the Terrain3D addon. |
+| `copia-release-next` | Copia addon root | Standalone Copia at `addons/copia`, the instancing store; it needs neither HEGo nor Houdini. |
+| `hego-copia-release-next` | HEGo Copia addon root | The bridge at `addons/hego_copia`, for writing HDA points into Copia stores and sending store cells to HDA inputs. Requires HEGo and Copia. |
 | `release-next-bundle` | `hego/`, `strata/`, `hego_strata/` and `hego_terrain3d/` | Copy the four directories into a Godot project's `addons/` directory. Terrain3D is not included. |
 
-Dependencies point one way. The HEGo and Strata manifests declare no package
+Dependencies point one way. The HEGo, Strata and Copia manifests declare no package
 dependencies; the HEGo Strata manifest requires `release-next` and
-`strata-release-next` at its own `SOURCE_COMMIT`, and the HEGo Terrain3D manifest
-requires `release-next` at its own `SOURCE_COMMIT`. Terrain3D itself is
+`strata-release-next` at its own `SOURCE_COMMIT`, the HEGo Copia manifest requires
+`release-next` and `copia-release-next` at its own `SOURCE_COMMIT`, and the HEGo
+Terrain3D manifest requires `release-next` at its own `SOURCE_COMMIT`. Terrain3D itself is
 TokisanGames' addon, not one of these packages, so the HEGo Terrain3D manifest
 names it under `external_requires` instead: Terrain3D at `addons/terrain_3d`,
 tested with 1.0.1 and installed by the user. The bundle contains all four
 addon trees so a consumer can install the matched set in one operation, and
 repeats that external requirement; a project without Terrain3D leaves out
-`hego_terrain3d/`. Neither bridge contains native code, so neither has a build
-receipt, and the publisher validates receipts for HEGo and Strata only. Strata's
-native extension is built from `SConstruct.terrain` using godot-cpp and does not
-invoke SCons's Houdini-dependent HEGo build.
+`hego_terrain3d/`. The bundle does not contain Copia or its bridge; install
+`copia-release-next` and `hego-copia-release-next` beside it. No bridge contains
+native code, so no bridge has a build receipt, and the publisher validates receipts
+for HEGo, Strata and Copia only. Strata's and Copia's native extensions are built
+from `SConstruct.terrain` and `SConstruct.copia` using godot-cpp and do not invoke
+SCons's Houdini-dependent HEGo build.
 
 The HEGo Terrain3D manifest, with `<sha>` the source revision:
 
@@ -97,6 +103,16 @@ scripts/build-terrain.sh --dry-run all template_debug
 python3 scripts/tests/test_build_terrain.py
 ```
 
+Copia builds independently too, without `HFS`, and records its receipts in
+`demo/addons/copia/native-build.json`. Its Windows DLLs are built with MSVC on a
+Windows host.
+
+```bash
+scripts/build-copia.sh linux-compat               # glibc 2.28 container (scripts/linux-compat-copia.Containerfile)
+scripts/build-copia.sh windows                    # MSVC, from Git Bash on Windows
+python3 scripts/native_build_manifest.py validate --addon copia --ref HEAD
+```
+
 The Windows output is statically linked against the MinGW C++ runtime and is
 checked for unexpected MinGW/Houdini imports and the extension entry point. The
 Linux-compatible output is checked for dynamic C++/Houdini dependencies, the
@@ -113,7 +129,7 @@ revision into a package.
 
 ## Validate package staging without publishing
 
-The dry-run validates receipts, builds all five trees locally, and prints the
+The dry-run validates receipts, builds all seven trees locally, and prints the
 prospective tree IDs without contacting a remote. An addon directory missing from
 the source revision stops it with an error rather than staging an empty package:
 

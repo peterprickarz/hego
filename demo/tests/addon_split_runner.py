@@ -3,13 +3,15 @@
 
 HEGo and Strata must each work without the other; only hego_strata
 depends on both. Likewise HEGo works without Terrain3D; only hego_terrain3d depends on
-both. This stages these projects under --work (default build/test-staging/addon-split), never touching
+both. Copia works without HEGo; only hego_copia depends on both. This stages these projects under --work (default build/test-staging/addon-split), never touching
 demo/, and removes each one after it passes:
 
   hego_only       addons/hego alone                    -> tests/hego_standalone_test.gd
   strata_only     addons/strata alone                  -> tests/terrain_cache_standalone_test.gd
   all_addons      hego, strata and hego_strata         -> tests/hego_extension_points_test.gd
   hego_terrain3d  hego, terrain_3d and hego_terrain3d  -> tests/hego_terrain3d_bridge_test.gd
+  copia_only      addons/copia alone                   -> tests/copia_store_test.gd
+  hego_copia      hego, copia and hego_copia           -> tests/hego_copia_bridge_test.gd
 
 Strata on its own is covered by runtime_test_runner.py, whose runtime project has no
 HEGo. Pass --godot (or set GODOT_BIN) to a real Godot binary; a launcher that opens a
@@ -34,6 +36,8 @@ PROJECTS = {
     "strata_only": (("strata",), "terrain_cache_standalone_test.gd", "HEGO_TERRAIN_STANDALONE_CACHE_PASS"),
     "all_addons": (("hego", "strata", "hego_strata"), "hego_extension_points_test.gd", "HEGO_EXTENSION_POINTS_TEST: PASS"),
     "hego_terrain3d": (("hego", "terrain_3d", "hego_terrain3d"), "hego_terrain3d_bridge_test.gd", "HEGO_TERRAIN3D_BRIDGE_TEST: PASS"),
+    "copia_only": (("copia",), "copia_store_test.gd", "COPIA_STORE_TEST PASS"),
+    "hego_copia": (("hego", "copia", "hego_copia"), "hego_copia_bridge_test.gd", "HEGO_COPIA_BRIDGE_TEST PASS"),
 }
 PROJECT = """config_version=5
 

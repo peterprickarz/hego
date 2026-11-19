@@ -272,10 +272,15 @@ for platform in "${PLATFORMS[@]}"; do
                 ;;
         esac
         hfs_version="$(cat "$HFS/houdini_version.txt" 2>/dev/null || basename "$HFS")"
-        hapi_headers="$(find "$HFS/toolkit/include/HAPI" -maxdepth 1 -type f -name '*.h' -print0 \
-            | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+        # SHA-256 over each header's name and bytes in name order: independent of the
+        # install path and the host, so receipts of Linux and Windows builds compare.
+        hapi_headers="$("$PYTHON" -c 'import hashlib, pathlib, sys
+digest = hashlib.sha256()
+for header in sorted(pathlib.Path(sys.argv[1]).glob("*.h")):
+    digest.update(header.name.encode() + b"\0" + header.read_bytes() + b"\0")
+print(digest.hexdigest())' "$HFS/toolkit/include/HAPI")"
         context="platform=$output_platform,target=$target,arch=$arch,compiler=$compiler,hfs=$hfs_version,hapi_headers_sha256=$hapi_headers"
-        python3 "$ROOT_DIR/scripts/native_build_manifest.py" record --addon hego \
+        "$PYTHON" "$ROOT_DIR/scripts/native_build_manifest.py" record --addon hego \
             --artifact "$artifact" --context "$context"
     done
 done

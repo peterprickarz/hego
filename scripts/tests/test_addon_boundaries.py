@@ -1,6 +1,7 @@
 """Each addon may only name classes from the addons it declares as dependencies.
 
-hego and strata depend on nothing; hego_strata depends on both. hego_terrain3d
+hego, strata and copia depend on nothing; hego_strata depends on hego and strata,
+hego_copia on hego and copia. hego_terrain3d
 depends on hego and on the external Terrain3D addon (addons/terrain_3d), which it only
 reaches through ClassDB, is_class() and Object.call(), never by class name, so that
 dependency is not a scanned one. Godot has no addon dependency system: a script naming
@@ -21,8 +22,10 @@ DEPENDS = {
     "strata": set(),
     "hego_strata": {"hego", "strata"},
     "hego_terrain3d": {"hego"},
+    "copia": set(),
+    "hego_copia": {"hego", "copia"},
 }
-NATIVE_SOURCES = {"hego": ROOT / "src", "strata": ROOT / "terrain" / "src"}
+NATIVE_SOURCES = {"hego": ROOT / "src", "strata": ROOT / "terrain" / "src", "copia": ROOT / "copia" / "src"}
 SCANNED = {".gd", ".tscn", ".tres", ".gdshader", ".gdshaderinc", ".cfg", ".gdextension"}
 
 
@@ -57,6 +60,8 @@ class AddonBoundaries(unittest.TestCase):
         self.assertIn("StrataLayerData", classes_of("strata"))
         self.assertIn("HEGoAPI", classes_of("hego"))
         self.assertIn("HEGoTerrain3DOutput", classes_of("hego_terrain3d"))
+        self.assertIn("CopiaStore3D", classes_of("copia"))
+        self.assertIn("HEGoCopiaOutput", classes_of("hego_copia"))
 
     def test_terrain3d_lives_only_in_its_bridge(self):
         # Terrain3D's own classes are not in the scan above, so check the code that would
