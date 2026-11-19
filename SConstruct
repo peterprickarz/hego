@@ -10,7 +10,6 @@ import shutil
 default_hfs = {
     "Windows": r"C:\Program Files\Side Effects Software\Houdini 22.0.429",
     "Linux":   "/opt/hfs22.0",  # the symlink, so a new production build needs no change
-    "Darwin":  "/Applications/Houdini/Houdini22.0.429/Frameworks/Houdini.framework/Versions/Current/Resources"
 }
 
 sys_name = platform.system()
@@ -44,16 +43,18 @@ HB = os.path.join(HFS, "bin")
 # ───────────────────────────────────────────────
 _host_platform = {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get(sys_name, sys_name.lower())
 _target_platform = ARGUMENTS.get("platform", ARGUMENTS.get("p", _host_platform))
+# HEGo ships Linux x86_64 and Windows x86_64 only. macOS is not supported: there is no
+# macOS build, no macOS library in hego.gdextension and no macOS package.
+if _target_platform not in ("linux", "windows"):
+    raise RuntimeError(
+        f"HEGo builds for Linux and Windows only, got platform={_target_platform!r}. "
+        "macOS is not supported."
+    )
 SConsignFile(f".sconsign-{_target_platform}.dblite")
 
 # godot-cpp v10 is versioned independently of Godot and bundles several API dumps;
 # build against the 4.7 API, the minimum Godot version HEGo and Strata support.
 ARGUMENTS.setdefault("api_version", "4.7")
-
-if _target_platform == "macos":
-    # macOS 11 is the first release with Apple Silicon support. Apply the same
-    # target to godot-cpp and HEGo, including builds made with OSXCross on Linux.
-    ARGUMENTS.setdefault("macos_deployment_target", "11.0")
 
 # ───────────────────────────────────────────────
 # Load godot-cpp environment
@@ -161,17 +162,6 @@ elif env["platform"] == "linux":
     env.Append(LIBS=["dl", "pthread"])
     env.Append(LIBPATH=[os.path.join(HFS, "dsolib")])
 
-elif env["platform"] == "macos":
-    # SCons defaults to its host's shared-library rules. Override them explicitly
-    # so Linux + OSXCross produces the same Mach-O dylib as native Apple Clang.
-    env["SHLIBPREFIX"] = "lib"
-    env["SHLIBSUFFIX"] = ".dylib"
-    env["SHLINKFLAGS"] = ["$LINKFLAGS", "-dynamiclib"]
-    if "-s" in env["LINKFLAGS"]:
-        env["LINKFLAGS"].remove("-s")
-        env.Append(LINKFLAGS=["-Wl,-S", "-Wl,-x", "-Wl,-dead_strip"])
-    env.Append(LINKFLAGS=[f"-Wl,-install_name,@rpath/libhego.macos.{env['target']}.dylib"])
-
 # Build machine info (optional, but matches setup script)
 if env["platform"] == "linux":
     env["ENV"]["HOUDINI_BUILD_PLATFORM"] = "Linux"
@@ -212,20 +202,9 @@ env.Append(CPPPATH=[src_dir])
 # ───────────────────────────────────────────────
 # Output library
 # ───────────────────────────────────────────────
-if env["platform"] == "macos":
-    # Keep each architecture's build separate, then install the selected one at
-    # the stable path used by Godot. Use arch=universal to ship both Mac CPUs.
-    # Explicit per-CPU manifest entries cannot fall back to a universal file.
-    compiled_library = env.SharedLibrary(
-        f"{build_dir}/hego{env['suffix']}.dylib", source=cpp_sources,
-    )
-    library = env.InstallAs(
-        f"demo/addons/hego/bin/libhego.macos.{env['target']}.dylib", compiled_library,
-    )
-else:
-    library = env.SharedLibrary(
-        ARGUMENTS.get("terrain_integration_output") or f"demo/addons/hego/bin/hego{env['suffix']}{env['SHLIBSUFFIX']}",
-        source=cpp_sources,
-    )
+library = env.SharedLibrary(
+    ARGUMENTS.get("terrain_integration_output") or f"demo/addons/hego/bin/hego{env['suffix']}{env['SHLIBSUFFIX']}",
+    source=cpp_sources,
+)
 
 Default(library)

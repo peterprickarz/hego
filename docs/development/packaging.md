@@ -44,10 +44,11 @@ The HEGo Terrain3D manifest, with `<sha>` the source revision:
 
 ## Platform scope and release gate
 
-Both extensions ship for Linux x86_64 (glibc 2.28 AlmaLinux container), Windows
-x86_64 (MinGW-w64) and macOS (universal x86_64 + arm64, natively or with OSXCross
-on Linux); the extension descriptors name exactly these libraries, and a release
-that lacks one of them is rejected by the receipt gate below. Linux ARM64 is
+All three extensions ship for Linux x86_64 (glibc 2.28 AlmaLinux container) and Windows
+x86_64; the extension descriptors name exactly these libraries, and a release
+that lacks one of them is rejected by the receipt gate below. **macOS is not
+supported**: the SConstruct files and build scripts refuse `platform=macos`, the
+descriptors name no macOS library, and no package contains one. Linux ARM64 is
 supported by the build scripts (`ARCH=arm64`, natively or in the container under
 qemu-user-static) but not shipped: emulated builds take hours on an x86_64 host,
 so it waits for a native ARM64 build machine or CI runner, after which the
@@ -81,7 +82,6 @@ HEGo builds require the Houdini 22 headers and runtime configuration:
 scripts/build.sh linux template_debug template_release
 scripts/build.sh all                                   # linux-compat x86_64 + Windows
 ARCH=arm64 scripts/build.sh linux-compat               # Linux ARM64 container (not shipped yet; hours under qemu)
-OSXCROSS_ROOT=~/osxcross ARCH=universal scripts/build.sh macos
 ```
 
 Terrain builds independently, without `HFS`:
@@ -92,7 +92,6 @@ scripts/build-terrain.sh linux-compat             # glibc 2.28 container
 scripts/build-terrain.sh windows                 # MinGW-w64 cross-build
 scripts/build-terrain.sh all                      # linux-compat x86_64 + Windows
 ARCH=arm64 scripts/build-terrain.sh linux-compat  # Linux ARM64 container (not shipped yet; hours under qemu)
-OSXCROSS_ROOT=~/osxcross ARCH=universal scripts/build-terrain.sh macos
 scripts/build-terrain.sh template_debug           # legacy host-target form
 scripts/build-terrain.sh --dry-run all template_debug
 python3 scripts/tests/test_build_terrain.py

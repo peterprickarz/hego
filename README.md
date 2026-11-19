@@ -171,12 +171,13 @@ python3 scripts/tests/test_distribution.py
 ### Prerequisites
 
 - **Python 3.8+** with SCons: `python -m pip install scons`
-- **C++17 compiler**: Xcode Command Line Tools on macOS, GCC on Linux, or Visual Studio 2022 on Windows
+- **C++17 compiler**: GCC on Linux, or Visual Studio 2022 on Windows
 - **Git** for cloning and submodules
 
-See [Building on macOS and Linux](BUILDING.md) for native builds, Apple Silicon/Intel
-binaries, and cross-compiling from Linux to macOS with OSXCross. Only HAPI headers
-are required to compile; Houdini itself is needed when running a session.
+HEGo, Strata and Copia ship Linux x86_64 and Windows x86_64 libraries only; macOS is not
+supported. See [Building on Linux](BUILDING.md) for native and redistributable Linux
+builds. Only HAPI headers are required to compile; Houdini itself is needed when running
+a session.
 Experimental Linux ARM64 builds and an isolated runtime test are documented in
 [Linux ARM64 testing](BUILDING.md#linux-arm64-testing).
 
@@ -200,7 +201,7 @@ Experimental Linux ARM64 builds and an isolated runtime test are documented in
 
 ### Building
 
-**macOS / Linux**
+**Linux**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -208,8 +209,8 @@ python -m pip install 'scons>=4.5,<5'
 scripts/build.sh              # native debug + release; discovers Houdini via HFS
 scripts/build.sh all          # redistributable Linux x86_64 (container) + Windows (MinGW)
 ARCH=arm64 scripts/build.sh linux-compat                      # Linux ARM64 (supported, not shipped; slow under qemu)
-OSXCROSS_ROOT=~/osxcross ARCH=universal scripts/build.sh macos  # universal macOS from Linux
 scripts/build-terrain.sh ...  # the same platforms for the Strata extension, no Houdini needed
+scripts/build-copia.sh linux-compat  # redistributable Linux x86_64 Copia extension
 ```
 
 For a build without a Houdini installation, first run

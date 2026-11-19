@@ -7,12 +7,10 @@
 #   scripts/build-terrain.sh linux-compat             # glibc 2.28 container
 #   ARCH=arm64 scripts/build-terrain.sh linux         # Linux ARM64 (native or cross toolchain)
 #   ARCH=arm64 scripts/build-terrain.sh linux-compat  # Linux ARM64 in the glibc 2.28 container (qemu on x86_64 hosts)
-#   OSXCROSS_ROOT=~/osxcross ARCH=universal scripts/build-terrain.sh macos
 #   scripts/build-terrain.sh all                       # linux-compat + Windows
 #   scripts/build-terrain.sh --dry-run all template_debug
 #
-# macOS builds need a macOS host with the Xcode Command Line Tools, or OSXCross on
-# Linux (OSXCROSS_ROOT; OSXCROSS_SDK and MACOS_SDK_PATH are optional overrides).
+# Strata ships Linux x86_64 and Windows x86_64 only. macOS is not supported.
 
 set -euo pipefail
 
@@ -37,10 +35,11 @@ fi
 
 requested_platform=host
 case "${1:-}" in
-    host|linux|linux-compat|windows|macos|all)
+    host|linux|linux-compat|windows|all)
         requested_platform="$1"
         shift
         ;;
+    macos) echo "error: macOS is not supported; Strata builds for Linux and Windows only" >&2; exit 2 ;;
 esac
 
 if [[ $# -gt 0 ]]; then TARGETS=("$@"); fi
@@ -64,7 +63,7 @@ case "$requested_platform" in
     host)
         case "$HOST_OS" in
             Linux*) PLATFORMS=(linux) ;;
-            Darwin) PLATFORMS=(macos) ;;
+            Darwin) echo "error: macOS is not supported; Strata builds for Linux and Windows only" >&2; exit 2 ;;
             MINGW*|MSYS*|CYGWIN*) PLATFORMS=(windows) ;;
             *) echo "error: host platform is not supported: $HOST_OS" >&2; exit 2 ;;
         esac
@@ -72,71 +71,18 @@ case "$requested_platform" in
     linux) PLATFORMS=(linux) ;;
     linux-compat) PLATFORMS=(linux-compat) ;;
     windows) PLATFORMS=(windows) ;;
-    macos) PLATFORMS=(macos) ;;
     all) PLATFORMS=(linux-compat windows) ;;
 esac
 
-# Native Linux builds follow the host CPU unless ARCH says otherwise; macOS cross
-# builds default to a universal binary so one dylib serves both Mac CPUs.
+# Native Linux builds follow the host CPU unless ARCH says otherwise.
 linux_arch="${ARCH:-$(uname -m)}"
 case "$linux_arch" in aarch64) linux_arch=arm64 ;; amd64) linux_arch=x86_64 ;; esac
 for platform in "${PLATFORMS[@]}"; do
     case "$platform:$linux_arch" in
-        linux:arm64|linux:x86_64|linux-compat:arm64|linux-compat:x86_64|windows:*|macos:*) ;;
+        linux:arm64|linux:x86_64|linux-compat:arm64|linux-compat:x86_64|windows:*) ;;
         *) echo "error: Linux ARCH must be arm64 or x86_64, got $linux_arch" >&2; exit 2 ;;
     esac
 done
-macos_arch="${ARCH:-}"
-MACOS_COMPILER=""
-MACOS_SCONS_ARGS=()
-
-configure_macos() {
-    local sdk_path="${MACOS_SDK_PATH:-}" compiler_arch compiler sdk tool
-    if [[ "$HOST_OS" == "Darwin" ]]; then
-        [[ -n "$macos_arch" ]] || macos_arch="$(uname -m)"
-        command -v xcrun >/dev/null || { echo "error: xcrun not found; install the Xcode Command Line Tools" >&2; return 1; }
-        MACOS_COMPILER="$(xcrun --find clang++)"
-        [[ -n "$sdk_path" ]] || sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
-    else
-        [[ -n "$macos_arch" ]] || macos_arch=universal
-        [[ -n "${OSXCROSS_ROOT:-}" && -d "$OSXCROSS_ROOT/target/bin" ]] || \
-            { echo "error: macOS builds on Linux need OSXCROSS_ROOT pointing to a built OSXCross toolchain" >&2; return 1; }
-        OSXCROSS_ROOT="$(cd "$OSXCROSS_ROOT" && pwd)"
-        export OSXCROSS_ROOT
-        compiler_arch="$macos_arch"
-        [[ "$macos_arch" != "universal" ]] || compiler_arch=x86_64
-        sdk="${OSXCROSS_SDK:-}"
-        if [[ -z "$sdk" ]]; then
-            for compiler in "$OSXCROSS_ROOT"/target/bin/"$compiler_arch"-apple-darwin*-clang++; do
-                [[ -x "$compiler" ]] || continue
-                [[ -z "$sdk" ]] || { echo "error: several OSXCross SDKs found; set OSXCROSS_SDK (e.g. darwin27)" >&2; return 1; }
-                sdk="${compiler##*/}"; sdk="${sdk#"$compiler_arch"-apple-}"; sdk="${sdk%-clang++}"
-            done
-        fi
-        [[ "$sdk" =~ ^darwin[0-9]+(\.[0-9]+)*$ ]] || { echo "error: no OSXCross compiler found for $compiler_arch" >&2; return 1; }
-        for tool in clang clang++ ar ranlib as; do
-            [[ -x "$OSXCROSS_ROOT/target/bin/$compiler_arch-apple-$sdk-$tool" ]] || \
-                { echo "error: OSXCross tool not found: $compiler_arch-apple-$sdk-$tool" >&2; return 1; }
-        done
-        if [[ "$macos_arch" == "universal" && ! -x "$OSXCROSS_ROOT/target/bin/arm64-apple-$sdk-clang++" ]]; then
-            echo "error: universal builds also need the OSXCross arm64 compiler" >&2; return 1
-        fi
-        MACOS_COMPILER="$OSXCROSS_ROOT/target/bin/$compiler_arch-apple-$sdk-clang++"
-        MACOS_SCONS_ARGS+=("osxcross_sdk=$sdk")
-    fi
-    case "$macos_arch" in
-        arm64|x86_64|universal) ;;
-        *) echo "error: macOS ARCH must be arm64, x86_64 or universal, got $macos_arch" >&2; return 1 ;;
-    esac
-    if [[ -n "$sdk_path" ]]; then
-        [[ -d "$sdk_path/usr/include" ]] || { echo "error: MACOS_SDK_PATH is not a macOS SDK: $sdk_path" >&2; return 1; }
-        MACOS_SCONS_ARGS+=("macos_sdk_path=$(cd "$sdk_path" && pwd)")
-    fi
-    if [[ -n "${MACOS_DEPLOYMENT_TARGET:-}" ]]; then
-        MACOS_SCONS_ARGS+=("macos_deployment_target=$MACOS_DEPLOYMENT_TARGET")
-    fi
-}
-
 print_command() {
     printf '  '
     printf '%q ' "$@"
@@ -174,26 +120,6 @@ verify_linux_so() {
         echo "error: $(basename "$so") needs glibc $newest, newer than $GLIBC_FLOOR" >&2
         return 1
     fi
-}
-
-verify_macos_dylib() {
-    local dylib="$1" arch="$2" description
-    description="$(file -b "$dylib")"
-    if ! grep -q "Mach-O" <<<"$description"; then
-        echo "error: $(basename "$dylib") is not a Mach-O library: $description" >&2
-        return 1
-    fi
-    case "$arch" in
-        universal)
-            grep -q "x86_64" <<<"$description" && grep -q "arm64" <<<"$description" || \
-                { echo "error: $(basename "$dylib") is not a universal x86_64 + arm64 binary: $description" >&2; return 1; }
-            ;;
-        *)
-            grep -q "$arch" <<<"$description" || \
-                { echo "error: $(basename "$dylib") is not built for $arch: $description" >&2; return 1; }
-            ;;
-    esac
-    echo "  $(basename "$dylib"): $description"
 }
 
 verify_windows_dll() {
@@ -276,19 +202,6 @@ for platform in "${PLATFORMS[@]}"; do
                 compiler="$("${CXX:-c++}" --version 2>/dev/null | head -n 1 || echo "${CXX:-c++}")"
                 require_compat=false
                 ;;
-            macos)
-                configure_macos || exit 1
-                arch="$macos_arch"
-                if [[ "$DRY_RUN" == true ]]; then
-                    print_command scons -f SConstruct.terrain platform=macos target="$target" arch="$arch" terrain_build_profile=macos "${MACOS_SCONS_ARGS[@]}" "-j$JOBS"
-                else
-                    (cd "$ROOT_DIR" && scons -f SConstruct.terrain platform=macos target="$target" arch="$arch" terrain_build_profile=macos "${MACOS_SCONS_ARGS[@]}" -j"$JOBS")
-                fi
-                output_platform=macos
-                build_profile=macos
-                compiler="$("$MACOS_COMPILER" --version | head -n 1)"
-                require_compat=false
-                ;;
             linux-compat)
                 arch="$linux_arch"
                 build_linux_compat "$target" "$arch"
@@ -332,11 +245,6 @@ for platform in "${PLATFORMS[@]}"; do
             windows)
                 artifact="bin/strata.windows.${target}.${arch}.dll"
                 verify_windows_dll "$ROOT_DIR/demo/addons/strata/$artifact"
-                ;;
-            macos)
-                # One dylib per target carries every built CPU (see ARCH=universal).
-                artifact="bin/libstrata.macos.${target}.dylib"
-                verify_macos_dylib "$ROOT_DIR/demo/addons/strata/$artifact" "$arch"
                 ;;
             linux)
                 artifact="bin/libstrata.linux.${target}.${arch}.so"
