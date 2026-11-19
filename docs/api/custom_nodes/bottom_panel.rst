@@ -1,7 +1,13 @@
 The Bottom Panel Interface
 ==========================
 
-The panel drives whatever node is selected through the methods below. Implement the ones you
+By default, the panel follows the scene selection. To keep editing one node, turn on
+**Lock Panel** in the HDA tab. The toggle shows the locked node's name. You can then select
+other nodes, including other HEGo nodes, and drag them from the scene tree into a string
+parameter or an input field. Recook still acts on the locked node. Turn the lock off to
+follow the current selection again. Removing the locked node also releases the lock.
+
+The panel drives its target through the methods below. Implement the ones you
 want: there is no base class to inherit, no interface to declare, and no type check anywhere
 in the panel. It asks your node whether it has a method, and calls it if it does.
 

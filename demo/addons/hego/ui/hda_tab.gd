@@ -37,6 +37,8 @@ const PARM_UI_SCENES = {
 }
 
 var hego_tool_node: Node
+## Latest eligible scene selection, including changes made while the panel is locked.
+var _scene_selection: Node
 ## The HDA the preset controls act on: the first one the node puts in the panel. A node
 ## showing several still has one set of preset buttons, and they belong to the first.
 var hego_asset_node: HEGoAssetNode
@@ -52,6 +54,7 @@ var _open_sections: Dictionary = {}
 var new_preset_name_diag: ConfirmationDialog
 var new_preset_name_line_edit: LineEdit
 
+@onready var lock_button: CheckButton = %LockPanelButton
 @onready var auto_recook_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer/CheckButton
 @onready var auto_start_session_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2/CheckButton
 @onready var asset_picker_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/AssetPickerButton
@@ -99,6 +102,7 @@ func _ready():
 	recook_button.pressed.connect(_on_recook_button_pressed)
 	rebuild_button.pressed.connect(_on_recook_button_pressed.bind(true))
 	asset_picker_button.pressed.connect(_on_asset_picker_button_pressed)
+	lock_button.toggled.connect(_on_lock_toggled)
 	root_control.selected_hego_node_changed.connect(set_selected_node)
 	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
 	new_preset_name_diag.confirmed.connect(_on_preset_dialog_confirmed)
@@ -432,29 +436,53 @@ func _on_remove_multiparm_instance(id: int, index: int, asset: HEGoAssetNode):
 	await update_ui()
 
 
-## Points the panel at [param node], or at nothing when it is null.
-##
-## There is deliberately no type check here. The panel used to set
-## allow_cook = node is HEGoNode3D, and update_ui() returned on that before building
-## anything, which made every has_method() guard in this file unreachable: a script could
-## implement the whole documented interface and still get an empty, all-disabled tab.
-func set_selected_node(node):
+## The plugin supplies the selected node that opted into the panel, or null.
+func set_selected_node(node: Node) -> void:
+	_scene_selection = node
+	if not lock_button.button_pressed:
+		await _follow_scene_selection()
+
+
+func _follow_scene_selection() -> void:
 	if is_instance_valid(hego_tool_node) and hego_tool_node.tree_exiting.is_connected(_on_selected_node_exiting):
 		hego_tool_node.tree_exiting.disconnect(_on_selected_node_exiting)
-	hego_tool_node = node
-	if is_instance_valid(hego_tool_node):
+		hego_tool_node.renamed.disconnect(_update_lock_button)
+	if is_instance_valid(_scene_selection) and _scene_selection.is_inside_tree() and not _scene_selection.is_queued_for_deletion():
+		hego_tool_node = _scene_selection
 		hego_tool_node.tree_exiting.connect(_on_selected_node_exiting, CONNECT_ONE_SHOT)
+		hego_tool_node.renamed.connect(_update_lock_button)
+	else:
+		hego_tool_node = null
+	_update_lock_button()
 	hego_asset_node = null
 	await update_ui()
-	
+
+
+func _on_lock_toggled(locked: bool) -> void:
+	if not locked and _scene_selection != hego_tool_node:
+		_follow_scene_selection()
+	else:
+		_update_lock_button()
+
+
+func _update_lock_button() -> void:
+	lock_button.disabled = not is_instance_valid(hego_tool_node)
+	lock_button.text = "Locked to %s" % hego_tool_node.name if lock_button.button_pressed else "Lock Panel"
+
 
 func _on_selected_node_exiting() -> void:
-	set_selected_node(null)
+	if _scene_selection == hego_tool_node:
+		_scene_selection = null
+	lock_button.set_pressed_no_signal(false)
+	_follow_scene_selection()
 
 
 func _on_value_changed(name, value, asset: HEGoAssetNode):
+	var edited_node := hego_tool_node
 	_notify_inputs_changed()
 	await _await_task(asset.set_parm(name, value))
+	if not is_instance_valid(edited_node) or hego_tool_node != edited_node:
+		return
 	if auto_recook_toggle.button_pressed and not _requires_explicit_recook():
 		await recook()
 	

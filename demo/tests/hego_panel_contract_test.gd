@@ -64,6 +64,72 @@ class MultiAssetNode extends Node3D:
 	func hego_set_input_stash(rows: Array) -> void: input_stash = rows
 
 
+func check_panel_lock(panel: Control, tab: Control, host: StubNode, other: StubNode) -> void:
+	check(tab.lock_button.disabled and not tab.lock_button.button_pressed, "an empty panel cannot be locked")
+	panel.set_selected_node(host)
+	check(not tab.lock_button.disabled, "a selected HEGo node can be locked")
+
+	# Supply one real string control for the stub HDA and a scene-tree drop payload.
+	var parm = preload("res://addons/hego/parm_controls/string_parm_ui.tscn").instantiate()
+	tab.parm_vbox.add_child(parm)
+	parm.setup({"name": "source", "values": [""]})
+	var source := Node.new()
+	source.name = "DragSource"
+	host.add_child(source)
+	var previous_scene := edited_scene_root
+	edited_scene_root = host
+
+	tab.lock_button.button_pressed = true
+	host.name = "LockedHost"
+	check(tab.lock_button.text.contains(host.name), "the lock shows the current name of its target")
+	panel.set_selected_node(null) # The plugin reports null for an ordinary scene node.
+	check(tab.hego_tool_node == host, "selecting a drag source keeps the locked target")
+	var field_survived: bool = is_instance_valid(parm) and parm.get_parent() == tab.parm_vbox
+	check(field_survived, "the original string parameter stays attached when the drag source is selected")
+	if field_survived:
+		var payload := {"type": "nodes", "nodes": [source.get_path()]}
+		check(parm.line_edit._can_drop_data(Vector2.ZERO, payload), "the locked field accepts a scene node")
+		parm.line_edit._drop_data(Vector2.ZERO, payload)
+		check(parm.param["values"] == ["DragSource"], "the drop commits the scene-relative path to the string parameter")
+	edited_scene_root = previous_scene
+
+	panel.set_selected_node(other)
+	check(tab.hego_tool_node == host, "selecting another HEGo node also keeps the lock")
+	host.cooked = false
+	await tab.recook()
+	check(host.cooked and not other.cooked, "Recook acts on the locked host")
+	tab.lock_button.button_pressed = false
+	check(tab.hego_tool_node == other, "unlock immediately follows the latest HEGo selection")
+	tab.lock_button.button_pressed = true
+	panel.set_selected_node(null)
+	tab.lock_button.button_pressed = false
+	check(tab.hego_tool_node == null and tab.lock_button.disabled, "unlock clears the panel when no HEGo node is selected")
+
+	var pending := StubNode.new()
+	for removal in ["detached", "freed"]:
+		root.add_child(pending)
+		panel.set_selected_node(host)
+		tab.lock_button.button_pressed = true
+		panel.set_selected_node(pending)
+		if removal == "detached":
+			root.remove_child(pending)
+		else:
+			pending.free()
+		tab.lock_button.button_pressed = false
+		check(tab.hego_tool_node == null and tab.lock_button.disabled, "unlock ignores a %s pending selection" % removal)
+
+	panel.set_selected_node(other)
+	tab.lock_button.button_pressed = true
+	panel.set_selected_node(host)
+	other.free()
+	await process_frame
+	check(tab.hego_tool_node == host and not tab.lock_button.button_pressed, "removing a locked node unlocks the panel and shows the current selection")
+	tab.lock_button.button_pressed = true
+	host.free()
+	await process_frame
+	check(tab.hego_tool_node == null and tab.lock_button.disabled and not tab.lock_button.button_pressed, "removing the locked current selection leaves the panel empty and unlocked")
+
+
 func _initialize() -> void:
 	var panel = preload("res://addons/hego/hego_control.tscn").instantiate()
 	root.add_child(panel)
@@ -138,6 +204,7 @@ func _initialize() -> void:
 	check(tab.input_vbox.get_child_count() == 0, "and no input row either")
 	check(tab.recook_button.disabled, "Recook is disabled with nothing selected")
 	check(tab.rebuild_button.disabled, "Rebuild is disabled with nothing selected")
+	await check_panel_lock(panel, tab, custom, pickable)
 
 	# --- a cook already running is not started twice -------------------------
 	var busy := StubNode.new()
