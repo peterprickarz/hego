@@ -1,0 +1,13 @@
+[configuration]
+
+entry_symbol = "copia_library_init"
+compatibility_minimum = "4.7"
+
+[libraries]
+
+; Copia ships Linux x86_64 and Windows x86_64 libraries only. macOS is not supported.
+
+linux.debug.x86_64 = "res://addons/copia/bin/libcopia.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://addons/copia/bin/libcopia.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://addons/copia/bin/copia.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/copia/bin/copia.windows.template_release.x86_64.dll"

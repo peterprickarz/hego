@@ -1,0 +1,10 @@
+{
+  "format_version": 1,
+  "package": "copia",
+  "addon_path": "addons/copia",
+  "source_commit": "a37d08d385e04492a739dc8f4594ab9e29eed16c",
+  "requires": [],
+  "build_requires": ["godot-cpp submodule"],
+  "requires_hego": false,
+  "requires_houdini_sdk_for_build": false
+}
