@@ -1,0 +1,22 @@
+{
+  "format_version": 1,
+  "source_fingerprint": "5130f04cb7e5eace4857eba3368387538bff3cc9547ad0e1d98295e710e5f69e",
+  "artifacts": {
+    "bin/copia.windows.template_debug.x86_64.dll": {
+      "sha256": "69995e443d5bbaea0c84499a4f3d550af100af7f1057aacdbee012860fcf0df1",
+      "build_context": "platform=windows,target=template_debug,arch=x86_64,profile=host,compiler=MSVC 19.36.32543,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
+    },
+    "bin/copia.windows.template_release.x86_64.dll": {
+      "sha256": "ae2fe0fdb476e088a794f6f9918714ab0f1882357844c59dbc342194117392df",
+      "build_context": "platform=windows,target=template_release,arch=x86_64,profile=host,compiler=MSVC 19.36.32543,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
+    },
+    "bin/libcopia.linux.template_debug.x86_64.so": {
+      "sha256": "47dfb963776eb2b0a50f3ee6230d8f5df20e65322e8592257ba40d28dbf1c81a",
+      "build_context": "platform=linux,target=template_debug,arch=x86_64,profile=linux-compat,compiler=g++ (GCC) 13.3.1 20240611 (Red Hat 13.3.1-2);image=8761c0420e030f5b16c8af0de580f108d367260f3e5e143ba56389fe9bd84363,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
+    },
+    "bin/libcopia.linux.template_release.x86_64.so": {
+      "sha256": "a1bd915eb195fb0aff07a4875b031dbec8d9be293f33c46e31fb7deafd5cd181",
+      "build_context": "platform=linux,target=template_release,arch=x86_64,profile=linux-compat,compiler=g++ (GCC) 13.3.1 20240611 (Red Hat 13.3.1-2);image=8761c0420e030f5b16c8af0de580f108d367260f3e5e143ba56389fe9bd84363,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
+    }
+  }
+}
