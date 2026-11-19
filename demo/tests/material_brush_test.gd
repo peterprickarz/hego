@@ -66,7 +66,7 @@ func run() -> void:
 	# Without a material mapping a channel named like a material keeps the metre semantics.
 	check(not StrataBrush.is_material_channel(hand, &"material_b"), "no material channels configured: not a material channel")
 	check(StrataBrush.apply_brush(hand, centre, 6.0, 0.6, "raise", &"material_b") > 0, "metre dab applies without a mapping")
-	check(is_equal_approx(terrain.sample_channel(&"material_b", centre, hand), 0.6), "without a mapping Raise adds the strength")
+	check(is_equal_approx(terrain.sample_channel(&"material_b", centre, hand), 0.6 * StrataBrush.DAB_SPACING * 6.0), "without a mapping Raise adds strength x dab spacing x radius")
 	check(StrataBrush.apply_brush(hand, centre, 6.0, 1.0, "erase", &"material_b") > 0, "metre erase applies")
 	terrain.editor_material_channels = channels
 
@@ -148,7 +148,7 @@ func run() -> void:
 	# Other channels keep their metre semantics on the same layer.
 	var height_before := terrain.sample_channel(&"height", centre, hand)
 	check(StrataBrush.apply_brush(hand, centre, 6.0, 2.0, "raise", &"height") > 0, "height dab applies beside material samples")
-	check(is_equal_approx(terrain.sample_channel(&"height", centre, hand) - height_before, 2.0), "Raise still adds metres to height")
+	check(is_equal_approx(terrain.sample_channel(&"height", centre, hand) - height_before, 2.0 * StrataBrush.DAB_SPACING * 6.0), "Raise still adds strength x dab spacing x radius metres to height")
 
 	terrain.free()
 	await process_frame

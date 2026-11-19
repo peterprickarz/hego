@@ -115,6 +115,8 @@ func run() -> void:
 	# material dab patches its rectangles of the touched regions, matching a complete composition.
 	terrain.preview_through_layer = hand
 	terrain.region_cells = 16
+	# Material maps exist only in a textured preview; untextured it draws one neutral material.
+	terrain.textured_editor_preview = true
 	var bridge := StrataEditorPreview.new()
 	terrain.add_child(bridge)
 	bridge.terrain = terrain

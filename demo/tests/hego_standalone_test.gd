@@ -35,7 +35,7 @@ func run() -> void:
 
 	var host := HEGoNode3D.new(); host.name = "Host"; root.add_child(host)
 	check(host.cook_extensions().is_empty() and not host.hego_requires_explicit_cook(), "an HEGo node has no extensions and recooks automatically")
-	check(host.output_handlers() == [HEGoMeshOutput, HEGoMultiMeshOutput, HEGoObjectOutput, HEGoCurveOutput], "an HEGo node runs exactly its four built-in output handlers")
+	check(host.output_handlers() == [HEGoMeshOutput, HEGoMultiMeshOutput, HEGoObjectOutput, HEGoGraphOutput, HEGoCurveOutput], "an HEGo node runs exactly its five built-in output handlers")
 	host.hego_notify_cook_inputs_changed()
 	var mesh := MeshInstance3D.new(); mesh.name = "Mesh"; mesh.mesh = BoxMesh.new(); root.add_child(mesh)
 	check(HEGoInputNodes.is_compatible_source(mesh) and HEGoInputNodes.handler_for(mesh) == null, "built-in input kinds are unaffected")

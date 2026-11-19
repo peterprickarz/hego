@@ -23,7 +23,8 @@ func run() -> void:
 	check(StrataBrush.sample_limit_message(layer, Vector2.ZERO, 4096.0).is_empty(), "4096 m radius fits on a coarse manual grid")
 	var touched := StrataBrush.apply_brush(layer, Vector2.ZERO, 4096.0, 10.0, "raise")
 	check(touched > 12000 and touched < StrataBrush.MAX_CANDIDATE_SAMPLES, "terrain-scale radius authors a bounded coarse mountain footprint")
-	check(is_equal_approx(terrain.sample_height(Vector2.ZERO), 10.0), "terrain-scale raise reaches its requested center height")
+	# A raise dab moves the centre by strength x DAB_SPACING x radius.
+	check(is_equal_approx(terrain.sample_height(Vector2.ZERO), 10.0 * StrataBrush.DAB_SPACING * 4096.0), "terrain-scale raise reaches its requested center height")
 	check(layer.data.has_sample(&"height", Vector2i.ZERO), "large brush owns its center")
 	check(StrataBrush.apply_brush(layer, Vector2.ZERO, 4096.0, 1.0, "erase") == touched, "large erase releases the complete owned footprint")
 	check(layer.data.get_owned_samples(&"height").is_empty(), "large erase leaves no height ownership")

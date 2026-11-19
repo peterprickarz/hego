@@ -155,7 +155,7 @@ func _run_layer_composition_and_brush_checks() -> void:
 	var owned_value := edits.data.get_sample(&"height", Vector2i(1, 0))
 	edits.data.set_sample(&"height", Vector2i(1, 0), owned_value)
 	_fill_flat(ground.data, 20.0)
-	close_to(brush_terrain.sample_height(Vector2.ZERO), 12.0, "Replace sculpted center survives base regeneration")
+	close_to(brush_terrain.sample_height(Vector2.ZERO), 10.0 + 2.0 * StrataBrush.DAB_SPACING * 1.5, "Replace sculpted center survives base regeneration")
 	close_to(brush_terrain.sample_height(Vector2(1.0, 0.0)), soft_before, "Replace falloff survives regeneration and same-value touch")
 	var erased := StrataBrush.apply_brush(edits, Vector2.ZERO, 1.5, 1.0, "erase")
 	check(erased > 0 and not edits.data.has_sample(&"height", Vector2i.ZERO), "erase brush removes selected-layer ownership")

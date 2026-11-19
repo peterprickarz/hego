@@ -95,6 +95,8 @@ func run() -> void:
 	for index in range(4): terrain.editor_materials.append(StrataMaterial.new())
 	terrain.editor_control_ids = packed.ids; terrain.editor_control_weights = packed.weights
 	var saved_ids := terrain.editor_control_ids.get_data(); var saved_weights := terrain.editor_control_weights.get_data()
+	# Material maps exist only in a textured preview; untextured it draws one neutral material.
+	terrain.textured_editor_preview = true
 	var bridge := StrataEditorPreview.new(); terrain.add_child(bridge); bridge.setup(terrain)
 	terrain.preview_through_layer = height
 	check(bridge.compose_cache() and bridge.get_stats().regions == 1, "the editor bridge composes its regions without a renderer")
