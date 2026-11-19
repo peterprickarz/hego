@@ -227,6 +227,16 @@ func hego_use_bottom_panel() -> bool:
 	return true
 
 
+## Reloads this HDA from disk, uploads all scene inputs again and cooks the replacement
+## with the current parameter values.
+func hego_rebuild() -> bool:
+	_last_cook_succeeded = false
+	if asset_name.is_empty() or not await agent.rebuild_asset(agent.asset(asset_name), parm_stash):
+		return false
+	await cook()
+	return _last_cook_succeeded
+
+
 ## Whether the last cook ran to the end. The panel only reads parameters back after one
 ## that did, so a failed cook cannot overwrite the stash with a half-restored asset.
 func hego_did_last_cook_succeed() -> bool:

@@ -61,6 +61,14 @@ Everything the HDA does is still an ordinary call on [HEGoAssetNode], in the ord
 				The asset's current parameters, as a blob to store on the node so they survive a session restart and a scene reload. Empty when they could not be read.
 			</description>
 		</method>
+		<method name="rebuild_asset">
+			<return type="bool" />
+			<param index="0" name="previous" type="HEGoAssetNode" />
+			<param index="1" name="stashed_parameters" type="PackedByteArray" default="PackedByteArray()" />
+			<description>
+				Reloads the library that supplies [param previous], replaces its instance and clears its input chains. Look up the replacement with [method asset] and run the host's usual cook to upload the current Godot inputs. Live parameters are captured before reloading. Before the first cook the replacement uses [param stashed_parameters].
+			</description>
+		</method>
 		<method name="sync_inputs">
 			<return type="bool" />
 			<param index="0" name="asset" type="HEGoAssetNode" />

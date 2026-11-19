@@ -51,6 +51,12 @@ Each value contains:
 Returns an empty dictionary if no session is active, if no libraries are loaded, or if querying HAPI fails.
 </description>
 </method>
+<method name="get_hip_file_extension">
+<return type="String" />
+<description>
+Returns the filename extension for the session license. Indie uses [code]hiplc[/code] and Education uses [code]hipnc[/code]. The default is [code]hip[/code].
+</description>
+</method>
 <method name="get_houdini_installation_path" qualifiers="const">
 <return type="String" />
 <description>
@@ -83,6 +89,19 @@ This count does not include the currently running task.
 <return type="bool" />
 <description>
 Returns [code]true[/code] when the Houdini Engine session is currently active.
+</description>
+</method>
+<method name="open_hip_file">
+<return type="HEGoTask" />
+<description>
+Saves the current Houdini Engine scene to a new temporary directory and launches the configured Houdini executable with that file. The temporary copy remains available after the Godot session closes. On success, the task result contains its absolute path.
+</description>
+</method>
+<method name="save_hip_file">
+<return type="HEGoTask" />
+<param index="0" name="path" type="String" />
+<description>
+Queues a save of the current Houdini Engine scene to [param path]. Accepts absolute filesystem paths and Godot project or user paths. Use [method get_hip_file_extension] to suggest a filename. On success, the task result contains the absolute path to the file.
 </description>
 </method>
 <method name="set_houdini_installation_path">

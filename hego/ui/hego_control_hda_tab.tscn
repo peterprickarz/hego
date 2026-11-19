@@ -78,11 +78,22 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_v64h4")
 [node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/Settings/PanelContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
+[node name="SettingsHeader" type="HBoxContainer" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer/SettingsHeader"]
 clip_contents = true
 layout_mode = 2
 text = "Settings:"
-horizontal_alignment = 1
+
+[node name="LockPanelButton" type="CheckButton" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer/SettingsHeader"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Keep editing this node while selecting or dragging other scene nodes. Unlock to follow the scene selection again."
+disabled = true
+text = "Lock Panel"
+text_overrun_behavior = 3
 
 [node name="HSeparator" type="HSeparator" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
 layout_mode = 2
@@ -118,11 +129,23 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Pick HDA Asset"
 
-[node name="ButtonRecook" type="Button" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
+[node name="CookActions" type="HBoxContainer" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="ButtonRecook" type="Button" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer/CookActions"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 disabled = true
 text = "Recook"
+
+[node name="ButtonRebuild" type="Button" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer/CookActions"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Reload the HDA definition from disk, reupload all inputs, and cook."
+disabled = true
+text = "Rebuild"
 
 [node name="MarginContainer" type="MarginContainer" parent="HSplitContainer2/Settings/PanelContainer/VBoxContainer"]
 layout_mode = 2

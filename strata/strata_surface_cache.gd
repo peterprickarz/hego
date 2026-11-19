@@ -25,7 +25,7 @@ extends RefCounted
 ##   cover   R8      how much of the cell surface writers replaced (StrataSurfaceWriter; 0 none)
 ##
 ## Requests come from the screen (StrataVirtualTextureFeedback: the page under every drawn pixel
-## at its footprint), from the displaced mesh (the relief mip around the camera) and from the
+## on or near the terrain surface, at its footprint), from the displaced mesh (the relief mip around the camera) and from the
 ## coarsest mips, which stay resident so every lookup ends somewhere. The least recently
 ## requested pages make room. A page a surface writer touches (StrataSurfaceWriter, drawn
 ## top-down by strata_surface_writer_pass.gd) waits for its writer tile and is evaluated once,
@@ -70,9 +70,15 @@ const _OBSOLETE_GLOBALS := ["strata_cache_windows_a", "strata_cache_windows_b", 
 ## Pages waiting for a writer tile at most, and missing pages looked at per frame at most.
 const _MAX_AWAITING := 64
 const _MAX_SCANNED := 256
-## Shares of the pool requested in one frame above which pressure_bias rises and below which it
-## falls again (pages requested in the frames before keep their slots too), its steps per frame
-## and its limit.
+## Frames a requested page counts as on screen and keeps its slot: the feedback pass reports a
+## visible page once per sampling cycle (not every frame), a frame or two late; the camera
+## squares request theirs every frame.
+const _ON_SCREEN_FEEDBACK := preload("res://addons/strata/strata_virtual_texture_feedback.gd").CYCLE_FRAMES + 2
+const _ON_SCREEN_SQUARES := 2
+## Shares of the pool on screen (pages requested within the on-screen frames, resident or still
+## missing) above which pressure_bias rises and below which it falls again, its steps per frame
+## and its limit. After a step it holds for the on-screen frames, until the pages requested
+## before the step have left the measure.
 const _PRESSURE_ABOVE := 0.85
 const _PRESSURE_BELOW := 0.6
 const _PRESSURE_RISE := 0.02
@@ -345,8 +351,11 @@ var _awaiting := {}
 ## Slots that may be evicted this frame, the least recently requested last.
 var _evictable: Array[int] = []
 var _evictable_frame := -1
-## pressure_bias as effective_lod_bias() last applied it.
+## pressure_bias as effective_lod_bias() last applied it, and the frame until which it holds.
 var _pressure_step := 0.0
+var _pressure_hold := 0
+## Frames a requested page counts as on screen (see _ON_SCREEN_FEEDBACK).
+var _on_screen_frames := _ON_SCREEN_SQUARES
 var _pinned: Array[Vector3i] = []
 var _frame := 0
 ## Every resident page is stale: the material or the shader variant changed.
@@ -596,7 +605,7 @@ func _key_of_slot_cells(mip: int, first: Vector2i) -> Vector3i:
 
 
 ## The slot of a page, taking a free one or evicting the least recently requested page for it
-## (not those requested in the last two frames: they are on screen). -1 when none can go.
+## (not those requested within the on-screen frames). -1 when none can go.
 func _acquire_slot(key: Vector3i, updates: Array) -> int:
 	var slot := -1
 	if _resident.has(key):
@@ -608,7 +617,7 @@ func _acquire_slot(key: Vector3i, updates: Array) -> int:
 			_evictable_frame = _frame
 			_evictable.clear()
 			for candidate in pool_pages:
-				if _slot_used[candidate] < _frame - 1: _evictable.append(candidate)
+				if _slot_used[candidate] <= _frame - _on_screen_frames: _evictable.append(candidate)
 			_evictable.sort_custom(func(a: int, b: int) -> bool: return _slot_used[a] > _slot_used[b])
 		if _evictable.is_empty():
 			stats.thrash = int(stats.get("thrash", 0)) + 1
@@ -685,8 +694,15 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 		for mip in top_mip + 1: _append_square(wanted, mip, camera, ring_cells * level_texel(mip))
 	stats.feedback_keys = feedback_keys.size()
 	feedback_keys = PackedInt32Array()
-	var demand := float(wanted.size()) / float(maxi(pool_pages, 1))
-	if demand > _PRESSURE_ABOVE: pressure_bias = minf(pressure_bias + _PRESSURE_RISE, _PRESSURE_MAX)
+	_on_screen_frames = _ON_SCREEN_FEEDBACK if feedback_active else _ON_SCREEN_SQUARES
+	var on_screen := 0
+	for slot in pool_pages:
+		if _slot_key[slot] != null and _slot_used[slot] > _frame - _on_screen_frames: on_screen += 1
+	for key: Vector3i in _asked:
+		if not _resident.has(key): on_screen += 1
+	var demand := float(on_screen) / float(maxi(pool_pages, 1))
+	if demand > _PRESSURE_ABOVE:
+		if _frame >= _pressure_hold: pressure_bias = minf(pressure_bias + _PRESSURE_RISE, _PRESSURE_MAX)
 	elif demand < _PRESSURE_BELOW: pressure_bias = maxf(pressure_bias - _PRESSURE_FALL, 0.0)
 	stats.pressure_bias = pressure_bias
 	var pressure_step := snappedf(pressure_bias, 0.125)
@@ -694,6 +710,7 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 		# Lookups read coarser mips now: the finer pages asked for before are not wanted any more.
 		_asked.clear()
 		_awaiting.clear()
+		_pressure_hold = _frame + _on_screen_frames
 	_pressure_step = pressure_step
 	for key in wanted:
 		if _resident.has(key):
