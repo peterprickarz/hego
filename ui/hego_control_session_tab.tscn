@@ -62,6 +62,23 @@ layout_mode = 2
 text = "hapi"
 scroll_fit_content_height = true
 
+[node name="SessionFiles" type="HBoxContainer" parent="Vbox"]
+layout_mode = 2
+
+[node name="SaveHIP" type="Button" parent="Vbox/SessionFiles"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Choose where to save the current Houdini session."
+disabled = true
+text = "Save HIP File…"
+
+[node name="OpenHIP" type="Button" parent="Vbox/SessionFiles"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Save a temporary copy of this session and open it in Houdini."
+disabled = true
+text = "Open HIP File"
+
 [node name="HSeparator" type="HSeparator" parent="Vbox"]
 layout_mode = 2
 
@@ -96,3 +113,9 @@ size_flags_vertical = 3
 bbcode_enabled = true
 scroll_following = true
 selection_enabled = true
+
+[node name="SaveHIPDialog" type="FileDialog" parent="."]
+unique_name_in_owner = true
+title = "Save Houdini Session"
+access = 2
+file_mode = 4

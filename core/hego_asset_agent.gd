@@ -152,6 +152,49 @@ func save_parameters(asset: HEGoAssetNode) -> PackedByteArray:
 	return preset if preset is PackedByteArray else PackedByteArray()
 
 
+## Reloads the library that supplies [param previous], replaces its instance and clears its
+## input chains. Look up the replacement with [method asset] and run the host's usual cook
+## to upload the current Godot inputs. Live parameters are captured before reloading.
+## Before the first cook the replacement uses [param stashed_parameters].
+func rebuild_asset(previous: HEGoAssetNode, stashed_parameters := PackedByteArray()) -> bool:
+	var label := _label_of(previous)
+	if previous == null or not assets.has(label):
+		return false
+	if not previous.has_method(&"reload_definition"):
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Rebuild requires an updated HEGo native extension. Install or build the extension for this platform and restart Godot.")
+		return false
+	var preset := stashed_parameters
+	var live := previous.get_id() != UNINSTANTIATED_NODE_ID
+	if live:
+		preset = await save_parameters(previous)
+		if preset.is_empty():
+			return false
+	else:
+		# A first rebuild needs a live node to resolve Houdini's preferred library.
+		if await task(previous.instantiate()) == null or previous.get_id() == UNINSTANTIATED_NODE_ID:
+			return false
+	var library = await task(previous.call(&"reload_definition"))
+	if library == null:
+		if not live:
+			await _delete(previous)
+		return false
+
+	# Keep the old instance until the new one has accepted the user's parameters.
+	var replacement := HEGoAssetNode.new()
+	replacement.op_name = previous.op_name
+	if not await instantiate(replacement, preset, true):
+		HEGoLog.get_singleton().error(LOG_CATEGORY, "Could not restore the rebuilt instance of " + previous.op_name)
+		await _delete(replacement)
+		if not live:
+			await _delete(previous)
+		return false
+	if assets.get(label) != previous or not await _delete(previous):
+		await _delete(replacement)
+		return false
+	assets[label] = replacement
+	return await _release_inputs(label)
+
+
 ## Feeds [param asset] the Godot nodes stored in the owner's input stash.
 ##
 ## Every HDA input goes through a merge node, because one Houdini input can combine several
@@ -295,16 +338,8 @@ func release() -> bool:
 	if not can_release():
 		return false
 	var ok := true
-	for label in _input_nodes:
-		var chains: Dictionary = _input_nodes[label]
-		for index in chains:
-			var chain: Dictionary = chains[index]
-			for input in chain.get("inputs", []):
-				if input is HEGoBaseNode:
-					ok = await _delete(input) and ok
-			if chain.get("merge") is HEGoBaseNode:
-				ok = await _delete(chain["merge"]) and ok
-	_input_nodes.clear()
+	for label in _input_nodes.keys():
+		ok = await _release_inputs(label) and ok
 	for label in assets:
 		ok = await _delete(assets[label]) and ok
 	assets.clear()
@@ -392,6 +427,19 @@ func _update_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: 
 	if not await _chain_task(asset.connect_input(merge_node, index), settings): return false
 	chain["inputs"] = input_array
 	return true
+
+func _release_inputs(label: String) -> bool:
+	var ok := true
+	var chains: Dictionary = _input_nodes.get(label, {})
+	for chain in chains.values():
+		for input in chain.get("inputs", []):
+			if input is HEGoBaseNode:
+				ok = await _delete(input) and ok
+		if chain.get("merge") is HEGoBaseNode:
+			ok = await _delete(chain["merge"]) and ok
+	_input_nodes.erase(label)
+	return ok
+
 
 func _delete(node: HEGoBaseNode) -> bool:
 	if node.get_id() == UNINSTANTIATED_NODE_ID:

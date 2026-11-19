@@ -30,6 +30,9 @@ const ALL_CATEGORIES := "All categories"
 
 @onready var start_button: Button = %Session/%ButtonStartSession
 @onready var stop_button: Button = %Session/%ButtonStopSession
+@onready var save_hip_button: Button = %Session/%SaveHIP
+@onready var open_hip_button: Button = %Session/%OpenHIP
+@onready var save_hip_dialog: FileDialog = %Session/%SaveHIPDialog
 @onready var connection_type: OptionButton = %Session/%ConnectionType
 @onready var connection_data: TextEdit = %Session/%ConnectionData
 @onready var session_sync_status: RichTextLabel = %Session/%SessionSyncStatusLabel
@@ -42,6 +45,7 @@ var _visible_lines: int = 0
 var _level_filter: OptionButton
 var _category_filter: OptionButton
 var _known_categories: PackedStringArray
+var _saving_hip := false
 
 
 ## Initialize the control and set up connections
@@ -54,6 +58,10 @@ func _ready():
 	connection_type.select(connection_type.get_item_index(HEGoAPI.SESSION_NAMED_PIPE))
 	start_button.pressed.connect(_on_start_session_button_pressed)
 	stop_button.pressed.connect(_on_stop_session_button_pressed)
+	save_hip_button.pressed.connect(_choose_hip_path)
+	save_hip_dialog.file_selected.connect(_save_hip_snapshot)
+	open_hip_button.pressed.connect(_save_hip_snapshot)
+	%Session.visibility_changed.connect(_on_session_visibility_changed)
 	_build_log_toolbar()
 	# Defer log capture setup to ensure the HEGoLog singleton is fully initialized
 	call_deferred("_setup_log_capture")
@@ -121,8 +129,64 @@ func _update_session_status():
 		_set_session_status_disconnected()
 
 
+func _on_session_visibility_changed() -> void:
+	if %Session.is_visible_in_tree():
+		_update_session_status()
+
+
+func _update_hip_actions(connected: bool) -> void:
+	save_hip_button.disabled = not connected or _saving_hip
+	open_hip_button.disabled = not connected or _saving_hip
+
+
+func _choose_hip_path() -> void:
+	var api := HEGoAPI.get_singleton()
+	if not api.has_method("get_hip_file_extension"):
+		HEGoLog.get_singleton().error("session", "Update the HEGo native extension to save HIP files.")
+		return
+	if not api.is_session_active():
+		_set_session_status_disconnected()
+		return
+	var extension: String = api.call("get_hip_file_extension")
+	save_hip_dialog.filters = PackedStringArray(["*.%s ; Houdini scene" % extension])
+	save_hip_dialog.current_file = "session." + extension
+	save_hip_dialog.popup_centered_ratio(0.6)
+
+
+# Open writes a temporary snapshot. Save passes the path from the file chooser.
+func _save_hip_snapshot(path := "") -> void:
+	if _saving_hip:
+		return
+	var api := HEGoAPI.get_singleton()
+	var log := HEGoLog.get_singleton()
+	if not api.is_session_active():
+		_set_session_status_disconnected()
+		log.error("session", "Start a Houdini session before saving a HIP file.")
+		return
+	if not api.has_method("open_hip_file"):
+		log.error("session", "Update the HEGo native extension to save and open HIP files.")
+		return
+	_saving_hip = true
+	_update_hip_actions(true)
+	var task: HEGoTask
+	if path.is_empty():
+		task = api.call("open_hip_file")
+	else:
+		task = api.call("save_hip_file", path)
+	var result := await HEGoNodeUtil.checked_task(self, task)
+	_saving_hip = false
+	if not is_inside_tree():
+		return
+	_update_hip_actions(api.is_session_active())
+	if result.ok:
+		log.info("session", ("Opened in Houdini: " if path.is_empty() else "Saved HIP file: ") + str(result.value))
+	else:
+		log.error("session", result.message)
+
+
 ## Set session status indicator to connected (green)
 func _set_session_status_connected():
+	_update_hip_actions(true)
 	session_sync_status.text = "SessionSync is connected"
 	session_sync_status.add_theme_color_override("default_color", Color.GREEN)
 	# Refresh library control when session becomes active
@@ -132,6 +196,7 @@ func _set_session_status_connected():
 
 ## Set session status indicator to disconnected (red)
 func _set_session_status_disconnected():
+	_update_hip_actions(false)
 	session_sync_status.text = "SessionSync is not connected"
 	session_sync_status.add_theme_color_override("default_color", Color.RED)
 	# Clear library control when session becomes inactive
