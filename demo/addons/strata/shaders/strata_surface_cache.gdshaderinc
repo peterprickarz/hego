@@ -13,8 +13,8 @@
 //
 // The cache is a virtual texture of the terrain's material without custom fragment code, one
 // cell per material texel in mip 0 (StrataRenderSettings.surface_cache_texels_per_metre). Its
-// pages follow what the screen shows: the ground under any drawn pixel is requested at that
-// pixel's footprint, and a read takes the finest resident mip at or above the footprint's
+// pages follow what the screen shows: the ground under any drawn pixel on or near it (within
+// StrataVirtualTextureFeedback.GROUND_BAND metres, about) is requested at that pixel's footprint, and a read takes the finest resident mip at or above the footprint's
 // (strata_virtual_texture.gdshaderinc). Cells are read as the terrain filters them
 // (StrataRenderSettings.surface_cache_filter: the nearest cell, or bilinear); heights
 // interpolate bilinearly.

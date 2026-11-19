@@ -277,8 +277,15 @@ in its status and stays off. Memory is 17 bytes per cell, 0.31 MB per slot of a 
 - The screen. With `surface_cache_feedback` (default on) a compute pass after the opaque pass
   (`StrataVirtualTextureFeedback`, a `CompositorEffect`) reads the depth of one pixel per 8 × 8
   tile, a different one each frame, and reports the page under it at the two mips around its
-  footprint plus `surface_cache_shading_lod_bias`. Every drawn pixel counts, not only terrain:
-  a rock requests the ground below it. The renderer adds the effect to the compositor its
+  footprint plus `surface_cache_shading_lod_bias`. The depth holds every opaque surface, so a
+  pixel requests pages only when it lies on or near the terrain: its height is compared with the
+  cached ground height there, read from a deciding mip (cells of at most 0.5 m, never finer than
+  the pixel's next mip) that the pixel always requests. Within about 1 m of the ground (more
+  with distance and while only coarse heights are resident) it counts: a rock or a trunk base
+  requests the ground it blends into, while canopies and the upper parts of trunks and props
+  request nothing. On surfaces steeper than 60° the footprint is the pixel's extent in space
+  rather than on the ground plane, which tends to zero there. `surface_cache_feedback` in the
+  stats reports the sampled pixels rejected and those waiting for their deciding page. The renderer adds the effect to the compositor its
   camera renders with (the camera's, else the `WorldEnvironment`'s, created when there is
   none). In the editor each 3D viewport camera gets a compositor of its own with the scene's
   effects and the feedback, so nothing is written into the scene. With feedback off the pages
@@ -289,8 +296,9 @@ in its status and stays off. Memory is 17 bytes per cell, 0.31 MB per slot of a 
   lookup ends there at the latest.
 
 At most `surface_cache_page_fills_per_frame` pages (default 32) are evaluated per frame,
-coarse mips first. A full pool evicts the pages requested longest ago, never those of the last
-two frames. When one frame requests more than 85 % of the pool, the cache raises the lod bias
+coarse mips first. A full pool evicts the pages requested longest ago, never those requested
+within one feedback cycle (the 64 frames in which the sampled pixel visits its whole tile, plus
+two for the readback; two frames with feedback off): a still view keeps its pages. When one frame requests more than 85 % of the pool, the cache raises the lod bias
 of every lookup until the requests fit (`stats.pressure_bias`): the surface gets softer instead
 of pages going missing. It falls back once requests drop below 60 %. A 4K view at lod bias 0
 requests about 1,500 to 2,500 pages, a 1440p view about a third of that. Terrain edits
