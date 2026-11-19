@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CopiaObject" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://addons/copia/copia_object.gd" id="1"]
+[ext_resource type="Resource" path="res://copia_demo/objects/render_rocks.tres" id="2"]
+[ext_resource type="Resource" path="res://copia_demo/objects/physics_rocks.tres" id="3"]
+
+[sub_resource type="StandardMaterial3D" id="mat"]
+albedo_color = Color(0.45, 0.45, 0.47, 1)
+roughness = 0.9
+
+[sub_resource type="SphereMesh" id="mesh"]
+material = SubResource("mat")
+radius = 0.6
+height = 1.0
+radial_segments = 10
+rings = 5
+
+[resource]
+script = ExtResource("1")
+mesh = SubResource("mesh")
+render = ExtResource("2")
+physics = ExtResource("3")

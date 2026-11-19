@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="CopiaObject" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://addons/copia/copia_object.gd" id="1"]
+[ext_resource type="Resource" path="res://copia_demo/objects/render_ground.tres" id="2"]
+
+[sub_resource type="StandardMaterial3D" id="mat"]
+albedo_color = Color(0.2, 0.45, 0.25, 1)
+roughness = 0.9
+
+[sub_resource type="PrismMesh" id="mesh"]
+material = SubResource("mat")
+size = Vector3(0.6, 0.6, 0.6)
+
+[resource]
+script = ExtResource("1")
+mesh = SubResource("mesh")
+render = ExtResource("2")

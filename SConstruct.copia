@@ -1,0 +1,99 @@
+#!/usr/bin/env python
+"""Standalone Godot build for Copia, the instance store (no Houdini SDK, no HEGo, no Strata)."""
+import filecmp
+import os
+import shutil
+import subprocess
+
+# Copia keeps its own signature database and its own godot-cpp object trees, so its
+# builds never reuse or overwrite objects of HEGo, Strata or another toolchain profile.
+#
+# Copia ships Linux x86_64 and Windows x86_64 only. macOS is not supported: there is no
+# macOS build, no macOS library in copia.gdextension and no macOS package.
+#
+# Profiles (copia_build_profile=...), driven by scripts/build-copia.sh:
+#   host          the machine's own toolchain: MSVC on Windows, the system GCC on Linux
+#   linux-compat  platform=linux inside the glibc 2.28 container
+#                 (scripts/linux-compat-copia.Containerfile); what a release ships
+_platform = ARGUMENTS.get("platform", "linux")
+_copia_profile = ARGUMENTS.pop("copia_build_profile", "host")
+if _platform not in ("linux", "windows"):
+    raise RuntimeError(
+        f"Copia builds for Linux and Windows only, got platform={_platform!r}. macOS is not supported."
+    )
+if _copia_profile not in ("host", "linux-compat"):
+    raise RuntimeError(f"Unknown Copia build profile {_copia_profile!r}; use host or linux-compat.")
+if _copia_profile == "linux-compat" and _platform != "linux":
+    raise RuntimeError("The linux-compat profile must build platform=linux.")
+
+_profile_suffix = "-linux-compat" if _copia_profile == "linux-compat" else ""
+SConsignFile(f".sconsign-copia-{_platform}{_profile_suffix}.dblite")
+
+# godot-cpp v10 is versioned independently of Godot and bundles several API dumps;
+# build against the 4.7 API, the minimum Godot version Copia supports.
+ARGUMENTS.setdefault("api_version", "4.7")
+
+# godot-cpp builds in its source root and writes its generated bindings, objects and
+# library there. Build it in a mirror of its tracked files under copia/build so this
+# extension never writes into the shared godot-cpp checkout.
+_cpp_profile_root = os.path.abspath(f"copia/build/dependencies/godot-cpp/{_copia_profile}")
+os.makedirs(_cpp_profile_root, exist_ok=True)
+_tracked_file = os.environ.get("HEGO_COPIA_CPP_FILELIST")
+if _tracked_file and os.path.isfile(_tracked_file):
+    with open(_tracked_file, encoding="utf-8") as _file:
+        _tracked = [line.rstrip("\n") for line in _file if line.rstrip("\n")]
+else:
+    _tracked = subprocess.check_output(["git", "-C", "godot-cpp", "ls-files", "-z"], text=False).decode("utf-8").split("\0")
+    _tracked = [path for path in _tracked if path]
+_manifest = os.path.join(_cpp_profile_root, ".copia-source-files")
+_previous = set()
+if os.path.isfile(_manifest):
+    with open(_manifest, encoding="utf-8") as _file:
+        _previous = set(line.rstrip("\n") for line in _file)
+for _stale in _previous - set(_tracked):
+    _stale_path = os.path.join(_cpp_profile_root, _stale)
+    if os.path.isfile(_stale_path) or os.path.islink(_stale_path):
+        os.unlink(_stale_path)
+for _relative in _tracked:
+    _source = os.path.join("godot-cpp", _relative)
+    _destination = os.path.join(_cpp_profile_root, _relative)
+    os.makedirs(os.path.dirname(_destination), exist_ok=True)
+    if not os.path.isfile(_destination) or not filecmp.cmp(_source, _destination, shallow=False):
+        shutil.copy2(_source, _destination)
+with open(_manifest, "w", encoding="utf-8") as _file:
+    _file.write("\n".join(_tracked) + "\n")
+env = SConscript(os.path.join(_cpp_profile_root, "SConstruct"))
+
+# godot-cpp v10 archives about a thousand generated objects. GNU ar (Linux, MinGW) gets
+# a response file so the command stays under the argument length limit. MSVC's lib tool
+# already uses one through its default ARCOM, which needs /OUT: and must be kept.
+if env["platform"] in ("linux", "windows") and not env.get("is_msvc", False):
+    env["MAXLINELENGTH"] = 64 * 1024
+    env["ARCOM"] = "${TEMPFILE('$AR $ARFLAGS $TARGET $SOURCES', '$ARCOMSTR')}"
+
+if env["platform"] == "linux":
+    # Keep statically linked libstdc++ symbols private to this extension.
+    env.Append(LINKFLAGS=["-Wl,--exclude-libs,ALL"])
+else:
+    # SCons' MinGW SharedLibrary builder defaults to a `lib` prefix. Godot's
+    # Windows extension descriptor uses the platform-native basename.
+    env.Replace(SHLIBPREFIX="")
+
+src_dir = "copia/src"
+build_dir = f"copia/build/{env['platform']}.{env['target']}.{env['arch']}{_profile_suffix}"
+VariantDir(build_dir, src_dir, duplicate=0)
+env.Append(CPPPATH=[src_dir])
+
+sources = Glob(f"{build_dir}/*.cpp")
+
+library_prefix = "lib" if env["platform"] == "linux" else ""
+if env["platform"] == "windows" and env.get("is_msvc", False):
+    # MSVC's linker writes an import library and an exports file beside the DLL. Nothing
+    # links against Copia, so write both into the build directory, out of the addon.
+    env["no_import_lib"] = 1
+    env.Append(LINKFLAGS=[f"/IMPLIB:{build_dir}/copia.{env['target']}.{env['arch']}.lib"])
+library = env.SharedLibrary(
+    f"demo/addons/copia/bin/{library_prefix}copia.{env['platform']}.{env['target']}.{env['arch']}{env['SHLIBSUFFIX']}",
+    source=sources,
+)
+Default(library)

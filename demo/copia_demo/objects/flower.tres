@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CopiaObject" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://addons/copia/copia_object.gd" id="1"]
+[ext_resource type="Resource" path="res://copia_demo/objects/render_ground.tres" id="2"]
+
+[sub_resource type="StandardMaterial3D" id="mat"]
+albedo_color = Color(0.95, 0.8, 0.2, 1)
+roughness = 0.9
+
+[sub_resource type="SphereMesh" id="mesh"]
+material = SubResource("mat")
+radius = 0.12
+height = 0.24
+radial_segments = 8
+rings = 4
+
+[resource]
+script = ExtResource("1")
+mesh = SubResource("mesh")
+render = ExtResource("2")

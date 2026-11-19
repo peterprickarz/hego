@@ -1,0 +1,32 @@
+[gd_resource type="Resource" script_class="CopiaObject" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://addons/copia/copia_object.gd" id="1"]
+[ext_resource type="Resource" path="res://copia_demo/objects/render_trees.tres" id="2"]
+[ext_resource type="Resource" path="res://copia_demo/objects/physics_trees.tres" id="3"]
+
+[sub_resource type="StandardMaterial3D" id="mat"]
+albedo_color = Color(0.12, 0.35, 0.18, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="mesh"]
+material = SubResource("mat")
+top_radius = 0.0
+bottom_radius = 1.6
+height = 9.0
+radial_segments = 8
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="imat"]
+albedo_color = Color(0.14, 0.32, 0.2, 1)
+roughness = 1.0
+
+[sub_resource type="PrismMesh" id="imesh"]
+material = SubResource("imat")
+size = Vector3(3.2, 9.0, 0.4)
+
+[resource]
+script = ExtResource("1")
+mesh = SubResource("mesh")
+render = ExtResource("2")
+physics = ExtResource("3")
+impostor_mesh = SubResource("imesh")

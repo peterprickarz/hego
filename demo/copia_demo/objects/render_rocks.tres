@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="CopiaRenderSettings" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/copia/copia_render_settings.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+visibility_range_end = 120.0
+batch_size = 32.0

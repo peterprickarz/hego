@@ -7,7 +7,8 @@ your HDAs cook there, and what they produce becomes ordinary Godot nodes in your
 Start with :doc:`about/getting_started`, then :doc:`node_reference/hego_node_3d`, which is
 the node most projects only ever need. Everything under :doc:`api/index` is for when you
 want to drive Houdini from a script of your own. For layered terrain, with or without
-Houdini, see :doc:`strata/index`.
+Houdini, see :doc:`strata/index`; for instancing large numbers of meshes, see
+:doc:`copia/index`.
 
 .. toctree::
    :maxdepth: 1
@@ -40,11 +41,21 @@ Houdini, see :doc:`strata/index`.
    strata/reference
 
 .. toctree::
+   :maxdepth: 2
+   :caption: Copia instancing
+
+   copia/index
+   copia/getting_started
+   copia/houdini
+   copia/reference
+
+.. toctree::
    :maxdepth: 1
    :caption: Development notes
 
    development/testing
    development/packaging
+   development/copia_design
    development/godot_mcp
    development/strata_regions_plan
    development/terrain_renderer_regions
