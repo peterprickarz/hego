@@ -22,6 +22,46 @@ HAPI_AttributeOwner to_hapi_owner(int owner)
 			return HAPI_ATTROWNER_POINT;
 	}
 }
+
+/// Groups [indices] by the value each has in [values], as { value: selection }, with
+/// the keys in the order they are first seen and the indices in their original order.
+/// An index past the end of [values] groups under a null key. The Dictionary only maps
+/// each distinct value to its group; the indices collect in native vectors, so adding
+/// to a large group does not copy it.
+template <typename Selection, typename Source>
+godot::Dictionary group_by_value(const std::vector<int> &indices, const godot::Array &values, const godot::Ref<Source> &source)
+{
+	godot::Dictionary slots;
+	std::vector<std::vector<int>> grouped;
+	const int64_t value_count = values.size();
+	for (const int index : indices)
+	{
+		const godot::Variant key = index < value_count ? values[index] : godot::Variant();
+		const godot::Variant slot = slots.get(key, godot::Variant());
+		size_t group = grouped.size();
+		if (slot.get_type() == godot::Variant::NIL)
+		{
+			slots[key] = static_cast<int64_t>(group);
+			grouped.emplace_back();
+		}
+		else
+		{
+			group = static_cast<size_t>(static_cast<int64_t>(slot));
+		}
+		grouped[group].push_back(index);
+	}
+
+	godot::Dictionary groups;
+	const godot::Array keys = slots.keys();
+	for (int i = 0; i < keys.size(); ++i)
+	{
+		godot::Ref<Selection> selection;
+		selection.instantiate();
+		selection->setup(source, grouped[i]);
+		groups[keys[i]] = selection;
+	}
+	return groups;
+}
 } // namespace
 
 // ─────────────────────────────────────────────
@@ -135,6 +175,15 @@ godot::Array HEGoPointOutput::get_attribute(const godot::String &name, int owner
 	return my_cache->cached_attribute(*my_cache->points_part(), to_hapi_owner(owner), name);
 }
 
+godot::Array HEGoPointOutput::read_attribute(const godot::String &name) const
+{
+	if (!is_valid() || !has_attribute(name, OWNER_POINT))
+	{
+		return godot::Array();
+	}
+	return my_cache->cached_attribute(*my_cache->points_part(), HAPI_ATTROWNER_POINT, name, true);
+}
+
 godot::Ref<HEGoPointSelection> HEGoPointOutput::select_all()
 {
 	std::vector<int> indices;
@@ -208,7 +257,7 @@ godot::Ref<HEGoPointSelection> HEGoPointSelection::filter_by(const godot::String
 		return selection;
 	}
 
-	const godot::Array values = my_output->get_attribute(name, HEGoPointOutput::OWNER_POINT);
+	const godot::Array values = my_output->read_attribute(name);
 	if (values.is_empty())
 	{
 		HEGo::Util::Log::warning(HEGo::Util::Log::Category::OUTPUT,
@@ -241,7 +290,7 @@ godot::Dictionary HEGoPointSelection::split_by(const godot::String &name)
 	// points simply form one unnamed group, which is what the handlers expect when
 	// they see a null key. Not having loaded an attribute that does exist is a
 	// mistake worth saying out loud.
-	const godot::Array values = my_output->get_attribute(name, HEGoPointOutput::OWNER_POINT);
+	const godot::Array values = my_output->read_attribute(name);
 	if (values.is_empty())
 	{
 		if (my_output->has_attribute(name, HEGoPointOutput::OWNER_POINT))
@@ -255,37 +304,7 @@ godot::Dictionary HEGoPointSelection::split_by(const godot::String &name)
 
 	// Group the indices first, then wrap each group once, so a split over many
 	// distinct values does not allocate a selection per point.
-	godot::Dictionary grouped;
-	for (const int index : my_indices)
-	{
-		const godot::Variant key = index < values.size() ? values[index] : godot::Variant();
-		if (!grouped.has(key))
-		{
-			grouped[key] = godot::PackedInt32Array();
-		}
-		godot::PackedInt32Array group_indices = grouped[key];
-		group_indices.append(index);
-		grouped[key] = group_indices;
-	}
-
-	const godot::Array keys = grouped.keys();
-	for (int i = 0; i < keys.size(); ++i)
-	{
-		const godot::PackedInt32Array group_indices = grouped[keys[i]];
-		std::vector<int> indices;
-		indices.reserve(group_indices.size());
-		for (int j = 0; j < group_indices.size(); ++j)
-		{
-			indices.push_back(group_indices[j]);
-		}
-
-		godot::Ref<HEGoPointSelection> selection;
-		selection.instantiate();
-		selection->setup(my_output, indices);
-		groups[keys[i]] = selection;
-	}
-
-	return groups;
+	return group_by_value<HEGoPointSelection>(my_indices, values, my_output);
 }
 
 godot::Dictionary HEGoPointSelection::get_points(const godot::PackedStringArray &names)
@@ -305,7 +324,7 @@ godot::Dictionary HEGoPointSelection::get_points(const godot::PackedStringArray 
 	for (int n = 0; n < wanted.size(); ++n)
 	{
 		const godot::String name = wanted[n];
-		const godot::Array values = my_output->get_attribute(name, HEGoPointOutput::OWNER_POINT);
+		const godot::Array values = my_output->read_attribute(name);
 		if (values.is_empty())
 		{
 			continue;
@@ -422,6 +441,15 @@ godot::Array HEGoSurfaceOutput::get_attribute(const godot::String &name) const
 	return my_cache->cached_attribute(my_part, HAPI_ATTROWNER_PRIM, name);
 }
 
+godot::Array HEGoSurfaceOutput::read_attribute(const godot::String &name) const
+{
+	if (!my_valid || !has_attribute(name))
+	{
+		return godot::Array();
+	}
+	return my_cache->cached_attribute(my_part, HAPI_ATTROWNER_PRIM, name, true);
+}
+
 godot::Ref<HEGoSurfaceSelection> HEGoSurfaceOutput::select_all()
 {
 	std::vector<int> indices;
@@ -491,7 +519,7 @@ godot::Ref<HEGoSurfaceSelection> HEGoSurfaceSelection::filter_by(const godot::St
 		return selection;
 	}
 
-	const godot::Array values = my_surfaces->get_attribute(name);
+	const godot::Array values = my_surfaces->read_attribute(name);
 	if (values.is_empty())
 	{
 		HEGo::Util::Log::warning(HEGo::Util::Log::Category::OUTPUT,
@@ -522,7 +550,7 @@ godot::Dictionary HEGoSurfaceSelection::split_by(const godot::String &name)
 
 	// As with points, an attribute the HDA never sets groups everything under one
 	// null key rather than losing the primitives.
-	const godot::Array values = my_surfaces->get_attribute(name);
+	const godot::Array values = my_surfaces->read_attribute(name);
 	if (values.is_empty())
 	{
 		if (my_surfaces->has_attribute(name))
@@ -534,37 +562,7 @@ godot::Dictionary HEGoSurfaceSelection::split_by(const godot::String &name)
 		return groups;
 	}
 
-	godot::Dictionary grouped;
-	for (const int index : my_indices)
-	{
-		const godot::Variant key = index < values.size() ? values[index] : godot::Variant();
-		if (!grouped.has(key))
-		{
-			grouped[key] = godot::PackedInt32Array();
-		}
-		godot::PackedInt32Array group_indices = grouped[key];
-		group_indices.append(index);
-		grouped[key] = group_indices;
-	}
-
-	const godot::Array keys = grouped.keys();
-	for (int i = 0; i < keys.size(); ++i)
-	{
-		const godot::PackedInt32Array group_indices = grouped[keys[i]];
-		std::vector<int> indices;
-		indices.reserve(group_indices.size());
-		for (int j = 0; j < group_indices.size(); ++j)
-		{
-			indices.push_back(group_indices[j]);
-		}
-
-		godot::Ref<HEGoSurfaceSelection> selection;
-		selection.instantiate();
-		selection->setup(my_surfaces, indices);
-		groups[keys[i]] = selection;
-	}
-
-	return groups;
+	return group_by_value<HEGoSurfaceSelection>(my_indices, values, my_surfaces);
 }
 
 godot::Dictionary HEGoSurfaceSelection::get_surface(const godot::PackedStringArray &read_attribs)
@@ -593,7 +591,7 @@ godot::Dictionary HEGoSurfaceSelection::get_surface(const godot::PackedStringArr
 	for (int i = 0; i < read_attribs.size(); ++i)
 	{
 		const godot::String name = read_attribs[i];
-		const godot::Array values = my_surfaces->get_attribute(name);
+		const godot::Array values = my_surfaces->read_attribute(name);
 		if (values.is_empty())
 		{
 			continue;

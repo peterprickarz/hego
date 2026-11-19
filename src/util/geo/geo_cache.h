@@ -71,7 +71,10 @@ public:
 	godot::Array attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name);
 
 	/// Reads already loaded values without HAPI calls. Warns when not loaded.
-	godot::Array cached_attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name);
+	/// Returns a copy, so a caller cannot edit the cache; [param shared] returns the
+	/// cached array itself for C++ readers that only read it and would otherwise
+	/// copy every value of the attribute on each call.
+	godot::Array cached_attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name, bool shared = false);
 	godot::PackedStringArray cached_attribute_names(const HAPI_PartInfo &part, HAPI_AttributeOwner owner);
 
 	/// Names of every attribute of one owner on one part, as Houdini reports them.

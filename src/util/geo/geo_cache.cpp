@@ -183,7 +183,7 @@ godot::Array GeoCache::attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner 
 	return values;
 }
 
-godot::Array GeoCache::cached_attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name)
+godot::Array GeoCache::cached_attribute(const HAPI_PartInfo &part, HAPI_AttributeOwner owner, const godot::String &name, bool shared)
 {
 	std::lock_guard<std::mutex> lock(my_attributes_mutex);
 	auto cached = my_attributes.find(attribute_key(part, owner, name));
@@ -191,7 +191,7 @@ godot::Array GeoCache::cached_attribute(const HAPI_PartInfo &part, HAPI_Attribut
 	{
 		my_hits++;
 		// Array is shared by reference. Keep callers from editing the cache.
-		return cached->second.duplicate();
+		return shared ? cached->second : cached->second.duplicate();
 	}
 	HEGo::Util::Log::warning(HEGo::Util::Log::Category::ATTRIB,
 			godot::String("Attribute '") + name + "' was not loaded. Await load_attributes() before reading it.");

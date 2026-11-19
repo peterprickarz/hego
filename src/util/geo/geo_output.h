@@ -101,6 +101,10 @@ protected:
 private:
 	friend class HEGoPointSelection;
 
+	/// get_attribute() without its defensive copy, for the selections, which only
+	/// read the values and would otherwise copy the whole attribute on every call.
+	godot::Array read_attribute(const godot::String &name) const;
+
 	std::shared_ptr<HEGo::Util::Geo::GeoCache> my_cache;
 	HAPI_NodeId my_node_id = -1;
 };
@@ -215,6 +219,9 @@ protected:
 
 private:
 	friend class HEGoSurfaceSelection;
+
+	/// get_attribute() without its defensive copy, for the selections.
+	godot::Array read_attribute(const godot::String &name) const;
 
 	std::shared_ptr<HEGo::Util::Geo::GeoCache> my_cache;
 	HAPI_NodeId my_node_id = -1;
