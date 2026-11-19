@@ -2,7 +2,7 @@
   "format_version": 1,
   "package": "hego-terrain3d",
   "addon_path": "addons/hego_terrain3d",
-  "source_commit": "d78df6c01663f4587703a2750f2e057c46197608",
-  "requires": [{"package": "hego", "branch": "release-next", "addon_path": "addons/hego", "source_commit": "d78df6c01663f4587703a2750f2e057c46197608"}],
+  "source_commit": "a37d08d385e04492a739dc8f4594ab9e29eed16c",
+  "requires": [{"package": "hego", "branch": "release-next", "addon_path": "addons/hego", "source_commit": "a37d08d385e04492a739dc8f4594ab9e29eed16c"}],
   "external_requires": [{"name": "Terrain3D", "author": "TokisanGames", "url": "https://github.com/TokisanGames/Terrain3D", "addon_path": "addons/terrain_3d", "tested_version": "1.0.1", "installed_by": "user"}]
 }
