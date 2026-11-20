@@ -31,7 +31,11 @@ Layer names are normalized to lowercase and trimmed before processing.
 
 
 
-Calling :ref:`set_layers()<class_HEGoHeightfieldInputNode_method_set_layers>` rebuilds the internal heightfield input node network for the new layer payload.
+Calling :ref:`set_layers()<class_HEGoHeightfieldInputNode_method_set_layers>` rebuilds the internal heightfield input node network for the new layer payload. :ref:`set_fields()<class_HEGoHeightfieldInputNode_method_set_fields>` uploads explicit fields, each on its own grid, instead.
+
+
+
+Both methods give the result the shape of a Houdini HeightField SOP's output, so HeightField nodes always have a ``mask`` to work on and the viewport shows the mask as a red tint: a zero-filled ``mask`` when none is supplied, a ``constant`` border of ``0`` on the ``mask`` volume (the ``height`` volume keeps its ``streak`` border), and the HeightField SOP's ``volvis`` detail attribute.
 
 .. rst-class:: classref-reftable-group
 
@@ -43,6 +47,8 @@ Methods
 
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoHeightfieldInputNode_method_instantiate>`\ (\ )                                                                                                                |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_fields<class_HEGoHeightfieldInputNode_method_set_fields>`\ (\ fields\: ``Array``, force\: ``bool`` = false\ )                                                                    |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_layers<class_HEGoHeightfieldInputNode_method_set_layers>`\ (\ layers\: ``Dictionary``, voxel_size\: ``float`` = 1.0, height_scale\: ``float`` = 1.0, force\: ``bool`` = false\ ) |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -75,6 +81,51 @@ The method requires an active Houdini session. On success, it stores the main no
 
 
 On failure, all stored ids are reset to invalid values and an error is logged.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoHeightfieldInputNode_method_set_fields:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **set_fields**\ (\ fields\: ``Array``, force\: ``bool`` = false\ ) :ref:`🔗<class_HEGoHeightfieldInputNode_method_set_fields>`
+
+Submits a task that uploads explicit heightfield fields into a new private Houdini object and publishes it as this input once every field has uploaded and the result has cooked. If any step fails, the previous input stays in place.
+
+
+
+Each entry of ``fields`` is a ``Dictionary``:
+
+::
+
+    {
+        "name": "height",                     # exact volume name, case kept
+        "image": Image,                       # uncompressed FORMAT_RF, used as is
+        "sample_origin": Vector3(0, 0, 0),    # centre of sample (0, 0)
+        "sample_step_x": Vector3(1, 0, 0),    # one image column
+        "sample_step_y": Vector3(0, 0, 1),    # one image row
+        "attrs": {"label": "base"}            # optional primitive attributes
+    }
+
+
+
+Positions are SOP-local Houdini coordinates of sample centres. Each field keeps its own resolution, spacing and orientation; images are never converted or resized. Names must be unique. A grid whose height axis would point down is transposed so every volume's height axis points up, keeping each sample at its position. ``attrs`` values may be ``bool``, ``int``, ``float``, ``String`` or ``Vector3``; the key ``name`` is reserved.
+
+
+
+When a field named ``height`` is present, the upload also matches a native HeightField:
+
+- If no field is named ``mask``, a zero-filled ``mask`` volume is added on exactly the ``height`` grid (same resolution, sample positions and orientation) and merged directly after ``height``.
+
+- The ``height`` volume carries the HeightField SOP's ``volvis`` detail dictionary: ``height`` drives the surface and ``mask`` tints it from white (``0``) to red (``1``). It is not written when any field supplies an attribute named ``volvis``.
+
+Any field named ``mask``, supplied or added, gets a ``constant`` border of ``0``. Without a ``height`` field, no mask or ``volvis`` is added.
+
+
+
+The upload is hashed. An identical payload returns without rebuilding while the published input is still valid in the same session, unless ``force`` is ``true``. At most 64 fields and 512 Mi samples are accepted per call. Invalid payloads fail before any task is queued.
 
 .. rst-class:: classref-item-separator
 
@@ -139,6 +190,8 @@ Resolution and defaults:
 - If no valid image exists in any layer, the task fails with an error.
 
 - If ``height`` and/or ``mask`` are missing, they are created as zero-filled layers.
+
+- The ``mask`` layer gets a ``constant`` border of ``0``, and the ``height`` layer carries the HeightField SOP's ``volvis`` detail dictionary unless any layer's ``attrs`` contains a ``volvis`` key.
 
 - Extra layers beyond ``height`` and ``mask`` are created as additional heightfield volume nodes.
 

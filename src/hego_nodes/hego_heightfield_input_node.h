@@ -45,7 +45,9 @@ public:
 	godot::Ref<HEGoTask> instantiate() override;
 	godot::Ref<HEGoTask> set_layers(godot::Dictionary layers, float voxel_size = 1.0f, float height_scale = 1.0f, bool force = false);
 	// Explicit sample-center lattice in SOP-local Houdini coordinates; no axis,
-	// name, scalar, resolution or height/mask conversion is performed.
+	// name, scalar or resolution conversion is performed. Like a native
+	// HeightField, a height field gains a zero mask on its grid when none is
+	// supplied, a constant-border mask and a detail volvis attribute.
 	godot::Ref<HEGoTask> set_fields(godot::Array fields, bool force = false);
 
 	static void _bind_methods();

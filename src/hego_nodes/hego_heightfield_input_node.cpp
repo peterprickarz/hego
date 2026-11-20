@@ -226,6 +226,57 @@ bool write_field_attrs(const HAPI_Session *session, HAPI_NodeId node, const std:
 	return true;
 }
 
+// Houdini's HeightField SOP visualisation: height drives the surface and mask
+// tints it from white to red. HAPI parses dictionary JSON without type hints, so
+// the ranges use UT_Options' typed form; plain arrays would arrive as float
+// arrays, which the viewport ignores.
+const char *const kHeightfieldVolvis =
+		"{\"densityfield\":\"height\","
+		"\"densityramp\":\"{\\\"colortype\\\":\\\"RGB\\\",\\\"points\\\":[2,{\\\"t\\\":0,\\\"rgba\\\":[1,1,1,1],\\\"basis\\\":\\\"linear\\\"},{\\\"t\\\":1,\\\"rgba\\\":[1,1,1,1],\\\"basis\\\":\\\"linear\\\"}]}\","
+		"\"densityrange\":{\"type\":\"vector2\",\"value\":[0,1]},"
+		"\"densityrampperiodic\":0,"
+		"\"cdfield\":\"mask\","
+		"\"cdramp\":\"{\\\"colortype\\\":\\\"RGB\\\",\\\"points\\\":[2,{\\\"t\\\":0,\\\"rgba\\\":[1,1,1,1],\\\"basis\\\":\\\"linear\\\"},{\\\"t\\\":1,\\\"rgba\\\":[1,0,0,1],\\\"basis\\\":\\\"linear\\\"}]}\","
+		"\"cdrange\":{\"type\":\"vector2\",\"value\":[0,1]},"
+		"\"cdrampperiodic\":0,"
+		"\"emitfield\":\"Alpha\","
+		"\"emitramp\":\"{\\\"colortype\\\":\\\"RGB\\\",\\\"points\\\":[2,{\\\"t\\\":0,\\\"rgba\\\":[0,0,0,0],\\\"basis\\\":\\\"linear\\\"},{\\\"t\\\":1,\\\"rgba\\\":[1,1,1,1],\\\"basis\\\":\\\"linear\\\"}]}\","
+		"\"emitrange\":{\"type\":\"vector2\",\"value\":[0,1]},"
+		"\"emitrampperiodic\":0,"
+		"\"emitcdfield\":\"\","
+		"\"emitcdramp\":\"{\\\"colortype\\\":\\\"RGB\\\",\\\"points\\\":[2,{\\\"t\\\":0,\\\"rgba\\\":[0,0,0,1],\\\"basis\\\":\\\"linear\\\"},{\\\"t\\\":1,\\\"rgba\\\":[1,1,1,1],\\\"basis\\\":\\\"linear\\\"}]}\","
+		"\"emitcdrange\":{\"type\":\"vector2\",\"value\":[0,1]},"
+		"\"emitcdrampperiodic\":0,"
+		"\"emitscale\":0.0,"
+		"\"shadowscale\":1.0}";
+
+// Writes the HeightField SOP's detail `volvis` dictionary onto an uncommitted
+// input volume. A Merge keeps it whatever input the volume is connected to.
+bool write_heightfield_volvis(const HAPI_Session *session, HAPI_NodeId node) {
+	HAPI_AttributeInfo info = HoudiniApi::AttributeInfo_Create();
+	info.exists = true;
+	info.owner = HAPI_ATTROWNER_DETAIL;
+	info.originalOwner = HAPI_ATTROWNER_DETAIL;
+	info.storage = HAPI_STORAGETYPE_DICTIONARY;
+	info.typeInfo = HAPI_ATTRIBUTE_TYPE_NONE;
+	info.count = 1;
+	info.tupleSize = 1;
+	const char *value = kHeightfieldVolvis;
+	return HoudiniApi::AddAttribute(session, node, 0, "volvis", &info) == HAPI_RESULT_SUCCESS &&
+			HoudiniApi::SetAttributeDictionaryData(session, node, 0, "volvis", &info, &value, 0, 1) == HAPI_RESULT_SUCCESS;
+}
+
+// HAPI input volumes have a streak border; a native HeightField mask reads 0
+// outside its grid. A built-in Primitive SOP sets the constant border.
+bool create_constant_border(const HAPI_Session *session, HAPI_NodeId parent, HAPI_NodeId input, HAPI_NodeId &border) {
+	border = -1;
+	return HoudiniApi::CreateNode(session, parent, "primitive", "mask_border", false, &border) == HAPI_RESULT_SUCCESS &&
+			HoudiniApi::ConnectNodeInput(session, border, 0, input, 0) == HAPI_RESULT_SUCCESS &&
+			HoudiniApi::SetParmIntValue(session, border, "dovolume", 0, 1) == HAPI_RESULT_SUCCESS &&
+			HoudiniApi::SetParmIntValue(session, border, "volborder", 0, 0) == HAPI_RESULT_SUCCESS &&
+			HoudiniApi::SetParmFloatValue(session, border, "volborderval", 0, 0.0f) == HAPI_RESULT_SUCCESS;
+}
+
 static void debug_log(const godot::String &message)
 {
 	if (kHeightfieldDebugLogs)
@@ -371,7 +422,7 @@ static void apply_prim_attributes(const HAPI_Session *session, HAPI_NodeId volum
 }
 
 static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transform &volume_transform, const std::string &layer_name,
-		const std::vector<float> &input_values, const godot::Dictionary &attrs, HAPI_NodeId target_node)
+		const std::vector<float> &input_values, const godot::Dictionary &attrs, HAPI_NodeId target_node, bool write_volvis = false)
 {
 	debug_log("commit_layer_to_node: begin layer='" + godot::String(layer_name.c_str()) + "' target_node=" + godot::String::num_int64(target_node));
 
@@ -449,6 +500,12 @@ static bool commit_layer_to_node(const HAPI_Session *session, const HAPI_Transfo
 	if (!attrs.is_empty())
 	{
 		apply_prim_attributes(session, target_node, attrs);
+	}
+
+	if (write_volvis && !write_heightfield_volvis(session, target_node))
+	{
+		HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed writing volvis for layer: " + godot::String(layer_name.c_str()));
+		return false;
 	}
 
 	if (HoudiniApi::CommitGeo(session, target_node) != HAPI_RESULT_SUCCESS)
@@ -732,13 +789,29 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_layers(godot::Dictionary laye
 					}
 				}
 
-				if (!commit_layer_to_node(session, volume_transform, "height", scaled_height_values, layer_attrs["height"], self->height_node_id))
+				// Like the HeightField SOP: a volvis tint unless a layer already
+				// carries an attribute of that name.
+				bool caller_volvis = false;
+				for (const auto &entry : layer_attrs)
+				{
+					caller_volvis = caller_volvis || entry.second.has("volvis");
+				}
+
+				if (!commit_layer_to_node(session, volume_transform, "height", scaled_height_values, layer_attrs["height"], self->height_node_id, !caller_volvis))
 				{
 					return -1;
 				}
 
 				if (!commit_layer_to_node(session, volume_transform, "mask", layer_values["mask"], layer_attrs["mask"], self->mask_node_id))
 				{
+					return -1;
+				}
+
+				HAPI_NodeId mask_border = -1;
+				if (!create_constant_border(session, self->node_id, self->mask_node_id, mask_border) ||
+						HoudiniApi::ConnectNodeInput(session, self->merge_node_id, 1, mask_border, 0) != HAPI_RESULT_SUCCESS)
+				{
+					HEGo::Util::Log::error(HEGo::Util::Log::Category::INPUT, "Failed setting the mask layer's constant border");
 					return -1;
 				}
 
@@ -788,6 +861,24 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_fields(godot::Array source_fi
 	if (!snapshot_fields(source_fields, snapshots, hash, error)) {
 		return make_failed(error, "Set heightfield fields", node_id);
 	}
+	// Arrive like a native HeightField: a zero mask on exactly the height grid,
+	// merged directly after height. It derives from height, which the hash covers.
+	const auto named = [&snapshots](const char *name) {
+		return std::find_if(snapshots.begin(), snapshots.end(), [name](const FieldSnapshot &field) { return field.name == name; });
+	};
+	const auto height = named("height");
+	const bool has_height = height != snapshots.end();
+	if (has_height && named("mask") == snapshots.end()) {
+		FieldSnapshot mask;
+		mask.name = "mask";
+		mask.grid = height->grid;
+		mask.transform = height->transform;
+		mask.samples.assign(height->samples.size(), 0.0f);
+		snapshots.insert(height + 1, std::move(mask));
+	}
+	const bool write_volvis = has_height && std::none_of(snapshots.begin(), snapshots.end(), [](const FieldSnapshot &field) {
+		return std::any_of(field.attrs.begin(), field.attrs.end(), [](const FieldAttribute &attr) { return attr.name == "volvis"; });
+	});
 	HEGoSessionManager *manager = get_session_manager();
 	if (!manager || !manager->get_session()) {
 		return make_failed("No Houdini session manager is available.", "Set heightfield fields", node_id);
@@ -798,7 +889,7 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_fields(godot::Array source_fi
 	const godot::String requested_name = node_name.is_empty() ? godot::String("HEGoFields") : node_name;
 	godot::Ref<HEGoHeightfieldInputNode> self = this;
 	return HEGo::Util::Task::submit_failable("Set heightfield fields", node_id,
-			[self, fields, hash, force, expected_session, expected_epoch, requested_name](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+			[self, fields, hash, write_volvis, force, expected_session, expected_epoch, requested_name](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
 				HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
 				if (!session || session->id != expected_session.id || session->type != expected_session.type || self->fields_epoch.load(std::memory_order_acquire) != expected_epoch || HoudiniApi::IsSessionValid(session) != HAPI_RESULT_SUCCESS) {
 					HEGo::Util::Task::fail(task, "The Houdini session changed or became invalid before this field upload ran.");
@@ -852,13 +943,17 @@ godot::Ref<HEGoTask> HEGoHeightfieldInputNode::set_fields(godot::Array source_fi
 					for (int axis = 0; axis < 3; ++axis) info.transform.position[axis] = 0.0f;
 					info.transform.rotationQuaternion[0] = info.transform.rotationQuaternion[1] = info.transform.rotationQuaternion[2] = 0.0f;
 					info.transform.rotationQuaternion[3] = 1.0f;
-					if (HoudiniApi::SetVolumeInfo(session, volume, 0, &info) != HAPI_RESULT_SUCCESS || HoudiniApi::SetHeightFieldData(session, volume, 0, field.name.c_str(), field.samples.data(), 0, static_cast<int>(field.samples.size())) != HAPI_RESULT_SUCCESS || !write_field_attrs(session, volume, field.attrs) || HoudiniApi::CommitGeo(session, volume) != HAPI_RESULT_SUCCESS) {
+					if (HoudiniApi::SetVolumeInfo(session, volume, 0, &info) != HAPI_RESULT_SUCCESS || HoudiniApi::SetHeightFieldData(session, volume, 0, field.name.c_str(), field.samples.data(), 0, static_cast<int>(field.samples.size())) != HAPI_RESULT_SUCCESS || !write_field_attrs(session, volume, field.attrs) || (write_volvis && field.name == "height" && !write_heightfield_volvis(session, volume)) || HoudiniApi::CommitGeo(session, volume) != HAPI_RESULT_SUCCESS) {
 						return fail_upload("Could not upload complete heightfield volume " + godot::String(field.name.c_str()));
+					}
+					HAPI_NodeId source = volume;
+					if (field.name == "mask" && !create_constant_border(session, new_object, volume, source)) {
+						return fail_upload("Could not give the mask field a constant border");
 					}
 					float matrix[16] = {};
 					HAPI_TransformEuler frame{};
 					HAPI_NodeId oriented = -1;
-					if (HoudiniApi::ConvertTransformQuatToMatrix(session, &field.transform, matrix) != HAPI_RESULT_SUCCESS || HoudiniApi::ConvertMatrixToEuler(session, matrix, HAPI_SRT, HAPI_XYZ, &frame) != HAPI_RESULT_SUCCESS || HoudiniApi::CreateNode(session, new_object, "xform", "field_basis", false, &oriented) != HAPI_RESULT_SUCCESS || HoudiniApi::ConnectNodeInput(session, oriented, 0, volume, 0) != HAPI_RESULT_SUCCESS) {
+					if (HoudiniApi::ConvertTransformQuatToMatrix(session, &field.transform, matrix) != HAPI_RESULT_SUCCESS || HoudiniApi::ConvertMatrixToEuler(session, matrix, HAPI_SRT, HAPI_XYZ, &frame) != HAPI_RESULT_SUCCESS || HoudiniApi::CreateNode(session, new_object, "xform", "field_basis", false, &oriented) != HAPI_RESULT_SUCCESS || HoudiniApi::ConnectNodeInput(session, oriented, 0, source, 0) != HAPI_RESULT_SUCCESS) {
 						return fail_upload("Could not create heightfield sample-frame transform");
 					}
 					for (int axis = 0; axis < 3; ++axis) {

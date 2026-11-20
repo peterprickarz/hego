@@ -79,6 +79,12 @@ The input row's terrain options decide what is sent:
 Each channel keeps its own grid. Read the grid size, position and orientation from the
 volumes themselves rather than assuming they match one another.
 
+When `height` is among the channels, the input also looks like a HeightField SOP's output:
+a zero-filled `mask` volume on exactly the `height` grid follows it (unless a `mask` channel
+is sent), the `mask` has a constant border of 0, and the geometry carries the HeightField
+SOP's `volvis` detail attribute, so the viewport tints the masked area red. The added `mask`
+has no `hegostrata_*` attributes.
+
 Every volume's height axis points up, as on a HeightField SOP's output, so HeightField nodes
 and the viewport read it the right way up. Strata's own grids run columns along +X and rows
 along +Z, which would point that axis down; HEGo transposes such a grid on upload, keeping

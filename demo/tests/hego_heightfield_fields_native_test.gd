@@ -154,3 +154,71 @@ func exercise() -> void:
 		check(item.sample_origin.distance_to(Vector3(-3.5, 0, -2.5)) < 0.00001 and item.sample_step_x == Vector3(0, 0, 1) and item.sample_step_y == Vector3(1, 0, 0), "native metadata matches real Houdini HeightField indexed sample centers and orientation")
 	# reset_node_id is an internal C++ lifecycle hook, not a script API. Its
 	# epoch/publication locking is reviewed natively; session cleanup invokes it.
+	await native_heightfield_shape()
+
+# Reports what a cook received: the detail volvis value types and each volume's border.
+const PROBE_CODE := """
+geo = hou.pwd().geometry()
+volvis = geo.dictAttribValue("volvis") if geo.findGlobalAttrib("volvis") else {}
+summary = ";".join("%s:%s:%s" % (key, type(volvis[key]).__name__, volvis[key] if isinstance(volvis[key], str) and not volvis[key].startswith("{") else "") for key in sorted(volvis))
+geo.addAttrib(hou.attribType.Prim, "probe_volvis", "")
+geo.addAttrib(hou.attribType.Prim, "probe_border", "")
+for prim in geo.prims():
+    prim.setAttribValue("probe_volvis", summary)
+    prim.setAttribValue("probe_border", prim.intrinsicValue("volumebordertype"))
+"""
+const NATIVE_VOLVIS := "cdfield:str:mask;cdramp:str:;cdrampperiodic:int:;cdrange:Vector2:;densityfield:str:height;densityramp:str:;densityrampperiodic:int:;densityrange:Vector2:;emitcdfield:str:;emitcdramp:str:;emitcdrampperiodic:int:;emitcdrange:Vector2:;emitfield:str:Alpha;emitramp:str:;emitrampperiodic:int:;emitrange:Vector2:;emitscale:float:;shadowscale:float:"
+
+func probe(input: HEGoHeightfieldInputNode, description: String) -> Array:
+	var asset := HEGoAssetNode.new()
+	asset.op_name = "Sop/python"
+	if not (await task_result(asset.instantiate(), description + ": Python SOP probe")).ok: return []
+	if not (await task_result(asset.set_parm("python", PROBE_CODE), description + ": probe code")).ok: return []
+	if not (await task_result(asset.connect_input(input, 0), description + ": connect probe")).ok: return []
+	var fetched := await task_result(asset.get_heightfield_fields(), description + ": fetch probed fields")
+	return fetched.result if fetched.ok else []
+
+func native_heightfield_shape() -> void:
+	# A height field alone gains a zero mask on exactly its grid, right after it; a
+	# channel on another grid is left alone.
+	var height := field("height", 5, 4, Vector3(-2, 0, 3), Vector3(0, 0, 1.5), Vector3(1.5, 0, 0))
+	var cliff := field("cliff", 3, 3, Vector3(7, 0, -1), Vector3(0, 0, 4), Vector3(4, 0, 0))
+	var input := HEGoHeightfieldInputNode.new()
+	if not (await task_result(input.set_fields([height, cliff]), "height-only field upload")).ok: return
+	var fields := await probe(input, "height-only fields")
+	var names := fields.map(func(item: Dictionary) -> String: return item.name)
+	check(names == ["height", "mask", "cliff"], "a default mask follows height and nothing else is added: %s" % [names])
+	if names != ["height", "mask", "cliff"]: return
+	var h: Dictionary = fields[0]
+	var m: Dictionary = fields[1]
+	check(m.resolution == h.resolution and m.sample_origin.is_equal_approx(h.sample_origin) and m.sample_step_x.is_equal_approx(h.sample_step_x) and m.sample_step_y.is_equal_approx(h.sample_step_y), "the default mask lies on exactly the height grid")
+	var zero := Image.create(m.image.get_width(), m.image.get_height(), false, Image.FORMAT_RF)
+	check(m.image.get_data() == zero.get_data(), "the default mask is zero-filled")
+	check(fields[2].resolution == Vector2i(3, 3), "a channel on its own grid keeps it")
+	check(h.attrs.get("probe_border") == "streak" and m.attrs.get("probe_border") == "constant" and fields[2].attrs.get("probe_border") == "streak", "like a native HeightField, only the mask has a constant border: %s" % [fields.map(func(item): return item.attrs.get("probe_border"))])
+	check(h.attrs.get("probe_volvis") == NATIVE_VOLVIS, "volvis matches the HeightField SOP's keys and value types: " + str(h.attrs.get("probe_volvis")))
+	# A supplied mask is kept, still with a constant border.
+	var mask := field("mask", 5, 4, Vector3(-2, 0, 3), Vector3(0, 0, 1.5), Vector3(1.5, 0, 0))
+	if not (await task_result(input.set_fields([height, mask]), "height and mask upload")).ok: return
+	fields = await probe(input, "height and supplied mask")
+	check(fields.size() == 2 and fields[1].name == "mask" and fields[1].image.get_data() == mask.image.get_data() and fields[1].attrs.get("probe_border") == "constant", "a supplied mask is kept as is, with a constant border")
+	# A caller's own volvis attribute is never overwritten.
+	var custom := field("height", 2, 2, Vector3.ZERO, Vector3(0, 0, 1), Vector3(1, 0, 0))
+	custom.attrs["volvis"] = "custom"
+	if not (await task_result(input.set_fields([custom]), "height with its own volvis")).ok: return
+	fields = await probe(input, "caller volvis")
+	check(fields.size() == 2 and fields[0].attrs.get("probe_volvis") == "", "no detail volvis is written over a caller's volvis attribute")
+	# Without height there is no mask and no volvis.
+	if not (await task_result(input.set_fields([cliff]), "field upload without height")).ok: return
+	fields = await probe(input, "no height")
+	check(fields.size() == 1 and fields[0].attrs.get("probe_volvis") == "", "without height, no mask or volvis is added")
+	# The legacy layer path matches.
+	var layer_image := Image.create(4, 4, false, Image.FORMAT_RF)
+	var layers := HEGoHeightfieldInputNode.new()
+	if not (await task_result(layers.set_layers({"height": {"image": layer_image}}), "legacy layer upload")).ok: return
+	fields = await probe(layers, "legacy layers")
+	var borders := {}
+	for item: Dictionary in fields: borders[item.name] = item.attrs.get("probe_border")
+	check(borders == {"height": "streak", "mask": "constant"}, "legacy layers: only the mask has a constant border: %s" % [borders])
+	check(fields.size() > 0 and fields[0].attrs.get("probe_volvis") == NATIVE_VOLVIS, "legacy layers carry the HeightField SOP's volvis")
+
