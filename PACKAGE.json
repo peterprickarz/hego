@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "package": "hego-strata-bundle",
-  "source_commit": "a37d08d385e04492a739dc8f4594ab9e29eed16c",
+  "source_commit": "3c973e5d1ab2ebd8ab38ef22b6e60e7f7b0cad9f",
   "addons": {"hego": "hego", "strata": "strata", "hego-strata": "hego_strata", "hego-terrain3d": "hego_terrain3d"},
   "requires": [],
   "external_requires": [{"name": "Terrain3D", "author": "TokisanGames", "url": "https://github.com/TokisanGames/Terrain3D", "addon_path": "addons/terrain_3d", "tested_version": "1.0.1", "installed_by": "user", "needed_by": ["hego-terrain3d"]}]
