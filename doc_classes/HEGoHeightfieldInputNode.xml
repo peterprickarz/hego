@@ -10,7 +10,9 @@ Each layer entry in the input dictionary is expected to be a dictionary with opt
 
 Layer names are normalized to lowercase and trimmed before processing.
 
-Calling [method set_layers] rebuilds the internal heightfield input node network for the new layer payload.
+Calling [method set_layers] rebuilds the internal heightfield input node network for the new layer payload. [method set_fields] uploads explicit fields, each on its own grid, instead.
+
+Both methods give the result the shape of a Houdini HeightField SOP's output, so HeightField nodes always have a [code]mask[/code] to work on and the viewport shows the mask as a red tint: a zero-filled [code]mask[/code] when none is supplied, a [code]constant[/code] border of [code]0[/code] on the [code]mask[/code] volume (the [code]height[/code] volume keeps its [code]streak[/code] border), and the HeightField SOP's [code]volvis[/code] detail attribute.
 </description>
 <tutorials>
 </tutorials>
@@ -25,6 +27,35 @@ If the node is already instantiated, the call returns immediately.
 The method requires an active Houdini session. On success, it stores the main node id plus internal height, mask, and merge node ids, then registers this wrapper with the session manager.
 
 On failure, all stored ids are reset to invalid values and an error is logged.
+</description>
+</method>
+<method name="set_fields">
+<return type="HEGoTask" />
+<param index="0" name="fields" type="Array" />
+<param index="1" name="force" type="bool" default="false" />
+<description>
+Submits a task that uploads explicit heightfield fields into a new private Houdini object and publishes it as this input once every field has uploaded and the result has cooked. If any step fails, the previous input stays in place.
+
+Each entry of [code]fields[/code] is a [Dictionary]:
+[codeblock]
+{
+    "name": "height",                     # exact volume name, case kept
+    "image": Image,                       # uncompressed FORMAT_RF, used as is
+    "sample_origin": Vector3(0, 0, 0),    # centre of sample (0, 0)
+    "sample_step_x": Vector3(1, 0, 0),    # one image column
+    "sample_step_y": Vector3(0, 0, 1),    # one image row
+    "attrs": {"label": "base"}            # optional primitive attributes
+}
+[/codeblock]
+
+Positions are SOP-local Houdini coordinates of sample centres. Each field keeps its own resolution, spacing and orientation; images are never converted or resized. Names must be unique. A grid whose height axis would point down is transposed so every volume's height axis points up, keeping each sample at its position. [code]attrs[/code] values may be [code]bool[/code], [code]int[/code], [code]float[/code], [String] or [Vector3]; the key [code]name[/code] is reserved.
+
+When a field named [code]height[/code] is present, the upload also matches a native HeightField:
+- If no field is named [code]mask[/code], a zero-filled [code]mask[/code] volume is added on exactly the [code]height[/code] grid (same resolution, sample positions and orientation) and merged directly after [code]height[/code].
+- The [code]height[/code] volume carries the HeightField SOP's [code]volvis[/code] detail dictionary: [code]height[/code] drives the surface and [code]mask[/code] tints it from white ([code]0[/code]) to red ([code]1[/code]). It is not written when any field supplies an attribute named [code]volvis[/code].
+Any field named [code]mask[/code], supplied or added, gets a [code]constant[/code] border of [code]0[/code]. Without a [code]height[/code] field, no mask or [code]volvis[/code] is added.
+
+The upload is hashed. An identical payload returns without rebuilding while the published input is still valid in the same session, unless [code]force[/code] is [code]true[/code]. At most 64 fields and 512 Mi samples are accepted per call. Invalid payloads fail before any task is queued.
 </description>
 </method>
 <method name="set_layers">
@@ -71,6 +102,7 @@ Resolution and defaults:
 - The first valid [code]image[/code] found across all layers sets the heightfield resolution.
 - If no valid image exists in any layer, the task fails with an error.
 - If [code]height[/code] and/or [code]mask[/code] are missing, they are created as zero-filled layers.
+- The [code]mask[/code] layer gets a [code]constant[/code] border of [code]0[/code], and the [code]height[/code] layer carries the HeightField SOP's [code]volvis[/code] detail dictionary unless any layer's [code]attrs[/code] contains a [code]volvis[/code] key.
 - Extra layers beyond [code]height[/code] and [code]mask[/code] are created as additional heightfield volume nodes.
 
 Notes on values:
