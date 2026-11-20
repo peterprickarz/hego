@@ -1,6 +1,6 @@
 # HEGo Copia package
 
-This package is built from source commit a37d08d385e04492a739dc8f4594ab9e29eed16c. It writes Houdini Digital Asset
+This package is built from source commit 3c973e5d1ab2ebd8ab38ef22b6e60e7f7b0cad9f. It writes Houdini Digital Asset
 points into a Copia instancing store and sends a store's cells to an HDA input.
 It requires both other packages from the same source revision: HEGo at
 `addons/hego` and Copia at `addons/copia`. See `PACKAGE.json` for their
