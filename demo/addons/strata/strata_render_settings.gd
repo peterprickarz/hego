@@ -251,7 +251,7 @@ func parameters() -> Dictionary:
 		if value not in [64, 128, 256] or surface_cache_page_size == value: return
 		surface_cache_page_size = value
 		emit_changed()
-## Pages the pool holds (about 0.3 MB each at 128 cells): those on screen plus a reserve that
+## Pages the pool holds (about 0.25 MB each at 128 cells, 1 MB at 256): those on screen plus a reserve that
 ## saves evaluating them again. When the screen requests more than fit, the cache reads coarser
 ## mips until they do (stats.surface_cache.pressure_bias, a softer surface): a 4K view at lod
 ## bias 0 requests about 1,500 to 2,500 pages, a 1440p view about a third of that.

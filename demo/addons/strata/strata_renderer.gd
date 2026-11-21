@@ -728,6 +728,7 @@ func _update_surface_cache(local_camera: Vector3) -> void:
 	_surface_cache.page_fills_per_frame = render_settings.surface_cache_page_fills_per_frame
 	_surface_cache.publish_globals = render_settings.surface_cache_publish_globals
 	var configured := _surface_cache.configure(_render_bounds, render_settings.surface_cache_texels_per_metre, render_settings.surface_cache_page_size, render_settings.surface_cache_pool_pages)
+	_surface_cache.set_height_range(_height_min, _height_max)
 	_stats.surface_cache = _surface_cache.stats
 	if not configured:
 		# The page table would be too large (stats.surface_cache.status says so): no cache.
@@ -749,7 +750,7 @@ func _update_surface_cache(local_camera: Vector3) -> void:
 	if _surface_cache.feedback_active:
 		var layout := _surface_cache.lookup_layout()
 		_vt_feedback.set_lookup(_source.global_transform.affine_inverse(), _surface_cache.texel, _surface_cache.page_size, _surface_cache.top_mip, lod_bias, anisotropy, Vector2i(layout.x, layout.y), layout.z, _render_bounds)
-		_vt_feedback.set_ground(_surface_cache.page_table_texture, _surface_cache.height_texture, layout.w, _SurfaceCache.BORDER)
+		_vt_feedback.set_ground(_surface_cache.page_table_texture, _surface_cache.height_texture, layout.w, _SurfaceCache.BORDER, _surface_cache.height_decode())
 		_surface_cache.feedback_keys = _vt_feedback.take_requests()
 		_stats.surface_cache_feedback = _vt_feedback.get_stats()
 	# Other shaders read the displaced ground, whether or not the terrain takes its relief here.

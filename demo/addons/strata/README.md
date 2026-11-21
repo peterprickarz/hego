@@ -113,6 +113,6 @@ whose roads are 209 writer meshes, not in this repository's demo):
 - A cold start over a road drew 314 tiles for 631 pages in under 120 frames (at 8 tiles per
   frame).
 - A writer change over a 40 m square redrew the 24 pages on screen there.
-- Memory: the cover atlas is one of the cache's 17 bytes per cell. Writer viewports take about
+- Memory: the cover atlas is one of the cache's 13 bytes per cell. Writer viewports take about
   1 MB each for 128-cell pages, at most `max_viewports` (32); they are created on demand and
   freed after `idle_release_seconds` (5) unused, one kept.

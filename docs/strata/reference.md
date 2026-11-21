@@ -262,14 +262,14 @@ page with a border of 4 cells of its neighbours on every side, so filtering and 
 never leave the slot. A page table (one R16 texture with a mip per page mip, one texel per
 page) holds each resident page's slot. It may not exceed 4096 texels per side: a terrain wider
 than 4096 pages of mip 0 needs larger pages or fewer texels per metre, and the cache says so
-in its status and stays off. Memory is 17 bytes per cell, 0.31 MB per slot of a 128-cell page:
-360 MB at the defaults, plus the page table (45 MB at 4096 pages per side).
+in its status and stays off. Memory is 13 bytes per cell, 0.24 MB per slot of a 128-cell page:
+about 275 MB at the defaults, plus the page table (45 MB at 4096 pages per side).
 
 | Atlas (2D array) | Per cell |
 | --- | --- |
 | albedo, RGBA8 | sRGB albedo after the terrain tint map; A: material AO × macro AO |
 | normal, RGBA8 | octahedral unit normal (terrain-local, around +Y); B: roughness; A: metallic |
-| height, R32F, two layers per atlas layer | at the cell corner: base height (−1e30 in holes), and the raw material relief before `displacement_strength` and the camera fade |
+| height, RG16 unorm | at the cell corner: R base height over the terrain's height range (snapped outward to 32 m, so about 1 cm per step over 600 m; 0 in holes), G the raw material relief before `displacement_strength` and the camera fade, over ±8 m |
 | cover, R8 | how much of the cell surface writers replaced (0 none) |
 
 **Which pages are resident.** Three things request pages each frame:

@@ -192,11 +192,11 @@ uniform float surface_cache_bake_lod_bias = -1.0;
 // Relief of a mip at an atlas position, bilinear between the cell corners (texel g holds the
 // corner of cell g) or of the cell itself.
 float vt_relief_linear(vec3 at) {
-	return textureLod(vt_height_linear, vec3((at.xy + vec2(0.5)) / vec2(textureSize(vt_height_linear, 0).xy), at.z * 2.0 + 1.0), 0.0).r;
+	return strata_vt_relief(textureLod(vt_height_linear, vec3((at.xy + vec2(0.5)) / vec2(textureSize(vt_height_linear, 0).xy), at.z), 0.0).g);
 }
 
 float vt_relief_cell(vec3 at) {
-	return texelFetch(vt_height, ivec3(ivec2(floor(at.xy)), int(at.z) * 2 + 1), 0).r;
+	return strata_vt_relief(texelFetch(vt_height, ivec3(ivec2(floor(at.xy)), int(at.z)), 0).g);
 }
 
 // Displacement relief (terrain_material_relief() as the cache holds it) from the relief mip: a
@@ -208,11 +208,11 @@ bool vt_relief(vec2 position, out float relief) {
 	if (vt_relief_mip < 0 || !strata_vt_locate(position, vt_relief_mip, at)) { return false; }
 	ivec2 first = ivec2(floor(at.xy));
 	vec2 f = at.xy - vec2(first);
-	int layer = int(at.z) * 2 + 1;
-	float a = texelFetch(vt_height, ivec3(first, layer), 0).r;
-	float b = texelFetch(vt_height, ivec3(first + ivec2(1, 0), layer), 0).r;
-	float c = texelFetch(vt_height, ivec3(first + ivec2(0, 1), layer), 0).r;
-	float d = texelFetch(vt_height, ivec3(first + ivec2(1, 1), layer), 0).r;
+	int layer = int(at.z);
+	float a = strata_vt_relief(texelFetch(vt_height, ivec3(first, layer), 0).g);
+	float b = strata_vt_relief(texelFetch(vt_height, ivec3(first + ivec2(1, 0), layer), 0).g);
+	float c = strata_vt_relief(texelFetch(vt_height, ivec3(first + ivec2(0, 1), layer), 0).g);
+	float d = strata_vt_relief(texelFetch(vt_height, ivec3(first + ivec2(1, 1), layer), 0).g);
 	relief = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 	return true;
 }
