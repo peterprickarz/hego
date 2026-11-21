@@ -4,7 +4,14 @@ Getting Started
 License Requirements
 --------------------
 
-You need a full Houdini FX, Core, or commercial Houdini Engine license to use this integration.
+You need a Houdini FX, Core, Indie, or commercial Houdini Engine license to use this integration.
+
+Houdini Indie requires Houdini 22.0.510 or later. HEGo identifies itself to Houdini Engine as a
+Godot client by setting ``HAPI_CLIENT_NAME=godot``, which is what lets Houdini Engine accept an
+Indie license. Earlier builds ignore it and still require a commercial license.
+
+This applies to sessions HEGo starts itself. If you connect to a Houdini Engine server that was
+already running, start that server with ``HAPI_CLIENT_NAME=godot`` in its environment as well.
 
 Houdini
 -------

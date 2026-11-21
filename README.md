@@ -76,7 +76,7 @@ bridges).
 
 ## Requirements
 
-- **Houdini 22.0.429** - No license needed for building, active commercial(FX,Core or Houdini Engine) license required for runtime
+- **Houdini 22.0.429** - No license needed for building, active FX, Core, Indie or commercial Houdini Engine license required for runtime (Indie needs Houdini 22.0.510 or later)
 - **Godot 4.7+** - tested on 4.7.2; stable or newer versions supported  
 
 ## Developer Setup
