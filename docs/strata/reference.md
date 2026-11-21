@@ -272,6 +272,22 @@ about 275 MB at the defaults, plus the page table (45 MB at 4096 pages per side)
 | height, RG16 unorm | at the cell corner: R base height over the terrain's height range (snapped outward to 32 m, so about 1 cm per step over 600 m; 0 in holes), G the raw material relief before `displacement_strength` and the camera fade, over ±8 m |
 | cover, R8 | how much of the cell surface writers replaced (0 none) |
 
+**Block compression (not yet used by the cache).** `StrataBlockEncoder`
+(`strata_block_encoder.gd`) compresses regions of an RGBA8 texture array on the GPU into a
+BC7 or BC5 texture array. A compute pass writes one 16-byte block per thread into an RGBA32UI
+scratch texture, and `texture_copy()` moves the blocks into the target. Vulkan allows that copy
+between formats of the same block size. Godot's D3D12 driver cannot create a BC texture that is
+a copy destination: `StrataBlockEncoder.target_supported()` says so, and callers keep
+uncompressed data there. BC7 tries modes 6 and 5, then mode 7 on the one partition (of the
+first 16) that a line-fit estimate ranks best, plus modes 1 and 3 for opaque blocks, and keeps
+the one with the least squared error. A texel's index comes from its projection onto the
+palette's line. BC5 encodes two chosen source channels as BC4 blocks, in the 8-level form or
+the 6-level form with exact 0 and 255. Measured on 24 resident 256-cell pages of a test terrain
+(98,304 blocks, RX 9070 XT): BC7 took 0.8 to 1.1 ms, with a mean error of 2.94/255 against 3.29
+for Godot's offline BC7 encoder and 19% of texels off by over 4/255 against 23%. BC5 took
+0.45 ms for normals and 0.26 ms for roughness and metallic, slightly more accurate than Godot's
+offline BC5. Call `free_resources()` on the render thread before the RenderingDevice goes away.
+
 **Which pages are resident.** Three things request pages each frame:
 
 - The screen. With `surface_cache_feedback` (default on) a compute pass after the opaque pass
