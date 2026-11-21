@@ -32,6 +32,24 @@ enum Shadow {
 	LOW_LOD,
 }
 
+enum DebugView {
+	## Normal drawing.
+	OFF,
+	## Flat green, lit, impostors included: shows which instances use these settings.
+	HIGHLIGHT,
+	## A random colour per MultiMesh batch (per instance in [constant DrawMode.INSTANCE]).
+	BATCHES,
+	## The mesh LOD Godot draws: 0 green, 1 yellow, 2 orange, 3 red, 4 magenta, 5 and above
+	## purple; impostors black. Godot picks one LOD per rendering instance, so per whole batch.
+	LOD,
+	## Shadows as the drawer sets them: grey none, red casting (no range, or within
+	## [member shadow_range]), yellow in the hysteresis band, blue beyond it.
+	SHADOW_RANGE,
+	## Instances drawn although entirely behind other geometry: red, seen through what hides
+	## them, over dim grey for the rest. Forward+ and Mobile only.
+	HIDDEN,
+}
+
 ## Emitted when a property that changes what the build produces is set: [member draw_mode] or
 ## [member batch_size]. [signal Resource.changed] is emitted too.
 signal build_inputs_changed
@@ -115,11 +133,29 @@ signal build_inputs_changed
 		impostor_range_end = maxf(value, 0.0)
 		_changed(false)
 
+@export_group("Debug")
+## Viewport debug view of the instances that use these settings, in every store; see
+## [enum DebugView] and the reference page, "Debug views". Overrides
+## [member CopiaStore3D.debug_view] unless [constant DebugView.OFF]. Editor and debug state:
+## shown in the inspector but never saved, so a resource file or a game never carries it. Not a
+## build input. The views replace the material, so alpha-cutout foliage draws as solid cards.
+@export var debug_view: DebugView = DebugView.OFF:
+	set(value):
+		if debug_view == value: return
+		debug_view = value
+		_changed(false)
+
+
+func _validate_property(property: Dictionary) -> void:
+	if property.name == "debug_view":
+		property.usage = PROPERTY_USAGE_EDITOR
+
 
 ## The values the drawer applies when it creates rendering objects. [code]fade_mode[/code] and
 ## [code]cast_shadows[/code] are [RenderingServer] enum values. A [constant Shadow.LOW_LOD]
 ## object draws with [code]cast_shadows[/code] off and [code]low_lod_shadows[/code] true: the
-## drawer adds the shadows-only instance.
+## drawer adds the shadows-only instance. [member debug_view] is not among them: the store
+## applies it after every draw params hook.
 func draw_params() -> Dictionary:
 	var fade := RenderingServer.VISIBILITY_RANGE_FADE_DISABLED
 	if fade_mode == FadeMode.SELF and draw_mode == DrawMode.MULTIMESH:

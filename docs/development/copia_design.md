@@ -589,6 +589,13 @@ draw params are passed. A call that changes nothing costs 1.6 µs per group in a
 1.0 µs per group through `set_groups_params`. `CopiaStore3D` passes only the keys of the object's
 draw params that changed, one `set_groups_params` call per range scale.
 
+The store builds an object's params as: the object's hook (`_get_draw_params()` or
+`_get_impostor_draw_params()`), then the store's draw override merged in, then the debug view
+(`copia_debug.gd`, see the reference page, "Debug views"), which replaces only
+`material_override` and, for the LOD view, `mesh` with cached resources. A debug view change
+therefore reaches the live groups through the same diff as any object change: one
+`material_override` key (and a mesh swap for LOD), no build.
+
 A batch's transform is the store transform × a translation to the batch origin; its multimesh is
 allocated with colour and custom data, gets the section's buffer unchanged (the drawer does not
 read or convert it) and `multimesh_set_custom_aabb` with the batch bounds. A single instance's

@@ -43,6 +43,7 @@ signal build_finished(report: Dictionary)
 const ObjectScript := preload("res://addons/copia/copia_object.gd")
 const RenderScript := preload("res://addons/copia/copia_render_settings.gd")
 const SourceScript := preload("res://addons/copia/copia_source_3d.gd")
+const DebugScript := preload("res://addons/copia/copia_debug.gd")
 const EXTENSION := "res://addons/copia/bin/copia.gdextension"
 ## Seconds between the last build input change of an object and the rebuild it causes.
 const REBUILD_DELAY := 0.5
@@ -182,6 +183,21 @@ class _Record extends RefCounted:
 		if not value and Engine.is_editor_hint():
 			_unload_all()
 
+@export_group("Debug")
+## Viewport debug view of every object of the store, for objects whose render settings'
+## [member CopiaRenderSettings.debug_view] is off (theirs wins otherwise); see
+## [enum CopiaRenderSettings.DebugView] and the reference page, "Debug views". Applied to the live
+## groups at once, like a draw override, with no build. Editor and debug state: shown in the
+## inspector but never saved with the scene.
+@export var debug_view: RenderScript.DebugView = RenderScript.DebugView.OFF:
+	set(value):
+		if debug_view == value: return
+		debug_view = value
+		for path in _objects:
+			if _objects[path] != null:
+				_apply_draw_params(_objects[path])
+		_report_debug_views()
+
 ## Rebuild the cells an object change makes stale (debounced, on a background thread), and
 ## check for stale cells when the node becomes ready. On by default in the editor and off in a
 ## running game; a tool script can turn it on before adding the node.
@@ -247,10 +263,16 @@ var _was_settled := true
 var _excluded_rects: Array[Rect2] = []  # run-time state, see set_excluded_rects
 var _draw_overrides := {}  # object path -> params merged into its draw params
 var _impostor_overrides := {}  # object path -> params merged into its impostor draw params
+var _debug_views := {}  # object path -> its debug view, for objects drawn with one
 
 
 func _init() -> void:
 	set_notify_transform(true)
+
+
+func _validate_property(property: Dictionary) -> void:
+	if property.name == "debug_view":
+		property.usage = PROPERTY_USAGE_EDITOR  # shown, never saved
 
 
 func _ready() -> void:
@@ -291,6 +313,7 @@ func _process(delta: float) -> void:
 	_drain_results()
 	_check_replacements()
 	_poll_build(delta)
+	DebugScript.sync_hidden()
 	if SourceScript._revision != _source_revision:
 		_update_needed = true  # a source entered, left or changed
 	_timer += delta
@@ -912,6 +935,7 @@ func _start() -> void:
 		_push_objects()
 	# Sources present now are found by the first regular update; later changes force one.
 	_source_revision = SourceScript._revision
+	_report_debug_views()
 	_scan()
 
 
@@ -931,6 +955,7 @@ func _stop() -> void:
 	_update_needed = false
 	_was_settled = true
 	_sources_known = false
+	_report_debug_views()  # nothing drawn: no view in use
 
 
 static func _ensure_native() -> bool:
@@ -1100,6 +1125,7 @@ func _info(path: String) -> Variant:
 	_refresh_info(info)
 	_objects[path] = info
 	_ranges_dirty = true
+	_report_debug_views()
 	return info
 
 
@@ -1193,14 +1219,41 @@ func _on_object_changed(path: String) -> void:
 	update_configuration_warnings()
 
 
-# The object's draw params (or impostor draw params) with the run-time override merged in.
+# The object's draw params (or impostor draw params) with the run-time override merged in, then
+# its debug view applied: after the hooks and the override, so a game's own material_override is
+# replaced too, and only the material (and for the LOD view the mesh) changes.
 func _object_params(object, path: String, impostor: bool) -> Dictionary:
 	var params: Dictionary = object._get_impostor_draw_params() if impostor else object._get_draw_params()
 	var override: Dictionary = (_impostor_overrides if impostor else _draw_overrides).get(path, {})
 	if not override.is_empty():
 		params = params.duplicate()
 		params.merge(override, true)
-	return params
+	var view := DebugScript.effective_view(object, debug_view)
+	if view == RenderScript.DebugView.OFF:
+		_debug_views.erase(path)
+		return params
+	_debug_views[path] = view
+	var batch_size := 0.0
+	var store_inverse := Transform3D.IDENTITY
+	if view == RenderScript.DebugView.BATCHES or view == RenderScript.DebugView.SHADOW_RANGE:
+		var descriptor: Dictionary = object.descriptor(impostor_cell_size)
+		if impostor:
+			batch_size = impostor_cell_size
+		elif descriptor.draw == "multimesh":
+			batch_size = descriptor.batch_size
+		if is_inside_tree():
+			store_inverse = global_transform.affine_inverse()
+	return DebugScript.apply(params, object, impostor, view, batch_size, store_inverse, path.hash() & 0x7fffffff)
+
+
+# Tells the debug views which views this store draws with, so caches no store uses are released.
+# Called after the drawer has the new params; nothing is in use while the node is out of the world.
+func _report_debug_views() -> void:
+	var views := {}
+	if _drawer != null:
+		for path in _debug_views:
+			views[_debug_views[path]] = true
+	DebugScript.set_store_views(get_instance_id(), views)
 
 
 # Passes the draw params that changed since the live groups were given theirs (an object change
@@ -1244,6 +1297,7 @@ func _apply_draw_params(info: Dictionary, physics_changed := false) -> void:
 			var record: _Record = _live[cell].get(path, {}).get("draw")
 			if record != null and record.group != 0:
 				_link_child(record)  # the swap distance follows the range end
+	_report_debug_views()
 
 
 # The keys of [param now] whose value differs from [param before] (every key when there was none).

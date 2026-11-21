@@ -71,6 +71,7 @@ How an object's instances are drawn. Variations of a thing share one resource.
 | `layers` | render layers flags | 1 | Render layers the instances are drawn on. | load |
 | `gi_mode` | `GeometryInstance3D.GIMode` | `GI_MODE_STATIC` | Global illumination mode. | load |
 | `impostor_range_end` | `float` | 0 | Distance in metres beyond which the impostor is not drawn. 0 is unlimited. | load |
+| `debug_view` | `DebugView` | `OFF` | Viewport debug view of the instances using these settings, in every store; overrides the store's `debug_view` unless `OFF`. See "Debug views". Shown in the inspector, never saved. | load |
 
 The far grid's cell size is the store's `impostor_cell_size`, not a render setting.
 
@@ -167,6 +168,7 @@ unscaled. It creates no child nodes and nothing it creates is saved with the sce
 | `density` | `float` | 1.0 | Fraction of each batch drawn, by keep value. |
 | `collider_distance` | `float` | 50.0 | Collider distance for objects whose physics settings give none. 0: colliders follow the draw range. |
 | `editor_preview` | `bool` | true | Stream around the editor camera. |
+| `debug_view` | `CopiaRenderSettings.DebugView` | `OFF` | Viewport debug view of every object whose render settings' `debug_view` is `OFF`. See "Debug views". Applied to the live groups at once; shown in the inspector, never saved. |
 | `watch_objects` | `bool` | editor: true, game: false | Not exported. Rebuild what an object change makes stale and check for stale cells when the node is ready. A tool script can set it before adding the node. |
 
 Writing and building (editor and tool scripts). Each call first waits for a background build
@@ -335,6 +337,80 @@ reduced source also applies to any other view that happens to see it. Values a g
 instance data at build time (for example a fade distance in the instance colour read by a shader)
 do not follow `range_scale`. Every separate neighbourhood is more memory, more server objects and
 more creation work under the same `frame_budget_usec`.
+
+## Debug views
+
+`CopiaRenderSettings.debug_view` (the instances using that settings resource) and
+`CopiaStore3D.debug_view` (every object of the store) colour what the drawer draws. An object
+takes its settings' view unless that is `OFF`, else the store's. Both are editor and debug state:
+the property is shown in the inspector but has no storage flag, so a `.tres` or a scene never
+stores it and a game never ships one. Changing it emits `changed`, not `build_inputs_changed`:
+the store re-applies the object's params to its live groups at once, with no build.
+
+| View | Colours |
+| --- | --- |
+| `OFF` | Normal drawing. |
+| `HIGHLIGHT` | Flat green, lit so shapes read, impostors included. |
+| `BATCHES` | A random colour per MultiMesh batch (per object and batch cell); in `INSTANCE` draw mode a colour per instance. Impostor batches likewise, one per far cell. |
+| `LOD` | The mesh LOD Godot draws: 0 green, 1 yellow, 2 orange, 3 red, 4 magenta, 5 and above purple. Impostors black. A mesh without LODs is green. |
+| `SHADOW_RANGE` | What the drawer does with shadows: grey casts none (shadow off, no low-LOD shadows); red casts (no `shadow_range`, or within it); yellow in the hysteresis band (`shadow_range` to `shadow_range` + `shadow_range_margin`, where an object keeps the state it had); blue beyond. Measured to the camera drawing it rather than to the store's sources, and for a batch from the centre of its batch cell rather than its exact origin (see below), so a batch shows one state but near the boundary may show the wrong one. Impostors show their own shadow params. |
+| `HIDDEN` | Every instance dim grey; instances drawn although nothing of their bounds can be seen show red and half transparent through whatever hides them, so dense hidden layers glow. |
+
+How they work. The store applies the view in its params flow, after the object's
+`_get_draw_params()` / `_get_impostor_draw_params()` hooks and its draw overrides: it replaces
+`material_override` (and for `LOD` the `mesh`) and leaves every other value, so a subclass's own
+material is replaced too and ranges, shadows and LOD bias stay as drawn. A material override wins
+over per-surface materials, so single instances need nothing else. Materials are cached (per
+shadow setting for `SHADOW_RANGE`, per mesh for `HIDDEN`) and released when no store uses the
+view.
+
+- `LOD`: no shader can read which LOD Godot chose, so the view draws a copy of the object's mesh
+  made for it: per surface one copy of the vertices for the base and for each LOD, the level
+  written into UV2.x, each LOD's indices moved to its own copy under the same edge lengths.
+  Godot then selects exactly the LOD it would select for the real mesh, and the shader colours
+  by UV2.x. The copy (no colours, bones, custom channels or blend shapes) is cached per mesh
+  while any store uses the view. Godot picks one LOD per rendering instance, from its bounds:
+  a whole MultiMesh batch switches LOD together, which the view shows as batch-sized patches.
+- `BATCHES` and `SHADOW_RANGE` cannot tell which MultiMesh an instance belongs to: in a
+  MultiMesh both `MODEL_MATRIX` and `NODE_POSITION_WORLD` include the instance's own transform.
+  They find its batch the way the build forms batches, from the instance origin in store space:
+  batch cell `floor(x / batch_size), floor(z / batch_size)`, or the far cell for an impostor.
+  `BATCHES` hashes the cell and the object's path; `SHADOW_RANGE` measures from the cell centre
+  at the instance's height, where the drawer measures from the centre of the batch's bounds, so
+  its boundary is off by up to half a batch. Single instances use their own origin, exactly. A
+  store that moves after the view is turned on keeps the old transform until the view is set
+  again.
+- `HIDDEN` tests each instance, not each pixel. A compositor effect runs before each viewport's
+  transparent pass (the opaque depth is then complete; the Mobile renderer calls no post-opaque
+  effect) and reduces its depth buffer to a farthest-depth pyramid (level 0 half the internal
+  resolution, then halving to 1 x 1; depth is reversed, so farthest is the minimum). In the
+  transparent pass of the same viewport a second material pass projects the instance's mesh
+  bounds (with the MultiMesh instance transform) to a screen rectangle and its nearest depth,
+  reads the pyramid at the level where the rectangle covers at most 2 x 2 texels, and marks the
+  instance hidden when its nearest depth is farther than the farthest depth over the rectangle.
+  Visible instances collapse to a point and cost no fragments. The test errs toward visible: an
+  instance is marked hidden only when the whole of its bounds lies behind the opaque depth, so one
+  whose bounds reach past an occluder's edge counts as visible even where its mesh does not, and
+  bounds crossing the near plane count as visible. Its own surface cannot hide it (that surface
+  is never nearer than its bounds), and a small depth tolerance keeps coplanar cases visible.
+  With MSAA the resolved depth is read on Forward+; the Mobile renderer resolves no depth for
+  effects, so with MSAA on Mobile every instance shows as visible. The effect is put on the
+  compositor of each 3D editor viewport camera (in a game, the viewport camera of each store
+  using the view) while some store uses the view, and taken off afterwards: a camera's own
+  unsaved compositor gets it added, otherwise the camera gets a new compositor holding the
+  effects it rendered with plus this one, and gets its previous one back afterwards. Saved
+  compositors and the scene's `WorldEnvironment` are not changed in the editor, and a scene
+  camera being previewed in the editor gets no effect (the view is then wrong in that viewport).
+  Each frame the store checks that every camera's compositor still holds the effect and puts it
+  back otherwise, so it coexists with other addons that rebuild a camera's compositor. Requires
+  Forward+ or Mobile (compositor effects); the view does not work in the Compatibility renderer.
+  Cost: one compute pass over the depth buffer per viewport and frame, a 32-bit pyramid texture
+  sized for the largest viewport (about 22 MB at 4K), and per instance a vertex pass that projects
+  eight corners and reads four texels. Multiview (XR) viewports use their first view only.
+
+Limits. Every view replaces the material, so alpha-cutout foliage draws as solid cards and
+vertex animation (wind) stops. The views are drawn with both faces. A low-LOD shadow twin takes
+the view's material as well; it only draws shadows.
 
 ## Not written yet
 
