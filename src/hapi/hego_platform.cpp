@@ -76,13 +76,18 @@ void HEGoPlatform::set_env_vars()
 	const char *current_path = std::getenv("PATH");
 	std::string path = current_path ? current_path : "";
 
+	// HAPI_CLIENT_NAME=godot lets Houdini Engine accept a Houdini Indie license for this
+	// client (Houdini 22.0.510 and later; older builds ignore it). Servers HEGo starts
+	// inherit it; a server that was already running keeps its own environment.
 #ifdef _WIN32
+	_putenv("HAPI_CLIENT_NAME=godot");
 	_putenv(("HFS=" + std::string(houdiniBasePath)).c_str());
 	if (!path.empty())
 		path += ";";
 	path += houdiniBinPath;
 	_putenv(("PATH=" + path).c_str());
 #else
+	setenv("HAPI_CLIENT_NAME", "godot", 1);
 	setenv("HFS", houdiniBasePath, 1);
 	if (!path.empty())
 		path += ":";
