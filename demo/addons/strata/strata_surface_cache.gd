@@ -55,6 +55,8 @@ const PINNED_PAGES := 64
 ## A missing page stays wanted this many frames after its last request (the feedback pass
 ## samples each pixel once in 64 frames).
 const PENDING_FRAMES := 96
+## Slots per row of debug_slot_image().
+const DEBUG_SLOT_WIDTH := 256
 const GLOBAL_PARAMETERS := {
 	"strata_cache_page_table": RenderingServer.GLOBAL_VAR_TYPE_SAMPLER2D,
 	"strata_cache_albedo": RenderingServer.GLOBAL_VAR_TYPE_SAMPLER2DARRAY,
@@ -78,6 +80,8 @@ const _OBSOLETE_GLOBALS := ["strata_cache_windows_a", "strata_cache_windows_b", 
 ## Pages waiting for a writer tile at most, and missing pages looked at per frame at most.
 const _MAX_AWAITING := 64
 const _MAX_SCANNED := 256
+## Slots the background refresh looks at per frame at most.
+const _REFRESH_SCAN := 256
 ## Frames a requested page counts as on screen and keeps its slot: the feedback pass reports a
 ## visible page once per sampling cycle (not every frame), a frame or two late; the camera
 ## squares request theirs every frame.
@@ -302,6 +306,10 @@ var page_size := 128
 var pool_pages := 1024
 ## Pages evaluated per frame at most (pages drawn with a writer tile come on top).
 var page_fills_per_frame := 32
+## On-screen pages a surface writer touches that are drawn again per frame while no requested
+## page waits (0: never). Writer materials that change slowly, such as rain wetness, reach the
+## cache this way without an invalidation; stats.refresh_cycle_frames is a full pass.
+var refresh_pages_per_frame := 2
 ## Half-size in cells, per mip, of the square around the camera whose pages are requested while
 ## no feedback names the visible pages.
 var ring_cells := 448
@@ -376,6 +384,13 @@ var _pressure_hold := 0
 var _on_screen_frames := _ON_SCREEN_SQUARES
 var _pinned: Array[Vector3i] = []
 var _frame := 0
+## Next slot the background refresh looks at, and the frame its pass started.
+var _refresh_cursor := 0
+var _refresh_pass_start := 0
+## Pages the background refresh queued, until they are drawn (for debug_slot_image()).
+var _refreshing := {}
+## Per slot: Time.get_ticks_msec() of its last fill (for debug_slot_image()).
+var _slot_filled_msec := PackedInt64Array()
 ## Every resident page is stale: the material or the shader variant changed.
 var _refill := false
 ## Set on the render thread when a request could not run (a map not uploaded yet): the main
@@ -548,6 +563,9 @@ func _drop_all() -> void:
 	_slot_key.fill(null)
 	_slot_used.resize(pool_pages)
 	_slot_used.fill(-1000)
+	_slot_filled_msec.resize(pool_pages)
+	_slot_filled_msec.fill(0)
+	_refreshing.clear()
 	_free.clear()
 	for slot in range(pool_pages - 1, -1, -1): _free.append(slot)
 
@@ -643,6 +661,64 @@ func _key_of_slot_cells(mip: int, first: Vector2i) -> Vector3i:
 
 ## The slot of a page, taking a free one or evicting the least recently requested page for it
 ## (not those requested within the on-screen frames). -1 when none can go.
+## Background refresh: while every requested page is resident and current or waits for its
+## writer tile, the on-screen pages a surface writer touches are queued again in slot order,
+## refresh_pages_per_frame at a time. Each keeps its slot and its content until the tile is drawn.
+func _refresh_writer_pages(writers: Node) -> void:
+	stats.refreshed_last_frame = 0
+	if refresh_pages_per_frame <= 0 or _slot_key.is_empty() or not bool(writers.call("has_writers")): return
+	if _awaiting.size() > 2 * refresh_pages_per_frame: return
+	for key: Vector3i in _asked:
+		if not _awaiting.has(key): return
+	var picked := 0
+	for scanned in mini(_REFRESH_SCAN, _slot_key.size()):
+		if picked >= refresh_pages_per_frame: break
+		var slot := _refresh_cursor
+		_refresh_cursor += 1
+		if _refresh_cursor >= _slot_key.size():
+			_refresh_cursor = 0
+			stats.refresh_cycle_frames = _frame - _refresh_pass_start
+			_refresh_pass_start = _frame
+		if _slot_key[slot] == null or _slot_used[slot] <= _frame - _on_screen_frames: continue
+		var key: Vector3i = _slot_key[slot]
+		if _awaiting.has(key) or _asked.has(key): continue
+		if not writers.call("queue_rect", key.z, _slot_cells(key)): continue
+		_awaiting[key] = _frame
+		_asked[key] = _frame
+		_refreshing[key] = true
+		picked += 1
+	stats.refreshed_last_frame = picked
+
+
+func _filled(key: Vector3i, slot: int) -> void:
+	_slot_filled_msec[slot] = Time.get_ticks_msec()
+	_refreshing.erase(key)
+
+
+## Debug: one texel per slot (DEBUG_SLOT_WIDTH texels per row), R the slot's state (0 free, 1
+## current, 2 stale, 3 waiting for its writer tile, 4 being refreshed in the background), G its
+## age since the last fill over [param age_window] seconds (1 at or beyond it). Read by the
+## terrain shader's surface cache debug views.
+func debug_slot_image(age_window: float) -> Image:
+	var count := _slot_key.size()
+	var rows := maxi(ceili(float(count) / DEBUG_SLOT_WIDTH), 1)
+	var data := PackedByteArray()
+	data.resize(DEBUG_SLOT_WIDTH * rows * 2)
+	var now := Time.get_ticks_msec()
+	var window := maxf(age_window, 0.001) * 1000.0
+	for key: Vector3i in _refreshing.keys():
+		if not _awaiting.has(key): _refreshing.erase(key)
+	for slot in count:
+		var key: Variant = _slot_key[slot]
+		if key == null: continue
+		var state := 1
+		if _awaiting.has(key): state = 4 if _refreshing.has(key) else 3
+		elif _dirty.has(key): state = 2
+		data[slot * 2] = state
+		data[slot * 2 + 1] = int(clampf(float(now - _slot_filled_msec[slot]) / window, 0.0, 1.0) * 255.0)
+	return Image.create_from_data(DEBUG_SLOT_WIDTH, rows, false, Image.FORMAT_RG8, data)
+
+
 func _acquire_slot(key: Vector3i, updates: Array) -> int:
 	var slot := -1
 	if _resident.has(key):
@@ -787,6 +863,7 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 			var item := _work_item(key, slot)
 			item.append_array([int(tile[3]), tile[2], int(tile[4])])
 			work.append(item)
+			_filled(key, slot)
 			if not sets.has(int(tile[3])): sets[int(tile[3])] = writers.call("set_texture", int(tile[3]))
 	var fills := 0
 	var scanned := 0
@@ -805,7 +882,10 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 		_asked.erase(key)
 		fills += 1
 		work.append(_work_item(key, slot))
-	if writers != null: writers.call("dispatch")
+		_filled(key, slot)
+	if writers != null:
+		_refresh_writer_pages(writers)
+		writers.call("dispatch")
 	stats.awaiting_writers = _awaiting.size()
 	stats.texels_last_frame = work.size() * _slot_size * _slot_size
 	stats.dispatches_last_frame = work.size()

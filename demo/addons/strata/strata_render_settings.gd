@@ -267,11 +267,32 @@ func parameters() -> Dictionary:
 		if value < 1 or value > 256 or surface_cache_page_fills_per_frame == value: return
 		surface_cache_page_fills_per_frame = value
 		emit_changed()
-## Tints pixels shaded from the cache green and directly shaded ones red.
-@export var surface_cache_shading_debug := false:
+## On-screen pages a surface writer touches that are drawn again per frame while nothing else
+## waits (0: only when invalidated). Writer materials that change slowly, such as rain wetness
+## set from a script, then reach the cache within one pass over those pages
+## (stats.surface_cache.refresh_cycle_frames) at a fixed cost per frame.
+@export_range(0, 64, 1) var surface_cache_refresh_pages_per_frame := 2:
 	set(value):
-		if surface_cache_shading_debug == value: return
-		surface_cache_shading_debug = value
+		if value < 0 or value > 64 or surface_cache_refresh_pages_per_frame == value: return
+		surface_cache_refresh_pages_per_frame = value
+		emit_changed()
+## Debug views of the surface cache. Coverage: pixels shaded from the cache green, directly
+## shaded ones red. The others colour the terrain by the page it reads, with the page edges in
+## dark lines. Pages: each page in a random colour. Status: green current, yellow stale (waiting to be
+## filled again), cyan waiting for its writer tile, blue being redrawn by the background refresh,
+## purple coarser than the footprint asks because the pool is full, orange one mip coarser
+## because the page is missing, red two or more (shaded directly), magenta no page. Age: time
+## since the page was last filled, green new to red at surface_cache_debug_age_seconds or older.
+@export_enum("Off:0", "Coverage:1", "Pages:2", "Status:3", "Age:4") var surface_cache_debug_view := 0:
+	set(value):
+		if surface_cache_debug_view == value: return
+		surface_cache_debug_view = value
+		emit_changed()
+## Seconds at which the Age debug view turns red.
+@export_range(0.5, 600.0, 0.5, "suffix:s") var surface_cache_debug_age_seconds := 10.0:
+	set(value):
+		if is_equal_approx(surface_cache_debug_age_seconds, value): return
+		surface_cache_debug_age_seconds = value
 		emit_changed()
 ## Prototype. Per-pixel parallax of the relief that is finer than the displaced mesh, marched
 ## through the surface cache's relief (needs surface_cache_enabled). The mesh keeps the relief of

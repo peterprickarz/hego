@@ -327,6 +327,16 @@ writer tile and is evaluated once, with the writers, so a road never appears a m
 its ground. Writers show at every distance, in the coarse mips too. See "Surface writers" in
 the addon's `README.md`.
 
+**Background refresh.** While every requested page is resident and current or waits for its
+writer tile, the cache draws the on-screen pages that writers touch again, in slot order,
+`surface_cache_refresh_pages_per_frame` (default 2, 0 off) at a time. Each keeps its content
+until its tile is drawn. Writer materials that change slowly (rain wetness set from a script,
+say) reach the cache within one pass without an `invalidate()`; `stats.refresh_cycle_frames` is
+the length of the last pass and `stats.refreshed_last_frame` the pages queued in the last frame.
+Neighbouring pages are drawn at different moments, so a fast change shows page edges until the
+pass is done: invalidate the writer for an instant change. Terrain-only pages change through
+edits alone and are not refreshed.
+
 The cache holds the material without custom fragment code, evaluated by the same functions as
 the terrain shader (`terrain_surface_core.gdshaderinc`, which the compute fill splices into
 GLSL), with texture bombing applied.
@@ -348,9 +358,21 @@ A page that is not resident yet falls back one mip; past that the pixel is shade
 are steeper ground (the top-down cells stretch there) and materials with custom fragment code.
 The far UV blend follows the pixel footprint instead of the camera distance, so each mip holds
 its share: a footprint counts as the distance at which flat ground seen from
-`surface_cache_shading_eye_height` has it. `surface_cache_shading_debug` tints cached pixels
-green and directly shaded ones red. Albedo is stored sRGB-encoded, so the bilinear filters
-blend it in that encoding.
+`surface_cache_shading_eye_height` has it. Albedo is stored sRGB-encoded, so the bilinear
+filters blend it in that encoding.
+
+**Debug views.** `surface_cache_debug_view` picks one. Coverage tints pixels shaded from the
+cache green and directly shaded ones red. The others colour the terrain by the page it reads at
+the pixel footprint, with or without cache shading, and draw the page edges as dark lines:
+
+| View | Colours |
+| --- | --- |
+| Pages | each page in a random colour |
+| Status | green current; yellow stale (waiting to be filled again); cyan waiting for its writer tile; blue being redrawn by the background refresh; purple coarser than the footprint asks because the pool is full (`pressure_bias`); orange one mip coarser because the page is missing, red two or more (the pixel is shaded directly); magenta no page |
+| Age | time since the page was last filled: green new, yellow at half of `surface_cache_debug_age_seconds` (10 s), red at it or older |
+
+The renderer uploads each slot's state and age (`StrataSurfaceCache.debug_slot_image()`) every
+frame while a view is on.
 
 **Displacement.** With `surface_cache_displacement` (default on) the terrain shader reads near
 relief from the mip whose cell matches `displacement_vertex_spacing` (bilinear between corner
