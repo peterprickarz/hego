@@ -1,11 +1,15 @@
 <?xml version='1.0' encoding='utf-8'?>
 <class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoPropertyUtil" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 	<brief_description>
-		Applies the [code]hego_custom_properties[/code] dictionary an HDA can attach to a spawned object onto the object itself.
+		Applies the [code]hego_custom_properties[/code] dictionary an HDA can attach to a
+ spawned object onto the object itself.
 	</brief_description>
 	<description>
-		The dictionary is nested, and every level that carries a value stores it under [code]hego_val[/code], so a sub-resource and its own properties can be described in one structure:
+		The dictionary is nested, and every level that carries a value stores it under
+ [code]hego_val[/code], so a sub-resource and its own properties can be described
+ in one structure:
 [codeblock]
+
 {
     "mesh": {
         "hego_val": "BoxMesh",     # instantiated, then filled in
@@ -32,7 +36,8 @@
 			<param index="1" name="property" type="String" />
 			<param index="2" name="value" type="Variant" />
 			<description>
-				Sets one property, skipping it with a warning if it does not exist or the value cannot be converted to the property's type.
+				Sets one property, skipping it with a warning if it does not exist or the value
+ cannot be converted to the property's type.
 			</description>
 		</method>
 		<method name="find_property_info" qualifiers="static">
@@ -40,7 +45,8 @@
 			<param index="0" name="obj" type="Object" />
 			<param index="1" name="property" type="String" />
 			<description>
-				Returns the [method Object.get_property_list] entry for [param property], or an empty dictionary if the object has no such property.
+				Returns the [method Object.get_property_list] entry for [param property],
+ or an empty dictionary if the object has no such property.
 			</description>
 		</method>
 		<method name="has_property" qualifiers="static">
@@ -57,7 +63,8 @@
 			<param index="1" name="expected_type" type="int" />
 			<param index="2" name="expected_class" type="String" />
 			<description>
-				Whether [param value] can be assigned to a property of [param expected_type] (a [enum Variant.Type]) and, for objects, of class [param expected_class].
+				Whether [param value] can be assigned to a property of [param expected_type]
+ (a [enum Variant.Type]) and, for objects, of class [param expected_class].
 			</description>
 		</method>
 	</methods>

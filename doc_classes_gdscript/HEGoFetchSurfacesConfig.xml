@@ -4,7 +4,9 @@
 		Attributes, filters and splits for a surface fetch, saved as a resource.
 	</brief_description>
 	<description>
-		only so existing projects can move across, and will be removed. The code API takes the same arguments, shares the same implementation and cache, and can decide what to read at runtime.
+		only so existing projects can move across, and will be removed. The code API
+ takes the same arguments, shares the same implementation and cache, and can
+ decide what to read at runtime.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -28,7 +30,10 @@
 			Further attribute names to read from the cook, beyond the toggles above.
 		</member>
 		<member name="custom_attribs" type="PackedStringArray" setter="" getter="">
-			Up to four point attributes exported as the custom vertex channels, in order ([code]ARRAY_CUSTOM0..3[/code], RGBA float). A blank entry skips that channel. Surfaces that carry them hold [code]custom_format_flags[/code], to pass as the flags argument of [method ArrayMesh.add_surface_from_arrays].
+			Up to four point attributes exported as the custom vertex channels, in order
+ ([code]ARRAY_CUSTOM0..3[/code], RGBA float). A blank entry skips that channel. Surfaces
+ that carry them hold [code]custom_format_flags[/code], to pass as the flags argument of
+ [method ArrayMesh.add_surface_from_arrays].
 		</member>
 		<member name="filter_attribs" type="PackedStringArray" setter="" getter="">
 			Attribute names to filter the primitives on, one per entry of [member filter_attrib_values].

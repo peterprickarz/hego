@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphPathMesh" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Builds the path visualisation of a [HEGoGraph3D]: a translucent ribbon or tube
+ along every connection, with an outline, in the graph's local space.
+	</brief_description>
+	<description>
+		Ribbon rows are oriented to the surface normal (from a [HEGoGraphSurface], else up).
+ Where connections meet, every arm is cut back far enough that neighbouring edges
+ meet, and the gap is filled by a fan around the node, so overlapping connections
+ never double the transparency and sharp turns stay clean. A tube is a cylinder per
+ connection plus a sphere at each node.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="build" qualifiers="static">
+			<return type="ArrayMesh" />
+			<param index="0" name="graph" type="HEGoGraph3D" />
+			<param index="1" name="surface" type="HEGoGraphSurface" />
+			<description>
+				Builds the mesh for [param graph]. [param surface] may be null.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="MAX_SEGMENTS" value="512">
+		</constant>
+		<constant name="MIN_EDGE" value="0.0001">
+		</constant>
+	</constants>
+</class>

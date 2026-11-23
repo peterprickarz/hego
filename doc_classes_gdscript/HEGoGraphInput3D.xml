@@ -4,7 +4,8 @@
 		A [HEGoGraph3D] authored in the editor and fed into a [HEGoNode3D] input.
 	</brief_description>
 	<description>
-		Kept as its own class so scenes saved with it load unchanged. All behaviour lives in [HEGoGraph3D]; use that class to accept graphs from either origin.
+		Kept as its own class so scenes saved with it load unchanged. All behaviour lives in
+ [HEGoGraph3D]; use that class to accept graphs from either origin.
 	</description>
 	<tutorials>
 	</tutorials>

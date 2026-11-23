@@ -4,7 +4,9 @@
 		Spawns one Godot node per output point.
 	</brief_description>
 	<description>
-		Each point decides through attributes what to spawn (a registered class, or a packed scene), where to put it, how to orient it and which of its properties to override. Points without those attributes fall back to a plain [Node3D].
+		Each point decides through attributes what to spawn (a registered class, or a
+ packed scene), where to put it, how to orient it and which of its properties to
+ override. Points without those attributes fall back to a plain [Node3D].
 	</description>
 	<tutorials>
 	</tutorials>
@@ -12,7 +14,10 @@
 		<method name="point_attribs" qualifiers="static">
 			<return type="Array" />
 			<description>
-				Attributes this handler reads off each spawned point: the shared orientation set plus its own. Cd is not among them, because spawned nodes are not tinted. A function rather than a const, because a const cannot be built from another class's constant. See [HEGoPointUtil].
+				Attributes this handler reads off each spawned point: the shared orientation set plus
+ its own. Cd is not among them, because spawned nodes are not tinted. A function rather
+ than a const, because a const cannot be built from another class's constant.
+ See [HEGoPointUtil].
 			</description>
 		</method>
 		<method name="output_phase" qualifiers="static">
@@ -47,7 +52,8 @@
 			Node path used when a point does not specify hego_node_path.
 		</constant>
 		<constant name="DEFAULT_CLASS_NAME" value="&quot;Node3D&quot;">
-			Class spawned when a point does not specify hego_class_name, and the fallback whenever the requested class or scene cannot be used.
+			Class spawned when a point does not specify hego_class_name, and the fallback
+ whenever the requested class or scene cannot be used.
 		</constant>
 		<constant name="SPAWN_TYPE_CLASS" value="0">
 			hego_spawn_type: instantiate the class named by hego_class_name.

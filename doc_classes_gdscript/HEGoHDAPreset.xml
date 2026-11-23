@@ -4,7 +4,10 @@
 		Saved parameter presets for one HDA, as the bottom panel's preset list stores them.
 	</brief_description>
 	<description>
-		One resource per operator, written to [code]res://hego/presets/&lt;operator&gt;.tres[/code]. A preset is the blob [method HEGoAssetNode.get_preset] returns, which is also what a node's [code]parm_stash[/code] holds, so a preset and a stashed parameter set are the same thing saved in two places.
+		One resource per operator, written to [code]res://hego/presets/&lt;operator&gt;.tres[/code]. A preset is the
+ blob [method HEGoAssetNode.get_preset] returns, which is also what a node's
+ [code]parm_stash[/code] holds, so a preset and a stashed parameter set are the same thing
+ saved in two places.
 	</description>
 	<tutorials>
 	</tutorials>

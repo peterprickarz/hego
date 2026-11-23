@@ -4,7 +4,9 @@
 		Converts the curve dictionaries a curve fetch returns into [Curve3D]s.
 	</brief_description>
 	<description>
-		Pure geometry, no scene access: [HEGoCurveOutput] handles the nodes. A curve dictionary holds [code]positions[/code], [code]type[/code], [code]order[/code], [code]is_closed[/code] and, for NURBS, [code]knots[/code].
+		Pure geometry, no scene access: [HEGoCurveOutput] handles the nodes. A curve
+ dictionary holds [code]positions[/code], [code]type[/code], [code]order[/code],
+ [code]is_closed[/code] and, for NURBS, [code]knots[/code].
 	</description>
 	<tutorials>
 	</tutorials>
@@ -13,7 +15,8 @@
 			<return type="Curve3D" />
 			<param index="0" name="curve" type="Dictionary" />
 			<description>
-				Builds the [Curve3D] matching [param curve]'s type, falling back to a poly curve for types this build does not know about.
+				Builds the [Curve3D] matching [param curve]'s type, falling back to a poly curve
+ for types this build does not know about.
 			</description>
 		</method>
 		<method name="curve_type_to_string" qualifiers="static">
@@ -34,7 +37,10 @@
 			<return type="Curve3D" />
 			<param index="0" name="curve" type="Dictionary" />
 			<description>
-				NURBS curve, approximated by sampling.  Curve3D's in/out handles cannot represent NURBS control points, so the curve is evaluated at a fixed number of parameter values and rebuilt from those samples.
+				NURBS curve, approximated by sampling.
+ 
+ Curve3D's in/out handles cannot represent NURBS control points, so the curve is
+ evaluated at a fixed number of parameter values and rebuilt from those samples.
 			</description>
 		</method>
 		<method name="evaluate_spline_at_t" qualifiers="static">
@@ -69,7 +75,8 @@
 			<return type="Curve3D" />
 			<param index="0" name="curve" type="Dictionary" />
 			<description>
-				Bezier curve: every third control point is on the curve, the two in between are its handles. Falls back to a poly curve when there are not enough points.
+				Bezier curve: every third control point is on the curve, the two in between are
+ its handles. Falls back to a poly curve when there are not enough points.
 			</description>
 		</method>
 	</methods>
@@ -84,7 +91,8 @@
 			NURBS samples generated per control point, when that is more than [constant MIN_NURBS_SAMPLES].
 		</constant>
 		<constant name="BEZIER_STRIDE" value="3">
-			Positions per Bezier segment in Houdini's flat control point list: one on-curve point followed by two off-curve handles.
+			Positions per Bezier segment in Houdini's flat control point list:
+ one on-curve point followed by two off-curve handles.
 		</constant>
 	</constants>
 </class>
