@@ -4,7 +4,10 @@
 		Helpers shared by the Terrain3D input, output and instancer paths.
 	</brief_description>
 	<description>
-		This bridge needs Terrain3D, but nothing in it refers to Terrain3D's types directly: everything goes through [ClassDB], [method Object.call] and [method Object.get], and every entry point degrades to a warning when the addon or a method is missing. So the bridge's scripts still load, and HEGo keeps cooking, in a project without Terrain3D.
+		This bridge needs Terrain3D, but nothing in it refers to Terrain3D's types directly:
+ everything goes through [ClassDB], [method Object.call] and [method Object.get], and
+ every entry point degrades to a warning when the addon or a method is missing. So the
+ bridge's scripts still load, and HEGo keeps cooking, in a project without Terrain3D.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -43,7 +46,8 @@
 			<return type="bool" />
 			<param index="0" name="value" type="Variant" />
 			<description>
-				Whether [param value] is a region size Terrain3D accepts: a power of two between [constant MIN_REGION_SIZE] and [constant MAX_REGION_SIZE].
+				Whether [param value] is a region size Terrain3D accepts: a power of two
+ between [constant MIN_REGION_SIZE] and [constant MAX_REGION_SIZE].
 			</description>
 		</method>
 		<method name="approx_equal_vec3" qualifiers="static">
@@ -73,7 +77,12 @@
 			<return type="Dictionary" />
 			<param index="0" name="texture_layers" type="Array" />
 			<description>
-				Checks that every texture layer can actually be turned into a Terrain3DTextureAsset.  Control maps address textures by slot, so a single unusable layer would shift every other one: validation is all-or-nothing. Returns [code]{ ok, layers, lowest_slot }[/code] on success and [code]{ ok, warning }[/code] on failure.
+				Checks that every texture layer can actually be turned into a Terrain3DTextureAsset.
+ 
+ Control maps address textures by slot, so a single unusable layer would shift every
+ other one: validation is all-or-nothing. Returns
+ [code]{ ok, layers, lowest_slot }[/code] on success and [code]{ ok, warning }[/code]
+ on failure.
 			</description>
 		</method>
 		<method name="load_texture_resource" qualifiers="static">
@@ -111,7 +120,8 @@
 			<param index="1" name="property_name" type="String" />
 			<param index="2" name="value" type="Variant" />
 			<description>
-				Sets a property only if the object has it, for properties whose availability depends on the installed Terrain3D version.
+				Sets a property only if the object has it, for properties whose availability
+ depends on the installed Terrain3D version.
 			</description>
 		</method>
 		<method name="build_control_bits_for_pixel" qualifiers="static">
@@ -123,7 +133,11 @@
 			<param index="4" name="lowest_valid_texture_slot" type="int" />
 			<param index="5" name="hole_image" type="Image" />
 			<description>
-				Builds the Terrain3D control map value for one pixel.  Terrain3D blends exactly two textures per pixel, so the two heaviest weight layers become base and overlay and the rest are dropped. Pass -1 for [param pixel_x] and [param pixel_z] to get the value used for pixels outside every weight image.
+				Builds the Terrain3D control map value for one pixel.
+ 
+ Terrain3D blends exactly two textures per pixel, so the two heaviest weight layers
+ become base and overlay and the rest are dropped. Pass -1 for [param pixel_x] and
+ [param pixel_z] to get the value used for pixels outside every weight image.
 			</description>
 		</method>
 		<method name="encode_control_bits" qualifiers="static">
@@ -141,7 +155,11 @@
 			<return type="Image" />
 			<param index="0" name="image" type="Image" />
 			<description>
-				Rotates a Houdini heightfield image into Terrain3D's orientation.  Houdini heightfields are stored rows-along-Z while Terrain3D expects rows-along-X, which is a 90 degree rotation; the import then mirrors along world X, so the result is flipped back here.
+				Rotates a Houdini heightfield image into Terrain3D's orientation.
+ 
+ Houdini heightfields are stored rows-along-Z while Terrain3D expects rows-along-X,
+ which is a 90 degree rotation; the import then mirrors along world X, so the result
+ is flipped back here.
 			</description>
 		</method>
 		<method name="find_node_from_path" qualifiers="static">
@@ -149,7 +167,8 @@
 			<param index="0" name="host" type="Node" />
 			<param index="1" name="node_path_text" type="String" />
 			<description>
-				Resolves a Terrain3D node path, relative to [param host] first and to the edited scene root second, so HDAs can address terrains outside the HEGo node.
+				Resolves a Terrain3D node path, relative to [param host] first and to the edited
+ scene root second, so HDAs can address terrains outside the HEGo node.
 			</description>
 		</method>
 		<method name="get_terrain_assets" qualifiers="static">
