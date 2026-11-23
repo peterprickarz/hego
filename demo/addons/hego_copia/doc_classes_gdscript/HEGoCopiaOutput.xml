@@ -1,0 +1,197 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoCopiaOutput" inherits="HEGoOutputHandler" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Writes a cook's points into a Copia store, on every cook of any HEGo node whose output
+ carries them: the panel's Recook, a Session Sync update and a batch cook() all do the same.
+	</brief_description>
+	<description>
+		HEGo finds this handler because it extends [HEGoOutputHandler]; neither HEGo nor Copia
+ names the other. It acts on points with a [code]hegocopia_object[/code] or a
+ [code]hegocopia_clear[/code] point attribute (the table is in docs/copia/houdini.md):
+ 
+[codeblock]
+
+hegocopia_object  string  path of a CopiaObject (or a Mesh); non-empty = an instance
+P, orient or N + up, scale, pscale                    the transform
+Cd, hegocopia_custom (+ hegocopia_custom_w)           optional colour and custom data
+hegocopia_keep    float   optional density priority 0..1
+hegocopia_set     string  set to write into; blank = default
+hegocopia_store   string  node path of the CopiaStore3D from the scene root; blank = the only one
+hegocopia_clear   int     1 = a clear point: empties set hegocopia_set in cell hegocopia_cell
+hegocopia_cell    string  "cx_cz", on clear points only
+[/codeblock]
+
+ 
+ Within one cook, clears are applied first and instances added after, per store. Nothing is
+ cleared implicitly. One cook may write several sets and several stores.
+ 
+ Options, from the host's metadata [code]hegocopia[/code] and the cook state key
+ [code]hegocopia_options[/code] (a cook extension's cook_prepare can set it), the later one
+ winning per key: [code]extra_attributes[/code] ([PackedStringArray]), point attributes that
+ are loaded too and stored as pass-through columns.
+ 
+ The result is left in the cook state under [code]hegocopia[/code]:
+ [code]{stores: {path: result}, errors, warnings, point_count, clear_count, skipped_count}[/code]
+ where each result is what [method write_attributes] returns.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="output_phase">
+			<return type="String" />
+			<description>
+			</description>
+		</method>
+		<method name="should_handle">
+			<return type="bool" />
+			<param index="0" name="summary" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="handle">
+			<return type="void" />
+			<param index="0" name="context" type="HEGoOutputContext" />
+			<description>
+			</description>
+		</method>
+		<method name="write_routes" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="routes" type="Dictionary" />
+			<param index="2" name="options" type="Dictionary" default="{}" />
+			<description>
+				What [method handle] does with a cook's points once they are read: [param routes] maps each
+ [code]hegocopia_store[/code] value to the attributes of the points that carry it (as
+ [method write_attributes] takes them), and [param options] are the cook's options
+ ([method options_of]). Store paths are resolved first and the points of every path that
+ names the same store are written in one call, so a blank path and the store's own path (the
+ spawned points and the clear points of the documented pattern) clear before they spawn.
+ Returns the report the handler leaves in the cook state:
+ [code]{stores: {path: result}, errors, warnings, point_count, clear_count, skipped_count}[/code].
+			</description>
+		</method>
+		<method name="split_routes" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="columns" type="Dictionary" />
+			<description>
+				Splits the columns of a cook's points ([code]{name: one value per point}[/code]) into the
+ routes [method write_routes] takes, by [code]hegocopia_store[/code]: points without a store
+ and points with a blank one both go to the route [code]""[/code] (the only store). The split
+ is native and linear; when every point names the same store (the usual case) the columns are
+ passed on without a copy.
+			</description>
+		</method>
+		<method name="options_of" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="cook_state" type="Dictionary" />
+			<description>
+				The options of a cook: the host's metadata, then [param cook_state]'s options on top.
+			</description>
+		</method>
+		<method name="merge_points" qualifiers="static">
+			<return type="void" />
+			<param index="0" name="into" type="Dictionary" />
+			<param index="1" name="more" type="Dictionary" />
+			<description>
+				Appends the points of [param more] to [param into], attribute by attribute. A column only
+ one side has is padded with [code]null[/code] (a point without a value), so the rows stay
+ aligned; padded columns become plain Arrays.
+			</description>
+		</method>
+		<method name="write_attributes" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="attributes" type="Dictionary" />
+			<param index="1" name="store" type="Node" />
+			<param index="2" name="options" type="Dictionary" default="{}" />
+			<description>
+				Writes the points in [param attributes] into [param store]:
+ [code]{name: one value per point}[/code] as HEGo delivers them (plain Arrays, [code]null[/code]
+ where a point has no value; packed arrays work too), under the [code]hegocopia_[/code] names above.
+ 
+ Clear points are applied first, then the instances added. [param options]:
+ [code]extra[/code] ([PackedStringArray]), the names of attributes stored as pass-through
+ columns. This is also the entry point for a cook extension that reads its points itself.
+ 
+ Returns [code]{ok, errors, point_count, clear_count, skipped_count, write}[/code]. [code]ok[/code]
+ says the store took what there was to write (nothing to write is ok); [code]errors[/code]
+ also lists what the conversion skipped or ignored, so it can be non-empty when ok.
+ [code]write[/code] is [method CopiaStore3D.write]'s result, empty when nothing was written.
+			</description>
+		</method>
+		<method name="find_store" qualifiers="static">
+			<return type="Node" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="path" type="String" />
+			<description>
+				The store [param path] names, or the only store when it is blank: see [method resolve_store].
+			</description>
+		</method>
+		<method name="resolve_store" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="path" type="String" />
+			<description>
+				Like [method find_store], with the reason when there is none: returns
+ [code]{store, path, error}[/code], where [code]path[/code] is the store's node path from the
+ scene root ([method scene_root]).
+ 
+ A non-blank [param path] is the node path from the scene root (also tried as an absolute
+ path). A blank one means the only [code]CopiaStore3D[/code] of the scene: none, or several,
+ is an error.
+			</description>
+		</method>
+		<method name="scene_root" qualifiers="static">
+			<return type="Node" />
+			<param index="0" name="host" type="Node" />
+			<description>
+				The root node store paths are relative to: the owner of [param host] (the scene root of
+ the scene it is saved in, which is the current scene at run time), else the edited or
+ current scene when it holds the host, else the topmost ancestor below the window.
+			</description>
+		</method>
+		<method name="is_store" qualifiers="static">
+			<return type="bool" />
+			<param index="0" name="node" type="Variant" />
+			<description>
+				Whether [param node] is a [code]CopiaStore3D[/code]: its script, or one it extends, is the
+ store's. The script is checked, not a class name the class cache may not know.
+			</description>
+		</method>
+		<method name="native_static" qualifiers="static">
+			<return type="Variant" />
+			<param index="0" name="native_class" type="String" />
+			<param index="1" name="method" type="String" />
+			<param index="2" name="arguments" type="Array" />
+			<description>
+				Calls a static method of a Copia native class, loading the extension if it is not yet.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="META_KEY" value="&amp;&quot;hegocopia&quot;">
+			Metadata key of the host that holds the options.
+		</constant>
+		<constant name="OPTIONS_KEY" value="&quot;hegocopia_options&quot;">
+			Cook state key of the options a cook extension sets.
+		</constant>
+		<constant name="REPORT_KEY" value="&quot;hegocopia&quot;">
+			Cook state key the report is left under.
+		</constant>
+		<constant name="STORE_ATTRIB" value="&quot;hegocopia_store&quot;">
+			The attribute that names the store a point goes to.
+		</constant>
+		<constant name="OBJECT_ATTRIB" value="&quot;hegocopia_object&quot;">
+		</constant>
+		<constant name="CLEAR_ATTRIB" value="&quot;hegocopia_clear&quot;">
+		</constant>
+		<constant name="NAMES" value="{&quot;Cd&quot;: &quot;Cd&quot;, &quot;N&quot;: &quot;N&quot;, &quot;P&quot;: &quot;P&quot;, &quot;cell&quot;: &quot;hegocopia_cell&quot;, &quot;clear&quot;: &quot;hegocopia_clear&quot;, &quot;custom&quot;: &quot;hegocopia_custom&quot;, &quot;custom_w&quot;: &quot;hegocopia_custom_w&quot;, &quot;keep&quot;: &quot;hegocopia_keep&quot;, &quot;object&quot;: &quot;hegocopia_object&quot;, &quot;orient&quot;: &quot;orient&quot;, &quot;pscale&quot;: &quot;pscale&quot;, &quot;scale&quot;: &quot;scale&quot;, &quot;set&quot;: &quot;hegocopia_set&quot;, &quot;up&quot;: &quot;up&quot;}">
+			Copia's default attribute names, and the names used here for them.
+		</constant>
+		<constant name="STORE_SCRIPT" value="&quot;res://addons/copia/copia_store_3d.gd&quot;">
+			Script of the store node.
+		</constant>
+		<constant name="EXTENSION" value="&quot;res://addons/copia/bin/copia.gdextension&quot;">
+		</constant>
+	</constants>
+</class>

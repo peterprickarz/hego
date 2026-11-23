@@ -12,7 +12,7 @@ HEGoInputHandler
 
 **Inherits:** ``RefCounted``
 
-**Inherited By:** :ref:`HEGoStrataInput<class_HEGoStrataInput>`, :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
+**Inherited By:** :ref:`HEGoCopiaInput<class_HEGoCopiaInput>`, :ref:`HEGoStrataInput<class_HEGoStrataInput>`, :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
 
 Teaches HEGo to send another kind of Godot node to an HDA input.
 
@@ -21,7 +21,23 @@ Teaches HEGo to send another kind of Godot node to an HDA input.
 Description
 -----------
 
-HEGo itself handles paths, meshes, CSG shapes and graph inputs; the HEGo Strata and HEGo Terrain3D bridges add terrains. Another addon adds a kind by extending this class and giving it a ``class_name``: HEGo finds every global class that extends it, in the editor and in exported games alike, so installing that addon is all it takes. The dependency only runs one way. The extending addon names HEGo's classes; HEGo never names the addon's.  Every method has a default that handles nothing, so a handler overrides only what it needs. Handlers are created once and reused, so keep per-input state in the input node :ref:`sync()<class_HEGoInputHandler_method_sync>` returns, not on the handler.
+HEGo itself handles paths, meshes, CSG shapes and graph inputs; the HEGo Strata and
+
+ HEGo Terrain3D bridges add terrains. Another addon adds a kind by extending this class
+
+ and giving it a ``class_name``: HEGo finds every global class that extends it,
+
+ in the editor and in exported games alike, so installing that addon is all it takes. The dependency only runs one way. The extending
+
+ addon names HEGo's classes; HEGo never names the addon's.
+
+ 
+
+ Every method has a default that handles nothing, so a handler overrides only what it
+
+ needs. Handlers are created once and reused, so keep per-input state in the input node
+
+ :ref:`sync()<class_HEGoInputHandler_method_sync>` returns, not on the handler.
 
 .. rst-class:: classref-reftable-group
 
@@ -60,7 +76,9 @@ Method Descriptions
 
 ``bool`` **handles**\ (\ _node\: ``Node``\ ) :ref:`🔗<class_HEGoInputHandler_method_handles>`
 
-Whether this handler turns ``node`` into an input. Also decides whether the node counts as a compatible source when the panel or a cook resolves input paths.
+Whether this handler turns ``node`` into an input. Also decides whether the node
+
+ counts as a compatible source when the panel or a cook resolves input paths.
 
 .. rst-class:: classref-item-separator
 
@@ -72,7 +90,33 @@ Whether this handler turns ``node`` into an input. Also decides whether the node
 
 ``Dictionary`` **sync**\ (\ _host\: ``Node``, _existing_node\: ``Variant``, _node\: ``Node``, _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoInputHandler_method_sync>`
 
-Creates or updates the HEGo input node for ``node``.  ``existing_node`` is the input node this HDA input used last cook, possibly of another type; reuse it when it fits. ``settings`` is the input's settings dictionary from the input stash. During a cook it also carries ``_cook``, the dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s and output handlers share (:ref:`HEGoOutputContext.cook_state<class_HEGoOutputContext_property_cook_state>`), so a handler can pick up what an extension prepared for this cook or leave something for an output handler, and ``_input_path`` (:ref:`HEGoInputNodes.INPUT_PATH_KEY<class_HEGoInputNodes_constant_INPUT_PATH_KEY>`), the path the input was resolved from, which HEGo's own inputs send as ``_hego_node_path``.  Returns ``{ok: true, node}``, or ``{ok: false, message}`` when the input could not be sent, which stops the cook with the previous output left in place.
+Creates or updates the HEGo input node for ``node``.
+
+ 
+
+ ``existing_node`` is the input node this HDA input used last cook, possibly of
+
+ another type; reuse it when it fits. ``settings`` is the input's settings dictionary
+
+ from the input stash. During a cook it also carries ``_cook``, the dictionary
+
+ the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s and output handlers share
+
+ (:ref:`HEGoOutputContext.cook_state<class_HEGoOutputContext_property_cook_state>`), so a handler can pick up what an extension
+
+ prepared for this cook or leave something for an output handler, and
+
+ ``_input_path``\ 
+
+ (:ref:`HEGoInputNodes.INPUT_PATH_KEY<class_HEGoInputNodes_constant_INPUT_PATH_KEY>`), the path the input was resolved from, which
+
+ HEGo's own inputs send as ``_hego_node_path``.
+
+ 
+
+ Returns ``{ok: true, node}``, or ``{ok: false, message}`` when the
+
+ input could not be sent, which stops the cook with the previous output left in place.
 
 .. rst-class:: classref-item-separator
 
@@ -84,7 +128,11 @@ Creates or updates the HEGo input node for ``node``.  ``existing_node`` is the i
 
 ``bool`` **claims_settings**\ (\ _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoInputHandler_method_claims_settings>`
 
-Whether stored ``settings`` were written for this handler's kind of input, even if the source node is currently missing. Keeps the handler's options in the panel, and its explicit-cook rule in force, while a referenced node is renamed or deleted.
+Whether stored ``settings`` were written for this handler's kind of input, even if
+
+ the source node is currently missing. Keeps the handler's options in the panel, and its
+
+ explicit-cook rule in force, while a referenced node is renamed or deleted.
 
 .. rst-class:: classref-item-separator
 
@@ -96,7 +144,11 @@ Whether stored ``settings`` were written for this handler's kind of input, even 
 
 ``bool`` **requires_explicit_cook**\ (\ _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoInputHandler_method_requires_explicit_cook>`
 
-Whether an input of this kind should wait for an explicit recook rather than recooking automatically whenever the panel changes it. :ref:`HEGoNode3D.hego_requires_explicit_cook()<class_HEGoNode3D_method_hego_requires_explicit_cook>` asks this for every input row, so the node itself follows the rule too.
+Whether an input of this kind should wait for an explicit recook rather than recooking
+
+ automatically whenever the panel changes it. :ref:`HEGoNode3D.hego_requires_explicit_cook()<class_HEGoNode3D_method_hego_requires_explicit_cook>`\ 
+
+ asks this for every input row, so the node itself follows the rule too.
 
 .. rst-class:: classref-item-separator
 
@@ -108,7 +160,15 @@ Whether an input of this kind should wait for an explicit recook rather than rec
 
 ``bool`` **requires_strict_cook**\ (\ _settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoInputHandler_method_requires_strict_cook>`
 
-Whether a cook with an input of this kind must be strict: any input that is missing, incompatible or fails to upload then fails the whole cook, rather than being skipped with a warning. For inputs whose result is published all-or-nothing, where a partial set of inputs would produce a wrong result rather than an incomplete one. See :ref:`HEGoAssetAgent.sync_inputs()<class_HEGoAssetAgent_method_sync_inputs>`.
+Whether a cook with an input of this kind must be strict: any input that is missing,
+
+ incompatible or fails to upload then fails the whole cook, rather than being skipped with
+
+ a warning. For inputs whose result is published all-or-nothing, where a partial set of
+
+ inputs would produce a wrong result rather than an incomplete one. See
+
+ :ref:`HEGoAssetAgent.sync_inputs()<class_HEGoAssetAgent_method_sync_inputs>`.
 
 .. rst-class:: classref-item-separator
 
@@ -120,7 +180,21 @@ Whether a cook with an input of this kind must be strict: any input that is miss
 
 ``Control`` **create_settings_editor**\ (\ ) :ref:`🔗<class_HEGoInputHandler_method_create_settings_editor>`
 
-An editor for this kind of input's settings, shown in the panel's input row, or null for none. HEGo creates one per input row.  The control must provide ``load_settings(settings: Dictionary)``, ``get_settings() -> Dictionary``, which the panel merges into the input's stored settings, and ``refresh(host: Node, nodes: Array)``, called with the row's current source nodes of this kind; and it must emit a ``changed`` signal when the user edits it.
+An editor for this kind of input's settings, shown in the panel's input row, or null for
+
+ none. HEGo creates one per input row.
+
+ 
+
+ The control must provide ``load_settings(settings: Dictionary)``,
+
+ ``get_settings() -> Dictionary``, which the panel merges into the input's
+
+ stored settings, and ``refresh(host: Node, nodes: Array)``, called with the
+
+ row's current source nodes of this kind; and it must emit a ``changed`` signal
+
+ when the user edits it.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

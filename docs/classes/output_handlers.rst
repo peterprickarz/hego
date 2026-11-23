@@ -17,6 +17,8 @@ What turns a cook's geometry into Godot nodes, one class per output type, plus t
      - Spawns one Godot node per output point.
    * - :ref:`HEGoCurveOutput<class_HEGoCurveOutput>`
      - Turns the curves of a cooked HDA into ``Path3D`` nodes under ``Outputs/``.
+   * - :ref:`HEGoGraphOutput<class_HEGoGraphOutput>`
+     - Turns output points flagged as graph points into :ref:`HEGoGraph3D<class_HEGoGraph3D>` nodes under ``Outputs/``.
    * - :ref:`HEGoCurveBuilder<class_HEGoCurveBuilder>`
      - Converts the curve dictionaries a curve fetch returns into ``Curve3D``\ s.
    * - :ref:`HEGoPointUtil<class_HEGoPointUtil>`
@@ -32,6 +34,7 @@ What turns a cook's geometry into Godot nodes, one class per output type, plus t
    class_hegomultimeshoutput
    class_hegoobjectoutput
    class_hegocurveoutput
+   class_hegographoutput
    class_hegocurvebuilder
    class_hegopointutil
    class_hegopropertyutil

@@ -102,7 +102,7 @@ func _ready() -> void:
 
 The attribute names are the ones in [the design page](../development/copia_design.md#point-attributes):
 `P` (origin), `orient` or `N` and `up` (orientation), `scale` and `pscale`, `object`, `set`, `Cd`
-(colour), `custom` (custom data) and `keep` (see [density](#density)). A point without a `set` is
+(colour), `custom` (custom data) and `keep` (see [Run-time behaviour](#run-time-behaviour)). A point without a `set` is
 in the set `default`. Pass an array with one set name per point to fill several sets in one call.
 
 `write(clears, points)` returns `{ok, error, apply, build}`. It runs on the calling thread and
@@ -145,7 +145,7 @@ batches. The running game reads built cells only.
 
 Everything else (ranges, shadows, fade, materials, layers and collision shapes) is applied when a
 cell loads and needs no build, so you can tune it with the game running. The
-[reference](reference.md#what-a-change-costs) lists which properties are which.
+[overview](index.md#what-a-change-costs) and [reference](reference.md) list which properties are which.
 
 ## The inspector panel
 

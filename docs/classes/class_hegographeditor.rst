@@ -16,14 +16,20 @@ HEGoGraphEditor
 
 **Inherits:** ``RefCounted``
 
-Viewport editing for a selected :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`.
+Viewport editing for a selected :ref:`HEGoGraph3D<class_HEGoGraph3D>`.
 
 .. rst-class:: classref-introduction-group
 
 Description
 -----------
 
-Point selection and the move/rotate/scale widget are Godot's built-in subgizmos. This object only handles Draw-mode clicks, connection picks, empty clicks that clear the selection, the right-click menu, and the attribute strip.
+Point selection and the move/rotate/scale widget are Godot's built-in
+
+ subgizmos. This object only handles Draw-mode clicks, connection picks,
+
+ empty clicks that clear the selection, the right-click menu, and the
+
+ attribute strip.
 
 .. rst-class:: classref-reftable-group
 
@@ -33,41 +39,41 @@ Properties
 .. table::
    :widths: auto
 
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``EditorPlugin``                                | :ref:`plugin<class_HEGoGraphEditor_property_plugin>`                             |                        |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``EditorNode3DGizmoPlugin``                     | :ref:`gizmo_plugin<class_HEGoGraphEditor_property_gizmo_plugin>`                 |                        |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``EditorNode3DGizmo``                           | :ref:`active_gizmo<class_HEGoGraphEditor_property_active_gizmo>`                 |                        |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``Control``                                     | :ref:`toolbar<class_HEGoGraphEditor_property_toolbar>`                           |                        |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``Control``                                     | :ref:`attrib_panel<class_HEGoGraphEditor_property_attrib_panel>`                 |                        |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` | :ref:`graph<class_HEGoGraphEditor_property_graph>`                               |                        |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | :ref:`Mode<enum_HEGoGraphEditor_Mode>`          | :ref:`mode<class_HEGoGraphEditor_property_mode>`                                 | ``1``                  |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``int``                                         | :ref:`placement_mode<class_HEGoGraphEditor_property_placement_mode>`             | ``0``                  |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``int``                                         | :ref:`world_axis<class_HEGoGraphEditor_property_world_axis>`                     | ``0``                  |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``float``                                       | :ref:`world_offset<class_HEGoGraphEditor_property_world_offset>`                 | ``0.0``                |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``PackedInt32Array``                            | :ref:`selected_points<class_HEGoGraphEditor_property_selected_points>`           | ``PackedInt32Array()`` |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``PackedInt32Array``                            | :ref:`selected_connections<class_HEGoGraphEditor_property_selected_connections>` | ``PackedInt32Array()`` |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``int``                                         | :ref:`last_point<class_HEGoGraphEditor_property_last_point>`                     | ``-1``                 |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``int``                                         | :ref:`hover_point<class_HEGoGraphEditor_property_hover_point>`                   | ``-1``                 |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``int``                                         | :ref:`hover_connection<class_HEGoGraphEditor_property_hover_connection>`         | ``-1``                 |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``Variant``                                     | :ref:`preview_cursor<class_HEGoGraphEditor_property_preview_cursor>`             | ``null``               |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
-   | ``bool``                                        | :ref:`ctrl_held<class_HEGoGraphEditor_property_ctrl_held>`                       | ``false``              |
-   +-------------------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``EditorPlugin``                       | :ref:`plugin<class_HEGoGraphEditor_property_plugin>`                             |                        |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``EditorNode3DGizmoPlugin``            | :ref:`gizmo_plugin<class_HEGoGraphEditor_property_gizmo_plugin>`                 |                        |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``EditorNode3DGizmo``                  | :ref:`active_gizmo<class_HEGoGraphEditor_property_active_gizmo>`                 |                        |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``Control``                            | :ref:`toolbar<class_HEGoGraphEditor_property_toolbar>`                           |                        |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``Control``                            | :ref:`attrib_panel<class_HEGoGraphEditor_property_attrib_panel>`                 |                        |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | :ref:`HEGoGraph3D<class_HEGoGraph3D>`  | :ref:`graph<class_HEGoGraphEditor_property_graph>`                               |                        |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | :ref:`Mode<enum_HEGoGraphEditor_Mode>` | :ref:`mode<class_HEGoGraphEditor_property_mode>`                                 | ``1``                  |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``int``                                | :ref:`placement_mode<class_HEGoGraphEditor_property_placement_mode>`             | ``0``                  |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``int``                                | :ref:`world_axis<class_HEGoGraphEditor_property_world_axis>`                     | ``0``                  |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``float``                              | :ref:`world_offset<class_HEGoGraphEditor_property_world_offset>`                 | ``0.0``                |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``PackedInt32Array``                   | :ref:`selected_points<class_HEGoGraphEditor_property_selected_points>`           | ``PackedInt32Array()`` |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``PackedInt32Array``                   | :ref:`selected_connections<class_HEGoGraphEditor_property_selected_connections>` | ``PackedInt32Array()`` |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``int``                                | :ref:`last_point<class_HEGoGraphEditor_property_last_point>`                     | ``-1``                 |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``int``                                | :ref:`hover_point<class_HEGoGraphEditor_property_hover_point>`                   | ``-1``                 |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``int``                                | :ref:`hover_connection<class_HEGoGraphEditor_property_hover_connection>`         | ``-1``                 |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``Variant``                            | :ref:`preview_cursor<class_HEGoGraphEditor_property_preview_cursor>`             | ``null``               |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
+   | ``bool``                               | :ref:`ctrl_held<class_HEGoGraphEditor_property_ctrl_held>`                       | ``false``              |
+   +----------------------------------------+----------------------------------------------------------------------------------+------------------------+
 
 .. rst-class:: classref-reftable-group
 
@@ -229,7 +235,13 @@ Constants
 
 **GROUP_SUBGIZMO** = ``1073741823`` :ref:`🔗<class_HEGoGraphEditor_constant_GROUP_SUBGIZMO>`
 
-Subgizmo id standing for the whole selection when it is more than one point, or has connections. Scripts can only give Godot one subgizmo id, so this one carries the move widget for all of them: its transform is their centre, and moving it moves every point in :ref:`group_points()<class_HEGoGraphEditor_method_group_points>`.
+Subgizmo id standing for the whole selection when it is more than one
+
+ point, or has connections. Scripts can only give Godot one subgizmo id, so
+
+ this one carries the move widget for all of them: its transform is their
+
+ centre, and moving it moves every point in :ref:`group_points()<class_HEGoGraphEditor_method_group_points>`.
 
 .. rst-class:: classref-section-separator
 
@@ -274,7 +286,9 @@ Property Descriptions
 
 ``EditorNode3DGizmo`` **active_gizmo** :ref:`🔗<class_HEGoGraphEditor_property_active_gizmo>`
 
-Filled by the gizmo plugin on redraw. Node3D.get_gizmos() is empty on a scripted Node3D, so this is how we call set_subgizmo_selection.
+Filled by the gizmo plugin on redraw. Node3D.get_gizmos() is empty on a
+
+ scripted Node3D, so this is how we call set_subgizmo_selection.
 
 .. rst-class:: classref-item-separator
 
@@ -312,7 +326,7 @@ Filled by the gizmo plugin on redraw. Node3D.get_gizmos() is empty on a scripted
 
 .. rst-class:: classref-property
 
-:ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` **graph** :ref:`🔗<class_HEGoGraphEditor_property_graph>`
+:ref:`HEGoGraph3D<class_HEGoGraph3D>` **graph** :ref:`🔗<class_HEGoGraphEditor_property_graph>`
 
 .. container:: contribute
 
@@ -561,7 +575,17 @@ Method Descriptions
 
 ``bool`` **handle_key_anywhere**\ (\ event\: ``InputEvent``\ ) :ref:`🔗<class_HEGoGraphEditor_method_handle_key_anywhere>`
 
-Key path that does not need the 3D viewport to have focus.  _forward_3d_gui_input only sees keys while the viewport surface has focus, which it loses to the attribute strip, the scene tree, or any other panel the user clicked last. The plugin feeds keys here from _input, and they count while the mouse is over a 3D viewport and no text field has focus.
+Key path that does not need the 3D viewport to have focus.
+
+ 
+
+ _forward_3d_gui_input only sees keys while the viewport surface has focus,
+
+ which it loses to the attribute strip, the scene tree, or any other panel
+
+ the user clicked last. The plugin feeds keys here from _input, and they
+
+ count while the mouse is over a 3D viewport and no text field has focus.
 
 .. rst-class:: classref-item-separator
 
@@ -611,7 +635,9 @@ Point a Ctrl+click connects from, or -1 when no point is selected.
 
 ``PackedInt32Array`` **group_points**\ (\ ) :ref:`🔗<class_HEGoGraphEditor_method_group_points>`
 
-Points the group widget moves: the selected points plus both ends of every selected connection.
+Points the group widget moves: the selected points plus both ends of every
+
+ selected connection.
 
 .. rst-class:: classref-item-separator
 
@@ -635,7 +661,11 @@ Local-space centre of :ref:`group_points()<class_HEGoGraphEditor_method_group_po
 
 |void| **move_group_live**\ (\ center\: ``Vector3``\ ) :ref:`🔗<class_HEGoGraphEditor_method_move_group_live>`
 
-Moves the group so its centre sits at ``center``. Offsets are taken from where the points were when the drag began, so a point shared by two selected connections moves once.
+Moves the group so its centre sits at ``center``. Offsets are taken
+
+ from where the points were when the drag began, so a point shared by two
+
+ selected connections moves once.
 
 .. rst-class:: classref-item-separator
 

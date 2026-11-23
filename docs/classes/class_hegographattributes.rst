@@ -12,14 +12,16 @@ HEGoGraphAttributes
 
 **Inherits:** ``Node``
 
-Schema for a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`: the attributes its points and connections can carry.
+Schema for a :ref:`HEGoGraph3D<class_HEGoGraph3D>`: the attributes its points and connections can carry.
 
 .. rst-class:: classref-introduction-group
 
 Description
 -----------
 
-Parent this under a graph and fill :ref:`attributes<class_HEGoGraphAttributes_property_attributes>`. The list can be saved as its own scene and reused under other graphs. Several children concatenate in tree order.
+Parent this under a graph and fill :ref:`attributes<class_HEGoGraphAttributes_property_attributes>`. The list can be saved as its
+
+ own scene and reused under other graphs. Several children concatenate in tree order.
 
 .. rst-class:: classref-reftable-group
 

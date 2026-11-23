@@ -9,8 +9,14 @@ your game use.
 Strata stands on its own. It needs neither HEGo nor Houdini: a native extension does the
 heavy data work (composition, meshing, material packing), and everything else is ordinary
 GDScript nodes and resources. When you do want Houdini to generate or erode terrain, the
-separate HEGo Strata bridge lets a `HEGoNode3D` cook straight into a layer; see
-[Strata and Houdini](houdini.md).
+separate HEGo Strata bridge (`addons/hego_strata`; see {doc}`/bridges/index`) lets a `HEGoNode3D`
+cook straight into a layer; see [Strata and Houdini](houdini.md).
+
+```{note}
+Strata is a standalone addon with no dependency on HEGo or Houdini and is planned to move into its
+own repository in the future. While it is developed on HEGo's `next` channel, its package and full
+documentation live here.
+```
 
 **What it is not.** Strata is for static, authored terrain. It does not deform at runtime and
 does not stream or page: the whole bake is one resource in memory, and you choose which

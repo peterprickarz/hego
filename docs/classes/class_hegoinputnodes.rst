@@ -19,7 +19,17 @@ Turns the Godot nodes wired into a :ref:`HEGoNode3D<class_HEGoNode3D>` into HEGo
 Description
 -----------
 
-Which input node a Godot node needs depends on its type: paths become curve inputs, meshes and CSG shapes become geometry inputs, and a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` becomes points and polyline primitives. Other addons add kinds of their own, such as terrains, through :ref:`HEGoInputHandler<class_HEGoInputHandler>`, which is consulted first. The node path of the source is always sent along as ``_hego_node_path`` so an HDA can tell its inputs apart.
+Which input node a Godot node needs depends on its type: paths become curve
+
+ inputs, meshes and CSG shapes become geometry inputs, and a :ref:`HEGoGraph3D<class_HEGoGraph3D>`\ 
+
+ becomes points and polyline primitives. Other addons add kinds of their own, such as
+
+ terrains, through :ref:`HEGoInputHandler<class_HEGoInputHandler>`, which is consulted first. The node path of the
+
+ source is always sent along as ``_hego_node_path`` so an HDA can tell its
+
+ inputs apart.
 
 .. rst-class:: classref-reftable-group
 
@@ -116,7 +126,9 @@ Spacing, in metres, a Path3D input is resampled at before it is sent to Houdini.
 
 **INPUT_PATH_KEY** = ``"_input_path"`` :ref:`🔗<class_HEGoInputNodes_constant_INPUT_PATH_KEY>`
 
-Key under which :ref:`sync()<class_HEGoInputNodes_method_sync>` passes an :ref:`HEGoInputHandler<class_HEGoInputHandler>` the input path it resolved, as stored in the input stash, so the handler can send it as :ref:`NODE_PATH_ATTRIB<class_HEGoInputNodes_constant_NODE_PATH_ATTRIB>`.
+Key under which :ref:`sync()<class_HEGoInputNodes_method_sync>` passes an :ref:`HEGoInputHandler<class_HEGoInputHandler>` the input path it resolved,
+
+ as stored in the input stash, so the handler can send it as :ref:`NODE_PATH_ATTRIB<class_HEGoInputNodes_constant_NODE_PATH_ATTRIB>`.
 
 .. _class_HEGoInputNodes_constant_HANDLER_BASE:
 
@@ -141,7 +153,11 @@ Method Descriptions
 
 ``Array`` **extension_handlers**\ (\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_extension_handlers>`
 
-The input handlers other addons provide: one instance of every global class that extends :ref:`HEGoInputHandler<class_HEGoInputHandler>`. Rescanned whenever the project's class list changes, so an addon installed in an open editor is picked up without a restart.
+The input handlers other addons provide: one instance of every global class that extends
+
+ :ref:`HEGoInputHandler<class_HEGoInputHandler>`. Rescanned whenever the project's class list changes, so an addon
+
+ installed in an open editor is picked up without a restart.
 
 .. rst-class:: classref-item-separator
 
@@ -165,7 +181,13 @@ The extension handler that sends ``node``, or null when HEGo handles it itself.
 
 ``Array`` **row_handlers**\ (\ host\: ``Node``, row\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_row_handlers>`
 
-The extension handlers input row ``row`` of ``host`` uses: those that send one of the nodes it names, and those whose kind of settings it stores, so a row keeps its handler's rules while its node is renamed or deleted. ``row`` is one entry of the input stash, ``{inputs, settings}``.
+The extension handlers input row ``row`` of ``host`` uses: those that send one of
+
+ the nodes it names, and those whose kind of settings it stores, so a row keeps its
+
+ handler's rules while its node is renamed or deleted. ``row`` is one entry of the
+
+ input stash, ``{inputs, settings}``.
 
 .. rst-class:: classref-item-separator
 
@@ -177,7 +199,13 @@ The extension handlers input row ``row`` of ``host`` uses: those that send one o
 
 ``Array`` **resolve_paths**\ (\ host\: ``Node``, paths\: ``Array``, settings\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_resolve_paths>`
 
-Expands input roots when settings.include_children is enabled. The stored paths remain compact; descendants are discovered again on every cook in scene order. Overlapping selections contribute each source once. Hidden authoring nodes are included, but this host's generated Outputs and CSG Boolean operands are not.
+Expands input roots when settings.include_children is enabled. The stored paths
+
+ remain compact; descendants are discovered again on every cook in scene order.
+
+ Overlapping selections contribute each source once. Hidden authoring nodes are
+
+ included, but this host's generated Outputs and CSG Boolean operands are not.
 
 .. rst-class:: classref-item-separator
 
@@ -189,7 +217,9 @@ Expands input roots when settings.include_children is enabled. The stored paths 
 
 ``bool`` **is_compatible_source**\ (\ node\: ``Node``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_is_compatible_source>`
 
-Whether a node supplies one of HEGo's supported input kinds. CSG assemblies bake from their root shape, including all of their Boolean children.
+Whether a node supplies one of HEGo's supported input kinds. CSG assemblies
+
+ bake from their root shape, including all of their Boolean children.
 
 .. rst-class:: classref-item-separator
 
@@ -201,7 +231,27 @@ Whether a node supplies one of HEGo's supported input kinds. CSG assemblies bake
 
 ``Variant`` **sync**\ (\ host\: ``Node``, existing_node\: ``Variant``, input_node_path\: ``Variant``, settings\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_sync>`
 
-Creates or updates the input node for the Godot node at ``input_node_path``.  Pass the previous input node as ``existing_node`` to reuse it when the source node still has the same type; pass null to always create a fresh one. Returns the input node to store, which is ``existing_node`` itself when it was reused.  ``settings`` is the per-input settings dictionary from the input stash. curve_sample_length optionally controls Path3D upload spacing in metres. Missing, non-finite or non-positive values use the one-metre default. During a strict cook it also carries ``_strict`` and the ``_errors`` array failures are collected in; see :ref:`HEGoAssetAgent.sync_inputs()<class_HEGoAssetAgent_method_sync_inputs>`.
+Creates or updates the input node for the Godot node at ``input_node_path``.
+
+ 
+
+ Pass the previous input node as ``existing_node`` to reuse it when the source
+
+ node still has the same type; pass null to always create a fresh one. Returns the
+
+ input node to store, which is ``existing_node`` itself when it was reused.
+
+ 
+
+ ``settings`` is the per-input settings dictionary from the input stash.
+
+ curve_sample_length optionally controls Path3D upload spacing in metres.
+
+ Missing, non-finite or non-positive values use the one-metre default. During a strict
+
+ cook it also carries ``_strict`` and the ``_errors`` array failures are
+
+ collected in; see :ref:`HEGoAssetAgent.sync_inputs()<class_HEGoAssetAgent_method_sync_inputs>`.
 
 .. rst-class:: classref-item-separator
 
@@ -213,7 +263,13 @@ Creates or updates the input node for the Godot node at ``input_node_path``.  Pa
 
 ``Node`` **resolve_input_node**\ (\ host\: ``Node``, input_node_path\: ``Variant``\ ) |static| :ref:`🔗<class_HEGoInputNodes_method_resolve_input_node>`
 
-The node ``input_node_path`` names, resolved the way input paths are: against the edited scene in the editor, against the running scene at runtime, and finally relative to ``host``. Null when nothing is there. Extensions use this to resolve paths an HDA writes into its output, so those behave exactly like the paths in the input stash.
+The node ``input_node_path`` names, resolved the way input paths are: against the
+
+ edited scene in the editor, against the running scene at runtime, and finally relative to
+
+ ``host``. Null when nothing is there. Extensions use this to resolve paths an HDA
+
+ writes into its output, so those behave exactly like the paths in the input stash.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

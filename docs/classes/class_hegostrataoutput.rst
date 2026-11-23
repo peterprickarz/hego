@@ -19,7 +19,35 @@ Publishes the heightfields a cook outputs into Strata terrain layers.
 Description
 -----------
 
-HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; neither HEGo nor Strata names it. A volume names its target with the primitive attribute hegostrata_layer_path, a path resolved like an input path (relative to the HEGo node, or to the edited or running scene); the HDA usually writes it from a target_layer_path parameter. Volumes without it belong to other handlers and are left alone. Every target must be a procedural ``StrataLayer`` of a ``StrataTerrain3D``, and every channel the HDA emits for it is accepted.  One cook is one ``StrataProcedural`` transaction over all its targets: every target receives a complete validated result, or none does and each keeps its previous one. The Strata layers the host read as inputs (:ref:`HEGoStrataInput<class_HEGoStrataInput>`) are the transaction's read set, so a result built from an input that changed while Houdini cooked is rejected, as is one whose target is also one of its inputs. A committed layer records the host in ``StrataLayer.producer_path`` and ``StrataLayer.producer_id``, the inputs it was built from, and the host's :ref:`signature()<class_HEGoStrataOutput_method_signature>`; the bridge's editor plugin uses these to mark it stale when the host changes (:ref:`poll()<class_HEGoStrataOutput_method_poll>`), and Strata itself when an input does.
+HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; neither HEGo nor Strata names it.
+
+ A volume names its target with the primitive attribute hegostrata_layer_path, a path
+
+ resolved like an input path (relative to the HEGo node, or to the edited or running
+
+ scene); the HDA usually writes it from a target_layer_path parameter. Volumes without it
+
+ belong to other handlers and are left alone. Every target must be a procedural
+
+ ``StrataLayer`` of a ``StrataTerrain3D``, and every channel the HDA emits for it is accepted.
+
+ 
+
+ One cook is one ``StrataProcedural`` transaction over all its targets: every target
+
+ receives a complete validated result, or none does and each keeps its previous one. The
+
+ Strata layers the host read as inputs (:ref:`HEGoStrataInput<class_HEGoStrataInput>`) are the transaction's read
+
+ set, so a result built from an input that changed while Houdini cooked is rejected, as is
+
+ one whose target is also one of its inputs. A committed layer records the host in
+
+ ``StrataLayer.producer_path`` and ``StrataLayer.producer_id``, the inputs it was
+
+ built from, and the host's :ref:`signature()<class_HEGoStrataOutput_method_signature>`; the bridge's editor plugin uses these to
+
+ mark it stale when the host changes (:ref:`poll()<class_HEGoStrataOutput_method_poll>`), and Strata itself when an input does.
 
 .. rst-class:: classref-reftable-group
 
@@ -56,6 +84,8 @@ Methods
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | |void|         | :ref:`poll<class_HEGoStrataOutput_method_poll>`\ (\ root\: ``Node``\ ) |static|                                                                                                                        |
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|         | :ref:`watch_all<class_HEGoStrataOutput_method_watch_all>`\ (\ root\: ``Node``\ ) |static|                                                                                                              |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Dictionary`` | :ref:`to_houdini_attrs<class_HEGoStrataOutput_method_to_houdini_attrs>`\ (\ attrs\: ``Dictionary``\ ) |static|                                                                                         |
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Dictionary`` | :ref:`from_houdini_attrs<class_HEGoStrataOutput_method_from_houdini_attrs>`\ (\ attrs\: ``Dictionary``\ ) |static|                                                                                     |
@@ -76,7 +106,11 @@ Constants
 
 **ATTR_PREFIX** = ``"hegostrata_"`` :ref:`🔗<class_HEGoStrataOutput_constant_ATTR_PREFIX>`
 
-Strata stores its field metadata under plain keys (role, channel, ...). In Houdini the same values are primitive attributes with this prefix, so they cannot collide with an HDA's own attributes.
+Strata stores its field metadata under plain keys (role, channel, ...). In Houdini the
+
+ same values are primitive attributes with this prefix, so they cannot collide with an
+
+ HDA's own attributes.
 
 .. _class_HEGoStrataOutput_constant_STRATA_KEYS:
 
@@ -164,7 +198,11 @@ Primitive attributes fetched with every field.
 
 **COOK_KEY** = ``"hego_strata"`` :ref:`🔗<class_HEGoStrataOutput_constant_COOK_KEY>`
 
-Key the bridge keeps its per-cook state under in the shared cook dictionary (:ref:`HEGoOutputContext.cook_state<class_HEGoOutputContext_property_cook_state>`): ``inputs``, the snapshots :ref:`HEGoStrataInput<class_HEGoStrataInput>` uploaded.
+Key the bridge keeps its per-cook state under in the shared cook dictionary
+
+ (:ref:`HEGoOutputContext.cook_state<class_HEGoOutputContext_property_cook_state>`): ``inputs``, the snapshots
+
+ :ref:`HEGoStrataInput<class_HEGoStrataInput>` uploaded.
 
 .. _class_HEGoStrataOutput_constant_LOG_CATEGORY:
 
@@ -223,7 +261,11 @@ Any cook with volumes may carry Strata targets; :ref:`handle()<class_HEGoStrataO
 
 |void| **handle**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) :ref:`🔗<class_HEGoStrataOutput_method_handle>`
 
-Fetches the volumes that name a Strata layer and publishes them as one transaction. A rejected result is logged and recorded on the layers it was meant for, or the layers this host published before when none could be resolved; their previous results stay in place.
+Fetches the volumes that name a Strata layer and publishes them as one transaction. A
+
+ rejected result is logged and recorded on the layers it was meant for, or the layers this
+
+ host published before when none could be resolved; their previous results stay in place.
 
 .. rst-class:: classref-item-separator
 
@@ -235,7 +277,19 @@ Fetches the volumes that name a Strata layer and publishes them as one transacti
 
 ``Dictionary`` **publish**\ (\ host\: ``Node``, fields\: ``Array``, inputs\: ``Array``, host_signature\: ``Dictionary`` = {}, guard\: ``Callable`` = Callable()\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_publish>`
 
-Routes ``fields``, as ``HEGoAssetNode.get_heightfield_fields()`` returns them, to the layers their hegostrata_layer_path names and publishes them in one transaction by ``host``. ``inputs`` are the snapshots the result was built from (:ref:`HEGoStrataInput.snapshot()<class_HEGoStrataInput_method_snapshot>`); ``host_signature`` is recorded on every published layer; ``guard``, when valid, must still return true at commit. Fields without a target path are ignored. Needs no Houdini session, so tests and fixtures publish through it with fields of their own. Returns the transaction's ``{ok, message}``.
+Routes ``fields``, as ``HEGoAssetNode.get_heightfield_fields()`` returns them, to
+
+ the layers their hegostrata_layer_path names and publishes them in one transaction by
+
+ ``host``. ``inputs`` are the snapshots the result was built from
+
+ (:ref:`HEGoStrataInput.snapshot()<class_HEGoStrataInput_method_snapshot>`); ``host_signature`` is recorded on every published
+
+ layer; ``guard``, when valid, must still return true at commit. Fields without a
+
+ target path are ignored. Needs no Houdini session, so tests and fixtures publish through
+
+ it with fields of their own. Returns the transaction's ``{ok, message}``.
 
 .. rst-class:: classref-item-separator
 
@@ -247,7 +301,13 @@ Routes ``fields``, as ``HEGoAssetNode.get_heightfield_fields()`` returns them, t
 
 ``Dictionary`` **route_fields**\ (\ host\: ``Node``, fields\: ``Array``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_route_fields>`
 
-Groups ``fields`` per target layer and converts each to the target terrain's frame. Returns ``{ok, targets, results}``: ``targets`` as ``StrataProcedural.begin_transaction()`` takes them, ``results`` as ``StrataProcedural.commit_fields()`` takes them; or ``{ok: false, message}``.
+Groups ``fields`` per target layer and converts each to the target terrain's frame.
+
+ Returns ``{ok, targets, results}``: ``targets`` as
+
+ ``StrataProcedural.begin_transaction()`` takes them, ``results`` as
+
+ ``StrataProcedural.commit_fields()`` takes them; or ``{ok: false, message}``.
 
 .. rst-class:: classref-item-separator
 
@@ -259,7 +319,9 @@ Groups ``fields`` per target layer and converts each to the target terrain's fra
 
 |void| **record_input**\ (\ cook\: ``Dictionary``, snapshot\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_record_input>`
 
-Records ``snapshot``, one Strata input uploaded for this cook, in the shared cook dictionary, so the transaction checks it is still current when it commits.
+Records ``snapshot``, one Strata input uploaded for this cook, in the shared cook
+
+ dictionary, so the transaction checks it is still current when it commits.
 
 .. rst-class:: classref-item-separator
 
@@ -271,7 +333,9 @@ Records ``snapshot``, one Strata input uploaded for this cook, in the shared coo
 
 ``String`` **producer_id**\ (\ host\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_producer_id>`
 
-The producer identity a publication by ``host`` records on its layers: the host's path from the root of the scene it belongs to, or its absolute path when it belongs to none.
+The producer identity a publication by ``host`` records on its layers: the host's path
+
+ from the root of the scene it belongs to, or its absolute path when it belongs to none.
 
 .. rst-class:: classref-item-separator
 
@@ -283,7 +347,11 @@ The producer identity a publication by ``host`` records on its layers: the host'
 
 ``Dictionary`` **signature**\ (\ host\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_signature>`
 
-What a published result depends on in ``host`` besides its terrain inputs: the HDA, its parameters (as a hash of :ref:`HEGoNode3D.parm_stash<class_HEGoNode3D_property_parm_stash>`), its input rows and its transform. Recorded on the layers it publishes as ``StrataLayer.producer_signature``.
+What a published result depends on in ``host`` besides its terrain inputs: the HDA,
+
+ its parameters (as a hash of :ref:`HEGoNode3D.parm_stash<class_HEGoNode3D_property_parm_stash>`), its input rows and its
+
+ transform. Recorded on the layers it publishes as ``StrataLayer.producer_signature``.
 
 .. rst-class:: classref-item-separator
 
@@ -295,7 +363,11 @@ What a published result depends on in ``host`` besides its terrain inputs: the H
 
 ``bool`` **producer_changed**\ (\ layer\: ``StrataLayer``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_producer_changed>`
 
-Whether the HEGo node that published ``layer`` has changed since: its :ref:`signature()<class_HEGoStrataOutput_method_signature>` differs from the one recorded on the layer. False when the layer records no producer or its producer is not an HEGo node in the tree.
+Whether the HEGo node that published ``layer`` has changed since: its
+
+ :ref:`signature()<class_HEGoStrataOutput_method_signature>` differs from the one recorded on the layer. False when the layer
+
+ records no producer or its producer is not an HEGo node in the tree.
 
 .. rst-class:: classref-item-separator
 
@@ -319,7 +391,9 @@ The procedural layers under ``root`` whose recorded producer is ``host``.
 
 |void| **watch**\ (\ host\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_watch>`
 
-Makes ``host``'s :ref:`HEGoNode3D.cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>` mark the layers it published stale at once, rather than at the next :ref:`poll()<class_HEGoStrataOutput_method_poll>`. Connecting twice does nothing.
+Makes ``host``'s :ref:`HEGoNode3D.cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>` mark the layers it published
+
+ stale at once, rather than at the next :ref:`poll()<class_HEGoStrataOutput_method_poll>`. Connecting twice does nothing.
 
 .. rst-class:: classref-item-separator
 
@@ -331,7 +405,11 @@ Makes ``host``'s :ref:`HEGoNode3D.cook_inputs_changed<class_HEGoNode3D_signal_co
 
 |void| **inputs_changed**\ (\ host\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_inputs_changed>`
 
-Marks every layer ``host`` published stale, with new producer intent, because its inputs or parameters changed. Also for layers that are already stale, so a runtime bake of them goes stale too.
+Marks every layer ``host`` published stale, with new producer intent, because its
+
+ inputs or parameters changed. Also for layers that are already stale, so a runtime bake of
+
+ them goes stale too.
 
 .. rst-class:: classref-item-separator
 
@@ -343,7 +421,31 @@ Marks every layer ``host`` published stale, with new producer intent, because it
 
 |void| **poll**\ (\ root\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_poll>`
 
-One pass of the bridge's editor watch over the scene under ``root``: :ref:`watch()<class_HEGoStrataOutput_method_watch>`\ es every HEGo node, and marks every current procedural layer stale whose producer changed since it published (:ref:`producer_changed()<class_HEGoStrataOutput_method_producer_changed>`). The bridge's editor plugin runs this a few times a second; a changed input layer is Strata's own check (``StrataTerrain3D.check_procedural_sources()``).
+One pass of the bridge's editor watch over the scene under ``root``: marks every current
+
+ procedural layer of its terrains stale whose producer changed since it published
+
+ (:ref:`producer_changed()<class_HEGoStrataOutput_method_producer_changed>`). The bridge's editor plugin runs this a few times a second; a
+
+ changed input layer is Strata's own check
+
+ (``StrataTerrain3D.check_procedural_sources()``).
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoStrataOutput_method_watch_all:
+
+.. rst-class:: classref-method
+
+|void| **watch_all**\ (\ root\: ``Node``\ ) |static| :ref:`🔗<class_HEGoStrataOutput_method_watch_all>`
+
+:ref:`watch()<class_HEGoStrataOutput_method_watch>`\ es every HEGo node under ``root`` (once, when a scene opens) and puts
+
+ terrains that entered the tree before their script added them to their group (a script
+
+ reload) in it.
 
 .. rst-class:: classref-item-separator
 

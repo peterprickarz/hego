@@ -19,7 +19,25 @@ Brings a Houdini Digital Asset into a Godot scene.
 Description
 -----------
 
-Pick an HDA with **Select HDA**, set its parameters in the HEGo bottom panel, and recook. Cooking instantiates the HDA in the running Houdini session, feeds it the nodes wired up as inputs, cooks it, and turns the result into Godot nodes under a child called ``Outputs``.  This node handles the great majority of cases. When you want one that does something it does not - its own attributes, its own output nodes, several HDAs chained together - write your own and use :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`, which is what this node uses. Read :ref:`cook()<class_HEGoNode3D_method_cook>` below first: it is the worked example, and there is nothing in it a script of your own cannot do.
+Pick an HDA with **Select HDA**, set its parameters in the HEGo bottom panel, and
+
+ recook. Cooking instantiates the HDA in the running Houdini session, feeds it the nodes
+
+ wired up as inputs, cooks it, and turns the result into Godot nodes under a child called
+
+ ``Outputs``.
+
+ 
+
+ This node handles the great majority of cases. When you want one that does something it
+
+ does not - its own attributes, its own output nodes, several HDAs chained together -
+
+ write your own and use :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`, which is what this node uses. Read
+
+ :ref:`cook()<class_HEGoNode3D_method_cook>` below first: it is the worked example, and there is nothing in it a script
+
+ of your own cannot do.
 
 .. rst-class:: classref-reftable-group
 
@@ -94,7 +112,13 @@ Signals
 
 **cook_inputs_changed**\ (\ ) :ref:`🔗<class_HEGoNode3D_signal_cook_inputs_changed>`
 
-Emitted by :ref:`hego_notify_cook_inputs_changed()<class_HEGoNode3D_method_hego_notify_cook_inputs_changed>`: this node's inputs or parameters changed since its last cook, so anything built from that cook may be out of date. Lets another addon react at once without HEGo knowing about it; the HEGo Strata bridge, for example, marks the terrain layers this node published as stale.
+Emitted by :ref:`hego_notify_cook_inputs_changed()<class_HEGoNode3D_method_hego_notify_cook_inputs_changed>`: this node's inputs or parameters
+
+ changed since its last cook, so anything built from that cook may be out of date. Lets
+
+ another addon react at once without HEGo knowing about it; the HEGo Strata bridge, for
+
+ example, marks the terrain layers this node published as stale.
 
 .. rst-class:: classref-section-separator
 
@@ -178,7 +202,9 @@ References to the Godot nodes wired into the HDA's inputs, one entry per input.
 
 :ref:`HEGoAssetAgent<class_HEGoAssetAgent>` **agent** = ``<unknown>`` :ref:`🔗<class_HEGoNode3D_property_agent>`
 
-The tedious parts of driving an HDA. Everything it does is an ordinary call on :ref:`HEGoAssetNode<class_HEGoAssetNode>`; see :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`.
+The tedious parts of driving an HDA. Everything it does is an ordinary call on
+
+ :ref:`HEGoAssetNode<class_HEGoAssetNode>`; see :ref:`HEGoAssetAgent<class_HEGoAssetAgent>`.
 
 .. rst-class:: classref-section-separator
 
@@ -195,7 +221,15 @@ Method Descriptions
 
 |void| **cook**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_cook>`
 
-Instantiates the HDA if needed, pushes inputs and parameters, cooks it and rebuilds the ``Outputs`` subtree from the result.  Children that extend :ref:`HEGoCookExtension<class_HEGoCookExtension>` take part at each step; see :ref:`cook_extensions()<class_HEGoNode3D_method_cook_extensions>`. Without any, this is the whole of a cook.
+Instantiates the HDA if needed, pushes inputs and parameters, cooks it and rebuilds the
+
+ ``Outputs`` subtree from the result.
+
+ 
+
+ Children that extend :ref:`HEGoCookExtension<class_HEGoCookExtension>` take part at each step; see
+
+ :ref:`cook_extensions()<class_HEGoNode3D_method_cook_extensions>`. Without any, this is the whole of a cook.
 
 .. rst-class:: classref-item-separator
 
@@ -207,7 +241,27 @@ Instantiates the HDA if needed, pushes inputs and parameters, cooks it and rebui
 
 ``Array`` **output_handlers**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_output_handlers>`
 
-The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh and object output, then every :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` other addons provide (see :ref:`HEGoOutputHandler.extension_handlers()<class_HEGoOutputHandler_method_extension_handlers>`), then curve output.  Each has ``output_phase()``, ``should_handle(summary)`` and ``handle(context)``: HEGo's own are scripts with those as static functions, the extension handlers are instances. Override this in a subclass to add one of your own, to drop one this node does not need, or to change the order.  A function rather than a constant, because GDScript cannot build a constant out of other classes' references, and because the extension handlers are discovered at run time.
+The output handlers a cook runs, in the order it runs them: HEGo's mesh, multimesh,
+
+ object and graph output, then every :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` other addons provide (see
+
+ :ref:`HEGoOutputHandler.extension_handlers()<class_HEGoOutputHandler_method_extension_handlers>`), then curve output.
+
+ 
+
+ Each has ``output_phase()``, ``should_handle(summary)`` and
+
+ ``handle(context)``: HEGo's own are scripts with those as static functions, the
+
+ extension handlers are instances. Override this in a subclass to add one of your own, to
+
+ drop one this node does not need, or to change the order.
+
+ 
+
+ A function rather than a constant, because GDScript cannot build a constant out of other
+
+ classes' references, and because the extension handlers are discovered at run time.
 
 .. rst-class:: classref-item-separator
 
@@ -219,7 +273,17 @@ The output handlers a cook runs, in the order it runs them: HEGo's mesh, multime
 
 ``Array`` **cook_extensions**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_cook_extensions>`
 
-The children that take part in this node's cooks, in child order: every direct child that extends :ref:`HEGoCookExtension<class_HEGoCookExtension>`.  This is how another addon adds to what a cook does without HEGo knowing about it, for example by checking or publishing the cook's result before the ``Outputs`` subtree is replaced.
+The children that take part in this node's cooks, in child order: every direct child
+
+ that extends :ref:`HEGoCookExtension<class_HEGoCookExtension>`.
+
+ 
+
+ This is how another addon adds to what a cook does without HEGo knowing about it, for
+
+ example by checking or publishing the cook's result before the ``Outputs``\ 
+
+ subtree is replaced.
 
 .. rst-class:: classref-item-separator
 
@@ -243,7 +307,9 @@ Tells the plugin this node can be edited from the HEGo bottom panel.
 
 ``bool`` **hego_rebuild**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_hego_rebuild>`
 
-Reloads this HDA from disk, uploads all scene inputs again and cooks the replacement with the current parameter values.
+Reloads this HDA from disk, uploads all scene inputs again and cooks the replacement
+
+ with the current parameter values.
 
 .. rst-class:: classref-item-separator
 
@@ -255,7 +321,9 @@ Reloads this HDA from disk, uploads all scene inputs again and cooks the replace
 
 ``bool`` **hego_did_last_cook_succeed**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_hego_did_last_cook_succeed>`
 
-Whether the last cook ran to the end. The panel only reads parameters back after one that did, so a failed cook cannot overwrite the stash with a half-restored asset.
+Whether the last cook ran to the end. The panel only reads parameters back after one
+
+ that did, so a failed cook cannot overwrite the stash with a half-restored asset.
 
 .. rst-class:: classref-item-separator
 
@@ -267,7 +335,11 @@ Whether the last cook ran to the end. The panel only reads parameters back after
 
 |void| **hego_notify_cook_inputs_changed**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_hego_notify_cook_inputs_changed>`
 
-Tells this node's cook extensions that its inputs or parameters changed, and emits :ref:`cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>`. The panel calls it on every edit, and :ref:`hego_set_input_stash()<class_HEGoNode3D_method_hego_set_input_stash>` calls it too.
+Tells this node's cook extensions that its inputs or parameters changed, and emits
+
+ :ref:`cook_inputs_changed<class_HEGoNode3D_signal_cook_inputs_changed>`. The panel calls it on every edit, and
+
+ :ref:`hego_set_input_stash()<class_HEGoNode3D_method_hego_set_input_stash>` calls it too.
 
 .. rst-class:: classref-item-separator
 
@@ -279,7 +351,13 @@ Tells this node's cook extensions that its inputs or parameters changed, and emi
 
 ``bool`` **hego_requires_explicit_cook**\ (\ ) :ref:`🔗<class_HEGoNode3D_method_hego_requires_explicit_cook>`
 
-Whether recooking should wait for an explicit request rather than following every edit, because one of this node's cook extensions, or the input handler of one of its input rows (see :ref:`HEGoInputHandler.requires_explicit_cook()<class_HEGoInputHandler_method_requires_explicit_cook>`), asks for that. The panel's auto recook is skipped while this is true.
+Whether recooking should wait for an explicit request rather than following every edit,
+
+ because one of this node's cook extensions, or the input handler of one of its input rows
+
+ (see :ref:`HEGoInputHandler.requires_explicit_cook()<class_HEGoInputHandler_method_requires_explicit_cook>`), asks for that. The panel's auto
+
+ recook is skipped while this is true.
 
 .. rst-class:: classref-item-separator
 
@@ -339,7 +417,13 @@ The stored input references.
 
 |void| **hego_set_input_stash**\ (\ input_array\: ``Array``\ ) :ref:`🔗<class_HEGoNode3D_method_hego_set_input_stash>`
 
-Stores the input references the bottom panel collected.  Each HDA input can combine several Godot nodes, so ``input_array`` holds one entry per HDA input, each with its own list of node paths and its settings.
+Stores the input references the bottom panel collected.
+
+ 
+
+ Each HDA input can combine several Godot nodes, so ``input_array`` holds one entry per
+
+ HDA input, each with its own list of node paths and its settings.
 
 .. rst-class:: classref-item-separator
 
@@ -351,7 +435,13 @@ Stores the input references the bottom panel collected.  Each HDA input can comb
 
 |void| **hego_set_asset_name**\ (\ new_asset_name\: ``String``\ ) :ref:`🔗<class_HEGoNode3D_method_hego_set_asset_name>`
 
-Lets the panel's asset picker change which HDA this node cooks.  Implementing this is what tells the panel the picker applies at all; a node with an HDA written into its script leaves it out and gets no picker button.
+Lets the panel's asset picker change which HDA this node cooks.
+
+ 
+
+ Implementing this is what tells the panel the picker applies at all; a node with an HDA
+
+ written into its script leaves it out and gets no picker button.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

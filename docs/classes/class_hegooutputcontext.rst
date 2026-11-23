@@ -19,7 +19,13 @@ Everything one output handler is given to work with.
 Description
 -----------
 
-A handler needs three things from the cook - the node the output belongs under, the HDA that produced it, and what that cook produced - and the scene plumbing every one of them would otherwise repeat. This carries all of it, so a handler's only argument names exactly what it may use, and any node can call one by building a context for it.
+A handler needs three things from the cook - the node the output belongs under, the HDA
+
+ that produced it, and what that cook produced - and the scene plumbing every one of them
+
+ would otherwise repeat. This carries all of it, so a handler's only argument names
+
+ exactly what it may use, and any node can call one by building a context for it.
 
 .. rst-class:: classref-reftable-group
 
@@ -78,7 +84,17 @@ Property Descriptions
 
 ``Node`` **host** :ref:`🔗<class_HEGoOutputContext_property_host>`
 
-The node this cook belongs to.  Output normally goes under :ref:`outputs_root()<class_HEGoOutputContext_method_outputs_root>` rather than directly here. A handler that must parent somewhere else needs the host itself, which is why it is exposed: the HEGo Terrain3D bridge's terrain output deliberately builds outside the subtree a cook rebuilds, so the terrain it spawns survives recooking.
+The node this cook belongs to.
+
+ 
+
+ Output normally goes under :ref:`outputs_root()<class_HEGoOutputContext_method_outputs_root>` rather than directly here. A handler
+
+ that must parent somewhere else needs the host itself, which is why it is exposed: the
+
+ HEGo Terrain3D bridge's terrain output deliberately builds outside the subtree a cook
+
+ rebuilds, so the terrain it spawns survives recooking.
 
 .. rst-class:: classref-item-separator
 
@@ -102,7 +118,13 @@ The Houdini node whose cook this is.
 
 ``Dictionary`` **summary** :ref:`🔗<class_HEGoOutputContext_property_summary>`
 
-What the cook produced, as :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` reported it.  This is the same dictionary the handler's ``should_handle()`` was asked about, so ``handle()`` can read what it was selected for rather than working it out again.
+What the cook produced, as :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` reported it.
+
+ 
+
+ This is the same dictionary the handler's ``should_handle()`` was asked about,
+
+ so ``handle()`` can read what it was selected for rather than working it out again.
 
 .. rst-class:: classref-item-separator
 
@@ -114,7 +136,11 @@ What the cook produced, as :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAs
 
 ``Dictionary`` **cook_state** = ``{}`` :ref:`🔗<class_HEGoOutputContext_property_cook_state>`
 
-The dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s and input handlers share for this one cook, or empty when the cook was not run through :ref:`HEGoNode3D.cook()<class_HEGoNode3D_method_cook>`. Besides their own keys it holds what the cook started from; see :ref:`HEGoCookExtension<class_HEGoCookExtension>`.
+The dictionary the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s and input handlers share for this one
+
+ cook, or empty when the cook was not run through :ref:`HEGoNode3D.cook()<class_HEGoNode3D_method_cook>`. Besides their
+
+ own keys it holds what the cook started from; see :ref:`HEGoCookExtension<class_HEGoCookExtension>`.
 
 .. rst-class:: classref-section-separator
 
@@ -167,7 +193,9 @@ The node this cook's output is built under, created if it does not exist yet.
 
 ``Node`` **ensure_parent**\ (\ root\: ``Node``, path_parts\: ``PackedStringArray``\ ) :ref:`🔗<class_HEGoOutputContext_method_ensure_parent>`
 
-Creates the intermediate nodes of ``path_parts`` under ``root`` and returns the node the leaf should be added to. The leaf itself is left to the caller.
+Creates the intermediate nodes of ``path_parts`` under ``root`` and returns the
+
+ node the leaf should be added to. The leaf itself is left to the caller.
 
 .. rst-class:: classref-item-separator
 
@@ -179,7 +207,11 @@ Creates the intermediate nodes of ``path_parts`` under ``root`` and returns the 
 
 |void| **own**\ (\ node\: ``Node``\ ) :ref:`🔗<class_HEGoOutputContext_method_own>`
 
-Makes ``node`` part of the saved scene while running in the editor. A spawned node whose owner is left unset silently disappears when the scene is saved, so every node a cook creates goes through here.
+Makes ``node`` part of the saved scene while running in the editor. A spawned node
+
+ whose owner is left unset silently disappears when the scene is saved, so every node a
+
+ cook creates goes through here.
 
 .. rst-class:: classref-item-separator
 
@@ -191,7 +223,37 @@ Makes ``node`` part of the saved scene while running in the editor. A spawned no
 
 ``Node`` **place**\ (\ node_path\: ``String``, default_name\: ``String``, factory\: ``Callable``, unique\: ``bool`` = false, configure\: ``Callable`` = Callable()\ ) :ref:`🔗<class_HEGoOutputContext_method_place>`
 
-Creates the node that ``node_path`` names under this cook's output root, and returns it ready to use, named, parented and owned.  ``node_path`` may contain slashes; everything before the last part becomes plain ``Node3D``\ s. ``default_name`` is used when the path names nothing. ``factory`` is only called when a node actually has to be created.  An existing node at that location is reused when it is already the right class and replaced when it is not, so a handler that runs twice does not orphan what it built the first time. Pass ``unique`` to suffix the name instead of reusing, which is what spawning one node per point needs.  ``configure`` runs on a newly created node after it is named and before it enters the tree. Anything that has to be set before the node's ``_ready()`` sees it belongs there rather than on the returned node: a spawned scene reading a property the HDA meant to override would otherwise read the default.
+Creates the node that ``node_path`` names under this cook's output root, and returns
+
+ it ready to use, named, parented and owned.
+
+ 
+
+ ``node_path`` may contain slashes; everything before the last part becomes plain
+
+ ``Node3D``\ s. ``default_name`` is used when the path names nothing. ``factory`` is
+
+ only called when a node actually has to be created.
+
+ 
+
+ An existing node at that location is reused when it is already the right class and
+
+ replaced when it is not, so a handler that runs twice does not orphan what it built the
+
+ first time. Pass ``unique`` to suffix the name instead of reusing, which is what
+
+ spawning one node per point needs.
+
+ 
+
+ ``configure`` runs on a newly created node after it is named and before it enters
+
+ the tree. Anything that has to be set before the node's ``_ready()`` sees it
+
+ belongs there rather than on the returned node: a spawned scene reading a property the
+
+ HDA meant to override would otherwise read the default.
 
 .. rst-class:: classref-item-separator
 
@@ -203,7 +265,17 @@ Creates the node that ``node_path`` names under this cook's output root, and ret
 
 :ref:`HEGoPointSelection<class_HEGoPointSelection>` **select_points**\ (\ filter_attrib\: ``String``, attribs\: ``PackedStringArray``\ ) :ref:`🔗<class_HEGoOutputContext_method_select_points>`
 
-Fetches this cook's points, loads ``attribs``, and returns the ones whose ``filter_attrib`` is 1.  Returns ``null`` when the fetch failed, the output is unusable, or nothing matched, so a handler can bail on one check rather than the four this replaces. ``filter_attrib`` is loaded whether or not ``attribs`` names it.
+Fetches this cook's points, loads ``attribs``, and returns the ones whose
+
+ ``filter_attrib`` is 1.
+
+ 
+
+ Returns ``null`` when the fetch failed, the output is unusable, or nothing
+
+ matched, so a handler can bail on one check rather than the four this replaces.
+
+ ``filter_attrib`` is loaded whether or not ``attribs`` names it.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

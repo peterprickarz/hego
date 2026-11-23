@@ -19,7 +19,11 @@ Spawns one Godot node per output point.
 Description
 -----------
 
-Each point decides through attributes what to spawn (a registered class, or a packed scene), where to put it, how to orient it and which of its properties to override. Points without those attributes fall back to a plain ``Node3D``.
+Each point decides through attributes what to spawn (a registered class, or a
+
+ packed scene), where to put it, how to orient it and which of its properties to
+
+ override. Points without those attributes fall back to a plain ``Node3D``.
 
 .. rst-class:: classref-reftable-group
 
@@ -78,7 +82,9 @@ Node path used when a point does not specify hego_node_path.
 
 **DEFAULT_CLASS_NAME** = ``"Node3D"`` :ref:`🔗<class_HEGoObjectOutput_constant_DEFAULT_CLASS_NAME>`
 
-Class spawned when a point does not specify hego_class_name, and the fallback whenever the requested class or scene cannot be used.
+Class spawned when a point does not specify hego_class_name, and the fallback
+
+ whenever the requested class or scene cannot be used.
 
 .. _class_HEGoObjectOutput_constant_SPAWN_TYPE_CLASS:
 
@@ -111,7 +117,13 @@ Method Descriptions
 
 ``Array`` **point_attribs**\ (\ ) |static| :ref:`🔗<class_HEGoObjectOutput_method_point_attribs>`
 
-Attributes this handler reads off each spawned point: the shared orientation set plus its own. Cd is not among them, because spawned nodes are not tinted. A function rather than a const, because a const cannot be built from another class's constant. See :ref:`HEGoPointUtil<class_HEGoPointUtil>`.
+Attributes this handler reads off each spawned point: the shared orientation set plus
+
+ its own. Cd is not among them, because spawned nodes are not tinted. A function rather
+
+ than a const, because a const cannot be built from another class's constant.
+
+ See :ref:`HEGoPointUtil<class_HEGoPointUtil>`.
 
 .. rst-class:: classref-item-separator
 

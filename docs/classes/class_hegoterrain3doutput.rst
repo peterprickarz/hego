@@ -19,7 +19,21 @@ Builds a Terrain3D node from the heightfield layers of a cooked HDA.
 Description
 -----------
 
-The ``height`` layer drives the terrain itself; the optional ``hegot3d_*`` layers add region masks, holes, per-texture weights and colour maps. Everything is driven by detail attributes on the height layer, so an HDA that does not set ``hegot3d_spawn_terrain`` is skipped entirely.  HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; HEGo never names it. Heightfields another handler publishes, such as the HEGo Strata bridge's, lack ``hegot3d_spawn_terrain`` and are left alone.
+The ``height`` layer drives the terrain itself; the optional
+
+ ``hegot3d_*`` layers add region masks, holes, per-texture weights and
+
+ colour maps. Everything is driven by detail attributes on the height layer, so an
+
+ HDA that does not set ``hegot3d_spawn_terrain`` is skipped entirely.
+
+ 
+
+ HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; HEGo never names it. Heightfields
+
+ another handler publishes, such as the HEGo Strata bridge's, lack
+
+ ``hegot3d_spawn_terrain`` and are left alone.
 
 .. rst-class:: classref-reftable-group
 

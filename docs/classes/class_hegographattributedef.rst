@@ -12,14 +12,16 @@ HEGoGraphAttributeDef
 
 **Inherits:** ``Resource``
 
-One attribute a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` can store on its points or connections.
+One attribute a :ref:`HEGoGraph3D<class_HEGoGraph3D>` can store on its points or connections.
 
 .. rst-class:: classref-introduction-group
 
 Description
 -----------
 
-Lives in a :ref:`HEGoGraphAttributes<class_HEGoGraphAttributes>` list on a child of the graph. The name, owner and value type decide what is sent to Houdini; the rest only shapes the editor UI.
+Lives in a :ref:`HEGoGraphAttributes<class_HEGoGraphAttributes>` list on a child of the graph. The name, owner
+
+ and value type decide what is sent to Houdini; the rest only shapes the editor UI.
 
 .. rst-class:: classref-reftable-group
 
@@ -42,6 +44,8 @@ Properties
    +--------------------------------------------------------+----------------------------------------------------------------------------+-------------------------+
    | ``String``                                             | :ref:`default_string<class_HEGoGraphAttributeDef_property_default_string>` | ``""``                  |
    +--------------------------------------------------------+----------------------------------------------------------------------------+-------------------------+
+   | ``Vector3``                                            | :ref:`default_vector<class_HEGoGraphAttributeDef_property_default_vector>` | ``Vector3(0, 0, 0)``    |
+   +--------------------------------------------------------+----------------------------------------------------------------------------+-------------------------+
    | ``bool``                                               | :ref:`int_as_toggle<class_HEGoGraphAttributeDef_property_int_as_toggle>`   | ``false``               |
    +--------------------------------------------------------+----------------------------------------------------------------------------+-------------------------+
    | ``PackedStringArray``                                  | :ref:`string_options<class_HEGoGraphAttributeDef_property_string_options>` | ``PackedStringArray()`` |
@@ -55,13 +59,15 @@ Methods
 .. table::
    :widths: auto
 
-   +-------------+---------------------------------------------------------------------------------------------------+
-   | ``Variant`` | :ref:`default_value<class_HEGoGraphAttributeDef_method_default_value>`\ (\ )                      |
-   +-------------+---------------------------------------------------------------------------------------------------+
-   | ``Variant`` | :ref:`make_array<class_HEGoGraphAttributeDef_method_make_array>`\ (\ size\: ``int``\ )            |
-   +-------------+---------------------------------------------------------------------------------------------------+
-   | ``bool``    | :ref:`matches_array<class_HEGoGraphAttributeDef_method_matches_array>`\ (\ array\: ``Variant``\ ) |
-   +-------------+---------------------------------------------------------------------------------------------------+
+   +-------------+------------------------------------------------------------------------------------------------------------+
+   | ``Variant`` | :ref:`default_value<class_HEGoGraphAttributeDef_method_default_value>`\ (\ )                               |
+   +-------------+------------------------------------------------------------------------------------------------------------+
+   | ``Variant`` | :ref:`make_array<class_HEGoGraphAttributeDef_method_make_array>`\ (\ size\: ``int``\ )                     |
+   +-------------+------------------------------------------------------------------------------------------------------------+
+   | ``bool``    | :ref:`matches_array<class_HEGoGraphAttributeDef_method_matches_array>`\ (\ array\: ``Variant``\ )          |
+   +-------------+------------------------------------------------------------------------------------------------------------+
+   | ``int``     | :ref:`value_type_of<class_HEGoGraphAttributeDef_method_value_type_of>`\ (\ array\: ``Variant``\ ) |static| |
+   +-------------+------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -147,6 +153,14 @@ enum **ValueType**: :ref:`🔗<enum_HEGoGraphAttributeDef_ValueType>`
 	There is currently no description for this enum. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
 
 
+
+.. _class_HEGoGraphAttributeDef_constant_VECTOR3:
+
+.. rst-class:: classref-enumeration-constant
+
+:ref:`ValueType<enum_HEGoGraphAttributeDef_ValueType>` **VECTOR3** = ``3``
+
+Three floats (a Houdini vector of tuple size 3), stored as a ``PackedVector3Array``.
 
 .. rst-class:: classref-section-separator
 
@@ -253,6 +267,22 @@ Default for a newly created point or connection when :ref:`value_type<class_HEGo
 
 ----
 
+.. _class_HEGoGraphAttributeDef_property_default_vector:
+
+.. rst-class:: classref-property
+
+``Vector3`` **default_vector** = ``Vector3(0, 0, 0)`` :ref:`🔗<class_HEGoGraphAttributeDef_property_default_vector>`
+
+.. rst-class:: classref-property-setget
+
+- |void| **@default_vector_setter**\ (\ value\: ``Vector3``\ )
+
+Default for a newly created point or connection when :ref:`value_type<class_HEGoGraphAttributeDef_property_value_type>` is VECTOR3.
+
+.. rst-class:: classref-item-separator
+
+----
+
 .. _class_HEGoGraphAttributeDef_property_int_as_toggle:
 
 .. rst-class:: classref-property
@@ -323,6 +353,20 @@ A packed array of ``size`` filled with :ref:`default_value()<class_HEGoGraphAttr
 ``bool`` **matches_array**\ (\ array\: ``Variant``\ ) :ref:`🔗<class_HEGoGraphAttributeDef_method_matches_array>`
 
 Whether ``array`` is the packed type this definition stores.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoGraphAttributeDef_method_value_type_of:
+
+.. rst-class:: classref-method
+
+``int`` **value_type_of**\ (\ array\: ``Variant``\ ) |static| :ref:`🔗<class_HEGoGraphAttributeDef_method_value_type_of>`
+
+The value type that stores ``array``, or -1 when no type does. Used to declare the
+
+ attributes a cook sends back.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

@@ -27,12 +27,14 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
      - Teaches HEGo to turn another kind of cook result into Godot nodes.
    * - :ref:`HEGoCookTimings<class_HEGoCookTimings>`
      - Collects the per-phase timings of a ``cook()`` call.
+   * - :ref:`HEGoGraph3D<class_HEGoGraph3D>`
+     - A 3D graph of points and connections: authored as a :ref:`HEGoNode3D<class_HEGoNode3D>` input, or built by a cook's graph output (see :ref:`HEGoGraphOutput<class_HEGoGraphOutput>`).
    * - :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`
-     - A 3D graph of points and connections that can be fed into a :ref:`HEGoNode3D<class_HEGoNode3D>` input.
+     - A :ref:`HEGoGraph3D<class_HEGoGraph3D>` authored in the editor and fed into a :ref:`HEGoNode3D<class_HEGoNode3D>` input.
    * - :ref:`HEGoGraphAttributes<class_HEGoGraphAttributes>`
-     - Schema for a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`: the attributes its points and connections can carry.
+     - Schema for a :ref:`HEGoGraph3D<class_HEGoGraph3D>`: the attributes its points and connections can carry.
    * - :ref:`HEGoGraphAttributeDef<class_HEGoGraphAttributeDef>`
-     - One attribute a :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>` can store on its points or connections.
+     - One attribute a :ref:`HEGoGraph3D<class_HEGoGraph3D>` can store on its points or connections.
 
 .. toctree::
    :maxdepth: 1
@@ -47,6 +49,7 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
    class_hegocookextension
    class_hegooutputhandler
    class_hegocooktimings
+   class_hegograph3d
    class_hegographinput3d
    class_hegographattributes
    class_hegographattributedef

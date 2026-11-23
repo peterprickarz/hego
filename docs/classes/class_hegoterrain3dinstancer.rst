@@ -19,7 +19,21 @@ Scatters scenes onto an existing Terrain3D through its instancer.
 Description
 -----------
 
-The point fetch groups points by terrain node path and then by scene path, so one HDA can populate several terrains with several scenes each. Slots HEGo generated on a previous cook are recognised by their ``hegot3d_`` name prefix and reused, which keeps hand-authored mesh assets untouched.  HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; HEGo never names it. It reads points, not volumes, and does nothing for a cook whose points lack :ref:`INSTANCING_FILTER_ATTRIB<class_HEGoTerrain3DInstancer_constant_INSTANCING_FILTER_ATTRIB>`.
+The point fetch groups points by terrain node path and then by scene path, so one
+
+ HDA can populate several terrains with several scenes each. Slots HEGo generated on
+
+ a previous cook are recognised by their ``hegot3d_`` name prefix and reused,
+
+ which keeps hand-authored mesh assets untouched.
+
+ 
+
+ HEGo runs it because it extends :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`; HEGo never names it. It reads
+
+ points, not volumes, and does nothing for a cook whose points lack
+
+ :ref:`INSTANCING_FILTER_ATTRIB<class_HEGoTerrain3DInstancer_constant_INSTANCING_FILTER_ATTRIB>`.
 
 .. rst-class:: classref-reftable-group
 
@@ -115,7 +129,11 @@ Method Descriptions
 
 ``Array`` **point_attribs**\ (\ ) |static| :ref:`🔗<class_HEGoTerrain3DInstancer_method_point_attribs>`
 
-Attributes this handler reads off each instanced point: the shared orientation set plus colour. A function rather than a const, because a const cannot be built from another class's constant. See :ref:`HEGoPointUtil<class_HEGoPointUtil>`.
+Attributes this handler reads off each instanced point: the shared orientation set plus
+
+ colour. A function rather than a const, because a const cannot be built from another
+
+ class's constant. See :ref:`HEGoPointUtil<class_HEGoPointUtil>`.
 
 .. rst-class:: classref-item-separator
 

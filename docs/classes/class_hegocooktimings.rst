@@ -19,7 +19,11 @@ Collects the per-phase timings of a :ref:`HEGoNode3D.cook()<class_HEGoNode3D_met
 Description
 -----------
 
-Usage: :ref:`begin_phase()<class_HEGoCookTimings_method_begin_phase>` before a phase, :ref:`end_phase()<class_HEGoCookTimings_method_end_phase>` after it, and :ref:`format_summary()<class_HEGoCookTimings_method_format_summary>` once the cook is done. Phases are printed in the order they were recorded, so adding an output handler needs no change here.
+Usage: :ref:`begin_phase()<class_HEGoCookTimings_method_begin_phase>` before a phase, :ref:`end_phase()<class_HEGoCookTimings_method_end_phase>` after it, and
+
+ :ref:`format_summary()<class_HEGoCookTimings_method_format_summary>` once the cook is done. Phases are printed in the order
+
+ they were recorded, so adding an output handler needs no change here.
 
 .. rst-class:: classref-reftable-group
 

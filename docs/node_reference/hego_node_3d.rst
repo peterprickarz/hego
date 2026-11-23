@@ -11,26 +11,37 @@ and what it does with them is :doc:`/api/node3d_modules`.
 
 ``HEGoNode3D`` supports:
 
-- Feeding Path3D, :doc:`HEGoGraphInput3D <hego_graph_input_3d>`, MeshInstance3D, CSGShape3D, and Terrain3D into Houdini
+- Feeding Path3D, :doc:`HEGoGraphInput3D <hego_graph_input_3d>`, MeshInstance3D, and CSGShape3D into Houdini
 - Generating bespoke geo as MeshInstance3D nodes, including LODs and material assignment
+- Generating curves as Path3D nodes and graphs as ``HEGoGraph3D`` nodes
 - Instancing meshes via MultiMeshInstance3D nodes
-- Generating Terrain3D terrains from heightfields
-- Spawning Terrain3D instancer content from points
 - Spawning nodes by class name and setting most properties
 - Spawning scenes by resource path
 
-The Terrain3D items need the HEGo Terrain3D bridge addon (``addons/hego_terrain3d``) next to
-HEGo and Terrain3D; it adds them through
+Additional input and output types plug into ``HEGoNode3D`` through separate, one-way
+**bridge addons** (see :doc:`/bridges/index`) using
 :ref:`HEGoInputHandler<class_HEGoInputHandler>` and
-:ref:`HEGoOutputHandler<class_HEGoOutputHandler>`. The HEGo Strata bridge
-(``addons/hego_strata``) adds Strata layers as inputs and publishes heightfields into them
-the same way, through :ref:`HEGoStrataInput<class_HEGoStrataInput>` and
-:ref:`HEGoStrataOutput<class_HEGoStrataOutput>`; see :doc:`/strata/houdini`. Each output handler acts only on output
-that carries its own attributes, so both bridges can be installed together. An input
-handler can make a node's cooks explicit (the panel's auto recook skips the node) and strict
-(:ref:`requires_strict_cook<class_HEGoInputHandler_method_requires_strict_cook>`); the
-Strata bridge's terrain inputs do both. For extra steps in one node's cooks, add a
-:ref:`HEGoCookExtension<class_HEGoCookExtension>` child. See :doc:`/api/node3d_modules`.
+:ref:`HEGoOutputHandler<class_HEGoOutputHandler>`:
+
+- **HEGo Strata** (``addons/hego_strata``): feeds ``StrataLayer`` nodes into HDAs and
+  publishes heightfield volumes into procedural Strata layers via
+  :ref:`HEGoStrataInput<class_HEGoStrataInput>` and
+  :ref:`HEGoStrataOutput<class_HEGoStrataOutput>` (:doc:`/strata/houdini`).
+- **HEGo Copia** (``addons/hego_copia``): feeds ``CopiaStore3D`` cell summaries and
+  instance points into HDAs and writes cooked points/clears into Copia stores via
+  :ref:`HEGoCopiaInput<class_HEGoCopiaInput>` and
+  :ref:`HEGoCopiaOutput<class_HEGoCopiaOutput>` (:doc:`/copia/houdini`).
+- **HEGo Terrain3D** (``addons/hego_terrain3d``): feeds Terrain3D nodes into HDAs and
+  generates Terrain3D terrains and instancer content (:doc:`inputs/terrain3d_input`,
+  :doc:`outputs/terrain3d_output`).
+
+Each output handler acts only on output that carries its own attributes, so any combination
+of bridges can be installed together. An input handler can make a node's cooks explicit (the
+panel's auto recook skips the node) and strict
+(:ref:`requires_strict_cook<class_HEGoInputHandler_method_requires_strict_cook>`); the Strata
+bridge's terrain inputs do both, and Copia inputs make cooks strict. For extra steps in one
+node's cooks, add a :ref:`HEGoCookExtension<class_HEGoCookExtension>` child. See
+:doc:`/api/node3d_modules`.
 
 Usage
 -----
@@ -147,8 +158,9 @@ Inputs
 The following sections describe what ``HEGoNode3D`` sends into Houdini when you connect different
 Godot node types as HDA inputs.
 
-Supported input types include Path3D, MeshInstance3D, CSGShape3D, and, with the HEGo
-Terrain3D bridge addon, Terrain3D.
+Built-in input types are Path3D, HEGoGraphInput3D, MeshInstance3D, and CSGShape3D. Bridge
+addons add Strata layers (:doc:`/strata/houdini`), Copia stores (:doc:`/copia/houdini`), and
+Terrain3D (:doc:`inputs/terrain3d_input`).
 
 .. toctree::
    :maxdepth: 2
@@ -158,9 +170,10 @@ Terrain3D bridge addon, Terrain3D.
 Outputs
 -------
 
-The following sections describe output-side attributes read after cook. Choose the output type
-that best fits your use case: geometry, instancing, object spawning, or Terrain3D (with the
-HEGo Terrain3D bridge addon).
+The following sections describe output-side attributes read after cook. Built-in outputs
+cover geometry, curves, graphs, MultiMesh instancing, and object spawning; bridge addons add
+Strata terrain layers (:doc:`/strata/houdini`), Copia instancing stores
+(:doc:`/copia/houdini`), and Terrain3D (:doc:`outputs/terrain3d_output`).
 
 .. toctree::
    :maxdepth: 2

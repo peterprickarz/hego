@@ -88,6 +88,7 @@ GROUPS = [
             "HEGoCookExtension",
             "HEGoOutputHandler",
             "HEGoCookTimings",
+            "HEGoGraph3D",
             "HEGoGraphInput3D",
             "HEGoGraphAttributes",
             "HEGoGraphAttributeDef",
@@ -103,6 +104,7 @@ GROUPS = [
             "HEGoMultiMeshOutput",
             "HEGoObjectOutput",
             "HEGoCurveOutput",
+            "HEGoGraphOutput",
             "HEGoCurveBuilder",
             "HEGoPointUtil",
             "HEGoPropertyUtil",
@@ -134,6 +136,18 @@ GROUPS = [
         ],
     ),
     (
+        "hego_copia",
+        "HEGo Copia bridge",
+        "The separate ``addons/hego_copia`` addon, which depends on HEGo and Copia: Copia "
+        "store cells and points as HDA inputs, and a cook's points written into Copia "
+        "stores. It plugs into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` "
+        "and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`.",
+        [
+            "HEGoCopiaInput",
+            "HEGoCopiaOutput",
+        ],
+    ),
+    (
         "terrain3d",
         "HEGo Terrain3D bridge",
         "The separate ``addons/hego_terrain3d`` addon, which depends on HEGo and on the "
@@ -156,8 +170,10 @@ INTERNAL_CLASSES = {
     "HEGoAssetSection": "a section of the bottom panel",
     "HEGoInputLineEdit": "a field in the bottom panel",
     "HEGoGraphEditor": "viewport editing for HEGoGraphInput3D",
+    "HEGoGraphPathMesh": "path ribbon/tube mesh helper for HEGoGraph3D",
     "HEGoGraphPicking": "screen-space picking for the graph editor",
     "HEGoGraphPlacement": "ray-plane hits for the graph editor",
+    "HEGoGraphSurface": "ground snapping and draping helper for HEGoGraph3D",
     "HEGoStrataInputSettings": "the Strata options in a bottom panel input row",
 }
 
@@ -320,8 +336,8 @@ def write_index(out_dir):
         "HEGo Class Reference",
         "====================",
         "",
-        "Every class HEGo registers, and those of the two bridge addons, HEGo Strata and HEGo",
-        "Terrain3D. The C++ pages come from the class reference XML in",
+        "Every class HEGo registers, and those of the three bridge addons — HEGo Strata, HEGo",
+        "Copia and HEGo Terrain3D. The C++ pages come from the class reference XML in",
         "``demo/addons/hego/doc_classes``; the GDScript pages are generated from the scripts'",
         "own ``##`` comments, so a class page and the editor's built-in help say the same thing.",
         "",

@@ -2,12 +2,18 @@
 
 Copia is an instancing store for large worlds: tens of thousands to millions of instances of
 meshes such as rocks, plants and props, kept on disk in cells and drawn only near the camera. It
-needs no Houdini. Points are written into it from GDScript, from native code, or (once the
-bridge exists) from HEGo cooks.
+needs no Houdini. Points are written into it from GDScript, from native code, or from HEGo cooks
+through the separate HEGo Copia bridge (`addons/hego_copia`; see {doc}`/bridges/index`).
+
+```{note}
+Copia is a standalone addon with no dependency on HEGo or Houdini and is planned to move into its
+own repository in the future. While it is developed on HEGo's `next` channel, its package and full
+documentation live here.
+```
 
 Pages: [Getting started](getting_started.md) (install, a first store, the demo scene),
 [Reference](reference.md) (every property and method), [Copia and Houdini](houdini.md) (the HEGo
-bridge) and the specification, `docs/development/copia_design.md`.
+bridge) and the [design specification](../development/copia_design.md).
 
 ## Who needs it
 

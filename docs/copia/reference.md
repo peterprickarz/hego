@@ -4,7 +4,9 @@ The store node, the source node and the three resource classes document their me
 Godot's built-in help. This page lists them in one place and says which properties need a build.
 "Build" means the descriptor the native build reads changes, so the built cells that used the
 object are stale; "load" means the value is applied when a cell loads and needs no build. The
-native side is specified in `docs/development/copia_design.md`.
+native side is specified in the [design specification](../development/copia_design.md). The HEGo
+bridge classes are in the class reference: {ref}`HEGoCopiaInput<class_HEGoCopiaInput>` and
+{ref}`HEGoCopiaOutput<class_HEGoCopiaOutput>`.
 
 Scale, where a rule compares it, is the length of an instance's basis Y column.
 

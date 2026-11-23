@@ -239,7 +239,17 @@ are built for the island's four materials, and make good templates for your own:
 | --- | --- | --- |
 | `HEGo_IslandErosion` | cumulative `height`; optionally the raw `height` and `constraint` of a later hand layer, which it protects and blends toward | `height`, `erosion_delta`, `sediment`, `debris`, `flow`, `grass`, `rock`, `sand`, `scree`, `footpath`, plus one `material_<name>` weight per material |
 | `HEGo_TerrainTint` | cumulative `height` | `terrain_tint_r`, `terrain_tint_g`, `terrain_tint_b`, `terrain_ao` |
-| `HEGo_MaterialDistribution` | cumulative `height` | one `material_<name>` weight per material, summing to 1 | The material HDA works on the terrain's own lattice, up to 4097 samples per axis, and writes every output on exactly the lattice it receives; a 4097-sample cook takes about 75 s and about 12 GB of memory. The island sends it at the terrain's 1 m spacing (4097 samples); a lattice above 4097 samples per axis is cooked in overlapping tiles and published as one result (see the development notes on the material distribution). | Parameter | Default | Meaning |
+| `HEGo_MaterialDistribution` | cumulative `height` | one `material_<name>` weight per material, summing to 1 |
+
+The material HDA works on the terrain's own lattice, up to 4097 samples per axis, and writes
+every output on exactly the lattice it receives; a 4097-sample cook takes about 75 s and
+about 12 GB of memory. The island sends it at the terrain's 1 m spacing (4097 samples); a
+lattice above 4097 samples per axis is cooked in overlapping tiles and published as one
+result (see [island material distribution](../development/island_material_distribution.md)).
+
+`HEGo_IslandErosion` footpath parameters:
+
+| Parameter | Default | Meaning |
 | --- | --- | --- |
 | `footpaths` | on | compute the channel; off still outputs it, all 0 |
 | `footpath_count` | 8 | waypoints joined into the network |

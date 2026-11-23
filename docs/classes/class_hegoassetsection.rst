@@ -23,7 +23,11 @@ One collapsible block of parameters in the bottom panel, for one HDA.
 Description
 -----------
 
-A node that puts several HDAs in the panel gets one of these per HDA. A node with a single HDA gets its parameters directly and no header, so the common case looks exactly as it did.
+A node that puts several HDAs in the panel gets one of these per HDA. A node with a
+
+ single HDA gets its parameters directly and no header, so the common case looks exactly
+
+ as it did.
 
 .. rst-class:: classref-reftable-group
 
@@ -128,7 +132,9 @@ Where this section's parameter widgets go.
 
 |void| **open**\ (\ ) :ref:`🔗<class_HEGoAssetSection_method_open>`
 
-Opens the section without reporting it, for when a script asked for it rather than the user. The panel's remembered state is the user's, and highlighting should not overwrite it.
+Opens the section without reporting it, for when a script asked for it rather than the
+
+ user. The panel's remembered state is the user's, and highlighting should not overwrite it.
 
 .. rst-class:: classref-item-separator
 

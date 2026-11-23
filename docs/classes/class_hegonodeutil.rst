@@ -19,7 +19,13 @@ Shared plumbing for :ref:`HEGoNode3D<class_HEGoNode3D>` and its output handlers.
 Description
 -----------
 
-Every handler needs the same three things: a way to wait for a :ref:`HEGoTask<class_HEGoTask>`, a way to build the ``Outputs/...`` node hierarchy a cook writes into, and a way to read the attribute dictionaries HAPI hands back. They live here so the handlers only contain the logic that is actually specific to their output type.
+Every handler needs the same three things: a way to wait for a :ref:`HEGoTask<class_HEGoTask>`,
+
+ a way to build the ``Outputs/...`` node hierarchy a cook writes into,
+
+ and a way to read the attribute dictionaries HAPI hands back. They live here so
+
+ the handlers only contain the logic that is actually specific to their output type.
 
 .. rst-class:: classref-reftable-group
 
@@ -95,7 +101,9 @@ Method Descriptions
 
 ``Variant`` **await_task**\ (\ host\: ``Node``, task\: :ref:`HEGoTask<class_HEGoTask>`\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_await_task>`
 
-Waits for ``task`` to finish and returns its result, or ``null`` if it failed or the host leaves the tree. This does not cancel the native task.
+Waits for ``task`` to finish and returns its result, or ``null``\ 
+
+ if it failed or the host leaves the tree. This does not cancel the native task.
 
 .. rst-class:: classref-item-separator
 
@@ -107,7 +115,17 @@ Waits for ``task`` to finish and returns its result, or ``null`` if it failed or
 
 ``Dictionary`` **checked_task**\ (\ host\: ``Variant``, task\: :ref:`HEGoTask<class_HEGoTask>`\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_checked_task>`
 
-Waits for ``task`` like :ref:`await_task()<class_HEGoNodeUtil_method_await_task>`, but reports the outcome rather than logging it: ``{ok: true, value}``, or ``{ok: false, message}`` when the task failed, was null, or ``host`` left the scene tree while it waited.  Use this where failure has to be told apart from a task that legitimately completed with null, which is what HEGo returns for work it could skip.
+Waits for ``task`` like :ref:`await_task()<class_HEGoNodeUtil_method_await_task>`, but reports the outcome rather than
+
+ logging it: ``{ok: true, value}``, or ``{ok: false, message}`` when the
+
+ task failed, was null, or ``host`` left the scene tree while it waited.
+
+ 
+
+ Use this where failure has to be told apart from a task that legitimately completed with
+
+ null, which is what HEGo returns for work it could skip.
 
 .. rst-class:: classref-item-separator
 
@@ -119,7 +137,15 @@ Waits for ``task`` like :ref:`await_task()<class_HEGoNodeUtil_method_await_task>
 
 ``Dictionary`` **global_subclasses**\ (\ base\: ``StringName``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_global_subclasses>`
 
-Every global class that extends ``base``, directly or through other global classes, as a dictionary from class name to script path. ``base`` itself is not included.  Reads ``ProjectSettings.get_global_class_list()``, which exported games have too. This is how HEGo finds the :ref:`HEGoInputHandler<class_HEGoInputHandler>`\ s and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`\ s other addons provide.
+Every global class that extends ``base``, directly or through other global classes,
+
+ as a dictionary from class name to script path. ``base`` itself is not included.
+
+ 
+
+ Reads ``ProjectSettings.get_global_class_list()``, which exported games have too. This
+
+ is how HEGo finds the :ref:`HEGoInputHandler<class_HEGoInputHandler>`\ s and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`\ s other addons provide.
 
 .. rst-class:: classref-item-separator
 
@@ -131,7 +157,17 @@ Every global class that extends ``base``, directly or through other global class
 
 ``bool`` **output_has**\ (\ summary\: ``Dictionary``, key\: ``String``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_output_has>`
 
-Whether the cook produced the kind of geometry a handler needs.  ``summary`` is :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAssetNode_method_get_output_summary>`'s result and ``key`` one of its has\_\* flags. An unknown summary or a missing key means the handler runs: skipping is only ever done on positive knowledge that there is nothing to do, so a failed summary costs time rather than output.
+Whether the cook produced the kind of geometry a handler needs.
+
+ 
+
+ ``summary`` is :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAssetNode_method_get_output_summary>`'s result and
+
+ ``key`` one of its has\_\* flags. An unknown summary or a missing key means
+
+ the handler runs: skipping is only ever done on positive knowledge that there is
+
+ nothing to do, so a failed summary costs time rather than output.
 
 .. rst-class:: classref-item-separator
 
@@ -143,7 +179,9 @@ Whether the cook produced the kind of geometry a handler needs.  ``summary`` is 
 
 ``bool`` **output_has_attribute**\ (\ summary\: ``Dictionary``, list_key\: ``String``, attribute\: ``String``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_output_has_attribute>`
 
-Whether the cooked geometry carries an attribute a handler keys off, for example hego_spawn. Follows the same "unknown means run it" rule as :ref:`output_has()<class_HEGoNodeUtil_method_output_has>`.
+Whether the cooked geometry carries an attribute a handler keys off, for example
+
+ hego_spawn. Follows the same "unknown means run it" rule as :ref:`output_has()<class_HEGoNodeUtil_method_output_has>`.
 
 .. rst-class:: classref-item-separator
 
@@ -155,7 +193,13 @@ Whether the cooked geometry carries an attribute a handler keys off, for example
 
 |void| **set_editor_owner**\ (\ host\: ``Node``, node\: ``Node``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_set_editor_owner>`
 
-Makes ``node`` show up in the saved scene while running in the editor.  Nodes created at runtime need no owner, and a node whose owner is left unset in the editor silently disappears on save, so every node a cook spawns goes through here.
+Makes ``node`` show up in the saved scene while running in the editor.
+
+ 
+
+ Nodes created at runtime need no owner, and a node whose owner is left unset in
+
+ the editor silently disappears on save, so every node a cook spawns goes through here.
 
 .. rst-class:: classref-item-separator
 
@@ -179,7 +223,15 @@ Returns the ``Outputs`` node under ``host``, creating it if needed.
 
 ``Node`` **ensure_parent_path**\ (\ host\: ``Node``, root\: ``Node``, path_parts\: ``PackedStringArray``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_ensure_parent_path>`
 
-Walks ``path_parts`` under ``root``, creating plain ``Node3D``\ s for every part except the last one, and returns the node the leaf should be added to.  The leaf itself is left to the caller, because each output type creates a different node for it (MeshInstance3D, Path3D, MultiMeshInstance3D, ...).
+Walks ``path_parts`` under ``root``, creating plain ``Node3D``\ s for every
+
+ part except the last one, and returns the node the leaf should be added to.
+
+ 
+
+ The leaf itself is left to the caller, because each output type creates a
+
+ different node for it (MeshInstance3D, Path3D, MultiMeshInstance3D, ...).
 
 .. rst-class:: classref-item-separator
 
@@ -191,7 +243,9 @@ Walks ``path_parts`` under ``root``, creating plain ``Node3D``\ s for every part
 
 ``String`` **unique_child_name**\ (\ parent\: ``Node``, base_name\: ``String``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_unique_child_name>`
 
-Returns a name based on ``base_name`` that is not taken under ``parent`` yet, by appending ``_001``, ``_002``, ... to it.
+Returns a name based on ``base_name`` that is not taken under ``parent`` yet,
+
+ by appending ``_001``, ``_002``, ... to it.
 
 .. rst-class:: classref-item-separator
 
@@ -203,7 +257,15 @@ Returns a name based on ``base_name`` that is not taken under ``parent`` yet, by
 
 ``Variant`` **get_attrib_value**\ (\ fetch_result\: ``Dictionary``, list_key\: ``String``, attr_name\: ``String``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_get_attrib_value>`
 
-Reads a named attribute out of one of HAPI's attribute lists.  The fetch results store attributes as ``{ "name": ..., "value": ... }`` dictionaries under a key such as ``prim_attribs`` or ``attrs``. Returns ``null`` when the list or the attribute is missing.
+Reads a named attribute out of one of HAPI's attribute lists.
+
+ 
+
+ The fetch results store attributes as ``{ "name": ..., "value": ... }``\ 
+
+ dictionaries under a key such as ``prim_attribs`` or ``attrs``.
+
+ Returns ``null`` when the list or the attribute is missing.
 
 .. rst-class:: classref-item-separator
 
@@ -215,7 +277,15 @@ Reads a named attribute out of one of HAPI's attribute lists.  The fetch results
 
 ``Variant`` **get_point_attrib**\ (\ point_dict\: ``Dictionary``, key\: ``String``, index\: ``int``, fallback\: ``Variant``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_get_point_attrib>`
 
-Reads element ``index`` of the array stored under ``key``, falling back to ``fallback`` when the attribute is missing, too short or holds a null.  Point fetches return one array per attribute, and an HDA is free to leave any of them out, so every read of a per-point attribute has to be defensive.
+Reads element ``index`` of the array stored under ``key``, falling back to
+
+ ``fallback`` when the attribute is missing, too short or holds a null.
+
+ 
+
+ Point fetches return one array per attribute, and an HDA is free to leave any of
+
+ them out, so every read of a per-point attribute has to be defensive.
 
 .. rst-class:: classref-item-separator
 
@@ -227,7 +297,9 @@ Reads element ``index`` of the array stored under ``key``, falling back to ``fal
 
 ``Variant`` **get_typed_point_attrib**\ (\ point_dict\: ``Dictionary``, key\: ``String``, index\: ``int``, expected_type\: ``int``, fallback\: ``Variant``\ ) |static| :ref:`🔗<class_HEGoNodeUtil_method_get_typed_point_attrib>`
 
-Same as :ref:`get_point_attrib()<class_HEGoNodeUtil_method_get_point_attrib>`, but only accepts values of ``expected_type`` (a Variant.Type value) and falls back otherwise.
+Same as :ref:`get_point_attrib()<class_HEGoNodeUtil_method_get_point_attrib>`, but only accepts values of ``expected_type``\ 
+
+ (a Variant.Type value) and falls back otherwise.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

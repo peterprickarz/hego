@@ -19,7 +19,11 @@ Converts the curve dictionaries a curve fetch returns into ``Curve3D``\ s.
 Description
 -----------
 
-Pure geometry, no scene access: :ref:`HEGoCurveOutput<class_HEGoCurveOutput>` handles the nodes. A curve dictionary holds ``positions``, ``type``, ``order``, ``is_closed`` and, for NURBS, ``knots``.
+Pure geometry, no scene access: :ref:`HEGoCurveOutput<class_HEGoCurveOutput>` handles the nodes. A curve
+
+ dictionary holds ``positions``, ``type``, ``order``,
+
+ ``is_closed`` and, for NURBS, ``knots``.
 
 .. rst-class:: classref-reftable-group
 
@@ -86,7 +90,9 @@ NURBS samples generated per control point, when that is more than :ref:`MIN_NURB
 
 **BEZIER_STRIDE** = ``3`` :ref:`🔗<class_HEGoCurveBuilder_constant_BEZIER_STRIDE>`
 
-Positions per Bezier segment in Houdini's flat control point list: one on-curve point followed by two off-curve handles.
+Positions per Bezier segment in Houdini's flat control point list:
+
+ one on-curve point followed by two off-curve handles.
 
 .. rst-class:: classref-section-separator
 
@@ -103,7 +109,9 @@ Method Descriptions
 
 ``Curve3D`` **build**\ (\ curve\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoCurveBuilder_method_build>`
 
-Builds the ``Curve3D`` matching ``curve``'s type, falling back to a poly curve for types this build does not know about.
+Builds the ``Curve3D`` matching ``curve``'s type, falling back to a poly curve
+
+ for types this build does not know about.
 
 .. rst-class:: classref-item-separator
 
@@ -139,7 +147,13 @@ Poly curve: every control point becomes a ``Curve3D`` point.
 
 ``Curve3D`` **build_nurbs_curve**\ (\ curve\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoCurveBuilder_method_build_nurbs_curve>`
 
-NURBS curve, approximated by sampling.  Curve3D's in/out handles cannot represent NURBS control points, so the curve is evaluated at a fixed number of parameter values and rebuilt from those samples.
+NURBS curve, approximated by sampling.
+
+ 
+
+ Curve3D's in/out handles cannot represent NURBS control points, so the curve is
+
+ evaluated at a fixed number of parameter values and rebuilt from those samples.
 
 .. rst-class:: classref-item-separator
 
@@ -187,7 +201,9 @@ Clamped uniform knot vector for ``num_control_points`` points of ``order``.
 
 ``Curve3D`` **build_bezier_curve**\ (\ curve\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoCurveBuilder_method_build_bezier_curve>`
 
-Bezier curve: every third control point is on the curve, the two in between are its handles. Falls back to a poly curve when there are not enough points.
+Bezier curve: every third control point is on the curve, the two in between are
+
+ its handles. Falls back to a poly curve when there are not enough points.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

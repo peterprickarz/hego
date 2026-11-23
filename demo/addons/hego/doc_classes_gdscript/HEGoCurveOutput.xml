@@ -4,7 +4,8 @@
 		Turns the curves of a cooked HDA into [Path3D] nodes under [code]Outputs/[/code].
 	</brief_description>
 	<description>
-		The curve geometry itself is built by [HEGoCurveBuilder]; this only decides where the nodes go and reuses existing ones so anything referencing a path keeps working.
+		The curve geometry itself is built by [HEGoCurveBuilder]; this only decides where
+ the nodes go and reuses existing ones so anything referencing a path keeps working.
 	</description>
 	<tutorials>
 	</tutorials>

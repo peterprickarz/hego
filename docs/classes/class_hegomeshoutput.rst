@@ -19,7 +19,11 @@ Turns the surfaces of a cooked HDA into ``MeshInstance3D``\ s under ``Outputs/``
 Description
 -----------
 
-Per output mesh the HDA decides, through detail attributes, whether the mesh is kept in the scene, saved as an ``ArrayMesh`` resource, or both, and which collision shape (if any) is generated for it.
+Per output mesh the HDA decides, through detail attributes, whether the mesh is kept
+
+ in the scene, saved as an ``ArrayMesh`` resource, or both, and which collision shape
+
+ (if any) is generated for it.
 
 .. rst-class:: classref-reftable-group
 
@@ -29,25 +33,27 @@ Methods
 .. table::
    :widths: auto
 
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``String``     | :ref:`output_phase<class_HEGoMeshOutput_method_output_phase>`\ (\ ) |static|                                                                                   |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``bool``       | :ref:`should_handle<class_HEGoMeshOutput_method_should_handle>`\ (\ summary\: ``Dictionary``\ ) |static|                                                       |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`fetch_surface_groups<class_HEGoMeshOutput_method_fetch_surface_groups>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static|      |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`fetch_meshes<class_HEGoMeshOutput_method_fetch_meshes>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static|                      |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|         | :ref:`handle<class_HEGoMeshOutput_method_handle>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static|                                  |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``ArrayMesh``  | :ref:`build_array_mesh<class_HEGoMeshOutput_method_build_array_mesh>`\ (\ surfaces\: ``Dictionary``\ ) |static|                                                |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Dictionary`` | :ref:`save_mesh_resource<class_HEGoMeshOutput_method_save_mesh_resource>`\ (\ mesh\: ``ArrayMesh``, save_path\: ``String``\ ) |static|                         |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | |void|         | :ref:`copy_array_mesh_contents<class_HEGoMeshOutput_method_copy_array_mesh_contents>`\ (\ target_mesh\: ``ArrayMesh``, source_mesh\: ``ArrayMesh``\ ) |static| |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
-   | ``Mesh``       | :ref:`load_mesh_resource_fresh<class_HEGoMeshOutput_method_load_mesh_resource_fresh>`\ (\ save_path\: ``String``\ ) |static|                                   |
-   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``String``     | :ref:`output_phase<class_HEGoMeshOutput_method_output_phase>`\ (\ ) |static|                                                                                                                                               |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``       | :ref:`should_handle<class_HEGoMeshOutput_method_should_handle>`\ (\ summary\: ``Dictionary``\ ) |static|                                                                                                                   |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`fetch_surface_groups<class_HEGoMeshOutput_method_fetch_surface_groups>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`, custom_attribs\: ``PackedStringArray`` = PackedStringArray(...)\ ) |static| |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`fetch_meshes<class_HEGoMeshOutput_method_fetch_meshes>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`, custom_attribs\: ``PackedStringArray`` = PackedStringArray(...)\ ) |static|                 |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|         | :ref:`handle<class_HEGoMeshOutput_method_handle>`\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static|                                                                                              |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``ArrayMesh``  | :ref:`build_array_mesh<class_HEGoMeshOutput_method_build_array_mesh>`\ (\ surfaces\: ``Dictionary``\ ) |static|                                                                                                            |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`save_mesh_resource<class_HEGoMeshOutput_method_save_mesh_resource>`\ (\ mesh\: ``ArrayMesh``, save_path\: ``String``\ ) |static|                                                                                     |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|         | :ref:`copy_array_mesh_contents<class_HEGoMeshOutput_method_copy_array_mesh_contents>`\ (\ target_mesh\: ``ArrayMesh``, source_mesh\: ``ArrayMesh``\ ) |static|                                                             |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``int``        | :ref:`custom_format_flags<class_HEGoMeshOutput_method_custom_format_flags>`\ (\ format\: ``int``\ ) |static|                                                                                                               |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Mesh``       | :ref:`load_mesh_resource_fresh<class_HEGoMeshOutput_method_load_mesh_resource_fresh>`\ (\ save_path\: ``String``\ ) |static|                                                                                               |
+   +----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -74,13 +80,29 @@ Category this file logs under, shown in the session panel filter.
 
 Point attributes read for every surface. P always comes along.
 
+.. _class_HEGoMeshOutput_constant_CUSTOM_ATTRIBS:
+
+.. rst-class:: classref-constant
+
+**CUSTOM_ATTRIBS** = ``["hego_custom0", "hego_custom1", "hego_custom2", "hego_custom3"]`` :ref:`🔗<class_HEGoMeshOutput_constant_CUSTOM_ATTRIBS>`
+
+Point attributes exported as the custom vertex channels, in order: the attribute at
+
+ index i becomes ``Mesh.ARRAY_CUSTOM0`` + i, packed to RGBA float (a float or int
+
+ of tuple size 1-4; missing components are 0). Shaders read them as CUSTOM0..CUSTOM3.
+
+ A channel whose attribute the cook does not have is left out of the surface.
+
 .. _class_HEGoMeshOutput_constant_MESH_INSTANCE_ATTRIB:
 
 .. rst-class:: classref-constant
 
 **MESH_INSTANCE_ATTRIB** = ``"hego_mesh_instance"`` :ref:`🔗<class_HEGoMeshOutput_constant_MESH_INSTANCE_ATTRIB>`
 
-Primitive attributes the output is grouped by: one mesh per instance name, one surface per material within it.
+Primitive attributes the output is grouped by: one mesh per instance name, one
+
+ surface per material within it.
 
 .. _class_HEGoMeshOutput_constant_MATERIAL_ATTRIB:
 
@@ -184,7 +206,9 @@ hego_col_type values.
 
 **DECOMPOSITION_PROPERTIES** = ``["convex_hull_approximation", "convex_hull_downsampling", "max_concavity", "max_convex_hulls", "max_num_vertices_per_convex_hull", "min_volume_per_convex_hull", "mode", "normalize_mesh", "plane_downsampling", "project_hull_vertices", "resolution", "resolution_axes_clipping_bias", "symmetry_planes_clipping_bias"]`` :ref:`🔗<class_HEGoMeshOutput_constant_DECOMPOSITION_PROPERTIES>`
 
-Properties of ``MeshConvexDecompositionSettings`` an HDA may override through the hego_col_decomp_settings dictionary. Names match the Godot property names.
+Properties of ``MeshConvexDecompositionSettings`` an HDA may override through
+
+ the hego_col_decomp_settings dictionary. Names match the Godot property names.
 
 .. rst-class:: classref-section-separator
 
@@ -223,9 +247,27 @@ Whether the cook produced surfaces worth building.
 
 .. rst-class:: classref-method
 
-``Dictionary`` **fetch_surface_groups**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_fetch_surface_groups>`
+``Dictionary`` **fetch_surface_groups**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`, custom_attribs\: ``PackedStringArray`` = PackedStringArray(...)\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_fetch_surface_groups>`
 
-Fetches the cook's surfaces and groups them the way the HDA asked for.  Returns ``{ mesh_instance_key: { material_key: surface } }``, keyed by the hego_mesh_instance and hego_material attributes, with a ``null`` key wherever the geometry does not name one. Empty when the fetch failed or produced nothing.  Nothing here touches the scene, so a node that wants to place the result itself can use this and :ref:`build_array_mesh()<class_HEGoMeshOutput_method_build_array_mesh>` instead of :ref:`handle()<class_HEGoMeshOutput_method_handle>`.
+Fetches the cook's surfaces and groups them the way the HDA asked for.
+
+ 
+
+ Returns ``{ mesh_instance_key: { material_key: surface } }``, keyed by the
+
+ hego_mesh_instance and hego_material attributes, with a ``null`` key wherever
+
+ the geometry does not name one. Empty when the fetch failed or produced nothing.
+
+ 
+
+ Nothing here touches the scene, so a node that wants to place the result itself can use
+
+ this and :ref:`build_array_mesh()<class_HEGoMeshOutput_method_build_array_mesh>` instead of :ref:`handle()<class_HEGoMeshOutput_method_handle>`.
+
+ ``custom_attribs`` names the point attributes for the custom channels, see
+
+ :ref:`CUSTOM_ATTRIBS<class_HEGoMeshOutput_constant_CUSTOM_ATTRIBS>` (at most four; a blank entry skips that channel).
 
 .. rst-class:: classref-item-separator
 
@@ -235,9 +277,17 @@ Fetches the cook's surfaces and groups them the way the HDA asked for.  Returns 
 
 .. rst-class:: classref-method
 
-``Dictionary`` **fetch_meshes**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_fetch_meshes>`
+``Dictionary`` **fetch_meshes**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`, custom_attribs\: ``PackedStringArray`` = PackedStringArray(...)\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_fetch_meshes>`
 
-One ``ArrayMesh`` per mesh instance the HDA asked for, without touching the scene.  Returns ``{ mesh_instance_key: ArrayMesh }``. This is the half of :ref:`handle()<class_HEGoMeshOutput_method_handle>` a custom node usually wants: it builds the meshes and leaves where they go, and whether they are saved as resources, to the caller.
+One ``ArrayMesh`` per mesh instance the HDA asked for, without touching the scene.
+
+ 
+
+ Returns ``{ mesh_instance_key: ArrayMesh }``. This is the half of
+
+ :ref:`handle()<class_HEGoMeshOutput_method_handle>` a custom node usually wants: it builds the meshes and leaves where they
+
+ go, and whether they are saved as resources, to the caller.
 
 .. rst-class:: classref-item-separator
 
@@ -261,7 +311,11 @@ Fetches the cook's surfaces and builds the mesh output.
 
 ``ArrayMesh`` **build_array_mesh**\ (\ surfaces\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_build_array_mesh>`
 
-Builds one ``ArrayMesh`` from a { material path: surface data } dictionary, adding a surface per material and wiring up LODs and materials. Returns null if empty or any surface is invalid; partial meshes are never published.
+Builds one ``ArrayMesh`` from a { material path: surface data } dictionary,
+
+ adding a surface per material and wiring up LODs and materials.
+
+ Returns null if empty or any surface is invalid; partial meshes are never published.
 
 .. rst-class:: classref-item-separator
 
@@ -273,7 +327,15 @@ Builds one ``ArrayMesh`` from a { material path: surface data } dictionary, addi
 
 ``Dictionary`` **save_mesh_resource**\ (\ mesh\: ``ArrayMesh``, save_path\: ``String``\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_save_mesh_resource>`
 
-Writes ``mesh`` to ``save_path``, overwriting an existing ``ArrayMesh`` in place so that scenes already referencing it pick up the new geometry.  Returns { ok, error, fallback_to_instance, message }; ``message`` and ``error`` only carry meaning when ``ok`` is false.
+Writes ``mesh`` to ``save_path``, overwriting an existing ``ArrayMesh`` in place
+
+ so that scenes already referencing it pick up the new geometry.
+
+ 
+
+ Returns { ok, error, fallback_to_instance, message }; ``message`` and
+
+ ``error`` only carry meaning when ``ok`` is false.
 
 .. rst-class:: classref-item-separator
 
@@ -285,7 +347,27 @@ Writes ``mesh`` to ``save_path``, overwriting an existing ``ArrayMesh`` in place
 
 |void| **copy_array_mesh_contents**\ (\ target_mesh\: ``ArrayMesh``, source_mesh\: ``ArrayMesh``\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_copy_array_mesh_contents>`
 
-Replaces the surfaces of ``target_mesh`` with those of ``source_mesh``.  Used instead of saving a new resource so the existing ``ArrayMesh`` object keeps its identity, and everything already pointing at it sees the update.
+Replaces the surfaces of ``target_mesh`` with those of ``source_mesh``.
+
+ 
+
+ Used instead of saving a new resource so the existing ``ArrayMesh`` object keeps its
+
+ identity, and everything already pointing at it sees the update.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoMeshOutput_method_custom_format_flags:
+
+.. rst-class:: classref-method
+
+``int`` **custom_format_flags**\ (\ format\: ``int``\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_custom_format_flags>`
+
+The custom channel format bits of a surface format, which
+
+ ``ArrayMesh.add_surface_from_arrays()`` needs again to rebuild that surface.
 
 .. rst-class:: classref-item-separator
 
@@ -297,7 +379,9 @@ Replaces the surfaces of ``target_mesh`` with those of ``source_mesh``.  Used in
 
 ``Mesh`` **load_mesh_resource_fresh**\ (\ save_path\: ``String``\ ) |static| :ref:`🔗<class_HEGoMeshOutput_method_load_mesh_resource_fresh>`
 
-Loads a saved mesh bypassing the resource cache, so the instance in the scene reflects what was just written to disk.
+Loads a saved mesh bypassing the resource cache, so the instance in the scene
+
+ reflects what was just written to disk.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

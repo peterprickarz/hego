@@ -5,6 +5,13 @@ These pages describe what ``HEGoNode3D`` sends into Houdini when you connect dif
 node types as HDA inputs. Drawing a graph in the viewport is
 :doc:`/node_reference/hego_graph_input_3d`.
 
+Bridge addons add additional input types without coupling them to HEGo (see
+:doc:`/bridges/index`):
+
+- **Strata layers** (``addons/hego_strata``): :doc:`/strata/houdini`
+- **Copia stores** (``addons/hego_copia``): :doc:`/copia/houdini`
+- **Terrain3D** (``addons/hego_terrain3d``): :doc:`terrain3d_input`
+
 .. toctree::
    :maxdepth: 1
 

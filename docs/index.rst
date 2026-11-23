@@ -6,9 +6,15 @@ your HDAs cook there, and what they produce becomes ordinary Godot nodes in your
 
 Start with :doc:`about/getting_started`, then :doc:`node_reference/hego_node_3d`, which is
 the node most projects only ever need. Everything under :doc:`api/index` is for when you
-want to drive Houdini from a script of your own. For layered terrain, with or without
-Houdini, see :doc:`strata/index`; for instancing large numbers of meshes, see
-:doc:`copia/index`.
+want to drive Houdini from a script of your own.
+
+On the ``next`` channel, HEGo connects to external systems through a one-way
+:doc:`bridge architecture <bridges/index>`. Two standalone addons are currently developed
+alongside HEGo here — :doc:`Strata <strata/index>` for layered terrain and
+:doc:`Copia <copia/index>` for large-scale cell-based instancing — together with their
+HEGo bridges (``hego_strata`` and ``hego_copia``) and the ``hego_terrain3d`` bridge. Both
+Strata and Copia work without Houdini and are planned to move to their own repositories
+later; while they live in HEGo's ``next`` branch, their full documentation is hosted here.
 
 .. toctree::
    :maxdepth: 1
@@ -26,13 +32,19 @@ Houdini, see :doc:`strata/index`; for instancing large numbers of meshes, see
 
 .. toctree::
    :maxdepth: 2
+   :caption: Bridges & Ecosystem
+
+   bridges/index
+
+.. toctree::
+   :maxdepth: 2
    :caption: Scripting
 
    api/index
 
 .. toctree::
    :maxdepth: 2
-   :caption: Strata terrain
+   :caption: Strata Terrain
 
    strata/index
    strata/getting_started
@@ -42,7 +54,7 @@ Houdini, see :doc:`strata/index`; for instancing large numbers of meshes, see
 
 .. toctree::
    :maxdepth: 2
-   :caption: Copia instancing
+   :caption: Copia Instancing
 
    copia/index
    copia/getting_started
@@ -50,8 +62,14 @@ Houdini, see :doc:`strata/index`; for instancing large numbers of meshes, see
    copia/reference
 
 .. toctree::
+   :maxdepth: 2
+   :caption: Reference
+
+   classes/index
+
+.. toctree::
    :maxdepth: 1
-   :caption: Development notes
+   :caption: Development Notes
 
    development/testing
    development/packaging
@@ -69,9 +87,3 @@ Houdini, see :doc:`strata/index`; for instancing large numbers of meshes, see
    development/island_material_distribution
    development/island_benchmark
    development/terrain_prototype
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Reference
-
-   classes/index

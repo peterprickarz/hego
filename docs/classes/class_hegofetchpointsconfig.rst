@@ -21,7 +21,11 @@ Attributes, filters and splits for a point fetch, saved as a resource.
 Description
 -----------
 
-only so existing projects can move across, and will be removed. The code API takes the same arguments, shares the same implementation and cache, and can decide what to read at runtime.
+only so existing projects can move across, and will be removed. The code API
+
+ takes the same arguments, shares the same implementation and cache, and can
+
+ decide what to read at runtime.
 
 .. rst-class:: classref-reftable-group
 

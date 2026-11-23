@@ -197,9 +197,9 @@ static func _row_count(columns: Dictionary) -> int:
 	return 0
 
 
-## Writes the points in [param attributes] into [param store]: [code]{name: one value per
-## point}[/code] as HEGo delivers them (plain Arrays, [code]null[/code] where a point has no
-## value; packed arrays work too), under the [code]hegocopia_[/code] names above.
+## Writes the points in [param attributes] into [param store]:
+## [code]{name: one value per point}[/code] as HEGo delivers them (plain Arrays, [code]null[/code]
+## where a point has no value; packed arrays work too), under the [code]hegocopia_[/code] names above.
 ##
 ## Clear points are applied first, then the instances added. [param options]:
 ## [code]extra[/code] ([PackedStringArray]), the names of attributes stored as pass-through

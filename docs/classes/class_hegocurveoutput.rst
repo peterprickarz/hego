@@ -19,7 +19,9 @@ Turns the curves of a cooked HDA into ``Path3D`` nodes under ``Outputs/``.
 Description
 -----------
 
-The curve geometry itself is built by :ref:`HEGoCurveBuilder<class_HEGoCurveBuilder>`; this only decides where the nodes go and reuses existing ones so anything referencing a path keeps working.
+The curve geometry itself is built by :ref:`HEGoCurveBuilder<class_HEGoCurveBuilder>`; this only decides where
+
+ the nodes go and reuses existing ones so anything referencing a path keeps working.
 
 .. rst-class:: classref-reftable-group
 

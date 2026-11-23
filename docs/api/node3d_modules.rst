@@ -49,34 +49,44 @@ one to see how an output type is built. Writing a node of your own around them i
      - The tedious parts of driving an HDA, for a node writing its own ``cook()``. See
        :doc:`custom_nodes/index`
 
-Terrain3D support is not part of HEGo. It is the separate HEGo Terrain3D bridge addon,
-``addons/hego_terrain3d``, which depends on HEGo and on the
-`Terrain3D <https://github.com/TokisanGames/Terrain3D>`_ addon (installed at
-``addons/terrain_3d``); neither of those depends on it. Its classes plug into the extension
-points below:
+Specialised terrain and instancing integrations are not part of HEGo itself. Each lives in
+its own **bridge addon** that depends one-way on HEGo and the target addon (see
+:doc:`/bridges/index`), plugging into the extension points below:
 
 .. list-table::
-   :widths: 32 68
+   :widths: 34 66
    :header-rows: 1
 
-   * - Class (HEGo Terrain3D bridge)
+   * - Bridge class
      - Responsibility
+   * - :ref:`HEGoStrataInput<class_HEGoStrataInput>`
+     - ``addons/hego_strata`` — :ref:`HEGoInputHandler<class_HEGoInputHandler>`: Strata
+       layers to heightfield volumes
+   * - :ref:`HEGoStrataOutput<class_HEGoStrataOutput>`
+     - ``addons/hego_strata`` — :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`:
+       ``hegostrata_*`` heightfield volumes to Strata layers
+   * - :ref:`HEGoCopiaInput<class_HEGoCopiaInput>`
+     - ``addons/hego_copia`` — :ref:`HEGoInputHandler<class_HEGoInputHandler>`:
+       ``CopiaStore3D`` cell summaries and points to a Houdini point cloud
+   * - :ref:`HEGoCopiaOutput<class_HEGoCopiaOutput>`
+     - ``addons/hego_copia`` — :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`:
+       ``hegocopia_*`` points and clears to ``CopiaStore3D``
    * - :ref:`HEGoTerrain3DUtil<class_HEGoTerrain3DUtil>`
-     - Terrain3D helpers shared by input, output and instancing
-   * - :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
-     - An :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`: heightfield layers to a
-       Terrain3D node
-   * - :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`
-     - An :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`: points to Terrain3D instancer
-       transforms
+     - ``addons/hego_terrain3d`` — Terrain3D helpers shared by input, output and instancing
    * - :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>`
-     - An :ref:`HEGoInputHandler<class_HEGoInputHandler>`: an existing Terrain3D to
-       heightfield layers for Houdini
+     - ``addons/hego_terrain3d`` — :ref:`HEGoInputHandler<class_HEGoInputHandler>`: an
+       existing Terrain3D to heightfield layers for Houdini
+   * - :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
+     - ``addons/hego_terrain3d`` — :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`:
+       heightfield layers to a Terrain3D node
+   * - :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`
+     - ``addons/hego_terrain3d`` — :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`:
+       points to Terrain3D instancer transforms
 
 Each has a page of its own in the class reference, under
-:doc:`/classes/writing_a_node`, :doc:`/classes/output_handlers` and, for the bridge,
-:doc:`/classes/terrain3d`; what follows here is what they are for and how they fit
-together.
+:doc:`/classes/writing_a_node`, :doc:`/classes/output_handlers` and, for the three bridges,
+:doc:`/classes/hego_strata`, :doc:`/classes/hego_copia`, and :doc:`/classes/terrain3d`; what
+follows here is what they are for and how they fit together.
 
 Every output handler exposes the same three entry points: ``output_phase()``, the name it is
 timed under; ``should_handle(summary)``, which decides from
@@ -229,20 +239,29 @@ to it to react at once, for example by marking what the last cook produced as ou
             return sent
         return {"ok": true, "node": input}
 
-The two bridge addons are the worked examples, and both have the same shape: input and
-output handlers, no cook extension. The HEGo Strata bridge (``addons/hego_strata``) uses
-:ref:`HEGoStrataInput<class_HEGoStrataInput>` to send terrain layers and
-:ref:`HEGoStrataOutput<class_HEGoStrataOutput>` to publish the heightfield volumes that
-carry ``hegostrata_layer_path`` into Strata layers, all targets of one cook in one
-transaction. Its terrain inputs make the cook explicit and strict, and its editor plugin
-listens to ``cook_inputs_changed`` to mark published layers stale. See
-:doc:`/strata/houdini`. The HEGo Terrain3D bridge
-(``addons/hego_terrain3d``) uses
-:ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>` to send a Terrain3D node, and
-:ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>` and
-:ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>` to build terrains and instances
-from output that carries ``hegot3d_*`` attributes. A heightfield the Strata bridge publishes
-lacks those, so the two coexist without either naming the other.
+The three bridge addons are the worked examples, and all three have the same shape: input
+and output handlers, no cook extension (see :doc:`/bridges/index`):
+
+- **HEGo Strata** (``addons/hego_strata``) uses
+  :ref:`HEGoStrataInput<class_HEGoStrataInput>` to send terrain layers and
+  :ref:`HEGoStrataOutput<class_HEGoStrataOutput>` to publish heightfield volumes carrying
+  ``hegostrata_layer_path`` into Strata layers, all targets of one cook in one transaction.
+  Its terrain inputs make the cook explicit and strict, and its editor plugin listens to
+  ``cook_inputs_changed`` to mark published layers stale. See :doc:`/strata/houdini`.
+- **HEGo Copia** (``addons/hego_copia``) uses
+  :ref:`HEGoCopiaInput<class_HEGoCopiaInput>` to send ``CopiaStore3D`` cell summaries and
+  selected instance points as a point cloud (making the cook strict) and
+  :ref:`HEGoCopiaOutput<class_HEGoCopiaOutput>` to write points carrying
+  ``hegocopia_object`` or ``hegocopia_clear`` into one or more Copia stores, applying clears
+  before spawns. See :doc:`/copia/houdini`.
+- **HEGo Terrain3D** (``addons/hego_terrain3d``) uses
+  :ref:`HEGoTerrain3DInput<class_HEGoTerrain3DInput>` to send a Terrain3D node, and
+  :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>` and
+  :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>` to build terrains and
+  instances from output carrying ``hegot3d_*`` attributes.
+
+Each bridge acts only on the geometry and attributes it owns, so all three coexist cleanly
+without naming one another.
 
 Shared helpers
 --------------

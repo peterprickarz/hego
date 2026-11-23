@@ -5,9 +5,10 @@
 # work with nothing but python3 and curl.
 #
 # There are two kinds of XML source. demo/addons/hego/doc_classes is hand-written and
-# describes the C++ classes; each addon's doc_classes_gdscript - HEGo's and the two bridges',
-# hego_strata and hego_terrain3d - is generated from its GDScript classes' ## comments by
-# scripts/generate_gdscript_docs.sh, which needs Godot and is run by hand.
+# describes the C++ classes; each addon's doc_classes_gdscript - HEGo's and the three
+# bridges', hego_strata, hego_copia and hego_terrain3d - is generated from its GDScript
+# classes' ## comments by scripts/generate_gdscript_docs.sh, which needs Godot and is run
+# by hand.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +17,7 @@ TOOLS_DIR="$DOCS_DIR/.tools"
 TOOLS_MISC_DIR="$TOOLS_DIR/misc/utility"
 XML_SRC_DIR="$ROOT_DIR/demo/addons/hego/doc_classes"
 # Keep in step with ADDONS in scripts/generate_gdscript_docs.sh.
-GDSCRIPT_ADDONS=(hego hego_strata hego_terrain3d)
+GDSCRIPT_ADDONS=(hego hego_strata hego_copia hego_terrain3d)
 GDSCRIPT_XML_SRC_DIRS=()
 GDSCRIPT_TREE_ARGS=()
 for addon in "${GDSCRIPT_ADDONS[@]}"; do

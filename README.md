@@ -30,21 +30,25 @@ git submodule update --init --recursive
 
 > **Note**: The `release` branch is automatically updated with each commit to `main` and contains only the addon files, making it perfect for submodule use.
 
-### Strata, Terrain3D and the HEGo bridges
+### Strata, Copia, Terrain3D and the HEGo bridges
 
-HEGo ships with three more addons that are developed in this repository but installed
-separately, each with a one-way dependency:
+HEGo uses a one-way bridge architecture (see [Bridge Architecture](docs/bridges/index.rst)).
+Strata and Copia are standalone addons developed in this repository for now (planned to move
+into their own repositories later), and thin GDScript bridge addons connect them and
+Terrain3D to HEGo:
 
 | Addon | Folder | Depends on | What it does |
 | --- | --- | --- | --- |
 | **HEGo** | `addons/hego` | – | Houdini Engine integration (this addon) |
 | **Strata** | `addons/strata` | – | Layered terrain: paint layers in the editor or cook them in Houdini, then bake for collision and navigation. Works without Houdini. |
 | **HEGo Strata** | `addons/hego_strata` | HEGo + Strata | Lets a `HEGoNode3D` read Strata layers and cook its result into one |
+| **Copia** | `addons/copia` | – | Cell-based instancing store for tens of thousands to millions of meshes with streaming, impostors and colliders. Works without Houdini. |
+| **HEGo Copia** | `addons/hego_copia` | HEGo + Copia | Sends Copia store cells/points to HDAs and writes cooked points and clears into Copia stores |
 | **HEGo Terrain3D** | `addons/hego_terrain3d` | HEGo + [Terrain3D](https://github.com/TokisanGames/Terrain3D) | Sends Terrain3D nodes to HDAs as heightfield inputs, and turns heightfields and points carrying `hegot3d_*` attributes into Terrain3D terrains and instances |
 
 Terrain3D is TokisanGames' addon, not part of this repository: install it yourself at
 `addons/terrain_3d` (the demo vendors and is tested with 1.0.1). Neither HEGo nor
-Terrain3D depends on HEGo Terrain3D, and it contains no native code.
+Terrain3D depends on HEGo Terrain3D, and none of the bridges contain native code.
 
 Strata documentation:
 
@@ -53,6 +57,13 @@ Strata documentation:
 - [Strata and Houdini](docs/strata/houdini.md): cook layers with an HDA through a `HEGoNode3D`
 - [Example: Bracken Isle](docs/strata/example_island.md): the demo island
 - [Reference](docs/strata/reference.md): channels, attributes, files and bake options
+
+Copia documentation:
+
+- [Copia instancing](docs/copia/index.md): what it is and how it works
+- [Getting started](docs/copia/getting_started.md): install, a first store, streaming, impostors, colliders and the demo scene
+- [Copia and Houdini](docs/copia/houdini.md): write and clear Copia stores from HDAs through the HEGo Copia bridge
+- [Reference](docs/copia/reference.md): properties, methods, descriptors and debug views
 
 The `next` channel publishes the addons as `release-next` (HEGo), `strata-release-next`,
 `hego-strata-release-next`, `hego-terrain3d-release-next`, `copia-release-next`,
@@ -271,9 +282,9 @@ python -m sphinx -W -b html docs docs/_build/html
 ```
 
 `generate_gdscript_docs.sh` needs Godot (set `GODOT` to pick the binary) and writes the
-`doc_classes_gdscript/` directory of HEGo and of both bridge addons (`hego_strata`,
-`hego_terrain3d`), each documenting its own classes; they are committed so the site builds
-without Godot.
+`doc_classes_gdscript/` directory of HEGo and of all three bridge addons (`hego_strata`,
+`hego_copia`, `hego_terrain3d`), each documenting its own classes; they are committed so
+the site builds without Godot.
 A class with no place in the tree fails `generate_docs.sh`; add it to a group in
 `scripts/class_tree.py`.
 

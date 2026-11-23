@@ -19,7 +19,13 @@ Helpers shared by the Terrain3D input, output and instancer paths.
 Description
 -----------
 
-This bridge needs Terrain3D, but nothing in it refers to Terrain3D's types directly: everything goes through ``ClassDB``, ``Object.call()`` and ``Object.get()``, and every entry point degrades to a warning when the addon or a method is missing. So the bridge's scripts still load, and HEGo keeps cooking, in a project without Terrain3D.
+This bridge needs Terrain3D, but nothing in it refers to Terrain3D's types directly:
+
+ everything goes through ``ClassDB``, ``Object.call()`` and ``Object.get()``, and
+
+ every entry point degrades to a warning when the addon or a method is missing. So the
+
+ bridge's scripts still load, and HEGo keeps cooking, in a project without Terrain3D.
 
 .. rst-class:: classref-reftable-group
 
@@ -213,7 +219,9 @@ Same as :ref:`get_attr_value()<class_HEGoTerrain3DUtil_method_get_attr_value>`, 
 
 ``bool`` **is_valid_region_size**\ (\ value\: ``Variant``\ ) |static| :ref:`🔗<class_HEGoTerrain3DUtil_method_is_valid_region_size>`
 
-Whether ``value`` is a region size Terrain3D accepts: a power of two between :ref:`MIN_REGION_SIZE<class_HEGoTerrain3DUtil_constant_MIN_REGION_SIZE>` and :ref:`MAX_REGION_SIZE<class_HEGoTerrain3DUtil_constant_MAX_REGION_SIZE>`.
+Whether ``value`` is a region size Terrain3D accepts: a power of two
+
+ between :ref:`MIN_REGION_SIZE<class_HEGoTerrain3DUtil_constant_MIN_REGION_SIZE>` and :ref:`MAX_REGION_SIZE<class_HEGoTerrain3DUtil_constant_MAX_REGION_SIZE>`.
 
 .. rst-class:: classref-item-separator
 
@@ -261,7 +269,17 @@ Slot number encoded in a hegot3d_texture_layer_N name, or -1 if there is none.
 
 ``Dictionary`` **validate_texture_layers**\ (\ texture_layers\: ``Array``\ ) |static| :ref:`🔗<class_HEGoTerrain3DUtil_method_validate_texture_layers>`
 
-Checks that every texture layer can actually be turned into a Terrain3DTextureAsset.  Control maps address textures by slot, so a single unusable layer would shift every other one: validation is all-or-nothing. Returns ``{ ok, layers, lowest_slot }`` on success and ``{ ok, warning }`` on failure.
+Checks that every texture layer can actually be turned into a Terrain3DTextureAsset.
+
+ 
+
+ Control maps address textures by slot, so a single unusable layer would shift every
+
+ other one: validation is all-or-nothing. Returns
+
+ ``{ ok, layers, lowest_slot }`` on success and ``{ ok, warning }``\ 
+
+ on failure.
 
 .. rst-class:: classref-item-separator
 
@@ -321,7 +339,9 @@ Whether two :ref:`get_image_signature()<class_HEGoTerrain3DUtil_method_get_image
 
 |void| **set_optional_property**\ (\ obj\: ``Object``, property_name\: ``String``, value\: ``Variant``\ ) |static| :ref:`🔗<class_HEGoTerrain3DUtil_method_set_optional_property>`
 
-Sets a property only if the object has it, for properties whose availability depends on the installed Terrain3D version.
+Sets a property only if the object has it, for properties whose availability
+
+ depends on the installed Terrain3D version.
 
 .. rst-class:: classref-item-separator
 
@@ -333,7 +353,15 @@ Sets a property only if the object has it, for properties whose availability dep
 
 ``int`` **build_control_bits_for_pixel**\ (\ texture_layers\: ``Array``, terrain3d_util\: ``Object``, pixel_x\: ``int``, pixel_z\: ``int``, lowest_valid_texture_slot\: ``int``, hole_image\: ``Image``\ ) |static| :ref:`🔗<class_HEGoTerrain3DUtil_method_build_control_bits_for_pixel>`
 
-Builds the Terrain3D control map value for one pixel.  Terrain3D blends exactly two textures per pixel, so the two heaviest weight layers become base and overlay and the rest are dropped. Pass -1 for ``pixel_x`` and ``pixel_z`` to get the value used for pixels outside every weight image.
+Builds the Terrain3D control map value for one pixel.
+
+ 
+
+ Terrain3D blends exactly two textures per pixel, so the two heaviest weight layers
+
+ become base and overlay and the rest are dropped. Pass -1 for ``pixel_x`` and
+
+ ``pixel_z`` to get the value used for pixels outside every weight image.
 
 .. rst-class:: classref-item-separator
 
@@ -357,7 +385,15 @@ Packs base slot, overlay slot, blend and hole flag into a Terrain3D control valu
 
 ``Image`` **fix_heightfield_image_transform**\ (\ image\: ``Image``\ ) |static| :ref:`🔗<class_HEGoTerrain3DUtil_method_fix_heightfield_image_transform>`
 
-Rotates a Houdini heightfield image into Terrain3D's orientation.  Houdini heightfields are stored rows-along-Z while Terrain3D expects rows-along-X, which is a 90 degree rotation; the import then mirrors along world X, so the result is flipped back here.
+Rotates a Houdini heightfield image into Terrain3D's orientation.
+
+ 
+
+ Houdini heightfields are stored rows-along-Z while Terrain3D expects rows-along-X,
+
+ which is a 90 degree rotation; the import then mirrors along world X, so the result
+
+ is flipped back here.
 
 .. rst-class:: classref-item-separator
 
@@ -369,7 +405,9 @@ Rotates a Houdini heightfield image into Terrain3D's orientation.  Houdini heigh
 
 ``Node`` **find_node_from_path**\ (\ host\: ``Node``, node_path_text\: ``String``\ ) |static| :ref:`🔗<class_HEGoTerrain3DUtil_method_find_node_from_path>`
 
-Resolves a Terrain3D node path, relative to ``host`` first and to the edited scene root second, so HDAs can address terrains outside the HEGo node.
+Resolves a Terrain3D node path, relative to ``host`` first and to the edited
+
+ scene root second, so HDAs can address terrains outside the HEGo node.
 
 .. rst-class:: classref-item-separator
 

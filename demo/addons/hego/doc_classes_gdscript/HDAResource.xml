@@ -4,7 +4,9 @@
 		An imported [code].hda[/code] file, as Godot's importer sees it.
 	</brief_description>
 	<description>
-		Importing an HDA does not read it: Houdini owns the file, and HEGo hands the path to the session rather than parsing it in Godot. The resource exists so an HDA can be referenced from a scene and shows up in the FileSystem dock.
+		Importing an HDA does not read it: Houdini owns the file, and HEGo hands the path to the
+ session rather than parsing it in Godot. The resource exists so an HDA can be referenced
+ from a scene and shows up in the FileSystem dock.
 	</description>
 	<tutorials>
 	</tutorials>

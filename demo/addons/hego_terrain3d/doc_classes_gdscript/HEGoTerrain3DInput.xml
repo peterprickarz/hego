@@ -4,7 +4,12 @@
 		Sends an existing Terrain3D node to an HDA input as heightfield layers.
 	</brief_description>
 	<description>
-		Terrain3D stores terrain as independent square regions; Houdini wants one rectangular heightfield. The regions are stitched into a single image, and the control map is unpacked into one weight layer per texture used, plus masks marking which pixels belong to a region at all and which are holes.  HEGo finds this handler because it extends [HEGoInputHandler]; HEGo never names it.
+		Terrain3D stores terrain as independent square regions; Houdini wants one
+ rectangular heightfield. The regions are stitched into a single image, and the
+ control map is unpacked into one weight layer per texture used, plus masks marking
+ which pixels belong to a region at all and which are holes.
+ 
+ HEGo finds this handler because it extends [HEGoInputHandler]; HEGo never names it.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -23,7 +28,9 @@
 			<param index="2" name="node" type="Node" />
 			<param index="3" name="settings" type="Dictionary" />
 			<description>
-				Uploads [param node]'s regions into a heightfield input, reusing [param existing_node] when it already is one. A terrain without regions still yields an empty input, so the HDA input stays connected.
+				Uploads [param node]'s regions into a heightfield input, reusing [param existing_node]
+ when it already is one. A terrain without regions still yields an empty input, so the
+ HDA input stays connected.
 			</description>
 		</method>
 		<method name="read_layers" qualifiers="static">
@@ -31,7 +38,11 @@
 			<param index="0" name="terrain3d_node" type="Node" />
 			<param index="1" name="input_node_path" type="String" default="&quot;&quot;" />
 			<description>
-				Reads [param terrain3d_node] into a layer dictionary for [method HEGoHeightfieldInputNode.set_layers], or an empty dictionary on failure.  [param input_node_path] is stored on every layer so the HDA can tell which Godot node the heightfield came from.
+				Reads [param terrain3d_node] into a layer dictionary for
+ [method HEGoHeightfieldInputNode.set_layers], or an empty dictionary on failure.
+ 
+ [param input_node_path] is stored on every layer so the HDA can tell which Godot
+ node the heightfield came from.
 			</description>
 		</method>
 		<method name="get_vertex_spacing" qualifiers="static">

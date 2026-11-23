@@ -40,6 +40,8 @@ Methods
    :widths: auto
 
    +---------------------------------+---------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`delete_node<class_HEGoBaseNode_method_delete_node>`\ (\ )     |
+   +---------------------------------+---------------------------------------------------------------------+
    | ``int``                         | :ref:`get_id<class_HEGoBaseNode_method_get_id>`\ (\ ) |const|       |
    +---------------------------------+---------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoBaseNode_method_instantiate>`\ (\ )     |
@@ -55,6 +57,26 @@ Methods
 
 Method Descriptions
 -------------------
+
+.. _class_HEGoBaseNode_method_delete_node:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **delete_node**\ (\ ) :ref:`🔗<class_HEGoBaseNode_method_delete_node>`
+
+Submits a task that deletes this node from the Houdini session and resets the stored id to ``-1``.
+
+
+
+HEGo creates every node with no parent, so Houdini wraps it in an object node of its own under ``/obj``; that object is what gets deleted, together with the node's cook caches and HEGo's cached copy of its output geometry. Nodes a session no longer holds are only forgotten. Call it once the node's output has been read, for example through :ref:`HEGoAssetAgent.release()<class_HEGoAssetAgent_method_release>`, to keep a long editor session from accumulating Houdini memory. A later :ref:`instantiate()<class_HEGoBaseNode_method_instantiate>` creates the node again.
+
+
+
+Returns an :ref:`HEGoTask<class_HEGoTask>` whose result is the id of the deleted object node, or ``null`` when there was nothing to delete. It fails when the node was re-instantiated or reset before the task ran, or when Houdini refuses the deletion.
+
+.. rst-class:: classref-item-separator
+
+----
 
 .. _class_HEGoBaseNode_method_get_id:
 

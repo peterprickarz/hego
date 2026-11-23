@@ -12,16 +12,23 @@ HEGoPropertyUtil
 
 **Inherits:** ``RefCounted``
 
-Applies the ``hego_custom_properties`` dictionary an HDA can attach to a spawned object onto the object itself.
+Applies the ``hego_custom_properties`` dictionary an HDA can attach to a
+
+ spawned object onto the object itself.
 
 .. rst-class:: classref-introduction-group
 
 Description
 -----------
 
-The dictionary is nested, and every level that carries a value stores it under ``hego_val``, so a sub-resource and its own properties can be described in one structure:
+The dictionary is nested, and every level that carries a value stores it under
+
+ ``hego_val``, so a sub-resource and its own properties can be described
+
+ in one structure:
 
 ::
+
 
     {
         "mesh": {
@@ -103,7 +110,9 @@ Applies ``properties`` to ``obj``, recursing into nested dictionaries.
 
 |void| **set_property**\ (\ obj\: ``Object``, property\: ``String``, value\: ``Variant``\ ) |static| :ref:`🔗<class_HEGoPropertyUtil_method_set_property>`
 
-Sets one property, skipping it with a warning if it does not exist or the value cannot be converted to the property's type.
+Sets one property, skipping it with a warning if it does not exist or the value
+
+ cannot be converted to the property's type.
 
 .. rst-class:: classref-item-separator
 
@@ -115,7 +124,9 @@ Sets one property, skipping it with a warning if it does not exist or the value 
 
 ``Dictionary`` **find_property_info**\ (\ obj\: ``Object``, property\: ``String``\ ) |static| :ref:`🔗<class_HEGoPropertyUtil_method_find_property_info>`
 
-Returns the ``Object.get_property_list()`` entry for ``property``, or an empty dictionary if the object has no such property.
+Returns the ``Object.get_property_list()`` entry for ``property``,
+
+ or an empty dictionary if the object has no such property.
 
 .. rst-class:: classref-item-separator
 
@@ -139,7 +150,9 @@ Whether ``obj`` exposes a property called ``property``.
 
 ``bool`` **is_compatible_type**\ (\ value\: ``Variant``, expected_type\: ``int``, expected_class\: ``String``\ ) |static| :ref:`🔗<class_HEGoPropertyUtil_method_is_compatible_type>`
 
-Whether ``value`` can be assigned to a property of ``expected_type`` (a Variant.Type) and, for objects, of class ``expected_class``.
+Whether ``value`` can be assigned to a property of ``expected_type``\ 
+
+ (a Variant.Type) and, for objects, of class ``expected_class``.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

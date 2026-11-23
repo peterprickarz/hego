@@ -4,7 +4,9 @@
 		Collects the per-phase timings of a [method HEGoNode3D.cook] call.
 	</brief_description>
 	<description>
-		Usage: [method begin_phase] before a phase, [method end_phase] after it, and [method format_summary] once the cook is done. Phases are printed in the order they were recorded, so adding an output handler needs no change here.
+		Usage: [method begin_phase] before a phase, [method end_phase] after it, and
+ [method format_summary] once the cook is done. Phases are printed in the order
+ they were recorded, so adding an output handler needs no change here.
 	</description>
 	<tutorials>
 	</tutorials>

@@ -12,7 +12,7 @@ HEGoOutputHandler
 
 **Inherits:** ``RefCounted``
 
-**Inherited By:** :ref:`HEGoStrataOutput<class_HEGoStrataOutput>`, :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`, :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
+**Inherited By:** :ref:`HEGoCopiaOutput<class_HEGoCopiaOutput>`, :ref:`HEGoStrataOutput<class_HEGoStrataOutput>`, :ref:`HEGoTerrain3DInstancer<class_HEGoTerrain3DInstancer>`, :ref:`HEGoTerrain3DOutput<class_HEGoTerrain3DOutput>`
 
 Teaches HEGo to turn another kind of cook result into Godot nodes.
 
@@ -21,7 +21,39 @@ Teaches HEGo to turn another kind of cook result into Godot nodes.
 Description
 -----------
 
-HEGo itself builds meshes, multimeshes, spawned objects and curves. Another addon adds a kind by extending this class and giving it a ``class_name``: HEGo finds every global class that extends it, in the editor and in exported games alike, so installing that addon is all it takes. The dependency only runs one way. The extending addon names HEGo's classes; HEGo never names the addon's. The HEGo Terrain3D bridge, for example, builds Terrain3D terrains and instances this way, and the HEGo Strata bridge publishes heightfields into Strata layers.  Several handlers may look at the same kind of output. Each one acts only on the parts that carry its own attributes and leaves the rest alone, so they need no rule about which of them goes first or which one owns, say, the heightfields.  :ref:`HEGoNode3D.output_handlers()<class_HEGoNode3D_method_output_handlers>` runs these after HEGo's own mesh, multimesh and object output and before its curve output, sorted by class name. Every method has a default that handles nothing, so a handler overrides only what it needs. Handlers are created once and reused, so keep per-cook state in the :ref:`HEGoOutputContext<class_HEGoOutputContext>` :ref:`handle()<class_HEGoOutputHandler_method_handle>` is given, not on the handler.
+HEGo itself builds meshes, multimeshes, spawned objects and curves. Another addon adds a
+
+ kind by extending this class and giving it a ``class_name``: HEGo finds every
+
+ global class that extends it, in the editor and in exported games alike, so installing
+
+ that addon is all it takes. The dependency only runs one way. The extending addon names
+
+ HEGo's classes; HEGo never names the addon's. The HEGo Terrain3D bridge, for example,
+
+ builds Terrain3D terrains and instances this way, and the HEGo Strata bridge publishes
+
+ heightfields into Strata layers.
+
+ 
+
+ Several handlers may look at the same kind of output. Each one acts only on the parts that
+
+ carry its own attributes and leaves the rest alone, so they need no rule about which of
+
+ them goes first or which one owns, say, the heightfields.
+
+ 
+
+ :ref:`HEGoNode3D.output_handlers()<class_HEGoNode3D_method_output_handlers>` runs these after HEGo's own mesh, multimesh and object
+
+ output and before its curve output, sorted by class name. Every method has a default that
+
+ handles nothing, so a handler overrides only what it needs. Handlers are created once and
+
+ reused, so keep per-cook state in the :ref:`HEGoOutputContext<class_HEGoOutputContext>` :ref:`handle()<class_HEGoOutputHandler_method_handle>` is given, not on
+
+ the handler.
 
 .. rst-class:: classref-reftable-group
 
@@ -73,7 +105,9 @@ Method Descriptions
 
 ``String`` **output_phase**\ (\ ) :ref:`🔗<class_HEGoOutputHandler_method_output_phase>`
 
-Name of the cook phase this handler is timed under, shown in the cook timings. Ends in ``_output`` by convention. Defaults to the class name in snake case.
+Name of the cook phase this handler is timed under, shown in the cook timings. Ends in
+
+ ``_output`` by convention. Defaults to the class name in snake case.
 
 .. rst-class:: classref-item-separator
 
@@ -85,7 +119,13 @@ Name of the cook phase this handler is timed under, shown in the cook timings. E
 
 ``bool`` **should_handle**\ (\ _summary\: ``Dictionary``\ ) :ref:`🔗<class_HEGoOutputHandler_method_should_handle>`
 
-Whether the cook has anything for this handler, judged from ``summary``, what :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` reported. Use :ref:`HEGoNodeUtil.output_has()<class_HEGoNodeUtil_method_output_has>` and :ref:`HEGoNodeUtil.output_has_attribute()<class_HEGoNodeUtil_method_output_has_attribute>`, which run the handler whenever the summary could not be read: skipping is only for positive knowledge that there is nothing to do.
+Whether the cook has anything for this handler, judged from ``summary``, what
+
+ :ref:`HEGoAssetNode.get_output_summary()<class_HEGoAssetNode_method_get_output_summary>` reported. Use :ref:`HEGoNodeUtil.output_has()<class_HEGoNodeUtil_method_output_has>`\ 
+
+ and :ref:`HEGoNodeUtil.output_has_attribute()<class_HEGoNodeUtil_method_output_has_attribute>`, which run the handler whenever the summary
+
+ could not be read: skipping is only for positive knowledge that there is nothing to do.
 
 .. rst-class:: classref-item-separator
 
@@ -97,7 +137,11 @@ Whether the cook has anything for this handler, judged from ``summary``, what :r
 
 |void| **handle**\ (\ _context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) :ref:`🔗<class_HEGoOutputHandler_method_handle>`
 
-Builds this handler's output for the cook in ``context``. May await. Runs after the host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s have committed and the previous ``Outputs`` subtree has been cleared.
+Builds this handler's output for the cook in ``context``. May await. Runs after the
+
+ host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s have committed and the previous ``Outputs`` subtree
+
+ has been cleared.
 
 .. rst-class:: classref-item-separator
 
@@ -109,7 +153,11 @@ Builds this handler's output for the cook in ``context``. May await. Runs after 
 
 ``Array`` **extension_handlers**\ (\ ) |static| :ref:`🔗<class_HEGoOutputHandler_method_extension_handlers>`
 
-The output handlers other addons provide: one instance of every global class that extends **HEGoOutputHandler**, sorted by class name. Rescanned whenever the project's class list changes, so an addon installed in an open editor is picked up without a restart.
+The output handlers other addons provide: one instance of every global class that extends
+
+ **HEGoOutputHandler**, sorted by class name. Rescanned whenever the project's class list
+
+ changes, so an addon installed in an open editor is picked up without a restart.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

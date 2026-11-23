@@ -27,6 +27,16 @@ Methods
    :widths: auto
 
    +----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | |void|               | :ref:`register_settings<class_HEGoGraphPicking_method_register_settings>`\ (\ ) |static|                                                                                                                          |
+   +----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``float``            | :ref:`point_size<class_HEGoGraphPicking_method_point_size>`\ (\ ) |static|                                                                                                                                        |
+   +----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``float``            | :ref:`line_width<class_HEGoGraphPicking_method_line_width>`\ (\ ) |static|                                                                                                                                        |
+   +----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``float``            | :ref:`point_radius<class_HEGoGraphPicking_method_point_radius>`\ (\ ) |static|                                                                                                                                    |
+   +----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``float``            | :ref:`connection_radius<class_HEGoGraphPicking_method_connection_radius>`\ (\ ) |static|                                                                                                                          |
+   +----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``int``              | :ref:`closest_point<class_HEGoGraphPicking_method_closest_point>`\ (\ mouse\: ``Vector2``, projected\: ``PackedVector2Array``, radius\: ``float`` = 12.0\ ) |static|                                              |
    +----------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``float``            | :ref:`distance_to_segment<class_HEGoGraphPicking_method_distance_to_segment>`\ (\ mouse\: ``Vector2``, a\: ``Vector2``, b\: ``Vector2``\ ) |static|                                                               |
@@ -49,13 +59,57 @@ Methods
 Constants
 ---------
 
+.. _class_HEGoGraphPicking_constant_SETTING_POINT_SIZE:
+
+.. rst-class:: classref-constant
+
+**SETTING_POINT_SIZE** = ``"hego/graph/point_size"`` :ref:`🔗<class_HEGoGraphPicking_constant_SETTING_POINT_SIZE>`
+
+Editor settings for the on-screen size of the markers, in pixels.
+
+.. _class_HEGoGraphPicking_constant_SETTING_LINE_WIDTH:
+
+.. rst-class:: classref-constant
+
+**SETTING_LINE_WIDTH** = ``"hego/graph/line_width"`` :ref:`🔗<class_HEGoGraphPicking_constant_SETTING_LINE_WIDTH>`
+
+.. container:: contribute
+
+	There is currently no description for this constant. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
+
+
+
+.. _class_HEGoGraphPicking_constant_DEFAULT_POINT_SIZE:
+
+.. rst-class:: classref-constant
+
+**DEFAULT_POINT_SIZE** = ``10.0`` :ref:`🔗<class_HEGoGraphPicking_constant_DEFAULT_POINT_SIZE>`
+
+.. container:: contribute
+
+	There is currently no description for this constant. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
+
+
+
+.. _class_HEGoGraphPicking_constant_DEFAULT_LINE_WIDTH:
+
+.. rst-class:: classref-constant
+
+**DEFAULT_LINE_WIDTH** = ``2.5`` :ref:`🔗<class_HEGoGraphPicking_constant_DEFAULT_LINE_WIDTH>`
+
+.. container:: contribute
+
+	There is currently no description for this constant. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
+
+
+
 .. _class_HEGoGraphPicking_constant_POINT_RADIUS:
 
 .. rst-class:: classref-constant
 
 **POINT_RADIUS** = ``12.0`` :ref:`🔗<class_HEGoGraphPicking_constant_POINT_RADIUS>`
 
-Pixel radius a click must be within to hit a point.
+Pixel radius a click must be within to hit a point, at least; see :ref:`point_radius()<class_HEGoGraphPicking_method_point_radius>`.
 
 .. _class_HEGoGraphPicking_constant_CONNECTION_RADIUS:
 
@@ -63,7 +117,7 @@ Pixel radius a click must be within to hit a point.
 
 **CONNECTION_RADIUS** = ``8.0`` :ref:`🔗<class_HEGoGraphPicking_constant_CONNECTION_RADIUS>`
 
-Pixel radius a click must be within to hit a connection.
+Pixel radius a click must be within to hit a connection, at least.
 
 .. rst-class:: classref-section-separator
 
@@ -73,6 +127,66 @@ Pixel radius a click must be within to hit a connection.
 
 Method Descriptions
 -------------------
+
+.. _class_HEGoGraphPicking_method_register_settings:
+
+.. rst-class:: classref-method
+
+|void| **register_settings**\ (\ ) |static| :ref:`🔗<class_HEGoGraphPicking_method_register_settings>`
+
+Adds the marker size settings to the editor settings if they are missing.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoGraphPicking_method_point_size:
+
+.. rst-class:: classref-method
+
+``float`` **point_size**\ (\ ) |static| :ref:`🔗<class_HEGoGraphPicking_method_point_size>`
+
+Diameter of point markers on screen, in pixels.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoGraphPicking_method_line_width:
+
+.. rst-class:: classref-method
+
+``float`` **line_width**\ (\ ) |static| :ref:`🔗<class_HEGoGraphPicking_method_line_width>`
+
+Width of connection lines on screen, in pixels.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoGraphPicking_method_point_radius:
+
+.. rst-class:: classref-method
+
+``float`` **point_radius**\ (\ ) |static| :ref:`🔗<class_HEGoGraphPicking_method_point_radius>`
+
+Pixel radius for picking a point: the marker radius plus a margin.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoGraphPicking_method_connection_radius:
+
+.. rst-class:: classref-method
+
+``float`` **connection_radius**\ (\ ) |static| :ref:`🔗<class_HEGoGraphPicking_method_connection_radius>`
+
+Pixel radius for picking a connection: half the line width plus a margin.
+
+.. rst-class:: classref-item-separator
+
+----
 
 .. _class_HEGoGraphPicking_method_closest_point:
 

@@ -1,0 +1,133 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoCopiaInput" inherits="HEGoInputHandler" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Sends a Copia store to an HDA input as one point cloud, so a generator can see what the store
+ holds and send back clear points for the cells it replaces (docs/copia/houdini.md).
+	</brief_description>
+	<description>
+		HEGo finds this handler because it extends [HEGoInputHandler]; neither HEGo nor Copia names
+ the other. Wire the [code]CopiaStore3D[/code] node into an input row.
+ 
+ Row settings (the input's settings dictionary):
+[codeblock]
+
+copia_input: true         marks the row as a Copia input (SETTINGS_MARKER)
+rect: [x0, z0, x1, z1]    optional; only the cells that intersect it, and only instance points
+                          inside it (store-local metres on X and Z). Absent = every cell.
+sets: ["roots"]           optional; only these sets get cell points. Empty = every set.
+exclude_sets: ["roots"]   optional; these sets get no cell points.
+points_of_sets: ["roads"] optional; the instance points of these sets (within rect) are sent
+                          too. Empty = none. Not limited by sets and exclude_sets.
+[/codeblock]
+
+ 
+ The cloud has two kinds of points, told apart by [code]hegocopia_cell_point[/code]:
+[codeblock]
+
+cell points (hegocopia_cell_point = 1), one per cell and set that holds points:
+  P (cell centre, y 0), hegocopia_cell, hegocopia_set,
+  hegocopia_count (int), hegocopia_cell_min, hegocopia_cell_max (vector3)
+instance points (hegocopia_cell_point = 0), when points_of_sets names sets:
+  P, N, up, scale, hegocopia_object, hegocopia_set, hegocopia_keep,
+  Cd, hegocopia_custom + hegocopia_custom_w when the points have them, and each
+  pass-through column under its own name
+[/codeblock]
+
+ Every attribute has a value for every point; the other kind's rows hold zero or an empty
+ string. The cloud does not name its store: the HDA names the store it writes to with a
+ string parameter of its own, stamped onto its output as [code]hegocopia_store[/code]
+ (docs/copia/houdini.md). HEGo inputs carry int, float, vector3 and string
+ attributes only, so the orientation travels as N + up + scale. The points are in the
+ store's local space and are sent as they are: the HDA's output is written back into the
+ store without a transform, so keep the HEGo node and the store at the same transform.
+ 
+ Nothing is filtered or interpreted here: which cell points to turn into clear points is
+ the generator's recipe. A generator that clears must be cooked against the store's current
+ content, so a row with this marker makes its cook strict.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="handles">
+			<return type="bool" />
+			<param index="0" name="node" type="Node" />
+			<description>
+			</description>
+		</method>
+		<method name="claims_settings">
+			<return type="bool" />
+			<param index="0" name="settings" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="requires_strict_cook">
+			<return type="bool" />
+			<param index="0" name="settings" type="Dictionary" />
+			<description>
+				A generator that clears cells must see the store as it is.
+			</description>
+		</method>
+		<method name="sync">
+			<return type="Dictionary" />
+			<param index="0" name="host" type="Node" />
+			<param index="1" name="existing_node" type="Variant" />
+			<param index="2" name="node" type="Node" />
+			<param index="3" name="settings" type="Dictionary" />
+			<description>
+			</description>
+		</method>
+		<method name="build_points" qualifiers="static">
+			<return type="Dictionary" />
+			<param index="0" name="store" type="Node" />
+			<param index="1" name="settings" type="Dictionary" default="{}" />
+			<description>
+				The point cloud of [param store] for the row settings in [param settings] (see the class
+ comment): [code]{P, attributes, cell_count, instance_count, error}[/code], where
+ [code]P[/code] and [code]attributes[/code] are exactly what [method HEGoInputNode.set_geo]
+ takes (cell points first, then instance points; an empty store gives no points and no
+ attributes, as HEGo rejects zero-length attribute arrays) and [code]error[/code] is empty
+ unless the store or the settings cannot be used.
+ 
+ Also read from [param settings]: [code]input_path[/code], the value of
+ [code]_hego_node_path[/code] (default: [code]store_path[/code], else the store's path from its
+ scene root).
+ 
+ No loop over points: the columns come from the store as arrays and are joined as arrays.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="SETTINGS_MARKER" value="&quot;copia_input&quot;">
+			Marks stored input settings as belonging to a Copia input, so its options and strict cook
+ rule stay in force while the store is missing.
+		</constant>
+		<constant name="OutputScript" value="&lt;Object&gt;">
+		</constant>
+		<constant name="CELL" value="&quot;hegocopia_cell&quot;">
+		</constant>
+		<constant name="SET" value="&quot;hegocopia_set&quot;">
+		</constant>
+		<constant name="COUNT" value="&quot;hegocopia_count&quot;">
+		</constant>
+		<constant name="CELL_MIN" value="&quot;hegocopia_cell_min&quot;">
+		</constant>
+		<constant name="CELL_MAX" value="&quot;hegocopia_cell_max&quot;">
+		</constant>
+		<constant name="CELL_POINT" value="&quot;hegocopia_cell_point&quot;">
+		</constant>
+		<constant name="EVERYWHERE" value="Rect2(-1000000000, -1000000000, 2000000000, 2000000000)">
+			What an unbounded read covers, in metres.
+		</constant>
+		<constant name="RENAMES" value="{&quot;custom&quot;: &quot;hegocopia_custom&quot;, &quot;custom_w&quot;: &quot;hegocopia_custom_w&quot;, &quot;keep&quot;: &quot;hegocopia_keep&quot;, &quot;object&quot;: &quot;hegocopia_object&quot;, &quot;set&quot;: &quot;hegocopia_set&quot;}">
+			to_attributes names the sent columns by.
+		</constant>
+		<constant name="INT" value="0" enum="Kind">
+		</constant>
+		<constant name="FLOAT" value="1" enum="Kind">
+		</constant>
+		<constant name="VECTOR" value="2" enum="Kind">
+		</constant>
+		<constant name="STRING" value="3" enum="Kind">
+		</constant>
+	</constants>
+</class>

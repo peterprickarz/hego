@@ -21,7 +21,11 @@ Attributes, filters and splits for a surface fetch, saved as a resource.
 Description
 -----------
 
-only so existing projects can move across, and will be removed. The code API takes the same arguments, shares the same implementation and cache, and can decide what to read at runtime.
+only so existing projects can move across, and will be removed. The code API
+
+ takes the same arguments, shares the same implementation and cache, and can
+
+ decide what to read at runtime.
 
 .. rst-class:: classref-reftable-group
 
@@ -43,6 +47,8 @@ Properties
    | ``bool``              | :ref:`tangents<class_HEGoFetchSurfacesConfig_property_tangents>`                         |
    +-----------------------+------------------------------------------------------------------------------------------+
    | ``PackedStringArray`` | :ref:`read_attribs<class_HEGoFetchSurfacesConfig_property_read_attribs>`                 |
+   +-----------------------+------------------------------------------------------------------------------------------+
+   | ``PackedStringArray`` | :ref:`custom_attribs<class_HEGoFetchSurfacesConfig_property_custom_attribs>`             |
    +-----------------------+------------------------------------------------------------------------------------------+
    | ``PackedStringArray`` | :ref:`filter_attribs<class_HEGoFetchSurfacesConfig_property_filter_attribs>`             |
    +-----------------------+------------------------------------------------------------------------------------------+
@@ -127,6 +133,26 @@ Whether to read tangents.
 ``PackedStringArray`` **read_attribs** :ref:`🔗<class_HEGoFetchSurfacesConfig_property_read_attribs>`
 
 Further attribute names to read from the cook, beyond the toggles above.
+
+**Note:** The returned array is *copied* and any changes to it will not update the original property value. See ``PackedStringArray`` for more details.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoFetchSurfacesConfig_property_custom_attribs:
+
+.. rst-class:: classref-property
+
+``PackedStringArray`` **custom_attribs** :ref:`🔗<class_HEGoFetchSurfacesConfig_property_custom_attribs>`
+
+Up to four point attributes exported as the custom vertex channels, in order
+
+ (``ARRAY_CUSTOM0..3``, RGBA float). A blank entry skips that channel. Surfaces
+
+ that carry them hold ``custom_format_flags``, to pass as the flags argument of
+
+ ``ArrayMesh.add_surface_from_arrays()``.
 
 **Note:** The returned array is *copied* and any changes to it will not update the original property value. See ``PackedStringArray`` for more details.
 

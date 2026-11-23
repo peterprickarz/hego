@@ -16,10 +16,13 @@ already running, start that server with ``HAPI_CLIENT_NAME=godot`` in its enviro
 Houdini
 -------
 
-Make sure you have the correct Houdini version installed. Currently **22.0.429**. It may work with
-other versions, but that is what it is built with. It works on Windows and Linux. Linux testing is
-done on Linux Mint, so other distros may have issues. Please create an issue on GitHub or let us
-know on the Discord if you run into issues.
+Make sure you have the correct Houdini version installed. Currently **22.0.429** (or
+**22.0.510+** if using a Houdini Indie license). It may work with other 22.0 builds, but
+22.0.429 is what HEGo is built against.
+
+HEGo ships pre-built libraries for **Windows x86_64** and **Linux x86_64** (Godot **4.7+**
+on the ``next`` channel); macOS is not supported. Please create an issue on GitHub or let us
+know on Discord if you run into platform issues.
 
 Installation
 ------------
@@ -39,11 +42,35 @@ You will need to restart Godot after enabling the plugin.
 Git submodule method
 ~~~~~~~~~~~~~~~~~~~~
 
+For the stable channel (``main``):
+
 .. code-block:: bash
 
    # Add HEGo as a submodule in your Godot project
    git submodule add -b release https://github.com/peterprickarz/hego.git addons/hego
    git submodule update --init --recursive
+
+For the development channel (``next``), HEGo, Strata, Copia, and their bridge addons are
+published on matched branches so you can install only what your project uses:
+
+.. code-block:: bash
+
+   # HEGo on next
+   git submodule add -b release-next https://github.com/peterprickarz/hego.git addons/hego
+
+   # Optional: Strata terrain + HEGo Strata bridge
+   git submodule add -b strata-release-next https://github.com/peterprickarz/hego.git addons/strata
+   git submodule add -b hego-strata-release-next https://github.com/peterprickarz/hego.git addons/hego_strata
+
+   # Optional: Copia instancing + HEGo Copia bridge
+   git submodule add -b copia-release-next https://github.com/peterprickarz/hego.git addons/copia
+   git submodule add -b hego-copia-release-next https://github.com/peterprickarz/hego.git addons/hego_copia
+
+   # Optional: Terrain3D bridge (install Terrain3D itself at addons/terrain_3d)
+   git submodule add -b hego-terrain3d-release-next https://github.com/peterprickarz/hego.git addons/hego_terrain3d
+
+See :doc:`/bridges/index` for how these addons fit together, and
+:doc:`/development/packaging` for the ``release-next-bundle`` branch and native build receipts.
 
 Your First Cook
 ---------------
@@ -117,11 +144,17 @@ The **Session** tab offers two file actions while a session is running.
 Examples
 --------
 
-The ``demo`` folder in the repo contains the project used for testing and development. Even if you
-only download the binaries, it is still recommended to look at this demo project. The demo project
-also comes with `Terrain3D <https://github.com/TokisanGames/Terrain3D>`_ installed, together with
-the HEGo Terrain3D bridge addon (``addons/hego_terrain3d``) that connects it to HEGo, and contains
-examples for generating terrains using Terrain3D.
+The ``demo`` folder in the repository contains the project used for testing and development:
+
+- **Strata island demo** (``demo/scenes/terrain_island.tscn``): the main scene of the demo
+  project — a complete 4 km island built with Strata and the HEGo Strata bridge, playable
+  without Houdini (see :doc:`/strata/example_island`).
+- **Copia instancing demo** (``demo/copia_demo/copia_demo.tscn``): generates ~300,000
+  instances with streaming, impostors, and colliders without Houdini (see
+  :doc:`/copia/getting_started`).
+- **Terrain3D examples**: the demo project also bundles
+  `Terrain3D <https://github.com/TokisanGames/Terrain3D>`_ together with the HEGo Terrain3D
+  bridge addon (``addons/hego_terrain3d``).
 
 Troubleshooting
 ---------------

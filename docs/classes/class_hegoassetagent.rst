@@ -19,9 +19,22 @@ Holds the HDAs one Godot node owns, and does the fiddly parts of driving them.
 Description
 -----------
 
-Using one is optional. Every method below is a short sequence of ordinary :ref:`HEGoAssetNode<class_HEGoAssetNode>` calls that a node can make itself, and the manual form of each is in the documentation; the agent exists because a few of those sequences are tedious to repeat and two are easy to get silently wrong. What it holds is the point of holding it: the assets by label, and the merge and input nodes behind each HDA input, all of which have to survive from one cook to the next for the Houdini node ids to stay valid. 
+Using one is optional. Every method below is a short sequence of ordinary
+
+ :ref:`HEGoAssetNode<class_HEGoAssetNode>` calls that a node can make itself, and the manual form of each is in the
+
+ documentation; the agent exists because a few of those sequences are tedious to repeat
+
+ and two are easy to get silently wrong. What it holds is the point of holding it: the
+
+ assets by label, and the merge and input nodes behind each HDA input, all of which have
+
+ to survive from one cook to the next for the Houdini node ids to stay valid.
+
+ 
 
 ::
+
 
     @tool
     extends MeshInstance3D
@@ -42,7 +55,13 @@ Using one is optional. Every method below is a short sequence of ordinary :ref:`
         mesh = meshes.values()[0] if not meshes.is_empty() else null
         parm_stash = await agent.save_parameters(fence)
 
-Everything the HDA does is still an ordinary call on :ref:`HEGoAssetNode<class_HEGoAssetNode>`, in the order the script writes it. The agent never stands between the two.
+
+
+ 
+
+ Everything the HDA does is still an ordinary call on :ref:`HEGoAssetNode<class_HEGoAssetNode>`, in the order the
+
+ script writes it. The agent never stands between the two.
 
 .. rst-class:: classref-reftable-group
 
@@ -90,6 +109,10 @@ Methods
    | |void|                                            | :ref:`highlight<class_HEGoAssetAgent_method_highlight>`\ (\ label\: ``String``\ )                                                                                                                             |
    +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Array``                                         | :ref:`panel_assets<class_HEGoAssetAgent_method_panel_assets>`\ (\ )                                                                                                                                           |
+   +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``                                          | :ref:`can_release<class_HEGoAssetAgent_method_can_release>`\ (\ ) |static|                                                                                                                                    |
+   +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``bool``                                          | :ref:`release<class_HEGoAssetAgent_method_release>`\ (\ )                                                                                                                                                     |
    +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoOutputContext<class_HEGoOutputContext>` | :ref:`output_context<class_HEGoAssetAgent_method_output_context>`\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, cook\: ``Dictionary`` = {}\ )                                                        |
    +---------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -154,7 +177,9 @@ The node these assets belong to.
 
 ``Dictionary`` **assets** = ``{}`` :ref:`🔗<class_HEGoAssetAgent_property_assets>`
 
-Every asset this node has made, keyed by label, in creation order. The bottom panel reads this to know what to show and what to call each section.
+Every asset this node has made, keyed by label, in creation order. The bottom panel reads
+
+ this to know what to show and what to call each section.
 
 .. rst-class:: classref-item-separator
 
@@ -166,7 +191,9 @@ Every asset this node has made, keyed by label, in creation order. The bottom pa
 
 ``Array`` **panel_labels** = ``[]`` :ref:`🔗<class_HEGoAssetAgent_property_panel_labels>`
 
-Labels the bottom panel shows, in the order it shows them. Empty means every asset, in creation order. Set it with :ref:`show_in_panel()<class_HEGoAssetAgent_method_show_in_panel>`.
+Labels the bottom panel shows, in the order it shows them. Empty means every asset, in
+
+ creation order. Set it with :ref:`show_in_panel()<class_HEGoAssetAgent_method_show_in_panel>`.
 
 .. rst-class:: classref-item-separator
 
@@ -178,7 +205,9 @@ Labels the bottom panel shows, in the order it shows them. Empty means every ass
 
 ``String`` **highlighted_label** = ``""`` :ref:`🔗<class_HEGoAssetAgent_property_highlighted_label>`
 
-Label of the asset the panel opens and scrolls to after a rebuild, or empty for none. Set it with :ref:`highlight()<class_HEGoAssetAgent_method_highlight>`.
+Label of the asset the panel opens and scrolls to after a rebuild, or empty for none.
+
+ Set it with :ref:`highlight()<class_HEGoAssetAgent_method_highlight>`.
 
 .. rst-class:: classref-section-separator
 
@@ -195,7 +224,17 @@ Method Descriptions
 
 ``Variant`` **task**\ (\ task\: :ref:`HEGoTask<class_HEGoTask>`\ ) :ref:`🔗<class_HEGoAssetAgent_method_task>`
 
-Waits for ``task`` and returns its result, or ``null`` if it failed.  ``null`` is not a general failure signal: a task that legitimately did nothing also completes with null, which is what HEGo returns for work it could skip. It does mean failure after ``cook()``, which returns 0 when it succeeds and fails its task when Houdini rejects it.
+Waits for ``task`` and returns its result, or ``null`` if it failed.
+
+ 
+
+ ``null`` is not a general failure signal: a task that legitimately did nothing
+
+ also completes with null, which is what HEGo returns for work it could skip. It does mean
+
+ failure after ``cook()``, which returns 0 when it succeeds and fails its task
+
+ when Houdini rejects it.
 
 .. rst-class:: classref-item-separator
 
@@ -207,7 +246,13 @@ Waits for ``task`` and returns its result, or ``null`` if it failed.  ``null`` i
 
 :ref:`HEGoAssetNode<class_HEGoAssetNode>` **asset**\ (\ operator_name\: ``String``, label\: ``String`` = ""\ ) :ref:`🔗<class_HEGoAssetAgent_method_asset>`
 
-The asset node for ``operator_name``, created on first use and reused afterwards.  Reusing it is what keeps the Houdini node id valid between cooks. ``label`` names it for the bottom panel and defaults to the operator without its table.
+The asset node for ``operator_name``, created on first use and reused afterwards.
+
+ 
+
+ Reusing it is what keeps the Houdini node id valid between cooks. ``label`` names it
+
+ for the bottom panel and defaults to the operator without its table.
 
 .. rst-class:: classref-item-separator
 
@@ -219,7 +264,31 @@ The asset node for ``operator_name``, created on first use and reused afterwards
 
 ``bool`` **instantiate**\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, stashed_parameters\: ``PackedByteArray`` = PackedByteArray(), strict\: ``bool`` = false\ ) :ref:`🔗<class_HEGoAssetAgent_method_instantiate>`
 
-Makes ``asset`` exist in Houdini. False when it could not be created.  Pushes the owner's transform when it is spatial, and restores ``stashed_parameters`` only when this call is what created the Houdini node. That condition is the subtle part: restoring on every cook would undo whatever the user has since changed in the panel.  Returns false on a license failure, which Houdini reports by completing successfully with an id of -1 rather than by failing. An unknown operator name is not caught here, because Houdini hands back a valid id for one; the cook is what rejects it.  With ``strict``, a failed transform or parameter restore also returns false, rather than carrying on with an asset that is not in the state the stash describes.
+Makes ``asset`` exist in Houdini. False when it could not be created.
+
+ 
+
+ Pushes the owner's transform when it is spatial, and restores
+
+ ``stashed_parameters`` only when this call is what created the Houdini node. That
+
+ condition is the subtle part: restoring on every cook would undo whatever the user has
+
+ since changed in the panel.
+
+ 
+
+ Returns false on a license failure, which Houdini reports by completing successfully with
+
+ an id of -1 rather than by failing. An unknown operator name is not caught here, because
+
+ Houdini hands back a valid id for one; the cook is what rejects it.
+
+ 
+
+ With ``strict``, a failed transform or parameter restore also returns false, rather
+
+ than carrying on with an asset that is not in the state the stash describes.
 
 .. rst-class:: classref-item-separator
 
@@ -231,7 +300,9 @@ Makes ``asset`` exist in Houdini. False when it could not be created.  Pushes th
 
 ``PackedByteArray`` **save_parameters**\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`\ ) :ref:`🔗<class_HEGoAssetAgent_method_save_parameters>`
 
-The asset's current parameters, as a blob to store on the node so they survive a session restart and a scene reload. Empty when they could not be read.
+The asset's current parameters, as a blob to store on the node so they survive a session
+
+ restart and a scene reload. Empty when they could not be read.
 
 .. rst-class:: classref-item-separator
 
@@ -243,7 +314,13 @@ The asset's current parameters, as a blob to store on the node so they survive a
 
 ``bool`` **rebuild_asset**\ (\ previous\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, stashed_parameters\: ``PackedByteArray`` = PackedByteArray()\ ) :ref:`🔗<class_HEGoAssetAgent_method_rebuild_asset>`
 
-Reloads the library that supplies ``previous``, replaces its instance and clears its input chains. Look up the replacement with :ref:`asset()<class_HEGoAssetAgent_method_asset>` and run the host's usual cook to upload the current Godot inputs. Live parameters are captured before reloading. Before the first cook the replacement uses ``stashed_parameters``.
+Reloads the library that supplies ``previous``, replaces its instance and clears its
+
+ input chains. Look up the replacement with :ref:`asset()<class_HEGoAssetAgent_method_asset>` and run the host's usual cook
+
+ to upload the current Godot inputs. Live parameters are captured before reloading.
+
+ Before the first cook the replacement uses ``stashed_parameters``.
 
 .. rst-class:: classref-item-separator
 
@@ -255,7 +332,29 @@ Reloads the library that supplies ``previous``, replaces its instance and clears
 
 ``bool`` **sync_inputs**\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, skip_indices\: ``Array`` = [], cook\: ``Dictionary`` = {}\ ) :ref:`🔗<class_HEGoAssetAgent_method_sync_inputs>`
 
-Feeds ``asset`` the Godot nodes stored in the owner's input stash.  Every HDA input goes through a merge node, because one Houdini input can combine several Godot nodes, and the input nodes are kept between cooks so unchanged geometry is not re-sent. ``skip_indices`` leaves inputs alone that something else fills, which is how an input fed by another HDA survives.  ``cook`` is the dictionary a host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s share, and its ``errors`` collects what went wrong. An input an :ref:`HEGoInputHandler<class_HEGoInputHandler>` could not send always counts as an error. When ``strict`` is true, so does any input that is missing, incompatible or fails to upload, rather than being skipped with a warning. Returns false when the input names could not be read or any error was recorded.
+Feeds ``asset`` the Godot nodes stored in the owner's input stash.
+
+ 
+
+ Every HDA input goes through a merge node, because one Houdini input can combine several
+
+ Godot nodes, and the input nodes are kept between cooks so unchanged geometry is not
+
+ re-sent. ``skip_indices`` leaves inputs alone that something else fills, which is how
+
+ an input fed by another HDA survives.
+
+ 
+
+ ``cook`` is the dictionary a host's :ref:`HEGoCookExtension<class_HEGoCookExtension>`\ s share, and its
+
+ ``errors`` collects what went wrong. An input an :ref:`HEGoInputHandler<class_HEGoInputHandler>` could not
+
+ send always counts as an error. When ``strict`` is true, so does any input that
+
+ is missing, incompatible or fails to upload, rather than being skipped with a warning.
+
+ Returns false when the input names could not be read or any error was recorded.
 
 .. rst-class:: classref-item-separator
 
@@ -267,7 +366,15 @@ Feeds ``asset`` the Godot nodes stored in the owner's input stash.  Every HDA in
 
 |void| **set_input**\ (\ index\: ``int``, sources\: ``Variant``\ ) :ref:`🔗<class_HEGoAssetAgent_method_set_input>`
 
-Points HDA input ``index`` at ``sources``, which may be a ``Node``, a ``NodePath``, a path string, or an array of any of those.  Writes to the same stash the panel's Inputs pane writes to, so an exported property and the panel agree rather than fighting.
+Points HDA input ``index`` at ``sources``, which may be a ``Node``, a ``NodePath``, a
+
+ path string, or an array of any of those.
+
+ 
+
+ Writes to the same stash the panel's Inputs pane writes to, so an exported property and
+
+ the panel agree rather than fighting.
 
 .. rst-class:: classref-item-separator
 
@@ -279,7 +386,15 @@ Points HDA input ``index`` at ``sources``, which may be a ``Node``, a ``NodePath
 
 |void| **show_in_panel**\ (\ labels\: ``Array``\ ) :ref:`🔗<class_HEGoAssetAgent_method_show_in_panel>`
 
-Shows only ``labels`` in the bottom panel, in that order.  The default is every asset this node has made, in creation order. A tool with several stages usually wants to say which of them a user should see, and put the one they are working on first. Pass an empty array to go back to showing all of them.
+Shows only ``labels`` in the bottom panel, in that order.
+
+ 
+
+ The default is every asset this node has made, in creation order. A tool with several
+
+ stages usually wants to say which of them a user should see, and put the one they are
+
+ working on first. Pass an empty array to go back to showing all of them.
 
 .. rst-class:: classref-item-separator
 
@@ -291,7 +406,13 @@ Shows only ``labels`` in the bottom panel, in that order.  The default is every 
 
 |void| **highlight**\ (\ label\: ``String``\ ) :ref:`🔗<class_HEGoAssetAgent_method_highlight>`
 
-Makes the panel open ``label``'s section and scroll to it on the next rebuild.  A recook rebuilds the panel, so a tool that moves the user on to its next stage can point them at it rather than leaving them to find it. Pass an empty string to highlight nothing.
+Makes the panel open ``label``'s section and scroll to it on the next rebuild.
+
+ 
+
+ A recook rebuilds the panel, so a tool that moves the user on to its next stage can point
+
+ them at it rather than leaving them to find it. Pass an empty string to highlight nothing.
 
 .. rst-class:: classref-item-separator
 
@@ -303,7 +424,59 @@ Makes the panel open ``label``'s section and scroll to it on the next rebuild.  
 
 ``Array`` **panel_assets**\ (\ ) :ref:`🔗<class_HEGoAssetAgent_method_panel_assets>`
 
-The assets the bottom panel should show, in order, as the panel wants them.  Return this straight from a node's ``hego_get_panel_assets()``. Entries are ``{ "label", "asset", "highlight" }``; a label in :ref:`panel_labels<class_HEGoAssetAgent_property_panel_labels>` that names no asset is skipped.
+The assets the bottom panel should show, in order, as the panel wants them.
+
+ 
+
+ Return this straight from a node's ``hego_get_panel_assets()``. Entries are
+
+ ``{ "label", "asset", "highlight" }``; a label in :ref:`panel_labels<class_HEGoAssetAgent_property_panel_labels>` that names
+
+ no asset is skipped.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetAgent_method_can_release:
+
+.. rst-class:: classref-method
+
+``bool`` **can_release**\ (\ ) |static| :ref:`🔗<class_HEGoAssetAgent_method_can_release>`
+
+Whether the loaded HEGo binary can delete nodes from the session, which
+
+ :ref:`release()<class_HEGoAssetAgent_method_release>` needs. Binaries older than :ref:`HEGoBaseNode.delete_node()<class_HEGoBaseNode_method_delete_node>` cannot.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetAgent_method_release:
+
+.. rst-class:: classref-method
+
+``bool`` **release**\ (\ ) :ref:`🔗<class_HEGoAssetAgent_method_release>`
+
+Deletes every Houdini node this agent made - the HDAs, and the merge and input nodes
+
+ behind their inputs - and forgets them. True when all of them are gone.
+
+ 
+
+ Houdini keeps a node's cooked geometry, and HEGo a copy of its output, for as long as
+
+ the node exists, so a host that cooks a large asset once and keeps the result as Godot
+
+ nodes can let them go. The next cook creates everything again: the HDA from the
+
+ owner's stashed parameters and the inputs by a full upload. The bottom panel shows no
+
+ parameters for a released host until then.
+
+ 
+
+ Returns false, and deletes nothing, when :ref:`can_release()<class_HEGoAssetAgent_method_can_release>` is false.
 
 .. rst-class:: classref-item-separator
 
@@ -315,7 +488,19 @@ The assets the bottom panel should show, in order, as the panel wants them.  Ret
 
 :ref:`HEGoOutputContext<class_HEGoOutputContext>` **output_context**\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, cook\: ``Dictionary`` = {}\ ) :ref:`🔗<class_HEGoAssetAgent_method_output_context>`
 
-Fetches what ``asset``'s cook produced and wraps it for the output handlers.  Needed by anything in the output library: :ref:`HEGoMeshOutput.fetch_meshes()<class_HEGoMeshOutput_method_fetch_meshes>`, :ref:`HEGoMultiMeshOutput.setup_multimesh()<class_HEGoMultiMeshOutput_method_setup_multimesh>`, and a handler's own ``handle(context)``.  ``cook`` becomes the context's :ref:`HEGoOutputContext.cook_state<class_HEGoOutputContext_property_cook_state>`.
+Fetches what ``asset``'s cook produced and wraps it for the output handlers.
+
+ 
+
+ Needed by anything in the output library: :ref:`HEGoMeshOutput.fetch_meshes()<class_HEGoMeshOutput_method_fetch_meshes>`,
+
+ :ref:`HEGoMultiMeshOutput.setup_multimesh()<class_HEGoMultiMeshOutput_method_setup_multimesh>`, and a handler's own
+
+ ``handle(context)``.
+
+ 
+
+ ``cook`` becomes the context's :ref:`HEGoOutputContext.cook_state<class_HEGoOutputContext_property_cook_state>`.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

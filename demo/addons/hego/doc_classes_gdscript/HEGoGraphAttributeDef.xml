@@ -4,7 +4,8 @@
 		One attribute a [HEGoGraph3D] can store on its points or connections.
 	</brief_description>
 	<description>
-		Lives in a [HEGoGraphAttributes] list on a child of the graph. The name, owner and value type decide what is sent to Houdini; the rest only shapes the editor UI.
+		Lives in a [HEGoGraphAttributes] list on a child of the graph. The name, owner
+ and value type decide what is sent to Houdini; the rest only shapes the editor UI.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -33,7 +34,8 @@
 			<return type="int" />
 			<param index="0" name="array" type="Variant" />
 			<description>
-				The value type that stores [param array], or -1 when no type does. Used to declare the attributes a cook sends back.
+				The value type that stores [param array], or -1 when no type does. Used to declare the
+ attributes a cook sends back.
 			</description>
 		</method>
 	</methods>

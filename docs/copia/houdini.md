@@ -24,8 +24,9 @@ plugin reports which addon is missing if one is. HEGo itself must be set up with
 Houdini session as described in {doc}`/about/getting_started`.
 
 The bridge adds nothing to your scene. HEGo picks up its output and input handlers
-(`HEGoCopiaOutput` and `HEGoCopiaInput`) automatically, so any `HEGoNode3D` can write to a store
-and any store can be wired into an input row.
+({ref}`HEGoCopiaOutput<class_HEGoCopiaOutput>` and {ref}`HEGoCopiaInput<class_HEGoCopiaInput>`)
+automatically, so any `HEGoNode3D` can write to a store and any store can be wired into an input
+row. See {doc}`/bridges/index` for how bridges fit into HEGo.
 
 ## How a cook works
 

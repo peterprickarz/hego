@@ -19,18 +19,21 @@ Features
 - **Bidirectional data flow**: convert between Godot and Houdini geometry formats
 - **Parameter management**: automatic type conversion between Godot Variant and HAPI types
 - **Mesh generation**: generate Godot meshes, instances, and scene nodes from Houdini output
-- **Terrain3D bridge**: generate `Terrain3D <https://tokisan.com/terrain3d/>`_ terrains, use Terrain3D instancing, and feed Terrain3D heightfield inputs into Houdini, through the separate HEGo Terrain3D addon (``addons/hego_terrain3d``)
+- **Bridge architecture**: plug in standalone systems via thin GDScript bridge addons without coupling HEGo to them (see :doc:`/bridges/index`):
+
+  - **Strata terrain** (``addons/strata`` + ``addons/hego_strata``): layered terrain with manual painting, procedural HDA layers, baking, collision, and navigation (:doc:`/strata/index`)
+  - **Copia instancing** (``addons/copia`` + ``addons/hego_copia``): cell-based instancing store for tens of thousands to millions of meshes with streaming, impostors, and colliders (:doc:`/copia/index`)
+  - **Terrain3D bridge** (``addons/hego_terrain3d``): generate `Terrain3D <https://tokisan.com/terrain3d/>`_ terrains, populate Terrain3D instancers, and feed Terrain3D heightfield inputs into Houdini
 
 Where to Start
 --------------
 
-If you are setting things up for the first time, see :doc:`Getting Started <getting_started>`.
-
-The easiest way to bring an HDA into Godot is :doc:`HEGoNode3D </node_reference/hego_node_3d>`.
-
-If you want to work with the underlying API directly, the entire ``HEGoNode3D`` workflow and
-editor bottom panel are built in GDScript on top of the core API. See the individual
-:doc:`API class pages </classes/class_hegoapi>` for details.
+- Setting up HEGo for the first time: :doc:`Getting Started <getting_started>`.
+- Bringing an HDA into a scene: :doc:`HEGoNode3D </node_reference/hego_node_3d>`.
+- Understanding how HEGo integrates with Strata, Copia, and Terrain3D: :doc:`Bridge Architecture </bridges/index>`.
+- Layered terrain (with or without Houdini): :doc:`Strata terrain </strata/index>`.
+- Large-scale mesh instancing (with or without Houdini): :doc:`Copia instancing </copia/index>`.
+- Driving Houdini from your own GDScript: :doc:`Scripting HEGo </api/index>` and the :doc:`class reference </classes/index>`.
 
 Overview Video
 --------------

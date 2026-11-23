@@ -1,8 +1,8 @@
 HEGo Class Reference
 ====================
 
-Every class HEGo registers, and those of the two bridge addons, HEGo Strata and HEGo
-Terrain3D. The C++ pages come from the class reference XML in
+Every class HEGo registers, and those of the three bridge addons — HEGo Strata, HEGo
+Copia and HEGo Terrain3D. The C++ pages come from the class reference XML in
 ``demo/addons/hego/doc_classes``; the GDScript pages are generated from the scripts'
 own ``##`` comments, so a class page and the editor's built-in help say the same thing.
 
@@ -63,6 +63,7 @@ The node HEGo ships, the helper a node of your own holds, and what the two of th
 - :ref:`HEGoCookExtension<class_HEGoCookExtension>`
 - :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`
 - :ref:`HEGoCookTimings<class_HEGoCookTimings>`
+- :ref:`HEGoGraph3D<class_HEGoGraph3D>`
 - :ref:`HEGoGraphInput3D<class_HEGoGraphInput3D>`
 - :ref:`HEGoGraphAttributes<class_HEGoGraphAttributes>`
 - :ref:`HEGoGraphAttributeDef<class_HEGoGraphAttributeDef>`
@@ -76,6 +77,7 @@ What turns a cook's geometry into Godot nodes, one class per output type, plus t
 - :ref:`HEGoMultiMeshOutput<class_HEGoMultiMeshOutput>`
 - :ref:`HEGoObjectOutput<class_HEGoObjectOutput>`
 - :ref:`HEGoCurveOutput<class_HEGoCurveOutput>`
+- :ref:`HEGoGraphOutput<class_HEGoGraphOutput>`
 - :ref:`HEGoCurveBuilder<class_HEGoCurveBuilder>`
 - :ref:`HEGoPointUtil<class_HEGoPointUtil>`
 - :ref:`HEGoPropertyUtil<class_HEGoPropertyUtil>`
@@ -97,6 +99,14 @@ The separate ``addons/hego_strata`` addon, which depends on HEGo and Strata: Str
 
 - :ref:`HEGoStrataInput<class_HEGoStrataInput>`
 - :ref:`HEGoStrataOutput<class_HEGoStrataOutput>`
+
+HEGo Copia bridge
+-----------------
+
+The separate ``addons/hego_copia`` addon, which depends on HEGo and Copia: Copia store cells and points as HDA inputs, and a cook's points written into Copia stores. It plugs into HEGo through :ref:`HEGoInputHandler<class_HEGoInputHandler>` and :ref:`HEGoOutputHandler<class_HEGoOutputHandler>`.
+
+- :ref:`HEGoCopiaInput<class_HEGoCopiaInput>`
+- :ref:`HEGoCopiaOutput<class_HEGoCopiaOutput>`
 
 HEGo Terrain3D bridge
 ---------------------
@@ -120,4 +130,5 @@ The separate ``addons/hego_terrain3d`` addon, which depends on HEGo and on the T
    output_handlers
    resources
    hego_strata
+   hego_copia
    terrain3d

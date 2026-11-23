@@ -19,7 +19,13 @@ Saved parameter presets for one HDA, as the bottom panel's preset list stores th
 Description
 -----------
 
-One resource per operator, written to ``res://hego/presets/<operator>.tres``. A preset is the blob :ref:`HEGoAssetNode.get_preset()<class_HEGoAssetNode_method_get_preset>` returns, which is also what a node's ``parm_stash`` holds, so a preset and a stashed parameter set are the same thing saved in two places.
+One resource per operator, written to ``res://hego/presets/<operator>.tres``. A preset is the
+
+ blob :ref:`HEGoAssetNode.get_preset()<class_HEGoAssetNode_method_get_preset>` returns, which is also what a node's
+
+ ``parm_stash`` holds, so a preset and a stashed parameter set are the same thing
+
+ saved in two places.
 
 .. rst-class:: classref-reftable-group
 

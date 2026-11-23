@@ -19,7 +19,43 @@ A child of an :ref:`HEGoNode3D<class_HEGoNode3D>` that takes part in its cooks.
 Description
 -----------
 
-A cook normally ends by rebuilding the ``Outputs`` subtree. An extension makes it do more, or do it differently: it can refuse to start a cook, prepare state for the input handlers, or check the result and keep the previous output when it is not right. Add one as a direct child of the HEGo node. HEGo calls the hooks below on every such child, in child order, and never needs to know which addon it came from. To turn a kind of cook result into something, write an :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` instead; it needs no child.  Every hook has a default that does nothing, so an extension overrides only what it needs. Hooks that return a Dictionary report ``{ok, message}``. Returning ``ok: false`` stops the cook and leaves the previous output in place. The extension that stops a cook records its own reason; the others are told through :ref:`cook_failed()<class_HEGoCookExtension_method_cook_failed>`.  ``cook`` is one dictionary shared by every extension, input handler and output handler for the duration of one cook. HEGo reads ``strict`` from it and collects input failures in ``errors``. It also records what the cook started from: ``input_stash`` (a copy), ``transform`` and, once the parameters are in place, ``parm_stash``, the preset the HDA cooks with. Keep anything of your own under your own key.
+A cook normally ends by rebuilding the ``Outputs`` subtree. An extension makes
+
+ it do more, or do it differently: it can refuse to start a cook, prepare state for the
+
+ input handlers, or check the result and keep the previous output when it is not right.
+
+ Add one as a direct child of the HEGo node. HEGo calls the hooks below on every such
+
+ child, in child order, and never needs to know which addon it came from. To turn a kind
+
+ of cook result into something, write an :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` instead; it needs no child.
+
+ 
+
+ Every hook has a default that does nothing, so an extension overrides only what it needs.
+
+ Hooks that return a Dictionary report ``{ok, message}``. Returning
+
+ ``ok: false`` stops the cook and leaves the previous output in place. The
+
+ extension that stops a cook records its own reason; the others are told through
+
+ :ref:`cook_failed()<class_HEGoCookExtension_method_cook_failed>`.
+
+ 
+
+ ``cook`` is one dictionary shared by every extension, input handler and output
+
+ handler for the duration of one cook. HEGo reads ``strict`` from it and collects
+
+ input failures in ``errors``. It also records what the cook started from:
+
+ ``input_stash`` (a copy), ``transform`` and, once the parameters are in
+
+ place, ``parm_stash``, the preset the HDA cooks with. Keep anything of your own
+
+ under your own key.
 
 .. rst-class:: classref-reftable-group
 
@@ -35,6 +71,8 @@ Methods
    | ``Dictionary`` | :ref:`cook_before<class_HEGoCookExtension_method_cook_before>`\ (\ _host\: ``Node``, _asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, _cook\: ``Dictionary``\ ) |
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | ``Dictionary`` | :ref:`cook_commit<class_HEGoCookExtension_method_cook_commit>`\ (\ _context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ )                                 |
+   +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`cook_finished<class_HEGoCookExtension_method_cook_finished>`\ (\ _context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ )                             |
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | |void|         | :ref:`cook_failed<class_HEGoCookExtension_method_cook_failed>`\ (\ _host\: ``Node``, _cook\: ``Dictionary``, _message\: ``String``\ )                              |
    +----------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -60,7 +98,13 @@ Method Descriptions
 
 ``Dictionary`` **cook_prepare**\ (\ _host\: ``Node``, _cook\: ``Dictionary``\ ) :ref:`🔗<class_HEGoCookExtension_method_cook_prepare>`
 
-The cook is about to start, before anything is sent to Houdini. Set ``cook.strict = true`` to make any input that cannot be sent fail the whole cook, rather than being skipped with a warning. It is already true when an input handler asks for it; see :ref:`HEGoInputHandler.requires_strict_cook()<class_HEGoInputHandler_method_requires_strict_cook>`.
+The cook is about to start, before anything is sent to Houdini. Set
+
+ ``cook.strict = true`` to make any input that cannot be sent fail the whole cook,
+
+ rather than being skipped with a warning. It is already true when an input handler asks
+
+ for it; see :ref:`HEGoInputHandler.requires_strict_cook()<class_HEGoInputHandler_method_requires_strict_cook>`.
 
 .. rst-class:: classref-item-separator
 
@@ -84,7 +128,29 @@ Inputs and parameters are in place and the HDA is about to cook.
 
 ``Dictionary`` **cook_commit**\ (\ _context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) :ref:`🔗<class_HEGoCookExtension_method_cook_commit>`
 
-The HDA cooked and nothing has been replaced yet. ``context.cook_state`` is the shared cook dictionary. Return ``ok: false`` to keep the previous output.
+The HDA cooked and nothing has been replaced yet. ``context.cook_state`` is the
+
+ shared cook dictionary. Return ``ok: false`` to keep the previous output.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoCookExtension_method_cook_finished:
+
+.. rst-class:: classref-method
+
+``Dictionary`` **cook_finished**\ (\ _context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`\ ) :ref:`🔗<class_HEGoCookExtension_method_cook_finished>`
+
+The cook finished: every output handler has run and the ``Outputs`` subtree holds
+
+ the new result. Work that needs that result - post-processing it, saving files, telling
+
+ other nodes - goes here, so it runs on every cook of the host, however it was started
+
+ (the panel's Recook, a Session Sync update, a script). Return ``ok: false`` to
+
+ mark the cook as failed; the output stays as built.
 
 .. rst-class:: classref-item-separator
 
@@ -108,7 +174,17 @@ The cook stopped before finishing, at any step, with ``message`` saying why.
 
 ``bool`` **skips_output_handler**\ (\ _handler\: ``Variant``, _cook\: ``Dictionary``\ ) :ref:`🔗<class_HEGoCookExtension_method_skips_output_handler>`
 
-Whether this cook should skip the output handler ``handler``, one entry of :ref:`HEGoNode3D.output_handlers()<class_HEGoNode3D_method_output_handlers>`, for example because the extension produces that kind of output itself. ``handler`` is either one of HEGo's own handler scripts or an :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` instance. Output handlers already ignore the parts of a result that do not carry their own attributes, so this is only for an extension that wants a handler not to run at all.
+Whether this cook should skip the output handler ``handler``, one entry of
+
+ :ref:`HEGoNode3D.output_handlers()<class_HEGoNode3D_method_output_handlers>`, for example because the extension produces that kind
+
+ of output itself. ``handler`` is either one of HEGo's own handler scripts or an
+
+ :ref:`HEGoOutputHandler<class_HEGoOutputHandler>` instance. Output handlers already ignore the parts of a result that
+
+ do not carry their own attributes, so this is only for an extension that wants a handler
+
+ not to run at all.
 
 .. rst-class:: classref-item-separator
 
@@ -132,7 +208,9 @@ The host's inputs or parameters changed since the last cook.
 
 ``bool`` **requires_explicit_cook**\ (\ ) :ref:`🔗<class_HEGoCookExtension_method_requires_explicit_cook>`
 
-Whether the host should only cook when asked, rather than recooking automatically on every change the panel makes.
+Whether the host should only cook when asked, rather than recooking automatically on
+
+ every change the panel makes.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

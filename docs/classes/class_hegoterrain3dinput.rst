@@ -19,7 +19,17 @@ Sends an existing Terrain3D node to an HDA input as heightfield layers.
 Description
 -----------
 
-Terrain3D stores terrain as independent square regions; Houdini wants one rectangular heightfield. The regions are stitched into a single image, and the control map is unpacked into one weight layer per texture used, plus masks marking which pixels belong to a region at all and which are holes.  HEGo finds this handler because it extends :ref:`HEGoInputHandler<class_HEGoInputHandler>`; HEGo never names it.
+Terrain3D stores terrain as independent square regions; Houdini wants one
+
+ rectangular heightfield. The regions are stitched into a single image, and the
+
+ control map is unpacked into one weight layer per texture used, plus masks marking
+
+ which pixels belong to a region at all and which are holes.
+
+ 
+
+ HEGo finds this handler because it extends :ref:`HEGoInputHandler<class_HEGoInputHandler>`; HEGo never names it.
 
 .. rst-class:: classref-reftable-group
 
@@ -139,7 +149,11 @@ Whether ``node`` is a Terrain3D, and the addon is there to read it.
 
 ``Dictionary`` **sync**\ (\ host\: ``Node``, existing_node\: ``Variant``, node\: ``Node``, settings\: ``Dictionary``\ ) :ref:`🔗<class_HEGoTerrain3DInput_method_sync>`
 
-Uploads ``node``'s regions into a heightfield input, reusing ``existing_node`` when it already is one. A terrain without regions still yields an empty input, so the HDA input stays connected.
+Uploads ``node``'s regions into a heightfield input, reusing ``existing_node``\ 
+
+ when it already is one. A terrain without regions still yields an empty input, so the
+
+ HDA input stays connected.
 
 .. rst-class:: classref-item-separator
 
@@ -151,7 +165,15 @@ Uploads ``node``'s regions into a heightfield input, reusing ``existing_node`` w
 
 ``Dictionary`` **read_layers**\ (\ terrain3d_node\: ``Node``, input_node_path\: ``String`` = ""\ ) |static| :ref:`🔗<class_HEGoTerrain3DInput_method_read_layers>`
 
-Reads ``terrain3d_node`` into a layer dictionary for :ref:`HEGoHeightfieldInputNode.set_layers()<class_HEGoHeightfieldInputNode_method_set_layers>`, or an empty dictionary on failure.  ``input_node_path`` is stored on every layer so the HDA can tell which Godot node the heightfield came from.
+Reads ``terrain3d_node`` into a layer dictionary for
+
+ :ref:`HEGoHeightfieldInputNode.set_layers()<class_HEGoHeightfieldInputNode_method_set_layers>`, or an empty dictionary on failure.
+
+ 
+
+ ``input_node_path`` is stored on every layer so the HDA can tell which Godot
+
+ node the heightfield came from.
 
 .. rst-class:: classref-item-separator
 

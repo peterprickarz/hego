@@ -19,7 +19,11 @@ An imported ``.hda`` file, as Godot's importer sees it.
 Description
 -----------
 
-Importing an HDA does not read it: Houdini owns the file, and HEGo hands the path to the session rather than parsing it in Godot. The resource exists so an HDA can be referenced from a scene and shows up in the FileSystem dock.
+Importing an HDA does not read it: Houdini owns the file, and HEGo hands the path to the
+
+ session rather than parsing it in Godot. The resource exists so an HDA can be referenced
+
+ from a scene and shows up in the FileSystem dock.
 
 .. rst-class:: classref-reftable-group
 

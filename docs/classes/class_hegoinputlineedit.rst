@@ -23,7 +23,9 @@ A field in the panel's Inputs pane that a scene node can be dragged onto.
 Description
 -----------
 
-Dropping a node writes its path relative to the edited scene, which is the form the input rows are stored in; typing a path by hand works the same way.
+Dropping a node writes its path relative to the edited scene, which is the form the input
+
+ rows are stored in; typing a path by hand works the same way.
 
 .. rst-class:: classref-reftable-group
 
@@ -69,7 +71,9 @@ Property Descriptions
 
 ``Variant`` **node_path** = ``""`` :ref:`🔗<class_HEGoInputLineEdit_property_node_path>`
 
-Unused. The dropped path is written straight to ``text``, which is what the panel reads back.
+Unused. The dropped path is written straight to ``text``, which is what the panel
+
+ reads back.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

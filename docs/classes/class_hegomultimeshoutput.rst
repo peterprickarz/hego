@@ -19,7 +19,9 @@ Instances an existing mesh resource once per output point through a ``MultiMesh`
 Description
 -----------
 
-The fetch returns points grouped by output name and then by mesh resource path, so one HDA can drive several ``MultiMeshInstance3D``\ s with a different mesh each.
+The fetch returns points grouped by output name and then by mesh resource path, so
+
+ one HDA can drive several ``MultiMeshInstance3D``\ s with a different mesh each.
 
 .. rst-class:: classref-reftable-group
 
@@ -109,7 +111,13 @@ Method Descriptions
 
 ``Array`` **point_attribs**\ (\ ) |static| :ref:`🔗<class_HEGoMultiMeshOutput_method_point_attribs>`
 
-Per-instance attributes this handler reads. Attributes this handler reads off each instanced point: the shared orientation set plus colour. A function rather than a const, because a const cannot be built from another class's constant. See :ref:`HEGoPointUtil<class_HEGoPointUtil>`.
+Per-instance attributes this handler reads.
+
+ Attributes this handler reads off each instanced point: the shared orientation set plus
+
+ colour. A function rather than a const, because a const cannot be built from another
+
+ class's constant. See :ref:`HEGoPointUtil<class_HEGoPointUtil>`.
 
 .. rst-class:: classref-item-separator
 
@@ -157,7 +165,9 @@ Fetches the instancing points of the cook and builds the multimeshes.
 
 |void| **setup_multimesh**\ (\ context\: :ref:`HEGoOutputContext<class_HEGoOutputContext>`, mesh_resource\: ``Mesh``, multimesh_name\: ``String``, point_dict\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoMultiMeshOutput_method_setup_multimesh>`
 
-Creates a ``MultiMeshInstance3D`` named ``multimesh_name`` under ``Outputs/`` and fills it with one instance per point in ``point_dict``.
+Creates a ``MultiMeshInstance3D`` named ``multimesh_name`` under ``Outputs/``\ 
+
+ and fills it with one instance per point in ``point_dict``.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

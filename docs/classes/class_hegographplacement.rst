@@ -172,7 +172,11 @@ World-aligned plane through ``origin`` offset along its normal.
 
 ``Variant`` **intersect_scene**\ (\ root\: ``Node``, origin\: ``Vector3``, direction\: ``Vector3``, exclude\: ``Node`` = null\ ) |static| :ref:`🔗<class_HEGoGraphPlacement_method_intersect_scene>`
 
-Nearest hit against physics, meshes, CSG, and any terrain node that offers a ray query under ``root``. ``exclude`` and its descendants are skipped. Returns a Vector3 or null.
+Nearest hit against physics, meshes, CSG, and any terrain node that offers a ray query
+
+ under ``root``.
+
+ ``exclude`` and its descendants are skipped. Returns a Vector3 or null.
 
 .. rst-class:: classref-item-separator
 
@@ -184,7 +188,9 @@ Nearest hit against physics, meshes, CSG, and any terrain node that offers a ray
 
 ``Variant`` **intersect_ray**\ (\ origin\: ``Vector3``, direction\: ``Vector3``, plane\: ``Plane``\ ) |static| :ref:`🔗<class_HEGoGraphPlacement_method_intersect_ray>`
 
-Intersection of a ray with ``plane``, or ``null`` if it misses or hits behind the origin.
+Intersection of a ray with ``plane``, or ``null`` if it misses
+
+ or hits behind the origin.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# Regenerates the class reference XML for the GDScript classes of HEGo and its two bridge
+# Regenerates the class reference XML for the GDScript classes of HEGo and its bridge
 # addons from their ## doc comments, into each addon's own doc_classes_gdscript directory:
-# demo/addons/hego/doc_classes_gdscript, demo/addons/hego_strata/doc_classes_gdscript and
-# demo/addons/hego_terrain3d/doc_classes_gdscript. Each addon carries the documentation of
-# its own classes only, so no package describes classes it does not depend on.
+# demo/addons/hego/doc_classes_gdscript, demo/addons/hego_strata/doc_classes_gdscript,
+# demo/addons/hego_copia/doc_classes_gdscript and demo/addons/hego_terrain3d/doc_classes_gdscript.
+# Each addon carries the documentation of its own classes only, so no package describes
+# classes it does not depend on.
 #
 # The XML is committed, exactly like the hand-written C++ XML next to it, because
 # scripts/generate_docs.sh runs on Read the Docs where there is no Godot to run. Run this
@@ -19,7 +20,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="$ROOT_DIR/demo"
 # Keep in step with GDSCRIPT_ADDONS in scripts/generate_docs.sh.
-ADDONS=(hego hego_strata hego_terrain3d)
+ADDONS=(hego hego_strata hego_copia hego_terrain3d)
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 

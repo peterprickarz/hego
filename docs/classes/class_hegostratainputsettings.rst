@@ -16,7 +16,9 @@ HEGoStrataInputSettings
 
 **Inherits:** ``VBoxContainer``
 
-The terrain options HEGo's panel shows in an input row that reads a terrain layer. :ref:`HEGoStrataInput<class_HEGoStrataInput>` creates it; see :ref:`HEGoInputHandler.create_settings_editor()<class_HEGoInputHandler_method_create_settings_editor>`.
+The terrain options HEGo's panel shows in an input row that reads a terrain layer.
+
+ :ref:`HEGoStrataInput<class_HEGoStrataInput>` creates it; see :ref:`HEGoInputHandler.create_settings_editor()<class_HEGoInputHandler_method_create_settings_editor>`.
 
 .. rst-class:: classref-reftable-group
 
@@ -161,7 +163,9 @@ Method Descriptions
 
 ``Dictionary`` **get_settings**\ (\ ) :ref:`🔗<class_HEGoStrataInputSettings_method_get_settings>`
 
-terrain_spacing is always written, so 0 replaces a spacing stored earlier. Per-channel spacings and the sample budget are not edited here and stay as stored.
+terrain_spacing is always written, so 0 replaces a spacing stored earlier. Per-channel
+
+ spacings and the sample budget are not edited here and stay as stored.
 
 .. rst-class:: classref-item-separator
 

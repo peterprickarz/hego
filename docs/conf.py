@@ -11,7 +11,7 @@ extensions = [
     "myst_parser",
 ]
 
-# The Strata and island documents are Markdown.
+# The Strata, Copia and development documents are Markdown.
 source_suffix = {".rst": "restructuredtext", ".md": "markdown"}
 myst_heading_anchors = 3
 

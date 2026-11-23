@@ -4,7 +4,8 @@
 		Schema for a [HEGoGraph3D]: the attributes its points and connections can carry.
 	</brief_description>
 	<description>
-		Parent this under a graph and fill [member attributes]. The list can be saved as its own scene and reused under other graphs. Several children concatenate in tree order.
+		Parent this under a graph and fill [member attributes]. The list can be saved as its
+ own scene and reused under other graphs. Several children concatenate in tree order.
 	</description>
 	<tutorials>
 	</tutorials>

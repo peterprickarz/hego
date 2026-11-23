@@ -19,7 +19,15 @@ Point attribute maths shared by every handler that scatters something.
 Description
 -----------
 
-Multimesh instancing, object spawning and the instancing output handlers other addons add all turn the same four point attributes - ``N``, ``up``, ``pscale`` and ``scale`` - into the same orientation. Having it in one place is what keeps an HDA's points landing identically whichever handler reads them, and is where to look when they do not.
+Multimesh instancing, object spawning and the instancing output handlers other addons
+
+ add all turn the same four point attributes - ``N``, ``up``,
+
+ ``pscale`` and ``scale`` - into the same orientation. Having it in one
+
+ place is what keeps an HDA's points landing identically whichever handler reads them,
+
+ and is where to look when they do not.
 
 .. rst-class:: classref-reftable-group
 
@@ -56,7 +64,9 @@ Constants
 
 **ORIENTATION_ATTRIBS** = ``["N", "up", "pscale", "scale"]`` :ref:`🔗<class_HEGoPointUtil_constant_ORIENTATION_ATTRIBS>`
 
-Attributes :ref:`basis_from_point()<class_HEGoPointUtil_method_basis_from_point>` reads. A point missing any of them falls back to the defaults below, so loading them is optional but everything ends up unrotated.
+Attributes :ref:`basis_from_point()<class_HEGoPointUtil_method_basis_from_point>` reads. A point missing any of them falls back to
+
+ the defaults below, so loading them is optional but everything ends up unrotated.
 
 .. _class_HEGoPointUtil_constant_COLOR_ATTRIB:
 
@@ -64,7 +74,9 @@ Attributes :ref:`basis_from_point()<class_HEGoPointUtil_method_basis_from_point>
 
 **COLOR_ATTRIB** = ``"Cd"`` :ref:`🔗<class_HEGoPointUtil_constant_COLOR_ATTRIB>`
 
-Attribute :ref:`read_color()<class_HEGoPointUtil_method_read_color>` reads. Handlers that tint their output add this to :ref:`ORIENTATION_ATTRIBS<class_HEGoPointUtil_constant_ORIENTATION_ATTRIBS>`; object spawning does not, because it does not tint.
+Attribute :ref:`read_color()<class_HEGoPointUtil_method_read_color>` reads. Handlers that tint their output add this to
+
+ :ref:`ORIENTATION_ATTRIBS<class_HEGoPointUtil_constant_ORIENTATION_ATTRIBS>`; object spawning does not, because it does not tint.
 
 .. _class_HEGoPointUtil_constant_DEFAULT_NORMAL:
 
@@ -97,7 +109,17 @@ Method Descriptions
 
 ``Basis`` **basis_from_point**\ (\ points\: ``Dictionary``, index\: ``int``\ ) |static| :ref:`🔗<class_HEGoPointUtil_method_basis_from_point>`
 
-Orientation and scale for point ``index``, from its N, up, scale and pscale.  An N and up that are collinear leave no frame to build, so such a point keeps an unrotated basis. That is reported by :ref:`is_orientation_collinear()<class_HEGoPointUtil_method_is_orientation_collinear>` rather than from here, so a caller can count the points it happened to and say so once instead of once per point.
+Orientation and scale for point ``index``, from its N, up, scale and pscale.
+
+ 
+
+ An N and up that are collinear leave no frame to build, so such a point keeps an
+
+ unrotated basis. That is reported by :ref:`is_orientation_collinear()<class_HEGoPointUtil_method_is_orientation_collinear>` rather than from
+
+ here, so a caller can count the points it happened to and say so once instead of once
+
+ per point.
 
 .. rst-class:: classref-item-separator
 
@@ -109,7 +131,9 @@ Orientation and scale for point ``index``, from its N, up, scale and pscale.  An
 
 ``Transform3D`` **transform_from_point**\ (\ points\: ``Dictionary``, index\: ``int``, position\: ``Vector3``\ ) |static| :ref:`🔗<class_HEGoPointUtil_method_transform_from_point>`
 
-The transform for point ``index``, oriented by :ref:`basis_from_point()<class_HEGoPointUtil_method_basis_from_point>` and placed at ``position``.
+The transform for point ``index``, oriented by :ref:`basis_from_point()<class_HEGoPointUtil_method_basis_from_point>` and placed
+
+ at ``position``.
 
 .. rst-class:: classref-item-separator
 
@@ -121,7 +145,9 @@ The transform for point ``index``, oriented by :ref:`basis_from_point()<class_HE
 
 ``bool`` **is_orientation_collinear**\ (\ points\: ``Dictionary``, index\: ``int``\ ) |static| :ref:`🔗<class_HEGoPointUtil_method_is_orientation_collinear>`
 
-Whether point ``index`` carries an N and up that are collinear, which leaves no frame to build and gives the point an unrotated basis.
+Whether point ``index`` carries an N and up that are collinear, which leaves no
+
+ frame to build and gives the point an unrotated basis.
 
 .. rst-class:: classref-item-separator
 
@@ -133,7 +159,9 @@ Whether point ``index`` carries an N and up that are collinear, which leaves no 
 
 ``bool`` **has_any_color**\ (\ points\: ``Dictionary``\ ) |static| :ref:`🔗<class_HEGoPointUtil_method_has_any_color>`
 
-Whether these points carry a usable Cd attribute at all, so a caller can skip setting up per-instance colour when nothing would use it.
+Whether these points carry a usable Cd attribute at all, so a caller can skip setting up
+
+ per-instance colour when nothing would use it.
 
 .. rst-class:: classref-item-separator
 
@@ -145,7 +173,9 @@ Whether these points carry a usable Cd attribute at all, so a caller can skip se
 
 ``Color`` **read_color**\ (\ points\: ``Dictionary``, index\: ``int``\ ) |static| :ref:`🔗<class_HEGoPointUtil_method_read_color>`
 
-Reads Cd for point ``index``, accepting both ``Color`` and ``Vector3`` and defaulting to white. Houdini hands colour back as either depending on how the attribute was created.
+Reads Cd for point ``index``, accepting both ``Color`` and ``Vector3`` and defaulting to
+
+ white. Houdini hands colour back as either depending on how the attribute was created.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`
