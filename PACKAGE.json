@@ -2,7 +2,7 @@
   "format_version": 1,
   "package": "strata",
   "addon_path": "addons/strata",
-  "source_commit": "e06b1ebe8840e8af966661a5327608f934a0b85d",
+  "source_commit": "a5dc78b6cd3ed326f0778ac574c6ca50a6247260",
   "requires": [],
   "build_requires": ["godot-cpp submodule"],
   "requires_hego": false,
