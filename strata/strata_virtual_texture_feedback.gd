@@ -53,7 +53,7 @@ layout(set = 0, binding = 1, std140) uniform Params {
 	ivec4 table;   // first page of mip 0 (xy), table size at mip 0, capacity
 	ivec4 frame;   // internal size (xy), pixel of the tile sampled this frame (zw)
 	vec4 bounds;   // terrain-local x and z minimum (xy) and maximum (zw)
-	vec4 filtering;   // largest anisotropy the shading follows (1: none), 0, 0, 0
+	vec4 filtering;   // largest anisotropy the shading follows (1: none), base height decode (height at 0, range), 0
 	ivec4 ground;     // slots per atlas side, border (cells), 1 when the cache heights are bound, deciding mip
 } P;
 // count: keys; rejected: sampled pixels off the terrain surface; deferred: sampled pixels whose
@@ -61,7 +61,7 @@ layout(set = 0, binding = 1, std140) uniform Params {
 layout(set = 0, binding = 2, std430) restrict buffer Requests { uint count; uint rejected; uint deferred; uint pad2; uint keys[]; } requests;
 layout(set = 0, binding = 3, std430) restrict buffer Seen { uint slots[]; } seen;
 // The cache's page table (one mip per page mip, (slot + 1) / 65535, 0 absent) and height atlas
-// (layer 2L: ground height at the cell corner, -1e30 in holes).
+// (RG16: R ground height at the cell corner over P.filtering.yz, 0 in holes).
 layout(set = 0, binding = 4) uniform sampler2D page_table;
 layout(set = 0, binding = 5) uniform sampler2DArray heights;
 
@@ -117,12 +117,14 @@ int ground_height(vec2 xz, int mip, out float height) {
 	ivec2 corner = ivec2(floor(grid));
 	vec2 f = grid - vec2(corner);
 	ivec2 texel = ivec2(in_layer % per_side, in_layer / per_side) * (page_size + 2 * P.ground.y) + ivec2(P.ground.y) + corner - page * page_size;
-	float h00 = texelFetch(heights, ivec3(texel, layer * 2), 0).r;
-	float h10 = texelFetch(heights, ivec3(texel + ivec2(1, 0), layer * 2), 0).r;
-	float h01 = texelFetch(heights, ivec3(texel + ivec2(0, 1), layer * 2), 0).r;
-	float h11 = texelFetch(heights, ivec3(texel + ivec2(1, 1), layer * 2), 0).r;
-	if (min(min(h00, h10), min(h01, h11)) < -1.0e29) { return 2; }
-	height = mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
+	float h00 = texelFetch(heights, ivec3(texel, layer), 0).r;
+	float h10 = texelFetch(heights, ivec3(texel + ivec2(1, 0), layer), 0).r;
+	float h01 = texelFetch(heights, ivec3(texel + ivec2(0, 1), layer), 0).r;
+	float h11 = texelFetch(heights, ivec3(texel + ivec2(1, 1), layer), 0).r;
+	if (min(min(h00, h10), min(h01, h11)) < 0.5 / 65535.0) { return 2; }
+	// Unorm (1 + t * 65534) / 65535 over the decode range: linear, so decoded after interpolating.
+	float encoded = mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
+	height = P.filtering.y + (encoded * 65535.0 - 1.0) / 65534.0 * P.filtering.z;
 	return 1;
 }
 
@@ -199,6 +201,8 @@ var _bounds := Rect2()
 var _ground_table: Texture2DRD
 var _ground_heights: Texture2DArrayRD
 var _ground_layout := Vector2i.ZERO
+## Base height decode of the height atlas (StrataSurfaceCache.height_decode()).
+var _ground_decode := Vector2(0.0, 1.0)
 ## Sampled pixels of the last reported viewport rejected as off the terrain, and deferred for a
 ## deciding page.
 var _rejected := 0
@@ -242,13 +246,14 @@ func set_lookup(world_to_local: Transform3D, cell_size: float, page_size: int, t
 
 ## Main thread: the cache's [param page_table] and [param heights] (StrataSurfaceCache
 ## page_table_texture and height_texture), its atlas layout ([param slots_per_side], slot
-## [param border] in cells): pixels then request pages only on or near the terrain surface (see
-## the class description). Null textures turn the test off.
-func set_ground(page_table: Texture2DRD, heights: Texture2DArrayRD, slots_per_side: int, border: int) -> void:
+## [param border] in cells) and base height [param decode] (StrataSurfaceCache.height_decode()):
+## pixels then request pages only on or near the terrain surface (see the class description). Null textures turn the test off.
+func set_ground(page_table: Texture2DRD, heights: Texture2DArrayRD, slots_per_side: int, border: int, decode := Vector2(0.0, 1.0)) -> void:
 	_mutex.lock()
 	_ground_table = page_table
 	_ground_heights = heights
 	_ground_layout = Vector2i(slots_per_side, border)
+	_ground_decode = decode
 	_mutex.unlock()
 
 
@@ -335,6 +340,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	var ground_table := _ground_table
 	var ground_heights := _ground_heights
 	var ground_layout := _ground_layout
+	var ground_decode := _ground_decode
 	_callbacks += 1
 	_mutex.unlock()
 	if not valid: return
@@ -358,7 +364,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	params.encode_s32(168, step % _STRIDE); params.encode_s32(172, step / _STRIDE)
 	params.encode_float(176, bounds.position.x); params.encode_float(180, bounds.position.y)
 	params.encode_float(184, bounds.end.x); params.encode_float(188, bounds.end.y)
-	params.encode_float(192, anisotropy)
+	params.encode_float(192, anisotropy); params.encode_float(196, ground_decode.x); params.encode_float(200, ground_decode.y)
 	params.encode_s32(208, ground_layout.x); params.encode_s32(212, ground_layout.y); params.encode_s32(216, 1 if ground else 0); params.encode_s32(220, deciding)
 	_rd.buffer_update(_params, 0, _PARAMS_BYTES, params)
 	for view in buffers.get_view_count():

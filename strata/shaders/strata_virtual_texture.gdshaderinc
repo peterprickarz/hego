@@ -12,6 +12,23 @@
 // is 0 for an absent page, otherwise (slot + 1) / 65535. A slot is the page with a border of
 // the neighbouring pages' cells on every side, so texels next to the page can be read too.
 
+// The height atlas is RG16 unorm (strata_surface_cache.gd): R the base height over a range
+// (decode: x the height at 0, y the range), 0 in holes; G the material relief over
+// +-STRATA_VT_RELIEF_RANGE metres (StrataSurfaceCache.RELIEF_RANGE).
+const float STRATA_VT_RELIEF_RANGE = 8.0;
+
+bool strata_vt_height_hole(float encoded) {
+	return encoded < 0.5 / 65535.0;
+}
+
+float strata_vt_base_height(float encoded, vec2 decode) {
+	return decode.x + (encoded * 65535.0 - 1.0) / 65534.0 * decode.y;
+}
+
+float strata_vt_relief(float encoded) {
+	return (encoded - 0.5) * (2.0 * STRATA_VT_RELIEF_RANGE);
+}
+
 // The resident page of a mip holding a terrain-local XZ position. atlas: xy the position in the
 // page's atlas layer in cells (integers are cell corners; the centre of a cell is at + 0.5), z
 // the layer. False when the page is absent, outside the table or there is no cache.

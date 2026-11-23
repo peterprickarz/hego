@@ -19,9 +19,11 @@ extends RefCounted
 ## pages' cells, for filtering and for corner heights):
 ##   albedo  RGBA8   sRGB-encoded albedo after the macro tint (centre of cell), A ambient occlusion
 ##   normal  RGBA8   octahedral terrain-local normal (RG, Y up), B roughness, A metallic
-##   height  R32F    layer 2L: base height at the cell corner g * texel (-1e30 in holes),
-##                   layer 2L + 1: material relief there (terrain_material_relief(), metres along
-##                   the normal, before displacement_strength and the camera fade)
+##   height  RG16    at the cell corner g * texel: R base height, unorm over height_decode()
+##                   (1 + t * 65534) / 65535 with t = (height - min) / range, 0 in holes;
+##                   G material relief there (terrain_material_relief(), metres along the normal,
+##                   before displacement_strength and the camera fade), relief / (2 *
+##                   RELIEF_RANGE) + 0.5
 ##   cover   R8      how much of the cell surface writers replaced (StrataSurfaceWriter; 0 none)
 ##
 ## Requests come from the screen (StrataVirtualTextureFeedback: the page under every drawn pixel
@@ -39,6 +41,12 @@ extends RefCounted
 
 ## Cells of border around a page in its slot.
 const BORDER := 4
+## Largest material relief (metres either way) the height atlas holds: 16 m over 16 bits, a
+## quarter of a millimetre per step.
+const RELIEF_RANGE := 8.0
+## The base height range is snapped outward to multiples of this many metres (with a metre of
+## margin), so terrain edits seldom change it: a change refills every page.
+const HEIGHT_RANGE_STEP := 32.0
 const MAX_TABLE_SIZE := 4096
 const MAX_ATLAS_SIZE := 4096
 ## The coarsest mips are always resident while they hold at most this many pages together: a
@@ -47,6 +55,8 @@ const PINNED_PAGES := 64
 ## A missing page stays wanted this many frames after its last request (the feedback pass
 ## samples each pixel once in 64 frames).
 const PENDING_FRAMES := 96
+## Slots per row of debug_slot_image().
+const DEBUG_SLOT_WIDTH := 256
 const GLOBAL_PARAMETERS := {
 	"strata_cache_page_table": RenderingServer.GLOBAL_VAR_TYPE_SAMPLER2D,
 	"strata_cache_albedo": RenderingServer.GLOBAL_VAR_TYPE_SAMPLER2DARRAY,
@@ -70,6 +80,8 @@ const _OBSOLETE_GLOBALS := ["strata_cache_windows_a", "strata_cache_windows_b", 
 ## Pages waiting for a writer tile at most, and missing pages looked at per frame at most.
 const _MAX_AWAITING := 64
 const _MAX_SCANNED := 256
+## Slots the background refresh looks at per frame at most.
+const _REFRESH_SCAN := 256
 ## Frames a requested page counts as on screen and keeps its slot: the feedback pass reports a
 ## visible page once per sampling cycle (not every frame), a frame or two late; the camera
 ## squares request theirs every frame.
@@ -125,7 +137,7 @@ layout(set = 0, binding = 19, std430) restrict readonly buffer Parameters {
 };
 layout(set = 0, binding = 20, rgba8) restrict writeonly uniform image2DArray albedo_out;
 layout(set = 0, binding = 21, rgba8) restrict writeonly uniform image2DArray normal_out;
-layout(set = 0, binding = 22, r32f) restrict writeonly uniform image2DArray height_out;
+layout(set = 0, binding = 22, rg16) restrict writeonly uniform image2DArray height_out;
 layout(set = 0, binding = 23, r8) restrict writeonly uniform image2DArray cover_out;
 // Writer pass tile (strata_surface_writer_pass.gd), premultiplied over-composite of the writers,
 // three outputs side by side (fill.tile_width texels each):
@@ -134,7 +146,7 @@ layout(set = 0, binding = 23, r8) restrict writeonly uniform image2DArray cover_
 //   2 surface  AO, relief * 0.25 + 0.5, metallic, A coverage
 layout(set = 1, binding = 0) uniform sampler2D writer_tile;
 // rect_origin: the slot's first cell at its mip; store_origin: its first texel in atlas layer `layer`.
-layout(push_constant, std430) uniform Fill { ivec2 rect_origin; ivec2 rect_size; int level; int layer; float texel; int writers; ivec2 tile_origin; int tile_width; int pad; ivec2 store_origin; ivec2 pad2; } fill;
+layout(push_constant, std430) uniform Fill { ivec2 rect_origin; ivec2 rect_size; int level; int layer; float texel; int writers; ivec2 tile_origin; int tile_width; int pad; ivec2 store_origin; vec2 height_decode; } fill;
 #define writer_albedo_at(t) texelFetch(writer_tile, (t), 0)
 #define writer_normal_at(t) texelFetch(writer_tile, (t) + ivec2(fill.tile_width, 0), 0)
 #define writer_surface_at(t) texelFetch(writer_tile, (t) + ivec2(2 * fill.tile_width, 0), 0)
@@ -193,6 +205,14 @@ vec2 cache_octahedral(vec3 n) {
 	vec2 e = n.xz;
 	if (n.y < 0.0) { e = (vec2(1.0) - abs(e.yx)) * vec2(e.x >= 0.0 ? 1.0 : -1.0, e.y >= 0.0 ? 1.0 : -1.0); }
 	return e * 0.5 + 0.5;
+}
+
+// The height atlas (RG16 unorm, see the class description): base height over fill.height_decode
+// (min, range), 0 reserved for holes; relief over +-RELIEF_RANGE metres.
+vec2 cache_encode_height(bool hole, float base, float relief) {
+	if (hole) { return vec2(0.0, 0.5); }
+	float t = clamp((base - fill.height_decode.x) / max(fill.height_decode.y, 1.0e-6), 0.0, 1.0);
+	return vec2((1.0 + t * 65534.0) / 65535.0, clamp(relief / (2.0 * %RELIEF_RANGE%) + 0.5, 0.0, 1.0));
 }
 
 // With cache shading the terrain reads colour, normal and ORM from the cache, far UV blend
@@ -267,8 +287,7 @@ void main() {
 		if (ws.a > 0.0001) { relief = relief * (1.0 - ws.a) + (ws.g - 0.5 * ws.a) * 4.0; }
 	}
 	bool hole = has_holes && terrain_cell_hole(corner);
-	imageStore(height_out, ivec3(store.xy, fill.layer * 2), vec4(hole ? -1.0e30 : corner_height));
-	imageStore(height_out, ivec3(store.xy, fill.layer * 2 + 1), vec4(hole ? 0.0 : relief));
+	imageStore(height_out, ivec3(store.xy, fill.layer), vec4(cache_encode_height(hole, corner_height, relief), 0.0, 0.0));
 }
 """
 
@@ -287,6 +306,10 @@ var page_size := 128
 var pool_pages := 1024
 ## Pages evaluated per frame at most (pages drawn with a writer tile come on top).
 var page_fills_per_frame := 32
+## On-screen pages a surface writer touches that are drawn again per frame while no requested
+## page waits (0: never). Writer materials that change slowly, such as rain wetness, reach the
+## cache this way without an invalidation; stats.refresh_cycle_frames is a full pass.
+var refresh_pages_per_frame := 2
 ## Half-size in cells, per mip, of the square around the camera whose pages are requested while
 ## no feedback names the visible pages.
 var ring_cells := 448
@@ -314,6 +337,9 @@ var top_mip := 0
 var resolution := 0
 var levels := 0
 var publish_globals := true
+## Terrain-local base height range the height atlas encodes (set_height_range()).
+var height_min := -HEIGHT_RANGE_STEP
+var height_range := 2.0 * HEIGHT_RANGE_STEP
 ## Records GPU timestamps around the fill: stats.gpu_ms is the GPU time of the last fill that
 ## did work (two frames late), stats.gpu_ms_total the sum over all fills.
 var measure_gpu := false
@@ -358,6 +384,13 @@ var _pressure_hold := 0
 var _on_screen_frames := _ON_SCREEN_SQUARES
 var _pinned: Array[Vector3i] = []
 var _frame := 0
+## Next slot the background refresh looks at, and the frame its pass started.
+var _refresh_cursor := 0
+var _refresh_pass_start := 0
+## Pages the background refresh queued, until they are drawn (for debug_slot_image()).
+var _refreshing := {}
+## Per slot: Time.get_ticks_msec() of its last fill (for debug_slot_image()).
+var _slot_filled_msec := PackedInt64Array()
 ## Every resident page is stale: the material or the shader variant changed.
 var _refill := false
 ## Set on the render thread when a request could not run (a map not uploaded yet): the main
@@ -494,8 +527,27 @@ func configure(bounds: Rect2, texels_per_metre: float, cells_per_page: int, slot
 	stats.page_size = page_size
 	stats.pool_pages = pool_pages
 	stats.table_size = _size0
-	stats.memory_mb = (_layers * resolution * resolution * 17.0 + _size0 * _size0 * 2.0 * 4.0 / 3.0) / 1048576.0
+	stats.memory_mb = (_layers * resolution * resolution * 13.0 + _size0 * _size0 * 2.0 * 4.0 / 3.0) / 1048576.0
 	return true
+
+
+## Sets the terrain-local base height range ([param minimum], [param maximum]) the height atlas
+## encodes, snapped outward to HEIGHT_RANGE_STEP with a metre of margin. A change marks every
+## page stale (each keeps its content, read with the new range, until refilled).
+func set_height_range(minimum: float, maximum: float) -> void:
+	if not is_finite(minimum) or not is_finite(maximum): return
+	var low := floorf((minf(minimum, maximum) - 1.0) / HEIGHT_RANGE_STEP) * HEIGHT_RANGE_STEP
+	var high := ceilf((maxf(minimum, maximum) + 1.0) / HEIGHT_RANGE_STEP) * HEIGHT_RANGE_STEP
+	stats.height_step_mm = (high - low) / 65534.0 * 1000.0
+	if low == height_min and high - low == height_range: return
+	height_min = low
+	height_range = high - low
+	invalidate()
+
+
+## Decoding of the height atlas's base height: x the height at t = 0, y the range.
+func height_decode() -> Vector2:
+	return Vector2(height_min, height_range)
 
 
 static func _floor_div(a: int, b: int) -> int:
@@ -511,6 +563,9 @@ func _drop_all() -> void:
 	_slot_key.fill(null)
 	_slot_used.resize(pool_pages)
 	_slot_used.fill(-1000)
+	_slot_filled_msec.resize(pool_pages)
+	_slot_filled_msec.fill(0)
+	_refreshing.clear()
 	_free.clear()
 	for slot in range(pool_pages - 1, -1, -1): _free.append(slot)
 
@@ -606,6 +661,64 @@ func _key_of_slot_cells(mip: int, first: Vector2i) -> Vector3i:
 
 ## The slot of a page, taking a free one or evicting the least recently requested page for it
 ## (not those requested within the on-screen frames). -1 when none can go.
+## Background refresh: while every requested page is resident and current or waits for its
+## writer tile, the on-screen pages a surface writer touches are queued again in slot order,
+## refresh_pages_per_frame at a time. Each keeps its slot and its content until the tile is drawn.
+func _refresh_writer_pages(writers: Node) -> void:
+	stats.refreshed_last_frame = 0
+	if refresh_pages_per_frame <= 0 or _slot_key.is_empty() or not bool(writers.call("has_writers")): return
+	if _awaiting.size() > 2 * refresh_pages_per_frame: return
+	for key: Vector3i in _asked:
+		if not _awaiting.has(key): return
+	var picked := 0
+	for scanned in mini(_REFRESH_SCAN, _slot_key.size()):
+		if picked >= refresh_pages_per_frame: break
+		var slot := _refresh_cursor
+		_refresh_cursor += 1
+		if _refresh_cursor >= _slot_key.size():
+			_refresh_cursor = 0
+			stats.refresh_cycle_frames = _frame - _refresh_pass_start
+			_refresh_pass_start = _frame
+		if _slot_key[slot] == null or _slot_used[slot] <= _frame - _on_screen_frames: continue
+		var key: Vector3i = _slot_key[slot]
+		if _awaiting.has(key) or _asked.has(key): continue
+		if not writers.call("queue_rect", key.z, _slot_cells(key)): continue
+		_awaiting[key] = _frame
+		_asked[key] = _frame
+		_refreshing[key] = true
+		picked += 1
+	stats.refreshed_last_frame = picked
+
+
+func _filled(key: Vector3i, slot: int) -> void:
+	_slot_filled_msec[slot] = Time.get_ticks_msec()
+	_refreshing.erase(key)
+
+
+## Debug: one texel per slot (DEBUG_SLOT_WIDTH texels per row), R the slot's state (0 free, 1
+## current, 2 stale, 3 waiting for its writer tile, 4 being refreshed in the background), G its
+## age since the last fill over [param age_window] seconds (1 at or beyond it). Read by the
+## terrain shader's surface cache debug views.
+func debug_slot_image(age_window: float) -> Image:
+	var count := _slot_key.size()
+	var rows := maxi(ceili(float(count) / DEBUG_SLOT_WIDTH), 1)
+	var data := PackedByteArray()
+	data.resize(DEBUG_SLOT_WIDTH * rows * 2)
+	var now := Time.get_ticks_msec()
+	var window := maxf(age_window, 0.001) * 1000.0
+	for key: Vector3i in _refreshing.keys():
+		if not _awaiting.has(key): _refreshing.erase(key)
+	for slot in count:
+		var key: Variant = _slot_key[slot]
+		if key == null: continue
+		var state := 1
+		if _awaiting.has(key): state = 4 if _refreshing.has(key) else 3
+		elif _dirty.has(key): state = 2
+		data[slot * 2] = state
+		data[slot * 2 + 1] = int(clampf(float(now - _slot_filled_msec[slot]) / window, 0.0, 1.0) * 255.0)
+	return Image.create_from_data(DEBUG_SLOT_WIDTH, rows, false, Image.FORMAT_RG8, data)
+
+
 func _acquire_slot(key: Vector3i, updates: Array) -> int:
 	var slot := -1
 	if _resident.has(key):
@@ -750,6 +863,7 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 			var item := _work_item(key, slot)
 			item.append_array([int(tile[3]), tile[2], int(tile[4])])
 			work.append(item)
+			_filled(key, slot)
 			if not sets.has(int(tile[3])): sets[int(tile[3])] = writers.call("set_texture", int(tile[3]))
 	var fills := 0
 	var scanned := 0
@@ -768,7 +882,10 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 		_asked.erase(key)
 		fills += 1
 		work.append(_work_item(key, slot))
-	if writers != null: writers.call("dispatch")
+		_filled(key, slot)
+	if writers != null:
+		_refresh_writer_pages(writers)
+		writers.call("dispatch")
 	stats.awaiting_writers = _awaiting.size()
 	stats.texels_last_frame = work.size() * _slot_size * _slot_size
 	stats.dispatches_last_frame = work.size()
@@ -777,7 +894,7 @@ func update(material: ShaderMaterial, defines: String, camera: Vector3, writers:
 	stats.missing = missing.size() - work.size()
 	if not work.is_empty() or not updates.is_empty() or _textures_dirty or _table_dirty:
 		_timestamp_frame += 1
-		var request := {"work": work, "updates": updates, "sets": sets, "maps": _maps.duplicate(), "bytes": _parameter_bytes, "defines": defines, "allocate": _textures_dirty, "allocate_table": _table_dirty, "layers": _layers, "resolution": resolution, "slot": _slot_size, "table_size": _size0, "mips": top_mip + 1, "texel": texel, "measure": measure_gpu, "stamp": _timestamp_frame}
+		var request := {"work": work, "updates": updates, "sets": sets, "maps": _maps.duplicate(), "bytes": _parameter_bytes, "defines": defines, "allocate": _textures_dirty, "allocate_table": _table_dirty, "layers": _layers, "resolution": resolution, "slot": _slot_size, "table_size": _size0, "mips": top_mip + 1, "texel": texel, "measure": measure_gpu, "stamp": _timestamp_frame, "height_decode": height_decode()}
 		_textures_dirty = false
 		_table_dirty = false
 		RenderingServer.call_on_render_thread(_render_update.bind(request))
@@ -805,7 +922,7 @@ func publish(terrain_transform: Transform3D, camera: Vector3, displacement_radiu
 	_set_global("strata_cache_layout", lookup_layout())
 	_set_global("strata_cache_camera", Vector4(camera.x, camera.y, camera.z, maxf(displacement_radius, 0.0)))
 	_set_global("strata_cache_surface", Vector4(displacement_strength, specular, float(relief_mip), 1.0))
-	_set_global("strata_cache_sampling", Vector4(effective_lod_bias(), 1.0 if bilinear_readers else 0.0, 0.0, 0.0))
+	_set_global("strata_cache_sampling", Vector4(effective_lod_bias(), 1.0 if bilinear_readers else 0.0, height_min, height_range))
 	_set_global("strata_cache_world_to_local", terrain_transform.affine_inverse())
 
 
@@ -966,6 +1083,7 @@ func _render_update(request: Dictionary) -> void:
 		var stamp := "StrataSurfaceCache fill %d" % int(request.get("stamp", 0))
 		if bool(request.get("measure", false)): rd.capture_timestamp(stamp + " begin")
 		var slot := int(request.slot)
+		var height_decode: Vector2 = request.height_decode
 		for item: Array in work:
 			var mip := int(item[0])
 			var first: Vector2i = item[1]
@@ -986,6 +1104,7 @@ func _render_update(request: Dictionary) -> void:
 				push.encode_s32(32, tile_origin.x); push.encode_s32(36, tile_origin.y)
 				push.encode_s32(40, int(item[6]))
 			push.encode_s32(48, store.x); push.encode_s32(52, store.y)
+			push.encode_float(56, height_decode.x); push.encode_float(60, height_decode.y)
 			rd.compute_list_set_push_constant(list, push, push.size())
 			rd.compute_list_dispatch(list, ceili(slot / 8.0), ceili(slot / 8.0), 1)
 		rd.compute_list_end()
@@ -1062,8 +1181,8 @@ func _allocate(rd: RenderingDevice, layer_count: int, cells: int) -> void:
 	# only those still valid afterwards are freed here.
 	var old_textures := _textures
 	_textures = []
-	var formats := [RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R32_SFLOAT, RenderingDevice.DATA_FORMAT_R8_UNORM]
-	var layers := [layer_count, layer_count, layer_count * 2, layer_count]
+	var formats := [RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R8G8B8A8_UNORM, RenderingDevice.DATA_FORMAT_R16G16_UNORM, RenderingDevice.DATA_FORMAT_R8_UNORM]
+	var layers := [layer_count, layer_count, layer_count, layer_count]
 	for i in 4:
 		var format := RDTextureFormat.new()
 		format.format = formats[i]
@@ -1133,7 +1252,7 @@ func _ensure_pipeline(rd: RenderingDevice, defines: String) -> bool:
 			_failed = true
 			return false
 		code += "\n// ---- %s ----\n" % name + include.code
-	code += _GLSL_MAIN
+	code += _GLSL_MAIN.replace("%RELIEF_RANGE%", "%.3f" % RELIEF_RANGE)
 	var source := RDShaderSource.new()
 	source.language = RenderingDevice.SHADER_LANGUAGE_GLSL
 	source.source_compute = code

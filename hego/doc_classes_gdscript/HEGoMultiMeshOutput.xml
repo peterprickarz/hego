@@ -4,7 +4,8 @@
 		Instances an existing mesh resource once per output point through a [MultiMesh].
 	</brief_description>
 	<description>
-		The fetch returns points grouped by output name and then by mesh resource path, so one HDA can drive several [MultiMeshInstance3D]s with a different mesh each.
+		The fetch returns points grouped by output name and then by mesh resource path, so
+ one HDA can drive several [MultiMeshInstance3D]s with a different mesh each.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -12,7 +13,10 @@
 		<method name="point_attribs" qualifiers="static">
 			<return type="Array" />
 			<description>
-				Per-instance attributes this handler reads. Attributes this handler reads off each instanced point: the shared orientation set plus colour. A function rather than a const, because a const cannot be built from another class's constant. See [HEGoPointUtil].
+				Per-instance attributes this handler reads.
+ Attributes this handler reads off each instanced point: the shared orientation set plus
+ colour. A function rather than a const, because a const cannot be built from another
+ class's constant. See [HEGoPointUtil].
 			</description>
 		</method>
 		<method name="output_phase" qualifiers="static">
@@ -42,7 +46,8 @@
 			<param index="2" name="multimesh_name" type="String" />
 			<param index="3" name="point_dict" type="Dictionary" />
 			<description>
-				Creates a [MultiMeshInstance3D] named [param multimesh_name] under [code]Outputs/[/code] and fills it with one instance per point in [param point_dict].
+				Creates a [MultiMeshInstance3D] named [param multimesh_name] under [code]Outputs/[/code]
+ and fills it with one instance per point in [param point_dict].
 			</description>
 		</method>
 	</methods>

@@ -8,6 +8,36 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="register_settings" qualifiers="static">
+			<return type="void" />
+			<description>
+				Adds the marker size settings to the editor settings if they are missing.
+			</description>
+		</method>
+		<method name="point_size" qualifiers="static">
+			<return type="float" />
+			<description>
+				Diameter of point markers on screen, in pixels.
+			</description>
+		</method>
+		<method name="line_width" qualifiers="static">
+			<return type="float" />
+			<description>
+				Width of connection lines on screen, in pixels.
+			</description>
+		</method>
+		<method name="point_radius" qualifiers="static">
+			<return type="float" />
+			<description>
+				Pixel radius for picking a point: the marker radius plus a margin.
+			</description>
+		</method>
+		<method name="connection_radius" qualifiers="static">
+			<return type="float" />
+			<description>
+				Pixel radius for picking a connection: half the line width plus a margin.
+			</description>
+		</method>
 		<method name="closest_point" qualifiers="static">
 			<return type="int" />
 			<param index="0" name="mouse" type="Vector2" />
@@ -64,11 +94,20 @@
 		</method>
 	</methods>
 	<constants>
+		<constant name="SETTING_POINT_SIZE" value="&quot;hego/graph/point_size&quot;">
+			Editor settings for the on-screen size of the markers, in pixels.
+		</constant>
+		<constant name="SETTING_LINE_WIDTH" value="&quot;hego/graph/line_width&quot;">
+		</constant>
+		<constant name="DEFAULT_POINT_SIZE" value="10.0">
+		</constant>
+		<constant name="DEFAULT_LINE_WIDTH" value="2.5">
+		</constant>
 		<constant name="POINT_RADIUS" value="12.0">
-			Pixel radius a click must be within to hit a point.
+			Pixel radius a click must be within to hit a point, at least; see [method point_radius].
 		</constant>
 		<constant name="CONNECTION_RADIUS" value="8.0">
-			Pixel radius a click must be within to hit a connection.
+			Pixel radius a click must be within to hit a connection, at least.
 		</constant>
 	</constants>
 </class>

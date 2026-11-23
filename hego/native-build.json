@@ -1,21 +1,21 @@
 {
   "format_version": 1,
-  "source_fingerprint": "417ec2d42d5fa30d35db7b3a8e786b8b42f2e303823369ec7186ab2b7162bf55",
+  "source_fingerprint": "412bc1db64a3772b45fd10fe7b0c7b56acd194c0ae13d0fccd1b5d74d0929d5c",
   "artifacts": {
     "bin/hego.windows.template_debug.x86_64.dll": {
-      "sha256": "fa04f4850529f077a4e12ccc5dc103d64e81a133ca69f196b7358568b5f186f2",
+      "sha256": "e59511c6fc3f7fd4066af7b7363c064364990306aa5a94435eb4e172d46c4383",
       "build_context": "platform=windows,target=template_debug,arch=x86_64,compiler=MSVC 19.36.32543,hfs=22.0.429,hapi_headers_sha256=0f8c511e35c188e472a2a903e0c18f52b162facc136d56f1611bad18e6332cbd"
     },
     "bin/hego.windows.template_release.x86_64.dll": {
-      "sha256": "5dc52af6e91baffc1fbd542683eaf84d49bfee64bbe17becb66c2be22dcd0250",
+      "sha256": "9c9cdd87bbce5f6640238f8fe480b80fceac3775c592bcfc8b779984d69f8e27",
       "build_context": "platform=windows,target=template_release,arch=x86_64,compiler=MSVC 19.36.32543,hfs=22.0.429,hapi_headers_sha256=0f8c511e35c188e472a2a903e0c18f52b162facc136d56f1611bad18e6332cbd"
     },
     "bin/libhego.linux.template_debug.x86_64.so": {
-      "sha256": "5039cb7c91394aa9dc32ec5c124d2d461b950d0ca43b21ba00f214f56eff8568",
+      "sha256": "a96ec6749851d756efeeb73aa7384d5996c312025bc81a4843a216378ae9ebfb",
       "build_context": "platform=linux,target=template_debug,arch=x86_64,compiler=hego-linux-compat,hfs=hfs22.0.429,hapi_headers_sha256=0f8c511e35c188e472a2a903e0c18f52b162facc136d56f1611bad18e6332cbd"
     },
     "bin/libhego.linux.template_release.x86_64.so": {
-      "sha256": "6a746215235d436c5037ee612ac21b232b5f9d8aaf596655d1212591755aaa5c",
+      "sha256": "490528026a82d85f4ea2de473aa4bb192bff56daf979a2ba7e9ece4ed68aa035",
       "build_context": "platform=linux,target=template_release,arch=x86_64,compiler=hego-linux-compat,hfs=hfs22.0.429,hapi_headers_sha256=0f8c511e35c188e472a2a903e0c18f52b162facc136d56f1611bad18e6332cbd"
     }
   }

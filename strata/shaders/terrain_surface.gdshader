@@ -9,9 +9,9 @@ uniform sampler2D color_maps[32] : source_color, filter_nearest_mipmap, repeat_e
 uniform sampler2D ormh_maps[32] : filter_nearest_mipmap, repeat_enable;
 uniform sampler2D normal_maps[32] : filter_nearest_mipmap, repeat_enable;
 #else
-uniform sampler2D color_maps[32] : source_color, filter_linear_mipmap, repeat_enable;
-uniform sampler2D ormh_maps[32] : filter_linear_mipmap, repeat_enable;
-uniform sampler2D normal_maps[32] : filter_linear_mipmap, repeat_enable;
+uniform sampler2D color_maps[32] : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D ormh_maps[32] : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_maps[32] : filter_linear_mipmap_anisotropic, repeat_enable;
 #endif
 uniform float uv_scales[32];
 // Optional top layer per material (StrataMaterial.top_*): texture slot + 1 of the set the
@@ -192,11 +192,11 @@ uniform float surface_cache_bake_lod_bias = -1.0;
 // Relief of a mip at an atlas position, bilinear between the cell corners (texel g holds the
 // corner of cell g) or of the cell itself.
 float vt_relief_linear(vec3 at) {
-	return textureLod(vt_height_linear, vec3((at.xy + vec2(0.5)) / vec2(textureSize(vt_height_linear, 0).xy), at.z * 2.0 + 1.0), 0.0).r;
+	return strata_vt_relief(textureLod(vt_height_linear, vec3((at.xy + vec2(0.5)) / vec2(textureSize(vt_height_linear, 0).xy), at.z), 0.0).g);
 }
 
 float vt_relief_cell(vec3 at) {
-	return texelFetch(vt_height, ivec3(ivec2(floor(at.xy)), int(at.z) * 2 + 1), 0).r;
+	return strata_vt_relief(texelFetch(vt_height, ivec3(ivec2(floor(at.xy)), int(at.z)), 0).g);
 }
 
 // Displacement relief (terrain_material_relief() as the cache holds it) from the relief mip: a
@@ -208,11 +208,11 @@ bool vt_relief(vec2 position, out float relief) {
 	if (vt_relief_mip < 0 || !strata_vt_locate(position, vt_relief_mip, at)) { return false; }
 	ivec2 first = ivec2(floor(at.xy));
 	vec2 f = at.xy - vec2(first);
-	int layer = int(at.z) * 2 + 1;
-	float a = texelFetch(vt_height, ivec3(first, layer), 0).r;
-	float b = texelFetch(vt_height, ivec3(first + ivec2(1, 0), layer), 0).r;
-	float c = texelFetch(vt_height, ivec3(first + ivec2(0, 1), layer), 0).r;
-	float d = texelFetch(vt_height, ivec3(first + ivec2(1, 1), layer), 0).r;
+	int layer = int(at.z);
+	float a = strata_vt_relief(texelFetch(vt_height, ivec3(first, layer), 0).g);
+	float b = strata_vt_relief(texelFetch(vt_height, ivec3(first + ivec2(1, 0), layer), 0).g);
+	float c = strata_vt_relief(texelFetch(vt_height, ivec3(first + ivec2(0, 1), layer), 0).g);
+	float d = strata_vt_relief(texelFetch(vt_height, ivec3(first + ivec2(1, 1), layer), 0).g);
 	relief = mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 	return true;
 }
@@ -344,7 +344,6 @@ float vt_writers(vec2 position, float footprint, out vec4 albedo, out vec4 norma
 // the mips around the pixel footprint, filtered by surface_cache_filter.
 uniform bool surface_cache_shading = false;
 uniform float surface_cache_shading_min_normal_y = 0.7071;
-uniform bool surface_cache_shading_debug = false;
 // 0 nearest cell, two mips blended (the materials' nearest-texel, linear-mipmap filtering);
 // 1 bilinear in the nearest mip; 2 bilinear, two mips blended; 3 anisotropic: the mip of the
 // footprint's short axis (up to surface_cache_anisotropy times finer), sampled along the long one.
@@ -386,20 +385,30 @@ void vt_fetch(vec3 at, vec2 axis_x, vec2 axis_y, out vec4 a, out vec4 n) {
 // The resolved surface at a terrain-local position whose pixel extends over axis_x and axis_y
 // (metres). A missing page falls back one mip; past that the pixel is shaded directly (false),
 // so missing pages never show as blur.
-bool vt_surface(vec2 position, vec2 axis_x, vec2 axis_y, out vec3 color, out vec3 orm, out vec3 normal) {
-	color = vec3(0.0); orm = vec3(1.0, 1.0, 0.0); normal = vec3(0.0, 1.0, 0.0);
-	if (vt_params.y <= 0.0) { return false; }
+// The mip vt_surface() reads first for a pixel extending over axis_x and axis_y with lod
+// [param bias], and t the share of the next mip blended in (0 with the Linear filter, which
+// takes the nearest mip).
+int vt_surface_level(vec2 axis_x, vec2 axis_y, float bias, out float t) {
 	int top = int(vt_params.w);
 	float long_axis = max(length(axis_x), length(axis_y));
 	float short_axis = min(length(axis_x), length(axis_y));
 	float ratio = surface_cache_filter == 3 ? clamp(long_axis / max(short_axis, 0.000001), 1.0, min(surface_cache_anisotropy, 2.0 * vt_params.z)) : 1.0;
-	float lod = max(log2(max(long_axis / ratio, 0.000001) / vt_params.x) + surface_cache_lod_bias, 0.0);
+	float lod = max(log2(max(long_axis / ratio, 0.000001) / vt_params.x) + bias, 0.0);
 	int k0 = min(int(floor(lod)), top);
-	float t = k0 < top ? fract(lod) : 0.0;
+	t = k0 < top ? fract(lod) : 0.0;
 	if (surface_cache_filter == 1) {
 		if (t >= 0.5) { k0++; }
 		t = 0.0;
 	}
+	return k0;
+}
+
+bool vt_surface(vec2 position, vec2 axis_x, vec2 axis_y, out vec3 color, out vec3 orm, out vec3 normal) {
+	color = vec3(0.0); orm = vec3(1.0, 1.0, 0.0); normal = vec3(0.0, 1.0, 0.0);
+	if (vt_params.y <= 0.0) { return false; }
+	int top = int(vt_params.w);
+	float t;
+	int k0 = vt_surface_level(axis_x, axis_y, surface_cache_lod_bias, t);
 	vec3 at;
 	if (!strata_vt_locate(position, k0, at)) {
 		k0++; t = 0.0;
@@ -416,6 +425,70 @@ bool vt_surface(vec2 position, vec2 axis_x, vec2 axis_y, out vec3 color, out vec
 		normal = normalize(mix(normal, surface_cache_octahedral_decode(n.rg), t));
 	}
 	return true;
+}
+
+// Debug views of the cache (StrataRenderSettings.surface_cache_debug_view): 1 coverage, which
+// pixels are shaded from the cache (in fragment()); and whether or not the pixel is shaded from
+// it, 2 the pages in random colours, 3 their state, 4 the age of their content. Thin dark lines
+// mark the page edges. surface_cache_debug_slots has a texel per slot
+// (StrataSurfaceCache.debug_slot_image(): R state, G age over surface_cache_debug_age_seconds).
+uniform int surface_cache_debug_view = 0;
+uniform sampler2D surface_cache_debug_slots : filter_nearest, repeat_disable;
+
+vec3 surface_cache_debug_hash(ivec3 key) {
+	uint h = uint(key.x) * 1597334677u ^ uint(key.y) * 3812015801u ^ uint(key.z + 7) * 2798796415u;
+	h = (h ^ (h >> 15u)) * 2246822519u;
+	h ^= h >> 13u;
+	return vec3(uvec3(h, h >> 8u, h >> 16u) & uvec3(255u)) / 255.0;
+}
+
+vec3 surface_cache_debug_color(vec2 position, vec2 axis_x, vec2 axis_y, vec3 albedo) {
+	vec3 absent = vec3(1.0, 0.0, 1.0);
+	if (vt_params.y <= 0.0) { return mix(albedo, absent, 0.7); }
+	float footprint = max(max(length(axis_x), length(axis_y)), 0.000001);
+	// The mip vt_surface() reads first, and the one it would read without the pool pressure rise.
+	float t;
+	int wanted = vt_surface_level(axis_x, axis_y, surface_cache_lod_bias, t);
+	int unpressed = vt_surface_level(axis_x, axis_y, surface_cache_bake_lod_bias, t);
+	vec3 at;
+	int found = strata_vt_find(position, wanted, at);
+	// Nothing resident here: magenta.
+	if (found < 0) { return mix(albedo, absent, 0.7); }
+	float page_cells = vt_params.y;
+	float slot_side = page_cells + 2.0 * vt_params.z;
+	ivec2 in_layer = ivec2(floor(at.xy / slot_side));
+	int per_side = max(vt_layout.w, 1);
+	int slot = int(at.z + 0.5) * per_side * per_side + in_layer.y * per_side + in_layer.x;
+	vec2 info = texelFetch(surface_cache_debug_slots, ivec2(slot % 256, slot / 256), 0).rg;
+	int state = int(info.r * 255.0 + 0.5);
+	vec2 in_page = at.xy - vec2(in_layer) * slot_side - vec2(vt_params.z);
+	float edge_cells = min(min(in_page.x, in_page.y), min(page_cells - in_page.x, page_cells - in_page.y));
+	float edge = 1.0 - smoothstep(1.0, 2.0, edge_cells / (footprint / (vt_params.x * exp2(float(found)))));
+	vec3 color;
+	if (surface_cache_debug_view == 2) {
+		ivec2 page = ivec2(floor(position / (vt_params.x * exp2(float(found)) * page_cells)));
+		color = mix(vec3(0.12), vec3(1.0), surface_cache_debug_hash(ivec3(page, found)));
+	} else if (surface_cache_debug_view == 3) {
+		if (found > wanted) {
+			// Its page is missing: a coarser mip stands in (orange one mip, red two or more; past
+			// one, vt_surface() shades the pixel directly).
+			color = found - wanted > 1 ? vec3(1.0, 0.05, 0.05) : vec3(1.0, 0.5, 0.0);
+		} else if (state == 2) {
+			color = vec3(1.0, 0.9, 0.1);	// stale, not yet filled again
+		} else if (state == 3) {
+			color = vec3(0.0, 0.85, 1.0);	// waiting for its writer tile
+		} else if (state == 4) {
+			color = vec3(0.25, 0.35, 1.0);	// being redrawn by the background refresh
+		} else if (unpressed < wanted) {
+			color = vec3(0.65, 0.2, 0.95);	// coarser than the footprint asks: the pool is full
+		} else {
+			color = vec3(0.15, 0.8, 0.25);	// current
+		}
+	} else {
+		// Age since the last fill: green new, yellow halfway, red at the window or older.
+		color = info.g < 0.5 ? mix(vec3(0.1, 0.85, 0.2), vec3(1.0, 0.9, 0.1), info.g * 2.0) : mix(vec3(1.0, 0.9, 0.1), vec3(1.0, 0.1, 0.05), info.g * 2.0 - 1.0);
+	}
+	return mix(mix(albedo, color, 0.6), vec3(0.02), 0.8 * edge);
 }
 #endif
 
@@ -517,7 +590,10 @@ void fragment() {
 	if (surface_cache_shading) {
 		float footprint = max(length(point_dx.xz), length(point_dy.xz));
 		far_mix = uv_blend_footprint(footprint);
-		if (projection_normal.y >= surface_cache_shading_min_normal_y) {
+		vec3 raw_face = cross(point_dx, point_dy);
+		float face_len2 = dot(raw_face, raw_face);
+		float face_normal_y = face_len2 > 1e-16 ? abs(raw_face.y) * inversesqrt(face_len2) : projection_normal.y;
+		if (min(projection_normal.y, face_normal_y) >= surface_cache_shading_min_normal_y) {
 			from_cache = vt_surface(surface_position, point_dx.xz, point_dy.xz, cache_color, cache_orm, cache_normal);
 		}
 	}
@@ -722,7 +798,8 @@ void fragment() {
 	if (parallax_debug == 2) { EMISSION = vec3(parallax_info.z * 0.25, parallax_info.w, 0.0); ALBEDO = vec3(0.0); ROUGHNESS = 1.0; METALLIC = 0.0; AO = 1.0; }
 #endif
 #ifdef STRATA_SURFACE_CACHE
-	if (surface_cache_shading_debug) { ALBEDO = mix(ALBEDO, from_cache ? vec3(0.1, 0.9, 0.2) : vec3(0.9, 0.15, 0.1), 0.5); }
+	if (surface_cache_debug_view == 1) { ALBEDO = mix(ALBEDO, from_cache ? vec3(0.1, 0.9, 0.2) : vec3(0.9, 0.15, 0.1), 0.5); }
+	else if (surface_cache_debug_view > 1) { ALBEDO = surface_cache_debug_color(surface_position, point_dx.xz, point_dy.xz, ALBEDO); }
 #endif
 	if (debug_surface_writers) { ALBEDO = mix(ALBEDO, vec3(0.0, 0.9, 1.0), writer_cover); }
 	if (debug_lod) { ALBEDO = mix(ALBEDO, vec3(fract(patch_level * 0.37), fract(patch_level * 0.61 + 0.3), fract(patch_level * 0.19 + 0.6)), 0.65); }

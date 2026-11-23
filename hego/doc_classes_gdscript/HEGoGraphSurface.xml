@@ -1,0 +1,52 @@
+<?xml version='1.0' encoding='utf-8'?>
+<class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoGraphSurface" inherits="RefCounted" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		Finds the ground under a [HEGoGraph3D] point, for snapping and for draping the
+ path visualisation.
+	</brief_description>
+	<description>
+		The surface is, in order:
+ [br]1. the graph's [member HEGoGraph3D.surface_provider] node, when it has a
+ [code]sample_height(Vector2) -&gt; float[/code] method (height in the provider's local
+ space at a local x/z position). A [code]contains_position(Vector2) -&gt; bool[/code]
+ method, when present, limits where it answers. Nothing here depends on a particular
+ terrain addon.
+ [br]2. a physics ray straight down, when the graph's world has colliders.
+ 
+ A query that finds nothing returns an empty dictionary and callers keep the point's
+ height.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="is_available">
+			<return type="bool" />
+			<description>
+				Whether any surface source is available.
+			</description>
+		</method>
+		<method name="query">
+			<return type="Dictionary" />
+			<param index="0" name="world_position" type="Vector3" />
+			<description>
+				Surface under [param world_position] (only x and z matter). Returns
+ [code]{"position": Vector3, "normal": Vector3}[/code] in world space, or an empty
+ dictionary when there is no ground there.
+			</description>
+		</method>
+		<method name="query_local">
+			<return type="Dictionary" />
+			<param index="0" name="local_position" type="Vector3" />
+			<description>
+				Same as [method query], but in the graph's local space.
+			</description>
+		</method>
+	</methods>
+	<constants>
+		<constant name="RAY_HEIGHT" value="20000.0">
+		</constant>
+		<constant name="NORMAL_STEP" value="1.5">
+			Sample spacing for estimating a normal from a height provider.
+		</constant>
+	</constants>
+</class>

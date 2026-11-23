@@ -410,7 +410,7 @@ func sources_for(rect: Rect2, use_providers := true) -> Array:
 ## Bakes [param tiles] (Vector2i) from [param extra_roots], the source group and (with
 ## [param use_providers]) the providers, then reloads them and their rebaked neighbours.
 ## Returns one report per tile (StrataAOOverlayBaker.bake_tile).
-func rebake_tiles(tiles: Array, extra_roots: Array = [], use_providers := true) -> Array:
+func rebake_tiles(tiles: Array, extra_roots: Array = [], use_providers := true, repair_neighbours := true) -> Array:
 	var reports := []
 	var touched := []
 	for tile: Vector2i in tiles:
@@ -418,7 +418,7 @@ func rebake_tiles(tiles: Array, extra_roots: Array = [], use_providers := true) 
 		var roots := extra_roots.duplicate()
 		var provided := sources_for(rect, use_providers)
 		roots.append_array(provided)
-		var report := Baker.bake_tile(layout(), tile, roots, bake_options())
+		var report := Baker.bake_tile(layout(), tile, roots, bake_options(), repair_neighbours)
 		for node: Variant in provided:
 			if node is Node and is_instance_valid(node) and not (node as Node).is_inside_tree():
 				(node as Node).free()
