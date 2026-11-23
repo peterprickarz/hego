@@ -409,7 +409,11 @@ static func _neighbour_blobs(layout: Dictionary, tile: Vector2i) -> PackedFloat3
 static func save_tile_image(layout: Dictionary, tile: Vector2i, image: Image, occluded: bool) -> int:
 	var path := tile_path(layout, tile)
 	if not occluded:
-		if FileAccess.file_exists(path): DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		if FileAccess.file_exists(path):
+			var removal := DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+			if removal != OK:
+				push_error("StrataAOOverlayBaker: could not remove empty tile %s (%s)" % [path, error_string(removal)])
+				return -1
 		return 0
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(path.get_base_dir()))
 	image.clear_mipmaps()
@@ -422,8 +426,9 @@ static func save_tile_image(layout: Dictionary, tile: Vector2i, image: Image, oc
 
 ## Bakes [param tile] from the instances of [param roots] whose blob centre lies in the tile,
 ## plus its neighbours' edge files; writes the map and the tile's edge file, then rebakes the
-## edge bands of neighbouring tiles that have an edge file. Returns a report.
-static func bake_tile(layout: Dictionary, tile: Vector2i, roots: Array, options: Dictionary) -> Dictionary:
+## edge bands of neighbouring tiles that have an edge file. A batch can defer
+## neighbour repairs until every changed tile has published its edge file.
+static func bake_tile(layout: Dictionary, tile: Vector2i, roots: Array, options: Dictionary, repair_neighbours := true) -> Dictionary:
 	options = options_with_defaults(options)
 	var started := Time.get_ticks_usec()
 	var rect := tile_rect(layout, tile)
@@ -461,16 +466,18 @@ static func bake_tile(layout: Dictionary, tile: Vector2i, roots: Array, options:
 	var edge_file := edges_path(layout, tile)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(edge_file.get_base_dir()))
 	var file := FileAccess.open(edge_file, FileAccess.WRITE)
-	if file != null:
-		file.store_buffer(edges.to_byte_array())
-		file.close()
+	if file == null:
+		return {"ok": false, "tile": tile, "message": "Cannot save AO edge file: " + edge_file}
+	file.store_buffer(edges.to_byte_array())
+	file.close()
 	var neighbours := []
-	for dz in [-1, 0, 1]:
-		for dx in [-1, 0, 1]:
-			var other := tile + Vector2i(dx, dz)
-			if (dx != 0 or dz != 0) and FileAccess.file_exists(edges_path(layout, other)):
-				if rebake_tile_edges(layout, other, options):
-					neighbours.append(other)
+	if repair_neighbours:
+		for dz in [-1, 0, 1]:
+			for dx in [-1, 0, 1]:
+				var other := tile + Vector2i(dx, dz)
+				if (dx != 0 or dz != 0) and FileAccess.file_exists(edges_path(layout, other)):
+					if rebake_tile_edges(layout, other, options):
+						neighbours.append(other)
 	var report := {"ok": bytes >= 0, "tile": tile, "path": tile_path(layout, tile) if bytes > 0 else "",
 		"instances": collected.instances, "by_key": collected.by_key, "edge_blobs": edges.size() / 4,
 		"procedural_blobs": owned_blobs.size() / 4,

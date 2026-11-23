@@ -60,7 +60,7 @@ extends Node3D
 
 var _registry: StrataSurfaceWriterRegistry
 var _entry := -1
-## Per item: {instances: Array[RID], hidden: RID of the adopted MeshInstance3D instance}
+## Per item: private render instances and a weak reference to the adopted mesh, if any.
 var _items: Array = []
 var _rebuild_queued := false
 var _watched_source: Node
@@ -120,7 +120,7 @@ func _queue_rebuild() -> void:
 	_rebuild.call_deferred()
 
 
-## The meshes to write: [{mesh, transform, materials: Array (per surface, null = mesh's own), hide: RID}]
+## Meshes to write, with their transforms, per-surface materials and optional adopted MeshInstance3D.
 func _collect() -> Array:
 	var result := []
 	if not is_inside_tree() or not is_visible_in_tree(): return result
@@ -135,13 +135,13 @@ func _collect() -> Array:
 				var materials := []
 				for surface in instance.mesh.get_surface_count():
 					materials.append(material if material != null else instance.get_active_material(surface))
-				result.append({"mesh": instance.mesh, "transform": instance.global_transform, "materials": materials, "hide": instance.get_instance()})
+				result.append({"mesh": instance.mesh, "transform": instance.global_transform, "materials": materials, "adopted": instance})
 			for child in node.get_children(): stack.append(child)
 	elif mesh != null:
 		var materials := []
 		for surface in mesh.get_surface_count():
 			materials.append(material if material != null else mesh.surface_get_material(surface))
-		result.append({"mesh": mesh, "transform": global_transform, "materials": materials, "hide": RID()})
+		result.append({"mesh": mesh, "transform": global_transform, "materials": materials, "adopted": null})
 	return result
 
 
@@ -173,9 +173,12 @@ func _rebuild() -> void:
 			instances.append(rid)
 		for surface_material: Variant in item.materials:
 			if surface_material is Material and not used.has(surface_material): used.append(surface_material)
-		var hide: RID = item.hide
-		if hide.is_valid(): RenderingServer.instance_set_visible(hide, false)
-		_items.append({"instances": instances, "hide": hide})
+		var adopted: MeshInstance3D = item.adopted
+		var source_ref: WeakRef
+		if adopted != null:
+			RenderingServer.instance_set_visible(adopted.get_instance(), false)
+			source_ref = weakref(adopted)
+		_items.append({"instances": instances, "source_ref": source_ref})
 		var box: AABB = (item.transform as Transform3D) * (item.mesh as Mesh).get_aabb()
 		boxes.append(box)
 		bounds = box if first else bounds.merge(box)
@@ -193,23 +196,25 @@ func _rebuild() -> void:
 func _clear() -> void:
 	for item: Dictionary in _items:
 		for rid: RID in item.instances: RenderingServer.free_rid(rid)
-		var hide: RID = item.hide
-		if hide.is_valid() and is_inside_tree():
-			# Give the adopted instance back its own visibility (it may have been freed).
-			RenderingServer.instance_set_visible(hide, true)
+		var source_ref: WeakRef = item.source_ref
+		if source_ref != null:
+			# A procedural recook can free an adopted mesh before this deferred rebuild.
+			var adopted := source_ref.get_ref() as MeshInstance3D
+			if adopted != null:
+				RenderingServer.instance_set_visible(adopted.get_instance(), adopted.is_visible_in_tree())
 	_items = []
 
 
 func _watch_source(node: Node) -> void:
-	if _watched_source == node: return
 	var tree := get_tree() if is_inside_tree() else null
 	if tree != null:
-		if _watched_source != null and tree.node_added.is_connected(_on_tree_node):
-			tree.node_added.disconnect(_on_tree_node)
-			tree.node_removed.disconnect(_on_tree_node)
-		if node != null:
+		var listening := tree.node_added.is_connected(_on_tree_node)
+		if node != null and not listening:
 			tree.node_added.connect(_on_tree_node)
 			tree.node_removed.connect(_on_tree_node)
+		elif node == null and listening:
+			tree.node_added.disconnect(_on_tree_node)
+			tree.node_removed.disconnect(_on_tree_node)
 	_watched_source = node
 
 
