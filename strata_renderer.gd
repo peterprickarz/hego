@@ -169,6 +169,8 @@ var _active_crease_variant := false
 ## StrataSurfaceCache while StrataRenderSettings.surface_cache_enabled (Forward+/Mobile only).
 var _surface_cache: _SurfaceCache
 var _surface_cache_variant := false
+## Per-slot state and age for the surface cache debug views (surface_cache_debug_view).
+var _cache_debug_texture: ImageTexture
 # The feedback effect, the first compositor it was added to and the camera it follows.
 var _vt_feedback: _VirtualTextureFeedback
 var _feedback_host: Compositor
@@ -726,8 +728,10 @@ func _update_surface_cache(local_camera: Vector3) -> void:
 		_surface_cache = _SurfaceCache.new()
 		_surface_cache.mark_material_dirty()
 	_surface_cache.page_fills_per_frame = render_settings.surface_cache_page_fills_per_frame
+	_surface_cache.refresh_pages_per_frame = render_settings.surface_cache_refresh_pages_per_frame
 	_surface_cache.publish_globals = render_settings.surface_cache_publish_globals
 	var configured := _surface_cache.configure(_render_bounds, render_settings.surface_cache_texels_per_metre, render_settings.surface_cache_page_size, render_settings.surface_cache_pool_pages)
+	_surface_cache.set_height_range(_height_min, _height_max)
 	_stats.surface_cache = _surface_cache.stats
 	if not configured:
 		# The page table would be too large (stats.surface_cache.status says so): no cache.
@@ -749,7 +753,7 @@ func _update_surface_cache(local_camera: Vector3) -> void:
 	if _surface_cache.feedback_active:
 		var layout := _surface_cache.lookup_layout()
 		_vt_feedback.set_lookup(_source.global_transform.affine_inverse(), _surface_cache.texel, _surface_cache.page_size, _surface_cache.top_mip, lod_bias, anisotropy, Vector2i(layout.x, layout.y), layout.z, _render_bounds)
-		_vt_feedback.set_ground(_surface_cache.page_table_texture, _surface_cache.height_texture, layout.w, _SurfaceCache.BORDER)
+		_vt_feedback.set_ground(_surface_cache.page_table_texture, _surface_cache.height_texture, layout.w, _SurfaceCache.BORDER, _surface_cache.height_decode())
 		_surface_cache.feedback_keys = _vt_feedback.take_requests()
 		_stats.surface_cache_feedback = _vt_feedback.get_stats()
 	# Other shaders read the displaced ground, whether or not the terrain takes its relief here.
@@ -765,7 +769,26 @@ func _update_surface_cache(local_camera: Vector3) -> void:
 		for pair: Array in [["vt_page_table", _surface_cache.page_table_texture], ["vt_albedo", _surface_cache.albedo_texture], ["vt_albedo_linear", _surface_cache.albedo_texture], ["vt_albedo_anisotropic", _surface_cache.albedo_texture], ["vt_normal", _surface_cache.normal_texture], ["vt_normal_linear", _surface_cache.normal_texture], ["vt_normal_anisotropic", _surface_cache.normal_texture], ["vt_height", _surface_cache.height_texture], ["vt_height_linear", _surface_cache.height_texture], ["vt_cover", _surface_cache.cover_texture], ["vt_params", _surface_cache.lookup_params()], ["vt_layout", _surface_cache.lookup_layout()], ["vt_relief_mip", relief_mip], ["surface_cache_filter", filter], ["surface_cache_anisotropy", maxf(anisotropy, 1.0)], ["surface_cache_lod_bias", lod_bias]]:
 			if _shader_material.get_shader_parameter(pair[0]) != pair[1]:
 				_shader_material.set_shader_parameter(pair[0], pair[1])
+		_update_cache_debug_view()
 	_stats.surface_writers = _writer_pass.stats.merged({"writers": _writer_pass.registry.entry_count()})
+
+## The cache debug views read each slot's state and age from a small texture, filled per frame
+## while a view is on.
+func _update_cache_debug_view() -> void:
+	var view := int(render_settings.surface_cache_debug_view)
+	if _shader_material.get_shader_parameter("surface_cache_debug_view") != view:
+		_shader_material.set_shader_parameter("surface_cache_debug_view", view)
+	if view < 2:
+		if _cache_debug_texture != null:
+			_cache_debug_texture = null
+			_shader_material.set_shader_parameter("surface_cache_debug_slots", null)
+		return
+	var image: Image = _surface_cache.debug_slot_image(render_settings.surface_cache_debug_age_seconds)
+	if _cache_debug_texture != null and _cache_debug_texture.get_size() == Vector2(image.get_size()):
+		_cache_debug_texture.update(image)
+	else:
+		_cache_debug_texture = ImageTexture.create_from_image(image)
+		_shader_material.set_shader_parameter("surface_cache_debug_slots", _cache_debug_texture)
 
 func _release_surface_cache() -> void:
 	_release_feedback()
@@ -776,6 +799,7 @@ func _release_surface_cache() -> void:
 	_surface_cache.release()
 	_surface_cache = null
 	_stats.erase("surface_cache")
+	_cache_debug_texture = null
 	if _shader_material != null: _shader_material.set_shader_parameter("vt_params", Vector4.ZERO)
 
 ## The surface cache of this renderer, or null while it is disabled.
@@ -1138,7 +1162,6 @@ func _update_cache_shading_settings() -> void:
 	var max_slope: Variant = render_settings.get(&"surface_cache_shading_max_slope")
 	_shader_material.set_shader_parameter("surface_cache_shading", render_settings.get(&"surface_cache_shading") == true)
 	_shader_material.set_shader_parameter("surface_cache_shading_min_normal_y", cos(deg_to_rad(float(max_slope) if max_slope != null else 45.0)))
-	_shader_material.set_shader_parameter("surface_cache_shading_debug", render_settings.get(&"surface_cache_shading_debug") == true)
 	var lod_bias: Variant = render_settings.get(&"surface_cache_shading_lod_bias")
 	_shader_material.set_shader_parameter("surface_cache_bake_lod_bias", float(lod_bias) if lod_bias != null else -1.0)
 	var eye_height: Variant = render_settings.get(&"surface_cache_shading_eye_height")

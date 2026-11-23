@@ -1,6 +1,6 @@
 # Strata addon package
 
-This standalone package is built from source commit 3c973e5d1ab2ebd8ab38ef22b6e60e7f7b0cad9f. It depends on Godot
+This standalone package is built from source commit e06b1ebe8840e8af966661a5327608f934a0b85d. It depends on Godot
 and godot-cpp, but does not require HEGo or Houdini. See `PACKAGE.json` for
 the package dependency declaration and `native-build.json` for binary receipts.
 
@@ -40,6 +40,13 @@ priority the material's `render_priority`, then the higher geometry seen from ab
 old and new rectangle, and so do its material's `changed` signal and `invalidate()` (call it
 after setting a writer material's shader parameters from a script; ShaderMaterial parameters
 do not signal a change; in the editor, writers watch their materials' parameters themselves).
+
+**Materials that change over time.** A writer parameter that drifts slowly, such as rain
+wetness set from a script, needs no `invalidate()`: the cache's background refresh
+(`StrataRenderSettings.surface_cache_refresh_pages_per_frame`, 2 by default) draws the on-screen
+pages that writers touch again in turn whenever no requested page waits, so they catch up
+within one pass (`stats.surface_cache.refresh_cycle_frames`). Neighbouring pages are drawn at
+different moments: call `invalidate()` for a change that must show at once.
 
 **Writer material contract.** A spatial shader that includes
 `res://addons/strata/shaders/strata_surface_writer.gdshaderinc` (which sets its render modes:
@@ -113,12 +120,14 @@ tints the writers on directly shaded pixels cyan.
 **Cost** (RX 9070 XT, 2386 × 1200; measured in a 4 km island level of a game using Strata,
 whose roads are 209 writer meshes, not in this repository's demo):
 
-- Writers that do not change cost nothing per frame.
+- With `surface_cache_refresh_pages_per_frame` at 0, writers that do not change cost nothing
+  per frame. At 2, frames took 36.0 and 37.2 ms against 34.0 and 35.7 ms with it off (two views
+  at 1280 × 720, one run each; runs vary by a few ms, so this is an upper bound).
 - A tile is one viewport render: 0.04 ms GPU and 0.04 to 0.1 ms CPU. The first tiles after
   load took about 1 ms CPU each.
 - A cold start over a road drew 314 tiles for 631 pages in under 120 frames (at 8 tiles per
   frame).
 - A writer change over a 40 m square redrew the 24 pages on screen there.
-- Memory: the cover atlas is one of the cache's 17 bytes per cell. Writer viewports take about
+- Memory: the cover atlas is one of the cache's 13 bytes per cell. Writer viewports take about
   1 MB each for 128-cell pages, at most `max_viewports` (32); they are created on demand and
   freed after `idle_release_seconds` (5) unused, one kept.

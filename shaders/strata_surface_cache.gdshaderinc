@@ -27,7 +27,7 @@ global uniform vec4 strata_cache_params;    // cell size of mip 0 (m), page size
 global uniform ivec4 strata_cache_layout;   // first page of mip 0 (xy), table size at mip 0, slots per atlas side
 global uniform vec4 strata_cache_camera;    // terrain-local camera position, displacement radius (0: none)
 global uniform vec4 strata_cache_surface;   // displacement strength, specular, relief mip (-1: none), 1 when enabled
-global uniform vec4 strata_cache_sampling;  // lod bias (added to the mip a footprint selects), 1 when cells are read bilinearly, 0, 0
+global uniform vec4 strata_cache_sampling;  // lod bias (added to the mip a footprint selects), 1 when cells are read bilinearly, base height decode (height at 0, range)
 global uniform mat4 strata_cache_world_to_local;
 
 #define STRATA_VT_TABLE strata_cache_page_table
@@ -108,12 +108,15 @@ bool strata_ground_sample(vec3 world_position, float footprint, out StrataGround
 	// Heights sit at cell corners: bilinear between this cell's four corners.
 	ivec2 cell = ivec2(floor(at.xy));
 	vec2 f = at.xy - vec2(cell);
-	int base_layer = int(at.z) * 2;
+	int base_layer = int(at.z);
+	vec2 decode = strata_cache_sampling.zw;
 	float h00 = texelFetch(strata_cache_height, ivec3(cell, base_layer), 0).r;
 	float h10 = texelFetch(strata_cache_height, ivec3(cell + ivec2(1, 0), base_layer), 0).r;
 	float h01 = texelFetch(strata_cache_height, ivec3(cell + ivec2(0, 1), base_layer), 0).r;
 	float h11 = texelFetch(strata_cache_height, ivec3(cell + ivec2(1, 1), base_layer), 0).r;
-	if (min(min(h00, h10), min(h01, h11)) < -1.0e29) { return false; }
+	if (strata_vt_height_hole(min(min(h00, h10), min(h01, h11)))) { return false; }
+	h00 = strata_vt_base_height(h00, decode); h10 = strata_vt_base_height(h10, decode);
+	h01 = strata_vt_base_height(h01, decode); h11 = strata_vt_base_height(h11, decode);
 	float base = mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
 	vec3 local_normal = strata_cache_octahedral_decode(normal_data.rg);
 	float radius = strata_cache_camera.w;
@@ -129,14 +132,13 @@ bool strata_ground_sample(vec3 world_position, float footprint, out StrataGround
 			float rt = strata_cache_params.x * exp2(float(relief_mip));
 			ivec2 rc = ivec2(floor(rat.xy));
 			vec2 rf = rat.xy - vec2(rc);
-			int rl = int(rat.z) * 2;
-			float b00 = texelFetch(strata_cache_height, ivec3(rc, rl), 0).r;
-			float b10 = texelFetch(strata_cache_height, ivec3(rc + ivec2(1, 0), rl), 0).r;
-			float b01 = texelFetch(strata_cache_height, ivec3(rc + ivec2(0, 1), rl), 0).r;
-			float r00 = texelFetch(strata_cache_height, ivec3(rc, rl + 1), 0).r;
-			float r10 = texelFetch(strata_cache_height, ivec3(rc + ivec2(1, 0), rl + 1), 0).r;
-			float r01 = texelFetch(strata_cache_height, ivec3(rc + ivec2(0, 1), rl + 1), 0).r;
-			float r11 = texelFetch(strata_cache_height, ivec3(rc + ivec2(1, 1), rl + 1), 0).r;
+			int rl = int(rat.z);
+			vec2 e00 = texelFetch(strata_cache_height, ivec3(rc, rl), 0).rg;
+			vec2 e10 = texelFetch(strata_cache_height, ivec3(rc + ivec2(1, 0), rl), 0).rg;
+			vec2 e01 = texelFetch(strata_cache_height, ivec3(rc + ivec2(0, 1), rl), 0).rg;
+			float r11 = strata_vt_relief(texelFetch(strata_cache_height, ivec3(rc + ivec2(1, 1), rl), 0).g);
+			float b00 = strata_vt_base_height(e00.r, decode), b10 = strata_vt_base_height(e10.r, decode), b01 = strata_vt_base_height(e01.r, decode);
+			float r00 = strata_vt_relief(e00.g), r10 = strata_vt_relief(e10.g), r01 = strata_vt_relief(e01.g);
 			vec2 slope = vec2(b10 - b00, b01 - b00) / rt;
 			float vertical = inversesqrt(1.0 + dot(slope, slope));
 			offset = mix(mix(r00, r10, rf.x), mix(r01, r11, rf.x), rf.y) * strata_cache_surface.x * fade * vertical;
