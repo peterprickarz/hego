@@ -71,12 +71,13 @@ How an object's instances are drawn. Variations of a thing share one resource.
 | `layers` | render layers flags | 1 | Render layers the instances are drawn on. | load |
 | `gi_mode` | `GeometryInstance3D.GIMode` | `GI_MODE_STATIC` | Global illumination mode. | load |
 | `impostor_range_end` | `float` | 0 | Distance in metres beyond which the impostor is not drawn. 0 is unlimited. | load |
+| `impostor_batch_size` | `float` | 0 | Impostor batch cell edge in metres: the instances of one impostor batch cell swap with their impostor together. 0 is the store's `cell_size` (one impostor batch per object and cell). Smaller values let small, short-range things swap close to `visibility_range_end`, at one impostor draw per batch cell. Must divide the store's cell size and, in `MULTIMESH` draw mode, be a multiple of `batch_size`. Used only by objects with an impostor mesh. | build |
 | `debug_view` | `DebugView` | `OFF` | Viewport debug view of the instances using these settings, in every store; overrides the store's `debug_view` unless `OFF`. See "Debug views". Shown in the inspector, never saved. | load |
 
 The far grid's cell size is the store's `impostor_cell_size`, not a render setting.
 
-Signals: `changed` on every set; `build_inputs_changed` only when `draw_mode` or `batch_size`
-change.
+Signals: `changed` on every set; `build_inputs_changed` only when `draw_mode`, `batch_size` or
+`impostor_batch_size` change.
 
 `draw_params() -> Dictionary` returns what the drawer applies when it creates objects:
 
@@ -143,6 +144,7 @@ The instance's scale applies to the shapes when the store creates the bodies.
 | `impostor` | `bool` | `impostor_mesh` is set |
 | `impostor_cell_size` | `float` | the argument (the store's `impostor_cell_size`) when `impostor` is true, else 0 |
 | `impostor_min_scale` | `float` | `impostor_min_scale` |
+| `impostor_batch_size` | `float` | `render.impostor_batch_size` when `impostor` is true, else 0 |
 
 There is no `hash` key: the design page says the build then uses the SHA-256 of these fields as
 it reads them. Without `render`, the values of a default `CopiaRenderSettings` are used.
@@ -254,8 +256,13 @@ How streaming works:
   read; an impostor range of 0 loads every far cell at start-up. Both cost memory and server
   objects for the whole store, so give large stores finite ranges.
 - Impostors: an object with an impostor mesh gets one group per far cell (one batch per cell
-  inside it). A cell's draw group is linked to its batch with the swap distance
-  `visibility_range_end`; the drawer then shows exactly one of the two. Removing a linked group
+  inside it, or per impostor batch cell with a render `impostor_batch_size`). A cell's draw group
+  is linked to its batch with the swap distance `visibility_range_end`; the drawer then shows
+  exactly one of the two. The swap is decided per impostor batch: a batch is replaced by its
+  impostor once the camera is farther than the swap distance from the impostor batch's bounds,
+  so with the default (a whole cell) the full instances of a cell are drawn until the camera is
+  that far from the whole cell. With a smaller `impostor_batch_size` each draw batch (or single
+  instance) is linked to the impostor batch of its own impostor batch cell. Removing a linked group
   is left to the drawer, which keeps the swap gap-free.
 - A rebuilt cell is read again; an object's groups are replaced (the new group is created before
   the old one is removed) unless the cell's set inputs, the object's descriptor hash and its
@@ -351,7 +358,7 @@ the store re-applies the object's params to its live groups at once, with no bui
 | --- | --- |
 | `OFF` | Normal drawing. |
 | `HIGHLIGHT` | Flat green, lit so shapes read, impostors included. |
-| `BATCHES` | A random colour per MultiMesh batch (per object and batch cell); in `INSTANCE` draw mode a colour per instance. Impostor batches likewise, one per far cell. |
+| `BATCHES` | A random colour per MultiMesh batch (per object and batch cell); in `INSTANCE` draw mode a colour per instance. Impostor batches likewise, one per cell or impostor batch cell. |
 | `LOD` | The mesh LOD Godot draws: 0 green, 1 yellow, 2 orange, 3 red, 4 magenta, 5 and above purple. Impostors black. A mesh without LODs is green. |
 | `SHADOW_RANGE` | What the drawer does with shadows: grey casts none (shadow off, no low-LOD shadows); red casts (no `shadow_range`, or within it); yellow in the hysteresis band (`shadow_range` to `shadow_range` + `shadow_range_margin`, where an object keeps the state it had); blue beyond. Measured to the camera drawing it rather than to the store's sources, and for a batch from the centre of its batch cell rather than its exact origin (see below), so a batch shows one state but near the boundary may show the wrong one. Impostors show their own shadow params. |
 | `HIDDEN` | Every instance dim grey; instances drawn although nothing of their bounds can be seen show red and half transparent through whatever hides them, so dense hidden layers glow. |
@@ -374,7 +381,8 @@ view.
 - `BATCHES` and `SHADOW_RANGE` cannot tell which MultiMesh an instance belongs to: in a
   MultiMesh both `MODEL_MATRIX` and `NODE_POSITION_WORLD` include the instance's own transform.
   They find its batch the way the build forms batches, from the instance origin in store space:
-  batch cell `floor(x / batch_size), floor(z / batch_size)`, or the far cell for an impostor.
+  batch cell `floor(x / batch_size), floor(z / batch_size)`, or for an impostor the cell (or its
+  impostor batch cell).
   `BATCHES` hashes the cell and the object's path; `SHADOW_RANGE` measures from the cell centre
   at the instance's height, where the drawer measures from the centre of the batch's bounds, so
   its boundary is off by up to half a batch. Single instances use their own origin, exactly. A

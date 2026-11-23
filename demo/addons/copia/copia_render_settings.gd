@@ -2,9 +2,10 @@
 class_name CopiaRenderSettings
 extends Resource
 ## How the instances of a [CopiaObject] are drawn. Variations of one thing share one settings
-## resource. Only [member draw_mode] and [member batch_size] are build inputs; every other
-## property applies when a cell loads and needs no build. The far grid's cell size, which holds
-## the impostor batches, is a property of the store ([member CopiaStore3D.impostor_cell_size]).
+## resource. Only [member draw_mode], [member batch_size] and [member impostor_batch_size] are
+## build inputs; every other property applies when a cell loads and needs no build. The far
+## grid's cell size, which holds the impostor batches, is a property of the store
+## ([member CopiaStore3D.impostor_cell_size]).
 
 enum DrawMode {
 	## One MultiMesh per batch cell: the instances of a batch are drawn together.
@@ -50,8 +51,8 @@ enum DebugView {
 	HIDDEN,
 }
 
-## Emitted when a property that changes what the build produces is set: [member draw_mode] or
-## [member batch_size]. [signal Resource.changed] is emitted too.
+## Emitted when a property that changes what the build produces is set: [member draw_mode],
+## [member batch_size] or [member impostor_batch_size]. [signal Resource.changed] is emitted too.
 signal build_inputs_changed
 
 ## How instances are drawn. A build input.
@@ -132,6 +133,18 @@ signal build_inputs_changed
 	set(value):
 		impostor_range_end = maxf(value, 0.0)
 		_changed(false)
+## Edge length in metres of an impostor batch cell: the instances of one such cell swap with
+## their impostor together, when the camera comes within [member visibility_range_end] of the
+## impostor batch. 0 is the store's cell size, one impostor batch per object and cell. A smaller
+## size swaps near the range end for small, short-range things, at one impostor draw per batch
+## cell. It must divide the store's cell size and, in [constant DrawMode.MULTIMESH], be a
+## multiple of [member batch_size]. Only used by objects with an impostor mesh. A build input.
+@export_range(0.0, 1024.0, 0.5, "or_greater", "suffix:m") var impostor_batch_size := 0.0:
+	set(value):
+		value = maxf(value, 0.0)
+		if is_equal_approx(impostor_batch_size, value): return
+		impostor_batch_size = value
+		_changed(true)
 
 @export_group("Debug")
 ## Viewport debug view of the instances that use these settings, in every store; see

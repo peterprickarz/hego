@@ -91,7 +91,10 @@ class _Record extends RefCounted:
 	var token := 0  # request in flight
 	var revision := 0  # directory revision the group was read from
 	var count := 0  # collider bodies of the group
-	var batches := {}  # impostor: cell -> batch index
+	var batches := {}  # impostor: impostor batch cell -> batch index
+	# Draw record of an object whose impostor batch cell is smaller than the cell: the impostor
+	# batch cell of each batch (multimesh) or instance, x and z.
+	var impostor_cells := PackedInt32Array()
 	var failed := false
 	var requested_usec := 0  # when the section in use (or in flight) was requested
 	var handle := 0  # the record's handle in the streamer
@@ -343,10 +346,19 @@ func _get_configuration_warnings() -> PackedStringArray:
 		var info = _info(path)
 		if info == null:
 			continue
-		var batch: float = info.object.descriptor(impostor_cell_size).batch_size
+		var descriptor: Dictionary = info.object.descriptor(impostor_cell_size)
+		var batch: float = descriptor.batch_size
 		var per_cell := cell_size / batch
 		if per_cell < 1.0 or not is_equal_approx(per_cell, roundf(per_cell)):
 			warnings.append("%s: batch_size %.2f m does not divide cell_size %.1f m; the build rejects it." % [path, batch, cell_size])
+		var impostor_batch: float = descriptor.impostor_batch_size
+		if descriptor.impostor and impostor_batch > 0.0:
+			var per_impostor := cell_size / impostor_batch
+			var per_draw := impostor_batch / batch
+			if per_impostor < 1.0 or not is_equal_approx(per_impostor, roundf(per_impostor)):
+				warnings.append("%s: impostor_batch_size %.2f m does not divide cell_size %.1f m; the build rejects it." % [path, impostor_batch, cell_size])
+			elif descriptor.draw == "multimesh" and (per_draw < 1.0 or not is_equal_approx(per_draw, roundf(per_draw))):
+				warnings.append("%s: impostor_batch_size %.2f m is not a multiple of batch_size %.2f m; the build rejects it." % [path, impostor_batch, batch])
 	return warnings
 
 
@@ -1146,6 +1158,7 @@ func _refresh_info(info: Dictionary) -> void:
 	info.draw_reach = render.visibility_range_end if render.visibility_range_end > 0.0 else INF
 	info.impostor_reach = render.impostor_range_end if render.impostor_range_end > 0.0 else INF
 	info.has_impostor = object.impostor_mesh != null
+	info.impostor_batch_size = render.impostor_batch_size
 	info.has_mesh = object.mesh != null
 	var physics = object.physics
 	info.has_physics = physics != null and physics.has_collider()
@@ -1238,7 +1251,7 @@ func _object_params(object, path: String, impostor: bool) -> Dictionary:
 	if view == RenderScript.DebugView.BATCHES or view == RenderScript.DebugView.SHADOW_RANGE:
 		var descriptor: Dictionary = object.descriptor(impostor_cell_size)
 		if impostor:
-			batch_size = impostor_cell_size
+			batch_size = descriptor.impostor_batch_size if descriptor.impostor_batch_size > 0.0 else cell_size
 		elif descriptor.draw == "multimesh":
 			batch_size = descriptor.batch_size
 		if is_inside_tree():
@@ -1756,6 +1769,8 @@ func _on_section(record: _Record, section: Dictionary) -> void:
 			var batch_cells: PackedInt32Array = section.batch_cells
 			for b in section.batch_count:
 				record.batches[Vector2i(batch_cells[b * 2], batch_cells[b * 2 + 1])] = b
+		elif record.kind == "draw":
+			record.impostor_cells = _impostor_cells(info, record, section)
 		var params := _draw_params(info, record)
 		if section.kind == "multimesh":
 			id = _drawer.add_multimesh_group(section, params)
@@ -1804,19 +1819,73 @@ func _far_of(cell: Vector2i) -> Vector2i:
 	return Vector2i(floori(float(cell.x) / per_far), floori(float(cell.y) / per_far))
 
 
-# Links a draw group to its impostor batch, when the far cell's impostor group is live.
+# Impostor batch cells per cell of an object: 1 when its impostor batch is the cell.
+func _impostor_per_cell(info) -> int:
+	var size: float = info.get("impostor_batch_size", 0.0) if info != null else 0.0
+	if size <= 0.0:
+		return 1
+	return maxi(roundi(cell_size / size), 1)
+
+
+# The impostor batch cell of each batch or instance of a draw section, as the build assigns
+# them, when the object's impostor batch cell is smaller than the cell; empty otherwise.
+func _impostor_cells(info: Dictionary, record: _Record, section: Dictionary) -> PackedInt32Array:
+	var cells := PackedInt32Array()
+	var per_cell := _impostor_per_cell(info)
+	if not info.has_impostor or per_cell == 1:
+		return cells
+	if section.kind == "multimesh":
+		# A draw batch lies inside one impostor batch cell: its cell, floor-divided.
+		var batch_cells: PackedInt32Array = section.batch_cells
+		var batch: float = info.object.descriptor(impostor_cell_size).batch_size
+		var per_draw := maxi(roundi(cell_size / batch) / per_cell, 1)
+		cells.resize(batch_cells.size())
+		for i in batch_cells.size():
+			cells[i] = floori(float(batch_cells[i]) / per_draw)
+	else:
+		var transforms: PackedFloat32Array = section.transforms
+		var size := cell_size / per_cell
+		var count := transforms.size() / 12
+		cells.resize(count * 2)
+		for i in count:
+			for axis in 2:
+				var value := floori(float(transforms[i * 12 + 9 + axis * 2]) / size)
+				var low := (record.cell.x if axis == 0 else record.cell.y) * per_cell
+				cells[i * 2 + axis] = clampi(value, low, low + per_cell - 1)
+	return cells
+
+
+# Links a draw group to its impostor batch (or, with a finer impostor batch cell, each of its
+# batches or instances to theirs), when the far cell's impostor group is live.
 func _link_child(record: _Record) -> void:
 	var info = _objects.get(record.path)
 	if info == null or not info.has_impostor or info.range_end <= 0.0 or record.group == 0:
 		return
 	var impostor: _Record = _far_live.get(_far_of(record.cell), {}).get(record.path)
-	if impostor == null or impostor.group == 0 or not impostor.batches.has(record.cell):
+	if impostor == null or impostor.group == 0:
 		return
-	_drawer.link_impostor(impostor.group, record.group, info.range_end * record.range_scale, impostor.batches[record.cell])
+	var swap: float = info.range_end * record.range_scale
+	if record.impostor_cells.is_empty():
+		if impostor.batches.has(record.cell):
+			_drawer.link_impostor(impostor.group, record.group, swap, impostor.batches[record.cell])
+		return
+	var per_object := PackedInt32Array()
+	per_object.resize(record.impostor_cells.size() / 2)
+	var any := false
+	for i in per_object.size():
+		var batch: int = impostor.batches.get(Vector2i(record.impostor_cells[i * 2], record.impostor_cells[i * 2 + 1]), -1)
+		per_object[i] = batch
+		any = any or batch >= 0
+	if any:
+		_drawer.link_impostor(impostor.group, record.group, swap, per_object)
 
 
 func _link_children(impostor: _Record) -> void:
-	for cell in impostor.batches:
+	var per_cell := _impostor_per_cell(_objects.get(impostor.path))
+	var cells := {}
+	for batch_cell in impostor.batches:
+		cells[Vector2i(floori(float(batch_cell.x) / per_cell), floori(float(batch_cell.y) / per_cell))] = true
+	for cell in cells:
 		var record: _Record = _live.get(cell, {}).get(impostor.path, {}).get("draw")
 		if record != null and record.group != 0:
 			_link_child(record)

@@ -1,7 +1,7 @@
 ## Copia resource classes: descriptor keys and types, mesh-path resolution, overridable hooks,
-## which changes emit build_inputs_changed, the shapes each physics kind resolves to, and the
-## per-surface materials (RIDs for single instances, a cached mesh copy for batches) and impostor
-## draw params.
+## which changes emit build_inputs_changed (the impostor batch size among them), the shapes each
+## physics kind resolves to, and the per-surface materials (RIDs for single instances, a cached
+## mesh copy for batches) and impostor draw params.
 ## Headless; needs no native library and no scene. Writes one mesh under user://.
 ##
 ##   godot-4.7.2 --path demo --headless --script res://tests/copia_resources_test.gd
@@ -165,7 +165,7 @@ func run() -> void:
 	# Descriptor: exactly the design page's keys and types, no hash.
 	var object = ObjectScript.new()
 	var descriptor: Dictionary = object.descriptor()
-	var expected_keys := ["draw", "mesh_aabb", "batch_size", "default_color", "default_custom", "collider", "collider_min_scale", "impostor", "impostor_cell_size", "impostor_min_scale"]
+	var expected_keys := ["draw", "mesh_aabb", "batch_size", "default_color", "default_custom", "collider", "collider_min_scale", "impostor", "impostor_cell_size", "impostor_min_scale", "impostor_batch_size"]
 	var keys := descriptor.keys()
 	keys.sort()
 	expected_keys.sort()
@@ -176,7 +176,7 @@ func run() -> void:
 	check(descriptor.default_color is Color and descriptor.default_color == Color.WHITE, "default_color is white")
 	check(descriptor.default_custom is Color and descriptor.default_custom == Color(0, 0, 0, 0), "default_custom is zero")
 	check(descriptor.collider is bool and not descriptor.collider and descriptor.collider_min_scale == 0.0, "no physics settings, no collider, min scale 0")
-	check(descriptor.impostor is bool and not descriptor.impostor and descriptor.impostor_cell_size == 0.0 and descriptor.impostor_min_scale == 0.0, "no impostor mesh, no impostor")
+	check(descriptor.impostor is bool and not descriptor.impostor and descriptor.impostor_cell_size == 0.0 and descriptor.impostor_min_scale == 0.0 and descriptor.impostor_batch_size == 0.0, "no impostor mesh, no impostor")
 
 	var render = RenderScript.new()
 	var physics = PhysicsScript.new()
@@ -264,6 +264,7 @@ func run() -> void:
 	expect_build(o, "adding physics settings", func(): o.physics = p)
 	expect_build(r, "the draw mode", func(): r.draw_mode = RenderScript.DrawMode.INSTANCE)
 	expect_build(r, "the batch size", func(): r.batch_size = 8.0)
+	expect_build(r, "the impostor batch size", func(): r.impostor_batch_size = 32.0)
 	for property in ["visibility_range_begin", "visibility_range_end", "visibility_range_margin", "shadow_range", "shadow_range_margin", "lod_bias", "extra_cull_margin", "impostor_range_end"]:
 		expect_no_build(r, property, func(): r.set(property, 123.0))
 	expect_no_build(r, "shadow", func(): r.shadow = RenderScript.Shadow.OFF)

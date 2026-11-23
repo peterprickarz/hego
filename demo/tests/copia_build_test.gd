@@ -1,7 +1,8 @@
 ## Copia build: built cells and far cells against their set files. Every instance appears once,
 ## sets share batches, batches respect their size and are centred on their bounds, keep order
 ## and counts, colliders and impostors follow their minimum scales, a rebuild is byte-identical
-## and stale_cells names exactly what a set write or a descriptor change made stale.
+## and stale_cells names exactly what a set write or a descriptor change made stale. An impostor
+## batch size splits a cell's impostors into finer batches, and its default changes nothing.
 ## Headless, no Houdini; uses a scratch directory under user://.
 ##
 ##   godot-4.7.2 --path demo --headless --script res://tests/copia_build_test.gd
@@ -201,6 +202,47 @@ func check_batches(section: Dictionary, source: Array, descriptor: Dictionary, b
 	return section.batch_count
 
 
+## impostor_batch_size: 0 or the cell size leaves built data current; a smaller size splits each
+## cell's impostors into batches of that cell, which the far cell gathers. A multimesh object's
+## impostor batch cell holds whole draw batches. Restores the store to `objects` at the end.
+func test_impostor_batches(dir: String, points: Array) -> void:
+	for value in [0.0, CELL]:
+		var same := objects.duplicate(true)
+		same[TREE].impostor_batch_size = value
+		check((build.stale_cells(dir, CELL, same) as Array).is_empty(), "impostor_batch_size %.0f leaves the built cells current" % value)
+	var fine := objects.duplicate(true)
+	fine[TREE].impostor_batch_size = 32.0
+	fine[GRASS].merge({"impostor": true, "impostor_cell_size": FAR, "impostor_batch_size": 32.0})
+	var result: Dictionary = build.build_cells(dir, CELL, CELLS, fine)
+	check(result.ok, "fine impostor batches build: %s" % result.error)
+	var far_expected := {}
+	for cell: Vector2i in CELLS:
+		var path := cell_file(dir, cell)
+		var directory: Dictionary = cells_reader.read_directory(path)
+		for object: String in [TREE, GRASS]:
+			var source := points.filter(func(p: Dictionary) -> bool: return cell_of(p) == cell and p.object == object)
+			var expected := source.filter(func(p: Dictionary) -> bool: return scale_of(p.transform) >= fine[object].get("impostor_min_scale", 0.0))
+			var label := "fine cell %s %s" % [cell, object.get_file()]
+			var section: Dictionary = cells_reader.read_section(path, object, "impostor")
+			var batches := check_batches(section, expected, fine[object], 32.0, label)
+			check(batches <= 4 and directory.objects[object].impostor_batch_count == batches, "%s: impostor batches per 32 m cell (%d)" % [label, batches])
+			if object == GRASS:
+				var draw: Dictionary = cells_reader.read_section(path, object)
+				var from_draw := {}
+				for b in draw.batch_count:
+					from_draw[Vector2i(floori(draw.batch_cells[b * 2] / 2.0), floori(draw.batch_cells[b * 2 + 1] / 2.0))] = true
+				var impostor_cells := {}
+				for b in section.batch_count:
+					impostor_cells[Vector2i(section.batch_cells[b * 2], section.batch_cells[b * 2 + 1])] = true
+				check(from_draw == impostor_cells, "%s: each impostor batch holds whole draw batches" % label)
+			far_expected.get_or_add([far_of(cell), object], []).append_array(expected)
+	for far_key: Array in far_expected:
+		var section: Dictionary = cells_reader.read_section(far_file(dir, far_key[0]), far_key[1])
+		check_batches(section, far_expected[far_key], fine[far_key[1]], 32.0, "fine far %s %s" % [far_key[0], far_key[1].get_file()])
+	var restored: Dictionary = build.build_cells(dir, CELL, build.stale_cells(dir, CELL, objects), objects)
+	check(restored.ok and (build.stale_cells(dir, CELL, objects) as Array).is_empty(), "rebuilding for the default impostor batch leaves nothing stale")
+
+
 func snapshot(directory: String) -> Dictionary:
 	var files := {}
 	for folder in ["cells", "far"]:
@@ -255,6 +297,14 @@ func run() -> void:
 	bad_objects[GRASS].impostor_cell_size = 256.0
 	rejected = build.build_cells(dir, CELL, CELLS, bad_objects)
 	check(not rejected.ok and rejected.written.is_empty(), "two far grid sizes are rejected")
+	bad_objects = objects.duplicate(true)
+	bad_objects[TREE].impostor_batch_size = 24.0
+	rejected = build.build_cells(dir, CELL, CELLS, bad_objects)
+	check(not rejected.ok and rejected.written.is_empty(), "an impostor batch size that does not divide the cell size is rejected")
+	bad_objects = objects.duplicate(true)
+	bad_objects[GRASS].merge({"impostor": true, "impostor_cell_size": FAR, "impostor_batch_size": 8.0})
+	rejected = build.build_cells(dir, CELL, CELLS, bad_objects)
+	check(not rejected.ok and rejected.written.is_empty(), "a multimesh impostor batch size below the batch size is rejected")
 
 	var result: Dictionary = build.build_cells(dir, CELL, CELLS, objects)
 	check(result.ok, "build succeeds: %s" % result.error)
@@ -327,6 +377,7 @@ func run() -> void:
 
 	# stale_cells: empty after a build, then exactly what changed.
 	check((build.stale_cells(dir, CELL, objects) as Array).is_empty(), "nothing is stale after a build")
+	test_impostor_batches(dir, points)
 	var extra_rocks: Array = []
 	for i in 5:
 		extra_rocks.append(make_point("rocks", ROCK, Vector2i(1, 0)))

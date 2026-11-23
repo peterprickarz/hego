@@ -42,6 +42,9 @@ struct Descriptor {
     bool impostor = false;
     double impostor_cell_size = 0.0;
     double impostor_min_scale = 0.0;
+    // Impostor batch cell edge; the cell size when the descriptor gives none (or 0).
+    double impostor_batch_size = 0.0;
+    int impostor_batches_per_cell = 1;
     std::string hash;
     bool defaulted = false;
 };
@@ -94,6 +97,11 @@ std::string computed_hash(const Descriptor &p_descriptor) {
     text += bits(p_descriptor.collider_min_scale);
     text += p_descriptor.impostor ? "|impostor|" : "|-|";
     text += bits(p_descriptor.impostor_cell_size) + "|" + bits(p_descriptor.impostor_min_scale);
+    // An impostor batch cell other than the cell joins the hash; the default leaves the hash
+    // of earlier builds unchanged.
+    if (p_descriptor.impostor && p_descriptor.impostor_batches_per_cell != 1) {
+        text += "|impostor_batch|" + bits(p_descriptor.impostor_batch_size);
+    }
     return hash_hex(sha256(reinterpret_cast<const uint8_t *>(text.data()), text.size()));
 }
 
@@ -168,6 +176,7 @@ bool parse_descriptor(const Dictionary &p_source, double p_cell_size, Descriptor
             !number(p_source, "collider_min_scale", r_descriptor.collider_min_scale, r_error) ||
             !number(p_source, "impostor_cell_size", r_descriptor.impostor_cell_size, r_error) ||
             !number(p_source, "impostor_min_scale", r_descriptor.impostor_min_scale, r_error) ||
+            !number(p_source, "impostor_batch_size", r_descriptor.impostor_batch_size, r_error) ||
             !four(p_source, "default_color", r_descriptor.color, r_error) ||
             !four(p_source, "default_custom", r_descriptor.custom, r_error)) {
         return false;
@@ -182,6 +191,26 @@ bool parse_descriptor(const Dictionary &p_source, double p_cell_size, Descriptor
     if (r_descriptor.impostor && whole_multiple(r_descriptor.impostor_cell_size, p_cell_size) < 1) {
         r_error = "impostor_cell_size must be a multiple of the cell size";
         return false;
+    }
+    if (!(r_descriptor.impostor_batch_size > 0.0)) {
+        r_descriptor.impostor_batch_size = p_cell_size;
+    }
+    if (r_descriptor.impostor) {
+        r_descriptor.impostor_batches_per_cell = int(whole_multiple(p_cell_size, r_descriptor.impostor_batch_size));
+        if (r_descriptor.impostor_batches_per_cell < 1) {
+            r_error = "impostor_batch_size must divide the cell size";
+            return false;
+        }
+        if (r_descriptor.multimesh && whole_multiple(r_descriptor.impostor_batch_size, r_descriptor.batch_size) < 1) {
+            r_error = "impostor_batch_size must be a multiple of batch_size";
+            return false;
+        }
+        if (r_descriptor.impostor_batches_per_cell == 1) {
+            r_descriptor.impostor_batch_size = p_cell_size;
+        }
+    } else {
+        r_descriptor.impostor_batch_size = p_cell_size;
+        r_descriptor.impostor_batches_per_cell = 1;
     }
     Variant hash = p_source.get("hash", Variant());
     if (hash.get_type() == Variant::STRING || hash.get_type() == Variant::STRING_NAME) {
@@ -201,6 +230,7 @@ bool parse_descriptor(const Dictionary &p_source, double p_cell_size, Descriptor
 bool parse_descriptors(const Dictionary &p_objects, double p_cell_size, Descriptors &r_descriptors, std::string &r_error) {
     r_descriptors.fallback.batch_size = p_cell_size;
     r_descriptors.fallback.defaulted = true;
+    r_descriptors.fallback.impostor_batch_size = p_cell_size;
     r_descriptors.fallback.hash = computed_hash(r_descriptors.fallback);
     Array keys = p_objects.keys();
     for (int64_t i = 0; i < keys.size(); i++) {
@@ -569,9 +599,40 @@ void build_cell(const String &p_directory, double p_cell_size, const State &p_st
             if (!chosen.empty()) {
                 std::vector<BatchRecord> batches;
                 std::vector<float> buffer;
-                make_batch(rows, chosen, descriptor, r_job.cx, r_job.cz, batches, buffer);
+                const int64_t per_cell = descriptor.impostor_batches_per_cell;
+                if (per_cell == 1) {
+                    make_batch(rows, chosen, descriptor, r_job.cx, r_job.cz, batches, buffer);
+                } else {
+                    // One batch per impostor batch cell, in impostor batch cell coordinates. A
+                    // multimesh object's cell follows from its draw batch cell, so every draw
+                    // batch lies inside one impostor batch.
+                    const int64_t draw_per = descriptor.multimesh ? int64_t(descriptor.batches_per_cell) / per_cell : 0;
+                    std::map<std::pair<int32_t, int32_t>, std::vector<uint32_t>> groups;
+                    for (uint32_t i : chosen) {
+                        const float *t = row_floats(rows, i);
+                        int64_t ix, iz;
+                        if (draw_per > 0) {
+                            const int64_t draw_cell = descriptor.batches_per_cell;
+                            int64_t bx = int64_t(std::floor(double(t[9]) / descriptor.batch_size));
+                            int64_t bz = int64_t(std::floor(double(t[11]) / descriptor.batch_size));
+                            bx = std::min(std::max(bx, int64_t(r_job.cx) * draw_cell), int64_t(r_job.cx) * draw_cell + draw_cell - 1);
+                            bz = std::min(std::max(bz, int64_t(r_job.cz) * draw_cell), int64_t(r_job.cz) * draw_cell + draw_cell - 1);
+                            ix = floor_div(bx, draw_per);
+                            iz = floor_div(bz, draw_per);
+                        } else {
+                            ix = int64_t(std::floor(double(t[9]) / descriptor.impostor_batch_size));
+                            iz = int64_t(std::floor(double(t[11]) / descriptor.impostor_batch_size));
+                            ix = std::min(std::max(ix, int64_t(r_job.cx) * per_cell), int64_t(r_job.cx) * per_cell + per_cell - 1);
+                            iz = std::min(std::max(iz, int64_t(r_job.cz) * per_cell), int64_t(r_job.cz) * per_cell + per_cell - 1);
+                        }
+                        groups[{ int32_t(ix), int32_t(iz) }].push_back(i);
+                    }
+                    for (auto &group : groups) {
+                        make_batch(rows, group.second, descriptor, group.first.first, group.first.second, batches, buffer);
+                    }
+                }
                 cell_entry.impostors = uint32_t(chosen.size());
-                cell_entry.impostor_batches = 1;
+                cell_entry.impostor_batches = uint32_t(batches.size());
                 encode_batch_section(batches, buffer, sections[SECTION_IMPOSTOR]);
             }
         }

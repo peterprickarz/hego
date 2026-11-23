@@ -90,7 +90,7 @@ public:
 
     void warm_up(const godot::RID &p_mesh, const godot::RID &p_material, bool p_uses_color, bool p_uses_custom);
 
-    void link_impostor(int64_t p_impostor_group, int64_t p_child_group, double p_swap_distance, int32_t p_batch);
+    void link_impostor(int64_t p_impostor_group, int64_t p_child_group, double p_swap_distance, const godot::Variant &p_batch);
     void unlink_impostor(int64_t p_impostor_group, int64_t p_child_group);
 
 protected:
@@ -136,9 +136,13 @@ private:
         int shadow_state = SHADOW_UNKNOWN;
         int64_t instance_total = 0;
         int64_t drawn = 0; // instances of the created objects, honouring density
-        // Impostor link, child side: the impostor group, its batch and the swap distance.
+        // Impostor link, child side: the impostor group, the batch that stands for every object
+        // (impostor_batches empty) or one batch per object (-1: that object keeps its own range),
+        // the sorted batches the child covers, and the swap distance.
         int64_t impostor = 0;
         int32_t impostor_batch = 0;
+        std::vector<int32_t> impostor_batches;
+        std::vector<int32_t> linked_batches;
         double swap_distance = 0.0;
         // Impostor side: the linked child groups.
         std::vector<int64_t> children;
@@ -199,12 +203,16 @@ private:
     void apply_density(Group &p_group);
     void free_unit(const FreeUnit &p_unit);
     const Group *linked_impostor(const Group &p_child) const;
-    godot::RID link_parent(const Group &p_child) const;
+    static int32_t child_batch(const Group &p_child, int32_t p_index);
+    static bool covers(const Group &p_child, int32_t p_batch);
+    static void clear_link(Group &r_child);
+    godot::RID link_parent(const Group &p_child, int32_t p_index) const;
     double effective_begin(const Group &p_group, int32_t p_index) const;
     bool impostor_eligible(const Group &p_group, int32_t p_index) const;
     void apply_surface_materials(const Group &p_group, const godot::RID &p_instance, bool p_reset) const;
     void refresh_impostor_batch(int64_t p_impostor, int32_t p_batch);
     void refresh_children(const Group &p_impostor, int32_t p_batch);
+    void refresh_impostor_batches(int64_t p_impostor, const std::vector<int32_t> &p_batches);
     void apply_range(const Group &p_group, int32_t p_index, const Item &p_item);
     void free_everything();
 };

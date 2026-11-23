@@ -617,12 +617,33 @@ const CopiaDrawer::Group *CopiaDrawer::linked_impostor(const Group &p_child) con
     return found == groups.end() ? nullptr : &found->second;
 }
 
-RID CopiaDrawer::link_parent(const Group &p_child) const {
+// The impostor batch that stands for object p_index of a linked child, or -1.
+int32_t CopiaDrawer::child_batch(const Group &p_child, int32_t p_index) {
+    if (p_child.impostor_batches.empty()) {
+        return p_child.impostor_batch;
+    }
+    return p_index < int32_t(p_child.impostor_batches.size()) ? p_child.impostor_batches[size_t(p_index)] : -1;
+}
+
+bool CopiaDrawer::covers(const Group &p_child, int32_t p_batch) {
+    return std::binary_search(p_child.linked_batches.begin(), p_child.linked_batches.end(), p_batch);
+}
+
+void CopiaDrawer::clear_link(Group &r_child) {
+    r_child.impostor = 0;
+    r_child.impostor_batch = 0;
+    r_child.impostor_batches.clear();
+    r_child.linked_batches.clear();
+    r_child.swap_distance = 0.0;
+}
+
+RID CopiaDrawer::link_parent(const Group &p_child, int32_t p_index) const {
     const Group *impostor = linked_impostor(p_child);
-    if (impostor == nullptr || p_child.impostor_batch >= impostor->created) {
+    const int32_t batch = child_batch(p_child, p_index);
+    if (impostor == nullptr || batch < 0 || batch >= impostor->created) {
         return RID();
     }
-    return impostor->items[size_t(p_child.impostor_batch)].instance;
+    return impostor->items[size_t(batch)].instance;
 }
 
 // Visibility range begin of an object: an impostor batch with linked children may hide near the
@@ -634,7 +655,7 @@ double CopiaDrawer::effective_begin(const Group &p_group, int32_t p_index) const
     double swap = 0.0;
     for (int64_t child_id : p_group.children) {
         auto found = groups.find(child_id);
-        if (found == groups.end() || found->second.impostor_batch != p_index) {
+        if (found == groups.end() || !covers(found->second, p_index)) {
             continue;
         }
         linked = true;
@@ -662,7 +683,7 @@ void CopiaDrawer::apply_range(const Group &p_group, int32_t p_index, const Item 
     double begin_margin = params.visibility_begin_margin;
     double end_margin = params.visibility_end_margin;
     if (flagged && p_group.impostor != 0 && impostor_eligible(p_group, p_index)) {
-        RID impostor = link_parent(p_group);
+        RID impostor = link_parent(p_group, p_index);
         if (impostor.is_valid()) {
             parent = impostor;
             begin = end = begin_margin = end_margin = 0.0;
@@ -685,41 +706,81 @@ void CopiaDrawer::refresh_impostor_batch(int64_t p_impostor, int32_t p_batch) {
     apply_range(found->second, p_batch, found->second.items[size_t(p_batch)]);
 }
 
+void CopiaDrawer::refresh_impostor_batches(int64_t p_impostor, const std::vector<int32_t> &p_batches) {
+    for (int32_t batch : p_batches) {
+        refresh_impostor_batch(p_impostor, batch);
+    }
+}
+
+// Applies the range of every created object of the children of p_impostor that batch p_batch
+// stands for.
 void CopiaDrawer::refresh_children(const Group &p_impostor, int32_t p_batch) {
     for (int64_t child_id : p_impostor.children) {
         auto found = groups.find(child_id);
-        if (found == groups.end() || found->second.impostor_batch != p_batch) {
+        if (found == groups.end() || !covers(found->second, p_batch)) {
             continue;
         }
         const Group &child = found->second;
         for (int32_t i = 0; i < child.created; i++) {
-            apply_range(child, i, child.items[size_t(i)]);
+            if (child_batch(child, i) == p_batch) {
+                apply_range(child, i, child.items[size_t(i)]);
+            }
         }
     }
 }
 
-void CopiaDrawer::link_impostor(int64_t p_impostor_group, int64_t p_child_group, double p_swap_distance, int32_t p_batch) {
+void CopiaDrawer::link_impostor(int64_t p_impostor_group, int64_t p_child_group, double p_swap_distance, const Variant &p_batch) {
     auto impostor_found = groups.find(p_impostor_group);
     auto child_found = groups.find(p_child_group);
     ERR_FAIL_COND_MSG(impostor_found == groups.end() || child_found == groups.end(), "CopiaDrawer: no such group.");
-    Group &impostor = impostor_found->second;
-    Group &child = child_found->second;
+    const Group &impostor = impostor_found->second;
     ERR_FAIL_COND_MSG(!impostor.multimesh, "CopiaDrawer: the impostor group must be a multimesh group.");
     ERR_FAIL_COND_MSG(p_impostor_group == p_child_group, "CopiaDrawer: a group cannot be its own impostor.");
-    ERR_FAIL_INDEX_MSG(p_batch, impostor.count, "CopiaDrawer: the impostor group has no such batch.");
     ERR_FAIL_COND_MSG(p_swap_distance < 0.0, "CopiaDrawer: swap_distance must not be negative.");
-    if (child.impostor != 0) {
-        unlink_impostor(child.impostor, p_child_group);
+    int32_t uniform = 0;
+    std::vector<int32_t> per_object;
+    if (p_batch.get_type() == Variant::INT) {
+        uniform = int32_t(int64_t(p_batch));
+        ERR_FAIL_INDEX_MSG(uniform, impostor.count, "CopiaDrawer: the impostor group has no such batch.");
+    } else if (p_batch.get_type() == Variant::PACKED_INT32_ARRAY) {
+        PackedInt32Array values = p_batch;
+        ERR_FAIL_COND_MSG(values.size() != child_found->second.count,
+                "CopiaDrawer: batch must hold one impostor batch per object of the child group.");
+        per_object.resize(size_t(values.size()));
+        for (int64_t i = 0; i < values.size(); i++) {
+            ERR_FAIL_COND_MSG(values[i] < -1 || values[i] >= impostor.count, "CopiaDrawer: the impostor group has no such batch.");
+            per_object[size_t(i)] = values[i];
+        }
+    } else {
+        ERR_FAIL_MSG("CopiaDrawer: batch must be an int or a PackedInt32Array.");
     }
+    if (child_found->second.impostor != 0) {
+        unlink_impostor(child_found->second.impostor, p_child_group);
+    }
+    Group &child = groups.at(p_child_group);
     child.impostor = p_impostor_group;
-    child.impostor_batch = p_batch;
+    child.impostor_batch = per_object.empty() ? uniform : -1;
+    child.impostor_batches = std::move(per_object);
+    child.linked_batches.clear();
+    if (child.impostor_batches.empty()) {
+        child.linked_batches.push_back(uniform);
+    } else {
+        std::set<int32_t> unique(child.impostor_batches.begin(), child.impostor_batches.end());
+        unique.erase(-1);
+        child.linked_batches.assign(unique.begin(), unique.end());
+    }
     child.swap_distance = p_swap_distance;
-    impostor.children.push_back(p_child_group);
-    impostor.held.erase(p_batch);
+    Group &linked = groups.at(p_impostor_group);
+    linked.children.push_back(p_child_group);
+    for (int32_t batch : child.linked_batches) {
+        linked.held.erase(batch);
+    }
     // Children first (parented and hidden while the impostor's begin is 0), then the impostor's
-    // begin; both in this call, so no frame sees one without the other.
-    refresh_children(impostor, p_batch);
-    refresh_impostor_batch(p_impostor_group, p_batch);
+    // begins; all in this call, so no frame sees one without the other.
+    for (int32_t i = 0; i < child.created; i++) {
+        apply_range(child, i, child.items[size_t(i)]);
+    }
+    refresh_impostor_batches(p_impostor_group, child.linked_batches);
 }
 
 void CopiaDrawer::unlink_impostor(int64_t p_impostor_group, int64_t p_child_group) {
@@ -729,15 +790,13 @@ void CopiaDrawer::unlink_impostor(int64_t p_impostor_group, int64_t p_child_grou
     Group &impostor = impostor_found->second;
     Group &child = child_found->second;
     ERR_FAIL_COND_MSG(child.impostor != p_impostor_group, "CopiaDrawer: the groups are not linked.");
-    const int32_t batch = child.impostor_batch;
+    const std::vector<int32_t> batches = child.linked_batches;
     impostor.children.erase(std::remove(impostor.children.begin(), impostor.children.end(), p_child_group), impostor.children.end());
-    child.impostor = 0;
-    child.impostor_batch = 0;
-    child.swap_distance = 0.0;
+    clear_link(child);
     for (int32_t i = 0; i < child.created; i++) {
         apply_range(child, i, child.items[size_t(i)]);
     }
-    refresh_impostor_batch(p_impostor_group, batch);
+    refresh_impostor_batches(p_impostor_group, batches);
 }
 
 void CopiaDrawer::create_item(Group &p_group, int32_t p_index) {
@@ -823,7 +882,7 @@ Dictionary CopiaDrawer::step(int64_t p_budget_usec) {
                 dequeue(group);
                 if (group.impostor != 0) {
                     // The last child object exists: the impostor may now hide near the camera.
-                    refresh_impostor_batch(group.impostor, group.impostor_batch);
+                    refresh_impostor_batches(group.impostor, group.linked_batches);
                 }
             }
         }
@@ -983,16 +1042,16 @@ void CopiaDrawer::remove_group(int64_t p_group) {
         // A linked child: its impostor batch goes back to begin 0 now, before any of the
         // child's objects is freed (they stay parented and hidden until then).
         const int64_t impostor_id = group.impostor;
-        const int32_t batch = group.impostor_batch;
+        const std::vector<int32_t> batches = group.linked_batches;
         auto impostor = groups.find(impostor_id);
         if (impostor != groups.end()) {
             std::vector<int64_t> &children = impostor->second.children;
             children.erase(std::remove(children.begin(), children.end(), p_group), children.end());
-            impostor->second.held.insert(batch);
+            impostor->second.held.insert(batches.begin(), batches.end());
         }
-        group.impostor = 0;
+        clear_link(group);
         if (server != nullptr) {
-            refresh_impostor_batch(impostor_id, batch);
+            refresh_impostor_batches(impostor_id, batches);
         }
         found = groups.find(p_group);
     }
@@ -1007,9 +1066,7 @@ void CopiaDrawer::remove_group(int64_t p_group) {
             if (child == groups.end()) {
                 continue;
             }
-            child->second.impostor = 0;
-            child->second.impostor_batch = 0;
-            child->second.swap_distance = 0.0;
+            clear_link(child->second);
             if (server != nullptr) {
                 for (int32_t i = 0; i < child->second.created; i++) {
                     apply_range(child->second, i, child->second.items[size_t(i)]);
@@ -1194,7 +1251,7 @@ Dictionary CopiaDrawer::get_group_info(int64_t p_group) const {
     // Visibility range begin each created object has now (an impostor's swap state).
     PackedFloat32Array begins;
     for (int32_t i = 0; i < group.created; i++) {
-        const bool linked_child = group.impostor != 0 && link_parent(group).is_valid() &&
+        const bool linked_child = group.impostor != 0 && link_parent(group, i).is_valid() &&
                 (group.parented.is_empty() || group.parented[i] != 0) && impostor_eligible(group, i);
         begins.push_back(float(linked_child ? 0.0 : effective_begin(group, i)));
     }
@@ -1203,8 +1260,15 @@ Dictionary CopiaDrawer::get_group_info(int64_t p_group) const {
         Dictionary link;
         link["impostor"] = group.impostor;
         link["batch"] = group.impostor_batch;
+        if (!group.impostor_batches.empty()) {
+            PackedInt32Array batches;
+            for (int32_t batch : group.impostor_batches) {
+                batches.push_back(batch);
+            }
+            link["batches"] = batches;
+        }
         link["swap_distance"] = group.swap_distance;
-        link["parent"] = link_parent(group);
+        link["parent"] = group.impostor_batches.empty() ? link_parent(group, 0) : RID();
         result["impostor_link"] = link;
     }
     PackedInt64Array children;

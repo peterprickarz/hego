@@ -6,7 +6,8 @@
 ## drawn instances apart, set_groups_params reaches every listed group, group density scales the global one,
 ## per-surface materials round-trip, an impostor only hides near the camera while its linked child
 ## group is fully created (and goes back before any child is freed), instances below the impostor
-## min scale keep their own range, warm-up objects go away, and a ray hit on a collider resolves
+## min scale keep their own range, a child linked per batch to finer impostor batches swaps each
+## batch with its own impostor batch, warm-up objects go away, and a ray hit on a collider resolves
 ## to its group and instance with the instance's scale.
 ## Headless: the renderer is a dummy, so nothing about drawing is asserted. Step overshoot over
 ## the budget is printed, not asserted.
@@ -293,6 +294,78 @@ func test_impostor_link(path: String) -> void:
 		check(stats.objects == 0 and stats.instances == 0 and stats.multimeshes == 0, "%s: nothing left: %s" % [order, stats])
 
 
+## A multimesh child linked per batch (impostor_batch_size 32 over 16 m draw batches): each draw
+## batch takes the impostor batch of its 32 m cell as parent, every impostor batch the child covers
+## swaps once the child is ready, a batch mapped to -1 keeps its own range, and removing the child
+## puts every covered impostor batch back to begin 0 at once.
+func test_impostor_batches() -> void:
+	var dir := scratch + "_batches"
+	remove_tree(dir)
+	var fern := "res://objects/fern.tres"
+	var descriptor := {"draw": "multimesh", "mesh_aabb": AABB(Vector3(-0.5, 0, -0.5), Vector3(1, 1, 1)), "batch_size": 16.0,
+			"impostor": true, "impostor_cell_size": CELL, "impostor_batch_size": 32.0}
+	var transform := PackedFloat32Array()
+	for i in 400:
+		transform.append_array(PackedFloat32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, rng.randf() * CELL, 0.0, rng.randf() * CELL]))
+	var applied: Dictionary = ClassDB.instantiate("CopiaSets").apply(dir, CELL, [], {"transform": transform, "object": PackedInt32Array(Array(range(400)).map(func(_i): return 0)), "object_paths": PackedStringArray([fern])})
+	check(applied.ok, "batches: apply: " + str(applied.get("error")))
+	var built: Dictionary = ClassDB.instantiate("CopiaBuild").build_cells(dir, CELL, [Vector2i.ZERO], {fern: descriptor})
+	check(built.ok, "batches: build: " + str(built.get("error")))
+	var cells: Object = ClassDB.instantiate("CopiaCells")
+	var path := dir.path_join("cells/0_0.copiacell")
+	var draw: Dictionary = cells.read_section(path, fern, "draw")
+	var impostor_section: Dictionary = cells.read_section(path, fern, "impostor")
+	check(draw.batch_count == 16 and impostor_section.batch_count == 4, "batches: 16 draw batches, 4 impostor batches (%d, %d)" % [draw.batch_count, impostor_section.batch_count])
+	var index_of := {}
+	for b in impostor_section.batch_count:
+		index_of[Vector2i(impostor_section.batch_cells[b * 2], impostor_section.batch_cells[b * 2 + 1])] = b
+	var mapping := PackedInt32Array()
+	for b in draw.batch_count:
+		mapping.append(index_of.get(Vector2i(floori(draw.batch_cells[b * 2] / 2.0), floori(draw.batch_cells[b * 2 + 1] / 2.0)), -2))
+	check(not mapping.has(-2), "batches: every draw batch lies in an impostor batch")
+	var swap := 45.0
+	var drawer: Object = ClassDB.instantiate("CopiaDrawer")
+	drawer.set_scenario(scenario)
+	var impostor: int = drawer.add_multimesh_group(impostor_section, {"mesh": mesh.get_rid(), "visibility_end": 120.0, "priority": 0.0})
+	var child: int = drawer.add_multimesh_group(draw, {"mesh": mesh.get_rid(), "visibility_begin": 3.0, "visibility_end": 400.0, "priority": 1.0})
+	var unlinked := mapping.duplicate()
+	unlinked[0] = -1
+	drawer.link_impostor(impostor, child, swap, unlinked)
+	var violations := 0
+	for i in 1000:
+		var step: Dictionary = drawer.step(1)
+		var imp: Dictionary = drawer.get_group_info(impostor)
+		var ready: bool = drawer.get_group_info(child).ready
+		for b in imp.created:
+			if not is_equal_approx(imp.visibility_begins[b], swap if ready else 0.0):
+				violations += 1
+		if step.pending_create == 0:
+			break
+	check(violations == 0, "batches: each covered impostor batch swaps exactly when the child is ready (%d violations)" % violations)
+	var kid: Dictionary = drawer.get_group_info(child)
+	check(kid.impostor_link.batches == unlinked and kid.impostor_link.batch == -1, "batches: the child reports its per-batch link")
+	check(kid.visibility_begins[0] == 3.0, "batches: a batch mapped to -1 keeps its own range")
+	var parented := 0
+	for b in range(1, draw.batch_count):
+		parented += 1 if kid.visibility_begins[b] == 0.0 else 0
+	check(parented == draw.batch_count - 1, "batches: every other batch takes its impostor batch as parent (%d)" % parented)
+	drawer.remove_group(child)
+	var begins: PackedFloat32Array = drawer.get_group_info(impostor).visibility_begins
+	check(begins.count(0.0) == impostor_section.batch_count, "batches: removing the child puts every impostor batch back to begin 0 (%s)" % begins)
+	child = drawer.add_multimesh_group(draw, {"mesh": mesh.get_rid(), "visibility_end": 400.0})
+	drawer.link_impostor(impostor, child, swap, mapping)
+	drain(drawer, 1000000)
+	drawer.unlink_impostor(impostor, child)
+	begins = drawer.get_group_info(impostor).visibility_begins
+	check(begins.count(0.0) == impostor_section.batch_count and not drawer.get_group_info(child).has("impostor_link"), "batches: unlink returns both groups to their own range")
+	drawer.remove_group(child)
+	drawer.remove_group(impostor)
+	drain(drawer, 1000000)
+	var stats: Dictionary = drawer.get_stats()
+	check(stats.objects == 0 and stats.multimeshes == 0, "batches: nothing left: %s" % stats)
+	remove_tree(dir)
+
+
 ## impostor_min_scale: instances of a linked instance group below it keep their own range and
 ## take no visibility parent; the others swap with the impostor.
 func test_impostor_min_scale(path: String) -> void:
@@ -460,6 +533,7 @@ func run() -> void:
 	await test_drawer(path)
 	await test_impostor_link(path)
 	test_impostor_min_scale(path)
+	test_impostor_batches()
 	test_shadow_margin()
 	await test_colliders(path)
 	test_file_loader(path)

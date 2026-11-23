@@ -180,20 +180,24 @@ The node resolves each object path once and passes the build a plain descriptor:
 | `default_color`, `default_custom` | used where a point carries none |
 | `collider`, `collider_min_scale` | whether instances get a collider, and the smallest scale that does |
 | `impostor`, `impostor_cell_size`, `impostor_min_scale` | whether instances get an impostor, the far grid's cell size (a multiple of the cell size; the store node's `impostor_cell_size`, which it passes to `CopiaObject.descriptor()`), and the smallest scale that does |
+| `impostor_batch_size` | impostor batch cell in metres: a divisor of the cell size and, for a multimesh object, a multiple of `batch_size`; 0 or absent is the cell size |
 | `hash` | hash of everything above; a change makes the built cells that used it stale |
 
 Types and defaults: `draw` `"multimesh"`; `mesh_aabb` an `AABB`, empty at the origin; `batch_size`
 the cell size; `default_color` a `Color`, white; `default_custom` a `Color` or `Vector4`, zero;
 `collider` false; `collider_min_scale` 0; `impostor` false; `impostor_cell_size` 0;
-`impostor_min_scale` 0; `hash` a `String` or `int`. When `hash` is absent or empty, the build uses
-the SHA-256 of the fields above as the build reads them. An object path that appears in the sets
+`impostor_min_scale` 0; `impostor_batch_size` 0 (the cell size); `hash` a `String` or `int`. When
+`hash` is absent or empty, the build uses the SHA-256 of the fields above as the build reads
+them; an `impostor_batch_size` equal to the cell size is left out of it, so the default keeps the
+hash of builds made before the field existed. An object path that appears in the sets
 but not in `objects` is built with all defaults (batch size = cell size, white colour, zero
 custom, no collider, no impostor); the result lists it under `defaulted` and its directory entry
 is marked.
 
 The store has one far grid: every object with an impostor must give the same
 `impostor_cell_size`. A `batch_size` that does not divide the cell size, an `impostor_cell_size`
-that is not a multiple of it, or two far grid sizes reject the call.
+that is not a multiple of it, two far grid sizes, or an `impostor_batch_size` that does not divide
+the cell size (or, for a multimesh object, is not a multiple of its `batch_size`) reject the call.
 
 An instance's scale, where a rule compares it, is the length of its basis Y column.
 
@@ -224,11 +228,16 @@ custom, keep bytes); extra columns are not build inputs.
 - **Colliders.** For objects with `collider`: the transforms (same layout) of the instances whose
   scale is at least `collider_min_scale`, in canonical order. MultiMesh objects get them too.
 - **Impostors.** For objects with `impostor`, the instances whose scale is at least
-  `impostor_min_scale` form one impostor batch per object and cell (batch cell = the cell),
-  stored in the built cell as its own section and built like a MultiMesh batch.
+  `impostor_min_scale` form one impostor batch per object and cell (batch cell = the cell), or
+  with a smaller `impostor_batch_size` one per non-empty impostor batch cell (batch cell in that
+  grid: for a multimesh object the floor of its draw batch cell ÷ `impostor_batch_size /
+  batch_size`, so a draw batch lies in one impostor batch; for single instances
+  `floor(x / impostor_batch_size)` clamped into the cell), stored in the built cell as its own
+  section and built like MultiMesh batches.
 - **Far cells.** Far cell `(fx, fz)` covers cells `fx * n` to `fx * n + n - 1` on each axis, `n =
   impostor_cell_size / cell_size`. It is assembled from the impostor sections of the built cells
-  inside it, one batch per object and cell, ordered by cell x, then z; it reads no set file. A
+  inside it, their batches per object in cell order (x, then z), each keeping its batch cell; it
+  reads no set file. A
   build of a cell rebuilds the far cell it lies in after all cells of the call are built.
 
 A build of the same inputs is byte-identical: nothing in a file depends on time, thread order or
@@ -531,7 +540,7 @@ shadow twin) or one single instance.
 | `set_density(fraction)`, `density` | visible instance count of every batch from its keep counts |
 | `set_group_density(group, fraction)`, `get_group_density(group)` | the group's share of `density` (default 1): its batches show the keep counts of `density` × `fraction`, by the same rule; applied to created batches at once |
 | `get_group_rids(group) -> Array[RID]` | the instance RIDs created so far, in batch or instance order (no shadow twins) |
-| `get_group_info(group) -> Dictionary` | `{id, kind ("multimesh" or "instance"), state ("queued", "partial", "created"), ready, count, created, instance_count, density (the group's share), params (every key, defaults included), bounds (AABB of the object origins, store space), shadows_on, visible_counts (multimesh), visibility_begins (per created object, the begin it has now), impostor_link ({impostor, batch, swap_distance, parent}, on a linked child), linked_children (PackedInt64Array)}`; `{}` for an unknown id |
+| `get_group_info(group) -> Dictionary` | `{id, kind ("multimesh" or "instance"), state ("queued", "partial", "created"), ready, count, created, instance_count, density (the group's share), params (every key, defaults included), bounds (AABB of the object origins, store space), shadows_on, visible_counts (multimesh), visibility_begins (per created object, the begin it has now), impostor_link ({impostor, batch, swap_distance, parent}, on a linked child; linked per object, `batch` is -1, `batches` holds the per-object batches and `parent` is empty), linked_children (PackedInt64Array)}`; `{}` for an unknown id |
 | `get_group_count()`, `get_stats()` | `get_stats()`: `{groups, queued_groups, objects (live RenderingServer instances: batches, single instances, shadow twins and warm-up), instances (the instances the live groups' created objects draw: a batch's visible count at the current density, 1 per single instance; visibility ranges and impostor swaps are not considered), multimeshes (live RIDs, warm-up included), pending_create, pending_free, warm_up, created_total, freed_total}` |
 | `warm_up(mesh, material = RID(), uses_color = true, uses_custom = true)` | see below |
 | `link_impostor(impostor_group, child_group, swap_distance, batch = 0)`, `unlink_impostor(impostor_group, child_group)` | see "Impostor swap" |
@@ -666,9 +675,12 @@ parents (HLOD: a child is drawn exactly while its parent is hidden by the parent
 
 - `link_impostor(impostor_group, child_group, swap_distance, batch = 0)`: the impostor group is a
   multimesh group; `batch` is the batch that stands for the child (a built cell's impostor section
-  has one per object and cell; for a far cell group, the batch of the child's cell). The child is
-  the same object's instance or multimesh group of that cell. Linking a child that is linked
-  elsewhere unlinks it first.
+  has one per object and cell; for a far cell group, the batch of the child's cell), or a
+  `PackedInt32Array` with one impostor batch per child object (batch or instance; -1: that object
+  keeps its own range), for an object whose `impostor_batch_size` is smaller than the cell. The
+  child is the same object's instance or multimesh group of that cell. Linking a child that is
+  linked elsewhere unlinks it first. The rules below apply per impostor batch: to the child
+  objects it stands for.
 - The child's objects flagged by `parented` (all when absent) and, for an instance group, at or
   above its `impostor_min_scale` get the impostor batch's instance as visibility parent and no
   range of their own (begin and end 0); the others keep their own range and `visibility_parent`. A child object created before its impostor batch exists keeps its own
