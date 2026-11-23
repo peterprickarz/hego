@@ -5,12 +5,8 @@ compatibility_minimum = "4.4"
 
 [libraries]
 
-; Build the platform's debug and release binaries before running or exporting.
-; macOS installs the selected architecture at these stable paths. Build with
-; arch=universal (or ARCH=universal scripts/build.sh macos) to support both Mac CPUs.
+; HEGo ships Linux x86_64 and Windows x86_64 libraries only. macOS is not supported.
 
-macos.debug = "res://addons/hego/bin/libhego.macos.template_debug.dylib"
-macos.release = "res://addons/hego/bin/libhego.macos.template_release.dylib"
 linux.debug.x86_64 = "res://addons/hego/bin/libhego.linux.template_debug.x86_64.so"
 linux.release.x86_64 = "res://addons/hego/bin/libhego.linux.template_release.x86_64.so"
 windows.debug.x86_64 = "res://addons/hego/bin/hego.windows.template_debug.x86_64.dll"

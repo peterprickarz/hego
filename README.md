@@ -51,12 +51,12 @@ git submodule update --init --recursive
 ### Prerequisites
 
 - **Python 3.8+** with SCons: `python -m pip install scons`
-- **C++17 compiler**: Xcode Command Line Tools on macOS, GCC on Linux, or Visual Studio 2022 on Windows
+- **C++17 compiler**: GCC on Linux, or Visual Studio 2022 on Windows
 - **Git** for cloning and submodules
 
-See [Building on macOS and Linux](BUILDING.md) for native builds, Apple Silicon/Intel
-binaries, and cross-compiling from Linux to macOS with OSXCross. Only HAPI headers
-are required to compile; Houdini itself is needed when running a session.
+HEGo ships Linux x86_64 and Windows x86_64 libraries only; macOS is not supported. See
+[Building on Linux](BUILDING.md) for native and redistributable Linux builds. Only HAPI
+headers are required to compile; Houdini itself is needed when running a session.
 
 ### Quick Setup
 
@@ -78,7 +78,7 @@ are required to compile; Houdini itself is needed when running a session.
 
 ### Building
 
-**macOS / Linux**
+**Linux**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
