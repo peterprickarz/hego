@@ -664,7 +664,7 @@ func is_settled() -> bool:
 		return true
 	if SourceScript._revision != _source_revision:
 		return false  # a source changed and the update that follows has not run
-	if _update_needed or _build_thread != null or not _requests.is_empty() or not _dir_requests.is_empty() or not _replacing.is_empty():
+	if _update_needed or _build_thread != null or not _requests.is_empty() or not _dir_requests.is_empty() or not _replacing.is_empty() or not _tasks.is_empty():
 		return false
 	for stats in [_drawer.get_stats(), _colliders.get_stats()]:
 		if int(stats.get("pending_create", 0)) != 0 or int(stats.get("pending_free", 0)) != 0:
