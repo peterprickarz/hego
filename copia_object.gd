@@ -228,6 +228,7 @@ func descriptor(impostor_cell_size := 0.0) -> Dictionary:
 		"impostor": impostor_mesh != null,
 		"impostor_cell_size": impostor_cell_size if impostor_mesh != null else 0.0,
 		"impostor_min_scale": impostor_min_scale,
+		"impostor_batch_size": settings.impostor_batch_size if impostor_mesh != null else 0.0,
 	}
 
 

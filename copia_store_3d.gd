@@ -43,6 +43,7 @@ signal build_finished(report: Dictionary)
 const ObjectScript := preload("res://addons/copia/copia_object.gd")
 const RenderScript := preload("res://addons/copia/copia_render_settings.gd")
 const SourceScript := preload("res://addons/copia/copia_source_3d.gd")
+const DebugScript := preload("res://addons/copia/copia_debug.gd")
 const EXTENSION := "res://addons/copia/bin/copia.gdextension"
 ## Seconds between the last build input change of an object and the rebuild it causes.
 const REBUILD_DELAY := 0.5
@@ -90,7 +91,10 @@ class _Record extends RefCounted:
 	var token := 0  # request in flight
 	var revision := 0  # directory revision the group was read from
 	var count := 0  # collider bodies of the group
-	var batches := {}  # impostor: cell -> batch index
+	var batches := {}  # impostor: impostor batch cell -> batch index
+	# Draw record of an object whose impostor batch cell is smaller than the cell: the impostor
+	# batch cell of each batch (multimesh) or instance, x and z.
+	var impostor_cells := PackedInt32Array()
 	var failed := false
 	var requested_usec := 0  # when the section in use (or in flight) was requested
 	var handle := 0  # the record's handle in the streamer
@@ -182,6 +186,21 @@ class _Record extends RefCounted:
 		if not value and Engine.is_editor_hint():
 			_unload_all()
 
+@export_group("Debug")
+## Viewport debug view of every object of the store, for objects whose render settings'
+## [member CopiaRenderSettings.debug_view] is off (theirs wins otherwise); see
+## [enum CopiaRenderSettings.DebugView] and the reference page, "Debug views". Applied to the live
+## groups at once, like a draw override, with no build. Editor and debug state: shown in the
+## inspector but never saved with the scene.
+@export var debug_view: RenderScript.DebugView = RenderScript.DebugView.OFF:
+	set(value):
+		if debug_view == value: return
+		debug_view = value
+		for path in _objects:
+			if _objects[path] != null:
+				_apply_draw_params(_objects[path])
+		_report_debug_views()
+
 ## Rebuild the cells an object change makes stale (debounced, on a background thread), and
 ## check for stale cells when the node becomes ready. On by default in the editor and off in a
 ## running game; a tool script can turn it on before adding the node.
@@ -247,10 +266,16 @@ var _was_settled := true
 var _excluded_rects: Array[Rect2] = []  # run-time state, see set_excluded_rects
 var _draw_overrides := {}  # object path -> params merged into its draw params
 var _impostor_overrides := {}  # object path -> params merged into its impostor draw params
+var _debug_views := {}  # object path -> its debug view, for objects drawn with one
 
 
 func _init() -> void:
 	set_notify_transform(true)
+
+
+func _validate_property(property: Dictionary) -> void:
+	if property.name == "debug_view":
+		property.usage = PROPERTY_USAGE_EDITOR  # shown, never saved
 
 
 func _ready() -> void:
@@ -291,6 +316,7 @@ func _process(delta: float) -> void:
 	_drain_results()
 	_check_replacements()
 	_poll_build(delta)
+	DebugScript.sync_hidden()
 	if SourceScript._revision != _source_revision:
 		_update_needed = true  # a source entered, left or changed
 	_timer += delta
@@ -320,10 +346,19 @@ func _get_configuration_warnings() -> PackedStringArray:
 		var info = _info(path)
 		if info == null:
 			continue
-		var batch: float = info.object.descriptor(impostor_cell_size).batch_size
+		var descriptor: Dictionary = info.object.descriptor(impostor_cell_size)
+		var batch: float = descriptor.batch_size
 		var per_cell := cell_size / batch
 		if per_cell < 1.0 or not is_equal_approx(per_cell, roundf(per_cell)):
 			warnings.append("%s: batch_size %.2f m does not divide cell_size %.1f m; the build rejects it." % [path, batch, cell_size])
+		var impostor_batch: float = descriptor.impostor_batch_size
+		if descriptor.impostor and impostor_batch > 0.0:
+			var per_impostor := cell_size / impostor_batch
+			var per_draw := impostor_batch / batch
+			if per_impostor < 1.0 or not is_equal_approx(per_impostor, roundf(per_impostor)):
+				warnings.append("%s: impostor_batch_size %.2f m does not divide cell_size %.1f m; the build rejects it." % [path, impostor_batch, cell_size])
+			elif descriptor.draw == "multimesh" and (per_draw < 1.0 or not is_equal_approx(per_draw, roundf(per_draw))):
+				warnings.append("%s: impostor_batch_size %.2f m is not a multiple of batch_size %.2f m; the build rejects it." % [path, impostor_batch, batch])
 	return warnings
 
 
@@ -912,6 +947,7 @@ func _start() -> void:
 		_push_objects()
 	# Sources present now are found by the first regular update; later changes force one.
 	_source_revision = SourceScript._revision
+	_report_debug_views()
 	_scan()
 
 
@@ -931,6 +967,7 @@ func _stop() -> void:
 	_update_needed = false
 	_was_settled = true
 	_sources_known = false
+	_report_debug_views()  # nothing drawn: no view in use
 
 
 static func _ensure_native() -> bool:
@@ -1100,6 +1137,7 @@ func _info(path: String) -> Variant:
 	_refresh_info(info)
 	_objects[path] = info
 	_ranges_dirty = true
+	_report_debug_views()
 	return info
 
 
@@ -1120,6 +1158,7 @@ func _refresh_info(info: Dictionary) -> void:
 	info.draw_reach = render.visibility_range_end if render.visibility_range_end > 0.0 else INF
 	info.impostor_reach = render.impostor_range_end if render.impostor_range_end > 0.0 else INF
 	info.has_impostor = object.impostor_mesh != null
+	info.impostor_batch_size = render.impostor_batch_size
 	info.has_mesh = object.mesh != null
 	var physics = object.physics
 	info.has_physics = physics != null and physics.has_collider()
@@ -1193,14 +1232,41 @@ func _on_object_changed(path: String) -> void:
 	update_configuration_warnings()
 
 
-# The object's draw params (or impostor draw params) with the run-time override merged in.
+# The object's draw params (or impostor draw params) with the run-time override merged in, then
+# its debug view applied: after the hooks and the override, so a game's own material_override is
+# replaced too, and only the material (and for the LOD view the mesh) changes.
 func _object_params(object, path: String, impostor: bool) -> Dictionary:
 	var params: Dictionary = object._get_impostor_draw_params() if impostor else object._get_draw_params()
 	var override: Dictionary = (_impostor_overrides if impostor else _draw_overrides).get(path, {})
 	if not override.is_empty():
 		params = params.duplicate()
 		params.merge(override, true)
-	return params
+	var view := DebugScript.effective_view(object, debug_view)
+	if view == RenderScript.DebugView.OFF:
+		_debug_views.erase(path)
+		return params
+	_debug_views[path] = view
+	var batch_size := 0.0
+	var store_inverse := Transform3D.IDENTITY
+	if view == RenderScript.DebugView.BATCHES or view == RenderScript.DebugView.SHADOW_RANGE:
+		var descriptor: Dictionary = object.descriptor(impostor_cell_size)
+		if impostor:
+			batch_size = descriptor.impostor_batch_size if descriptor.impostor_batch_size > 0.0 else cell_size
+		elif descriptor.draw == "multimesh":
+			batch_size = descriptor.batch_size
+		if is_inside_tree():
+			store_inverse = global_transform.affine_inverse()
+	return DebugScript.apply(params, object, impostor, view, batch_size, store_inverse, path.hash() & 0x7fffffff)
+
+
+# Tells the debug views which views this store draws with, so caches no store uses are released.
+# Called after the drawer has the new params; nothing is in use while the node is out of the world.
+func _report_debug_views() -> void:
+	var views := {}
+	if _drawer != null:
+		for path in _debug_views:
+			views[_debug_views[path]] = true
+	DebugScript.set_store_views(get_instance_id(), views)
 
 
 # Passes the draw params that changed since the live groups were given theirs (an object change
@@ -1244,6 +1310,7 @@ func _apply_draw_params(info: Dictionary, physics_changed := false) -> void:
 			var record: _Record = _live[cell].get(path, {}).get("draw")
 			if record != null and record.group != 0:
 				_link_child(record)  # the swap distance follows the range end
+	_report_debug_views()
 
 
 # The keys of [param now] whose value differs from [param before] (every key when there was none).
@@ -1702,6 +1769,8 @@ func _on_section(record: _Record, section: Dictionary) -> void:
 			var batch_cells: PackedInt32Array = section.batch_cells
 			for b in section.batch_count:
 				record.batches[Vector2i(batch_cells[b * 2], batch_cells[b * 2 + 1])] = b
+		elif record.kind == "draw":
+			record.impostor_cells = _impostor_cells(info, record, section)
 		var params := _draw_params(info, record)
 		if section.kind == "multimesh":
 			id = _drawer.add_multimesh_group(section, params)
@@ -1750,19 +1819,73 @@ func _far_of(cell: Vector2i) -> Vector2i:
 	return Vector2i(floori(float(cell.x) / per_far), floori(float(cell.y) / per_far))
 
 
-# Links a draw group to its impostor batch, when the far cell's impostor group is live.
+# Impostor batch cells per cell of an object: 1 when its impostor batch is the cell.
+func _impostor_per_cell(info) -> int:
+	var size: float = info.get("impostor_batch_size", 0.0) if info != null else 0.0
+	if size <= 0.0:
+		return 1
+	return maxi(roundi(cell_size / size), 1)
+
+
+# The impostor batch cell of each batch or instance of a draw section, as the build assigns
+# them, when the object's impostor batch cell is smaller than the cell; empty otherwise.
+func _impostor_cells(info: Dictionary, record: _Record, section: Dictionary) -> PackedInt32Array:
+	var cells := PackedInt32Array()
+	var per_cell := _impostor_per_cell(info)
+	if not info.has_impostor or per_cell == 1:
+		return cells
+	if section.kind == "multimesh":
+		# A draw batch lies inside one impostor batch cell: its cell, floor-divided.
+		var batch_cells: PackedInt32Array = section.batch_cells
+		var batch: float = info.object.descriptor(impostor_cell_size).batch_size
+		var per_draw := maxi(roundi(cell_size / batch) / per_cell, 1)
+		cells.resize(batch_cells.size())
+		for i in batch_cells.size():
+			cells[i] = floori(float(batch_cells[i]) / per_draw)
+	else:
+		var transforms: PackedFloat32Array = section.transforms
+		var size := cell_size / per_cell
+		var count := transforms.size() / 12
+		cells.resize(count * 2)
+		for i in count:
+			for axis in 2:
+				var value := floori(float(transforms[i * 12 + 9 + axis * 2]) / size)
+				var low := (record.cell.x if axis == 0 else record.cell.y) * per_cell
+				cells[i * 2 + axis] = clampi(value, low, low + per_cell - 1)
+	return cells
+
+
+# Links a draw group to its impostor batch (or, with a finer impostor batch cell, each of its
+# batches or instances to theirs), when the far cell's impostor group is live.
 func _link_child(record: _Record) -> void:
 	var info = _objects.get(record.path)
 	if info == null or not info.has_impostor or info.range_end <= 0.0 or record.group == 0:
 		return
 	var impostor: _Record = _far_live.get(_far_of(record.cell), {}).get(record.path)
-	if impostor == null or impostor.group == 0 or not impostor.batches.has(record.cell):
+	if impostor == null or impostor.group == 0:
 		return
-	_drawer.link_impostor(impostor.group, record.group, info.range_end * record.range_scale, impostor.batches[record.cell])
+	var swap: float = info.range_end * record.range_scale
+	if record.impostor_cells.is_empty():
+		if impostor.batches.has(record.cell):
+			_drawer.link_impostor(impostor.group, record.group, swap, impostor.batches[record.cell])
+		return
+	var per_object := PackedInt32Array()
+	per_object.resize(record.impostor_cells.size() / 2)
+	var any := false
+	for i in per_object.size():
+		var batch: int = impostor.batches.get(Vector2i(record.impostor_cells[i * 2], record.impostor_cells[i * 2 + 1]), -1)
+		per_object[i] = batch
+		any = any or batch >= 0
+	if any:
+		_drawer.link_impostor(impostor.group, record.group, swap, per_object)
 
 
 func _link_children(impostor: _Record) -> void:
-	for cell in impostor.batches:
+	var per_cell := _impostor_per_cell(_objects.get(impostor.path))
+	var cells := {}
+	for batch_cell in impostor.batches:
+		cells[Vector2i(floori(float(batch_cell.x) / per_cell), floori(float(batch_cell.y) / per_cell))] = true
+	for cell in cells:
 		var record: _Record = _live.get(cell, {}).get(impostor.path, {}).get("draw")
 		if record != null and record.group != 0:
 			_link_child(record)

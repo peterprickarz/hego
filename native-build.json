@@ -1,21 +1,21 @@
 {
   "format_version": 1,
-  "source_fingerprint": "5130f04cb7e5eace4857eba3368387538bff3cc9547ad0e1d98295e710e5f69e",
+  "source_fingerprint": "f7b5f0e65874b2ab51a51121cc7a159a6c1264caa2bd6b9764ee14011d74a811",
   "artifacts": {
     "bin/copia.windows.template_debug.x86_64.dll": {
-      "sha256": "69995e443d5bbaea0c84499a4f3d550af100af7f1057aacdbee012860fcf0df1",
-      "build_context": "platform=windows,target=template_debug,arch=x86_64,profile=host,compiler=MSVC 19.36.32543,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
+      "sha256": "57115883906819d40549c206829cede3e226ad28fa16f0617d4f543680337696",
+      "build_context": "platform=windows,target=template_debug,arch=x86_64,profile=host,compiler=MSVC,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/copia.windows.template_release.x86_64.dll": {
-      "sha256": "ae2fe0fdb476e088a794f6f9918714ab0f1882357844c59dbc342194117392df",
-      "build_context": "platform=windows,target=template_release,arch=x86_64,profile=host,compiler=MSVC 19.36.32543,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
+      "sha256": "da9a466a62512a67c4247f14d9ce96b3cb23ca4f3a4d36192724f74ee09b8631",
+      "build_context": "platform=windows,target=template_release,arch=x86_64,profile=host,compiler=MSVC,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/libcopia.linux.template_debug.x86_64.so": {
-      "sha256": "47dfb963776eb2b0a50f3ee6230d8f5df20e65322e8592257ba40d28dbf1c81a",
+      "sha256": "85fa97b8d11f10c6f372acd11c0b564623b300b3f3feba399cc70fffa6cd9f26",
       "build_context": "platform=linux,target=template_debug,arch=x86_64,profile=linux-compat,compiler=g++ (GCC) 13.3.1 20240611 (Red Hat 13.3.1-2);image=8761c0420e030f5b16c8af0de580f108d367260f3e5e143ba56389fe9bd84363,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/libcopia.linux.template_release.x86_64.so": {
-      "sha256": "a1bd915eb195fb0aff07a4875b031dbec8d9be293f33c46e31fb7deafd5cd181",
+      "sha256": "bd1cb8f7abdd399f2db7967c6eb400e630a819f6299b707573c6eb4c1d8852d4",
       "build_context": "platform=linux,target=template_release,arch=x86_64,profile=linux-compat,compiler=g++ (GCC) 13.3.1 20240611 (Red Hat 13.3.1-2);image=8761c0420e030f5b16c8af0de580f108d367260f3e5e143ba56389fe9bd84363,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     }
   }
