@@ -55,20 +55,6 @@ godot::Array flip_uv_v_axis(const godot::Array &uv_values)
 	return flipped;
 }
 
-godot::Array invert_vector3_array(const godot::Array &values)
-{
-	godot::Array inverted;
-	inverted.resize(values.size());
-
-	for (int i = 0; i < values.size(); ++i)
-	{
-		godot::Vector3 v = values[i];
-		inverted[i] = -v;
-	}
-
-	return inverted;
-}
-
 godot::String custom_channel_key(int channel) { return godot::String("hego_custom_channel") + godot::String::num_int64(channel); }
 
 bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &point_attribs, HAPI_PartInfo &out_part, godot::Array &out_prims,
@@ -114,8 +100,12 @@ bool prepare_surface_data(GeoCache &cache, const godot::PackedStringArray &point
 		}
 		else if (name == "tangents")
 		{
+			// Keep Houdini's tangentv (+dP/dV_houdini = up in texture space = -dP/dV_godot).
+			// Flipping UV.y to Godot's top-left origin does not flip OpenGL normal-map +Y (+G = up):
+			// Godot's QuadMesh, SurfaceTool::generate_tangents(), and Forward+ shaders expect
+			// BINORMAL = cross(NORMAL, TANGENT) * w to point up in texture space (+dP/dV_houdini).
 			out_point_attrs["tangentu"] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, "tangentu");
-			out_point_attrs["tangentv"] = invert_vector3_array(cache.attribute(out_part, HAPI_ATTROWNER_POINT, "tangentv"));
+			out_point_attrs["tangentv"] = cache.attribute(out_part, HAPI_ATTROWNER_POINT, "tangentv");
 		}
 		else
 		{
