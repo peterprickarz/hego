@@ -112,22 +112,36 @@ class _Panel:
 		for entry in summary:
 			files += int(entry.cells)
 			instances += int(entry.instances)
-			_add_set_row(entry.set, entry.cells, entry.instances)
+			_add_set_row(entry.set, entry.cells, entry.instances, str(entry.get("kind", "generated")), bool(entry.get("locked", false)))
 		_totals.text = "%d sets, %d set files, %s instances, %s" % [summary.size(), files, _group(instances), _stale_text]
 		_set_buttons(true)
 
-	func _add_set_row(set_name: String, cell_count: int, instance_count: int) -> void:
+	func _add_set_row(set_name: String, cell_count: int, instance_count: int, kind := "generated", locked := false) -> void:
 		var row := HBoxContainer.new()
+		var badge := "[%s%s]" % [kind, ", locked" if locked else ""]
 		var label := Label.new()
-		label.text = "%s: %d cells, %s instances" % [set_name, cell_count, _group(instance_count)]
+		label.text = "%s %s: %d cells, %s instances" % [set_name, badge, cell_count, _group(instance_count)]
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
+		var lock_btn := Button.new()
+		lock_btn.text = "Unlock" if locked else "Lock"
+		lock_btn.tooltip_text = "Toggles write protection on this set in sets/manifest.json."
+		lock_btn.pressed.connect(_toggle_lock.bind(set_name, kind, not locked))
+		row.add_child(lock_btn)
 		var remove := Button.new()
 		remove.text = "Remove"
-		remove.tooltip_text = "Deletes the set's files and rebuilds the cells it had content in."
-		remove.pressed.connect(_ask_remove.bind(set_name))
+		remove.disabled = locked
+		remove.tooltip_text = "Locked set cannot be removed." if locked else "Deletes the set's files and rebuilds the cells it had content in."
+		remove.pressed.connect(_ask_remove.bind(set_name, kind))
 		row.add_child(remove)
 		_sets.add_child(row)
+
+	func _toggle_lock(set_name: String, kind: String, locked: bool) -> void:
+		if _busy or _building() or not _valid():
+			return
+		var res: Dictionary = store.configure_set(set_name, kind, locked)
+		_update_counts()
+		_status.text = "%s %s" % [set_name, "locked" if locked else "unlocked"] if res.get("ok", false) else str(res.get("error", "failed"))
 
 	static func _group(value: int) -> String:
 		var text := str(value)
@@ -146,13 +160,18 @@ class _Panel:
 		_refresh.disabled = not can
 		for row in _sets.get_children():
 			row.get_child(1).disabled = not can
+			var locked: bool = row.get_child(1).text == "Unlock"
+			row.get_child(2).disabled = not can or locked
 
-	func _ask_remove(set_name: String) -> void:
+	func _ask_remove(set_name: String, kind := "generated") -> void:
 		if _busy or _building():
 			return
 		_pending_set = set_name
-		_confirm.title = "Remove set"
-		_confirm.dialog_text = "Delete set \"%s\" and rebuild the cells it had content in? This cannot be undone." % set_name
+		_confirm.title = "Remove authored set" if kind == "authored" else "Remove set"
+		if kind == "authored":
+			_confirm.dialog_text = "Delete HAND-AUTHORED set \"%s\" and rebuild its cells? Hand-placed/painted data cannot be recooked and this cannot be undone." % set_name
+		else:
+			_confirm.dialog_text = "Delete set \"%s\" and rebuild the cells it had content in? This cannot be undone." % set_name
 		_confirm.popup_centered()
 
 	func _on_remove_confirmed() -> void:

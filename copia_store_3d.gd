@@ -267,6 +267,7 @@ var _excluded_rects: Array[Rect2] = []  # run-time state, see set_excluded_rects
 var _draw_overrides := {}  # object path -> params merged into its draw params
 var _impostor_overrides := {}  # object path -> params merged into its impostor draw params
 var _debug_views := {}  # object path -> its debug view, for objects drawn with one
+var _active_suppressions := {}  # object path -> PackedFloat32Array (editor-only live suppressions)
 
 
 func _init() -> void:
@@ -367,14 +368,16 @@ func _get_configuration_warnings() -> PackedStringArray:
 
 ## Applies [param clears] and [param points] with [code]CopiaSets.apply[/code] (the design page's
 ## "Writing points" describes both), builds the touched cells and refreshes those that are loaded.
+## [param intent] is [code]"any"[/code], [code]"generated"[/code] or [code]"authored"[/code] and
+## enforces set ownership against [code]sets/manifest.json[/code].
 ## Returns [code]{ok, error, apply, build}[/code] with both native results.
-func write(clears: Array, points: Dictionary) -> Dictionary:
+func write(clears: Array, points: Dictionary, intent := "any") -> Dictionary:
 	_quiesce()
 	var report := {"ok": false, "error": "", "apply": {}, "build": {}}
 	if data_directory.is_empty():
 		report.error = "no data directory"
 		return report
-	var applied: Dictionary = _native_static("CopiaSets", "apply", [data_directory, cell_size, clears, points])
+	var applied: Dictionary = _native_static("CopiaSets", "apply", [data_directory, cell_size, clears, points, intent])
 	report.apply = applied
 	if not applied.get("ok", false):
 		report.error = applied.get("error", "apply failed")
@@ -389,6 +392,140 @@ func write(clears: Array, points: Dictionary) -> Dictionary:
 	report.ok = report.build.get("ok", false)
 	report.error = report.build.get("error", "")
 	return report
+
+
+## Writes procedural/generated points and clears; refused if any target set is authored or locked.
+func write_generated(clears: Array, points: Dictionary) -> Dictionary:
+	return write(clears, points, "generated")
+
+
+## Writes hand-authored points and clears; refused if any target set is generated or locked.
+func write_authored(clears: Array, points: Dictionary) -> Dictionary:
+	return write(clears, points, "authored")
+
+
+## Atomically removes matching points and adds new points in [param set_name] (including cross-cell
+## moves). With [param async_build] true, schedules [method build_async] on the touched cells and
+## returns immediately; otherwise builds synchronously.
+func edit_points(set_name: String, removes: Dictionary, adds: Dictionary, intent := "authored", async_build := false) -> Dictionary:
+	_quiesce()
+	var report := {"ok": false, "error": "", "edit": {}, "build": {}, "cells": []}
+	if data_directory.is_empty():
+		report.error = "no data directory"
+		return report
+	var edited: Dictionary = _native_static("CopiaSets", "edit_points", [data_directory, cell_size, set_name, removes, adds, intent])
+	report.edit = edited
+	if not edited.get("ok", false):
+		report.error = edited.get("error", "edit_points failed")
+		return report
+	_load_object_paths()
+	var cells: Array = edited.get("cells", [])
+	report.cells = cells
+	if cells.is_empty():
+		report.ok = true
+		report.build = _empty_build()
+		return report
+	if async_build:
+		report.ok = build_async(cells, false)
+		if not report.ok:
+			report.build = _build_now(cells, false)
+			report.ok = report.build.get("ok", false)
+			report.error = report.build.get("error", "")
+		return report
+	report.build = _build_now(cells, false)
+	report.ok = report.build.get("ok", false)
+	report.error = report.build.get("error", "")
+	return report
+
+
+## Removes points in [param set_name] within [param radius] of store-local [param center],
+## optionally filtered to [param object_filter]. Returns [code]{ok, error, erase, build, cells}[/code].
+func erase_in_sphere(set_name: String, center: Vector3, radius: float, object_filter := PackedStringArray(), intent := "authored", async_build := false) -> Dictionary:
+	_quiesce()
+	var report := {"ok": false, "error": "", "erase": {}, "build": {}, "cells": []}
+	if data_directory.is_empty():
+		report.error = "no data directory"
+		return report
+	var erased: Dictionary = _native_static("CopiaSets", "erase_in_sphere", [data_directory, cell_size, set_name, center, radius, PackedStringArray(object_filter), intent])
+	report.erase = erased
+	if not erased.get("ok", false):
+		report.error = erased.get("error", "erase_in_sphere failed")
+		return report
+	_load_object_paths()
+	var cells: Array = erased.get("cells", [])
+	report.cells = cells
+	if cells.is_empty():
+		report.ok = true
+		report.build = _empty_build()
+		return report
+	if async_build:
+		report.ok = build_async(cells, false)
+		if not report.ok:
+			report.build = _build_now(cells, false)
+			report.ok = report.build.get("ok", false)
+			report.error = report.build.get("error", "")
+		return report
+	report.build = _build_now(cells, false)
+	report.ok = report.build.get("ok", false)
+	report.error = report.build.get("error", "")
+	return report
+
+
+## Declares or updates ownership metadata ([code]"generated"[/code] or [code]"authored"[/code] and
+## [param locked]) for [param set_name] in [code]sets/manifest.json[/code].
+func configure_set(set_name: String, kind: String, locked := false) -> Dictionary:
+	if data_directory.is_empty():
+		return {"ok": false, "error": "no data directory"}
+	return _native_static("CopiaSets", "set_meta", [data_directory, set_name, kind, locked])
+
+
+## Returns [code]{set_name: {kind, locked}}[/code] for every manifest entry and every set on disk.
+func get_sets_meta() -> Dictionary:
+	if data_directory.is_empty():
+		return {}
+	return _native_static("CopiaSets", "get_sets_meta", [data_directory])
+
+
+## Sorted names of sets marked [code]"authored"[/code] in [code]sets/manifest.json[/code].
+func list_authored_sets() -> PackedStringArray:
+	var meta := get_sets_meta()
+	var names: Array = []
+	for set_name in meta:
+		if str(meta[set_name].get("kind", "generated")) == "authored":
+			names.append(set_name)
+	names.sort()
+	return PackedStringArray(names)
+
+
+## Temporarily hides instances matching store-local [param transforms] (12 floats per instance)
+## in live and newly-streaming draw groups of [param object_path] until [method clear_suppressions].
+func suppress_transforms(object_path: String, transforms: PackedFloat32Array) -> int:
+	if transforms.size() < 12:
+		return 0
+	var existing: PackedFloat32Array = _active_suppressions.get(object_path, PackedFloat32Array())
+	existing.append_array(transforms)
+	_active_suppressions[object_path] = existing
+	if _drawer == null:
+		return 0
+	var group_ids := PackedInt64Array()
+	for cell in _live:
+		var records: Dictionary = _live[cell].get(object_path, {})
+		if records.has("draw"):
+			var record: _Record = records.draw
+			if record.group != 0:
+				group_ids.append(record.group)
+			if record.old_group != 0:
+				group_ids.append(record.old_group)
+	if group_ids.is_empty():
+		return 0
+	return int(_drawer.suppress_transforms(group_ids, transforms))
+
+
+## Restores any instances temporarily hidden by [method suppress_transforms].
+func clear_suppressions() -> void:
+	_active_suppressions.clear()
+	if _drawer != null:
+		_drawer.clear_suppressions()
 
 
 ## Builds [param cells] ([Vector2i] cells or [method stale_cells] entries); empty builds every
@@ -486,9 +623,14 @@ func set_summary() -> Array:
 	var rows: Dictionary = cell_points()
 	var sets: PackedStringArray = rows.get("set", PackedStringArray())
 	var counts: PackedInt32Array = rows.get("count", PackedInt32Array())
+	var meta: Dictionary = get_sets_meta()
 	var by_set := {}
 	for i in sets.size():
-		var entry: Dictionary = by_set.get_or_add(sets[i], {"set": sets[i], "cells": 0, "instances": 0})
+		var info: Dictionary = meta.get(sets[i], {})
+		var entry: Dictionary = by_set.get_or_add(sets[i], {
+			"set": sets[i], "cells": 0, "instances": 0,
+			"kind": str(info.get("kind", "generated")), "locked": bool(info.get("locked", false)),
+		})
 		entry.cells += 1
 		entry.instances += counts[i]
 	var names := by_set.keys()
@@ -1778,6 +1920,8 @@ func _on_section(record: _Record, section: Dictionary) -> void:
 			id = _drawer.add_instance_group(section, params)
 		if id != 0 and record.density < 1.0:
 			_drawer.set_group_density(id, record.density)  # before any object is created
+		if id != 0 and record.kind == "draw" and _active_suppressions.has(record.path):
+			_drawer.suppress_transforms(PackedInt64Array([id]), _active_suppressions[record.path])
 	if id == 0:
 		record.failed = true
 		return

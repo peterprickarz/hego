@@ -1,21 +1,21 @@
 {
   "format_version": 1,
-  "source_fingerprint": "f7b5f0e65874b2ab51a51121cc7a159a6c1264caa2bd6b9764ee14011d74a811",
+  "source_fingerprint": "4c246ac5f6be40c7c6875f19c53b73c2f404a340cf160bac0513123bdf57c322",
   "artifacts": {
     "bin/copia.windows.template_debug.x86_64.dll": {
-      "sha256": "57115883906819d40549c206829cede3e226ad28fa16f0617d4f543680337696",
+      "sha256": "7082204e6ff456e29f69948f64cb99130df64374d0626a952315867a51111a4a",
       "build_context": "platform=windows,target=template_debug,arch=x86_64,profile=host,compiler=MSVC,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/copia.windows.template_release.x86_64.dll": {
-      "sha256": "da9a466a62512a67c4247f14d9ce96b3cb23ca4f3a4d36192724f74ee09b8631",
+      "sha256": "1ce81b12d20c56dde74fd773ace219536b6f9673ac546a6a59e18c5cf718859a",
       "build_context": "platform=windows,target=template_release,arch=x86_64,profile=host,compiler=MSVC,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/libcopia.linux.template_debug.x86_64.so": {
-      "sha256": "85fa97b8d11f10c6f372acd11c0b564623b300b3f3feba399cc70fffa6cd9f26",
+      "sha256": "cece01fce5f5a19b8a170da93617b5fd8905b85fdc9ccaebdaa863bb52120ad6",
       "build_context": "platform=linux,target=template_debug,arch=x86_64,profile=linux-compat,compiler=g++ (GCC) 13.3.1 20240611 (Red Hat 13.3.1-2);image=8761c0420e030f5b16c8af0de580f108d367260f3e5e143ba56389fe9bd84363,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     },
     "bin/libcopia.linux.template_release.x86_64.so": {
-      "sha256": "bd1cb8f7abdd399f2db7967c6eb400e630a819f6299b707573c6eb4c1d8852d4",
+      "sha256": "c9295b06f2c5d3f9182e2d8b654ef11841aa3253bf0040cdfef245b65d5290c8",
       "build_context": "platform=linux,target=template_release,arch=x86_64,profile=linux-compat,compiler=g++ (GCC) 13.3.1 20240611 (Red Hat 13.3.1-2);image=8761c0420e030f5b16c8af0de580f108d367260f3e5e143ba56389fe9bd84363,godot_cpp=507ed9d840c01a3c5b2a39af8bb4000bfac30bf5"
     }
   }
