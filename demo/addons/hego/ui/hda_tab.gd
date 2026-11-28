@@ -1,40 +1,16 @@
 @tool
 extends Control
 
-## Represents a Parm Type from Houdini
-enum HEGoParmType {
-	INT = 0,
-	MULTIPARM = 1,
-	TOGGLE = 2,
-	BUTTON = 3,
-	FLOAT = 4,
-	STRING = 6,
-	FOLDER = 13,
-}
+const ParameterEditor := preload("res://addons/hego/ui/parameter_editor.gd")
+const ParameterLinks := preload("res://addons/hego/core/parameter_links.gd")
+const HelpPage := preload("res://addons/hego/ui/asset_help.gd")
 
-# These mappings are used to instantiate the correct UI controls for each parameter type.
-const PARM_UI_SCENES = {
-	HEGoParmType.INT: [
-		preload("res://addons/hego/parm_controls/int_parm_ui.tscn"),
-		preload("res://addons/hego/parm_controls/int2_parm_ui.tscn"),
-		preload("res://addons/hego/parm_controls/int3_parm_ui.tscn"),
-		preload("res://addons/hego/parm_controls/int4_parm_ui.tscn"),
-	],
-	HEGoParmType.TOGGLE: [preload("res://addons/hego/parm_controls/toggle_parm_ui.tscn")],
-	HEGoParmType.BUTTON: [preload("res://addons/hego/parm_controls/button_parm_ui.tscn")],
-	HEGoParmType.FLOAT: [
-		preload("res://addons/hego/parm_controls/float_parm_ui.tscn"),
-		preload("res://addons/hego/parm_controls/float2_parm_ui.tscn"),
-		preload("res://addons/hego/parm_controls/float3_parm_ui.tscn"),
-		preload("res://addons/hego/parm_controls/float4_parm_ui.tscn"),
-	],
-	HEGoParmType.STRING: [preload("res://addons/hego/parm_controls/string_parm_ui.tscn")],
-	HEGoParmType.FOLDER: [preload("res://addons/hego/parm_controls/folder_parm_ui.tscn")],
-	HEGoParmType.MULTIPARM: [
-		preload("res://addons/hego/parm_controls/multiparm_parm_ui.tscn"),
-		preload("res://addons/hego/parm_controls/multiparm_instance_parm_ui.tscn")
-	]
-}
+var _editor := ParameterEditor.new()
+var _containers := {}
+var _parameter_data := {}
+var _edit_revisions := {}
+var _changing_layout := {}
+var _rendering_parameters := false
 
 var hego_tool_node: Node
 ## Latest eligible scene selection, including changes made while the panel is locked.
@@ -55,6 +31,8 @@ var new_preset_name_diag: ConfirmationDialog
 var new_preset_name_line_edit: LineEdit
 
 @onready var lock_button: CheckButton = %LockPanelButton
+@onready var asset_help_button: Button = %AssetHelpButton
+@onready var help_notice: AcceptDialog = %HelpNotice
 @onready var auto_recook_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/VBoxContainer/CheckButton
 @onready var auto_start_session_toggle: CheckButton = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/HBoxContainer2/CheckButton
 @onready var asset_picker_button: Button = $HSplitContainer2/Settings/PanelContainer/VBoxContainer/AssetPickerButton
@@ -96,12 +74,18 @@ func _print_bottom_panel_timing(trigger: String, session_start_msec: float, reco
 	print("\n".join(lines))
 
 func _ready():
+	_editor.value_requested.connect(_on_value_changed)
+	_editor.instance_requested.connect(_on_instance_requested)
+	_editor.instance_count_requested.connect(_on_instance_count_requested)
+	_editor.node_requested.connect(_on_node_requested)
+	_editor.node_candidates = _node_candidates
 	new_preset_name_diag = preload("res://addons/hego/ui/new_preset_name_diag.tscn").instantiate()
 	new_preset_name_line_edit = new_preset_name_diag.get_node("%LineEdit")
 	add_child(new_preset_name_diag)
 	recook_button.pressed.connect(_on_recook_button_pressed)
 	rebuild_button.pressed.connect(_on_recook_button_pressed.bind(true))
 	asset_picker_button.pressed.connect(_on_asset_picker_button_pressed)
+	asset_help_button.pressed.connect(func(): _on_asset_help_pressed(hego_asset_node, asset_help_button))
 	lock_button.toggled.connect(_on_lock_toggled)
 	root_control.selected_hego_node_changed.connect(set_selected_node)
 	new_preset_button.pressed.connect(_on_new_preset_button_pressed)
@@ -124,6 +108,11 @@ func _ready():
 ## otherwise stay in the tree for a frame, still able to take input and still wired to the
 ## node that is no longer selected.
 func _clear_widgets():
+	asset_help_button.hide()
+	help_notice.hide()
+	_containers.clear()
+	_parameter_data.clear()
+	_rendering_parameters = true
 	for child in parm_vbox.get_children():
 		parm_vbox.remove_child(child)
 		child.queue_free()
@@ -131,6 +120,7 @@ func _clear_widgets():
 		input_vbox.remove_child(child)
 		child.queue_free()
 	input_nodes = []
+	_rendering_parameters = false
 
 
 func _set_buttons_disabled(disabled: bool):
@@ -169,21 +159,7 @@ func _panel_assets() -> Array:
 	if not is_instance_valid(hego_tool_node):
 		return []
 
-	if hego_tool_node.has_method("hego_get_panel_assets"):
-		var entries = hego_tool_node.hego_get_panel_assets()
-		if entries is Array:
-			var usable := []
-			for entry in entries:
-				if entry is Dictionary and _is_instantiated(entry.get("asset")):
-					usable.append(entry)
-			return usable
-
-	if hego_tool_node.has_method("hego_get_asset_node"):
-		var asset = hego_tool_node.hego_get_asset_node()
-		if _is_instantiated(asset):
-			return [{"label": "", "asset": asset, "highlight": false}]
-
-	return []
+	return ParameterLinks.panel_assets(hego_tool_node).filter(func(entry): return _is_instantiated(entry.get("asset")))
 
 
 ## Whether [param asset] is an HDA that exists in Houdini.
@@ -248,8 +224,11 @@ func update_ui():
 		update_preset_dropdown()
 		return
 
-	# A single HDA gets no header at all, so the node most people use looks unchanged.
 	var use_sections := entries.size() > 1
+	if not use_sections:
+		asset_help_button.tooltip_text = "Open help for %s" % hego_asset_node.op_name
+		asset_help_button.disabled = false
+		asset_help_button.show()
 	var highlighted_section: Control = null
 	# Recorded so the highlight poll does not read this rebuild as a fresh request and run
 	# straight into another one.
@@ -265,6 +244,8 @@ func update_ui():
 			parm_vbox.add_child(section)
 			section.setup(asset_label, asset.op_name, _open_sections.get(asset_label, true))
 			section.open_changed.connect(_on_section_open_changed)
+			section.help_button.tooltip_text = "Open help for %s" % asset.op_name
+			section.help_button.pressed.connect(_on_asset_help_pressed.bind(asset, section.help_button))
 			container = section.get_container()
 			if entry.get("highlight", false):
 				section.open()
@@ -275,9 +256,9 @@ func update_ui():
 		var parm_dict = await _await_task(asset.get_parms_dict())
 		if not _is_rebuild_current(generation, selected_node):
 			return
-		if parm_dict and parm_dict.keys().size() != 0:
-			for key in parm_dict.keys():
-				add_parm_ui(parm_dict[key], container, asset)
+		_containers[asset.get_instance_id()] = container
+		if parm_dict is Dictionary:
+			_render_parameters(parm_dict, container, asset)
 
 	# Input rows belong to the node rather than to one HDA - there is a single input stash -
 	# so they are shown against the first HDA the node listed. A node chaining several takes
@@ -295,6 +276,42 @@ func update_ui():
 			(parm_vbox.get_parent() as ScrollContainer).ensure_control_visible(highlighted_section)
 
 	update_preset_dropdown()
+
+
+func _load_asset_help(asset: HEGoAssetNode) -> Dictionary:
+	return await HEGoNodeUtil.checked_task(self, asset.get_help_page())
+
+
+func _open_asset_help_page(page: Dictionary, can_open: Callable) -> Error:
+	return await HelpPage.open_page(page, can_open)
+
+
+func _on_asset_help_pressed(asset: HEGoAssetNode, button: Button) -> void:
+	if not asset or not button.visible or button.disabled:
+		return
+	var generation := _rebuild_generation
+	var selected_node := hego_tool_node
+	button.disabled = true
+	var reply := await _load_asset_help(asset)
+	if not _is_rebuild_current(generation, selected_node):
+		return
+	var message := ""
+	if not reply.ok:
+		message = "Could not read help for %s. %s" % [asset.op_name, reply.message]
+	else:
+		# Embedded pages render asynchronously. Check ownership at launch time too.
+		var can_open := _is_rebuild_current.bind(generation, selected_node)
+		var error := await _open_asset_help_page(reply.value, can_open)
+		if not _is_rebuild_current(generation, selected_node):
+			return
+		if error == ERR_UNAVAILABLE:
+			message = "%s has no help page." % asset.op_name
+		elif error != OK and error != ERR_SKIP:
+			message = "Could not open help for %s. %s" % [asset.op_name, error_string(error)]
+	button.disabled = false
+	if not message.is_empty():
+		help_notice.dialog_text = message
+		help_notice.popup_centered()
 
 
 ## Builds one row per input of [param asset], filled from the node's input stash.
@@ -340,100 +357,78 @@ func _poll_highlight() -> void:
 	await update_ui()
 
 
-## Builds the widget for one parameter of [param asset] under [param parent].
-##
-## The asset is carried all the way down rather than read off a member, because the panel can
-## be showing several HDAs at once and a widget must write to the one it was built from.
-func add_parm_ui(parm_dict: Dictionary, parent: Control, asset: HEGoAssetNode):
-	var parm_type = parm_dict["type"]
-	
-	# Handle special cases that need custom logic
-	if parm_type == HEGoParmType.FOLDER:
-		_handle_folder_parm(parm_dict, parent, asset)
+func _render_parameters(parameters: Dictionary, container: Control, asset: HEGoAssetNode) -> void:
+	_parameter_data[asset.get_instance_id()] = parameters
+	_editor.add_parameters(parameters.values(), container, asset)
+	for control in container.find_children("*", "Control", true, false):
+		if not control.has_meta("hego_parm_name"):
+			continue
+		if control is LineEdit:
+			control.text_changed.connect(func(_text: String): control.set_meta("hego_draft", true))
+			control.text_submitted.connect(func(_text: String): control.set_meta("hego_draft", false))
+		elif control is TextEdit:
+			control.text_changed.connect(func(): control.set_meta("hego_draft", true))
+
+
+func _node_candidates(asset: HEGoAssetNode, descriptor: Dictionary) -> Array:
+	var host := hego_tool_node
+	if not is_instance_valid(host):
+		return []
+	var entries := ParameterLinks.candidates(host, asset)
+	if entries.is_empty():
+		return []
+	var nodes := []
+	for entry in entries:
+		nodes.append(entry.node)
+	var result := await HEGoNodeUtil.checked_task(self, asset.get_node_parm_candidates(descriptor.name, nodes))
+	if not result.ok or hego_tool_node != host:
+		return []
+	var matches := []
+	for i in mini(entries.size(), result.value.size()):
+		if result.value[i]:
+			matches.append(entries[i])
+	return matches
+
+
+func _on_instance_requested(name: String, id: int, position: int, insert: bool, asset: HEGoAssetNode) -> void:
+	if not _accepts_edit(asset):
 		return
-	elif parm_type == HEGoParmType.MULTIPARM:
-		_handle_multiparm_parm(parm_dict, parent, asset)
+	var task := asset.insert_multiparm_instance(id, position) if insert else asset.remove_multiparm_instance(id, position)
+	await _change_layout(asset, task, {"block": name, "position": position, "delta": 1 if insert else -1})
+
+
+func _on_instance_count_requested(name: String, count: int, asset: HEGoAssetNode) -> void:
+	if _accepts_edit(asset):
+		await _change_layout(asset, asset.set_parm(name, count), {"block": name, "position": 0, "delta": 0})
+
+
+func _change_layout(asset: HEGoAssetNode, task: HEGoTask, change: Dictionary) -> void:
+	var key := asset.get_instance_id()
+	var host := hego_tool_node
+	var container: Control = _containers[key]
+	_changing_layout[key] = true
+	container.mouse_behavior_recursive = Control.MOUSE_BEHAVIOR_DISABLED
+	container.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_DISABLED
+	var previous: Dictionary = _parameter_data.get(key, {})
+	await _finish_edit(asset, task, "", {}, previous, change)
+	_changing_layout.erase(key)
+	if is_instance_valid(container) and host == hego_tool_node and _containers.get(key) == container:
+		container.mouse_behavior_recursive = Control.MOUSE_BEHAVIOR_INHERITED
+		container.focus_behavior_recursive = Control.FOCUS_BEHAVIOR_INHERITED
+
+
+func _on_node_requested(name: String, source: Variant, asset: HEGoAssetNode) -> void:
+	if not _accepts_edit(asset):
 		return
-	
-	# Handle regular parameters using mapping
-	var parm_ui = _create_parm_ui(parm_type, parm_dict.get("size", 1))
-	if parm_ui:
-		_setup_common_parm(parm_ui, parm_dict, parent, asset)
-
-
-func _create_parm_ui(parm_type: int, size: int) -> Control:
-	if not parm_type in PARM_UI_SCENES:
-		return null
-		
-	var scenes = PARM_UI_SCENES[parm_type]
-	var scene_index = 0
-	
-	# For types with size-based variants (INT, FLOAT), select based on size
-	if parm_type in [HEGoParmType.INT, HEGoParmType.FLOAT]:
-		scene_index = max(0, min(size - 1, scenes.size() - 1))
-	
-	return scenes[scene_index].instantiate()
-
-
-func _setup_common_parm(parm_ui: Control, parm_dict: Dictionary, parent: Control, asset: HEGoAssetNode):
-	parent.add_child(parm_ui)
-	parm_ui.setup(parm_dict)
-	if parm_ui.has_signal("value_changed"):
-		parm_ui.value_changed.connect(_on_value_changed.bind(asset))
-
-
-func _handle_folder_parm(parm_dict: Dictionary, parent: Control, asset: HEGoAssetNode):
-	var parm_ui = PARM_UI_SCENES[HEGoParmType.FOLDER][0].instantiate()
-	parent.add_child(parm_ui)
-	parm_ui.setup(parm_dict)
-	if parm_ui.has_signal("value_changed"):
-		parm_ui.value_changed.connect(_on_value_changed.bind(asset))
-	for child in parm_dict["children"]:
-		add_parm_ui(child, parm_ui.get_container(), asset)
-
-
-func _handle_multiparm_parm(parm_dict: Dictionary, parent: Control, asset: HEGoAssetNode):
-	var multiparm_ui = PARM_UI_SCENES[HEGoParmType.MULTIPARM][0].instantiate()
-	parent.add_child(multiparm_ui)
-	multiparm_ui.setup(parm_dict)
-	multiparm_ui.instance_count_changed.connect(_on_multiparm_instance_count_changed.bind(asset))
-	var multiparm_instance_container = multiparm_ui.get_instance_container()
-	var instance_containers = Array()
-	var instance_start_offset = parm_dict["instance_start_offset"]
-	if instance_start_offset == 1:
-		instance_containers.append(null)
-	for i in range(parm_dict["instance_count"]):
-		var label = parm_dict["label"]
-		var id = parm_dict["id"]
-		var multiparm_instance_ui = PARM_UI_SCENES[HEGoParmType.MULTIPARM][1].instantiate()
-		multiparm_instance_container.add_child(multiparm_instance_ui)
-		multiparm_instance_ui.setup(i + instance_start_offset, id, label)
-		var instance_parm_container = multiparm_instance_ui.get_container()
-		instance_containers.append(instance_parm_container)
-		multiparm_instance_ui.insert_instance.connect(_on_insert_multiparm_instance.bind(asset))
-		multiparm_instance_ui.remove_instance.connect(_on_remove_multiparm_instance.bind(asset))
-	for instance in parm_dict["instances"]:
-		for instance_parm_dict in instance:
-			var instance_index = instance_parm_dict["instance_num"]
-			add_parm_ui(instance_parm_dict, instance_containers[instance_index], asset)
-			
-			
-func _on_multiparm_instance_count_changed(value: int, parm_dict: Dictionary, asset: HEGoAssetNode):
-	_notify_inputs_changed()
-	await _await_task(asset.set_parm(parm_dict["name"], value))
-	await update_ui()
-	
-
-func _on_insert_multiparm_instance(id: int, index: int, asset: HEGoAssetNode):
-	_notify_inputs_changed()
-	await _await_task(asset.insert_multiparm_instance(id, index))
-	await update_ui()
-	
-
-func _on_remove_multiparm_instance(id: int, index: int, asset: HEGoAssetNode):
-	_notify_inputs_changed()
-	await _await_task(asset.remove_multiparm_instance(id, index))
-	await update_ui()
+	var binding := {}
+	if source != null:
+		for entry in ParameterLinks.candidates(hego_tool_node, asset):
+			if entry.node == source:
+				binding = entry.source
+				break
+		if binding.is_empty():
+			return
+	await _finish_edit(asset, asset.set_node_parm(name, source), name, binding)
 
 
 ## The plugin supplies the selected node that opted into the panel, or null.
@@ -477,15 +472,119 @@ func _on_selected_node_exiting() -> void:
 	_follow_scene_selection()
 
 
-func _on_value_changed(name, value, asset: HEGoAssetNode):
-	var edited_node := hego_tool_node
-	_notify_inputs_changed()
-	await _await_task(asset.set_parm(name, value))
-	if not is_instance_valid(edited_node) or hego_tool_node != edited_node:
+func _mark_scene_changed(host: Node) -> void:
+	if not Engine.is_editor_hint() or not is_instance_valid(host) or not is_inside_tree():
 		return
-	if auto_recook_toggle.button_pressed and not _requires_explicit_recook():
+	var scene := get_tree().edited_scene_root
+	var editor := Engine.get_singleton("EditorInterface")
+	if scene and editor and (host == scene or scene.is_ancestor_of(host)):
+		editor.mark_scene_as_unsaved()
+
+
+func _accepts_edit(asset: HEGoAssetNode) -> bool:
+	var key := asset.get_instance_id()
+	return not _rendering_parameters and _containers.has(key) and not _changing_layout.has(key) and is_instance_valid(hego_tool_node)
+
+
+func _on_value_changed(name: String, value: Variant, asset: HEGoAssetNode) -> void:
+	if not _accepts_edit(asset):
+		return
+	# A literal Houdini path replaces any scene-node binding for the same parameter.
+	await _finish_edit(asset, asset.set_parm(name, value), name)
+
+
+func _finish_edit(asset: HEGoAssetNode, task: HEGoTask, name := "", binding := {}, previous_layout := {}, change := {}) -> void:
+	var host := hego_tool_node
+	var key := asset.get_instance_id()
+	var revision := int(_edit_revisions.get(key, 0)) + 1
+	_edit_revisions[key] = revision
+	var result := await HEGoNodeUtil.checked_task(self, task)
+	if not result.ok:
+		HEGoLog.get_singleton().error("parm", result.message)
+	elif is_instance_valid(host):
+		var asset_key := ParameterLinks.asset_key(host, asset)
+		var links := ParameterLinks.saved(host, asset_key)
+		if not previous_layout.is_empty() and not links.is_empty():
+			var current = await _await_task(asset.get_parms_dict())
+			if current is Dictionary and is_instance_valid(host):
+				links = ParameterLinks.remap_instances(links, previous_layout, current, change)
+				ParameterLinks.store(host, asset_key, links)
+		if not name.is_empty() and not asset_key.is_empty():
+			if not binding.is_empty():
+				links[name] = binding
+			else:
+				links.erase(name)
+			ParameterLinks.store(host, asset_key, links)
+		if host.has_method("hego_notify_cook_inputs_changed"):
+			host.hego_notify_cook_inputs_changed()
+		# Manual cook still saves the edit. Custom multi-asset hosts may own a stash per section.
+		var entries := ParameterLinks.panel_assets(host)
+		var primary: bool = not entries.is_empty() and entries[0].get("asset") == asset
+		if host.has_method("hego_set_asset_parm_stash") or (primary and host.has_method("hego_set_parm_stash")):
+			var snapshot := await HEGoNodeUtil.checked_task(self, asset.get_preset())
+			if snapshot.ok and is_instance_valid(host) and ParameterLinks.asset_key(host, asset) == asset_key and snapshot.value is PackedByteArray:
+				if host.has_method("hego_set_asset_parm_stash"):
+					host.hego_set_asset_parm_stash(asset, snapshot.value)
+				else:
+					host.hego_set_parm_stash(snapshot.value)
+		_mark_scene_changed(host)
+	if not is_instance_valid(host) or hego_tool_node != host or _edit_revisions.get(key) != revision:
+		return
+	if result.ok and auto_recook_toggle.button_pressed and not _requires_explicit_recook():
+		while _cooking:
+			await get_tree().process_frame
+			if not is_inside_tree() or not is_instance_valid(host) or hego_tool_node != host or _edit_revisions.get(key) != revision:
+				return
 		await recook()
-	
+	await _refresh_parameters(asset, host, revision)
+
+
+func _refresh_parameters(asset: HEGoAssetNode, host: Node, revision: int) -> void:
+	var key := asset.get_instance_id()
+	var generation := _rebuild_generation
+	var data = await _await_task(asset.get_parms_dict())
+	if not _is_rebuild_current(generation, host) or _edit_revisions.get(key) != revision or not _containers.has(key) or not data is Dictionary:
+		return
+	var container: Control = _containers[key]
+	var focus := get_viewport().gui_get_focus_owner()
+	var field: Control = focus
+	while field and not field.has_meta("hego_parm_name"):
+		field = field.get_parent_control()
+	var restore_focus := field != null and container.is_ancestor_of(field)
+	var name := str(field.get_meta("hego_parm_name")) if restore_focus else ""
+	var component: Variant = field.get_meta("hego_parm_component") if restore_focus else null
+	var draft: Variant = null
+	if restore_focus and focus.get_meta("hego_draft", false) and (focus is LineEdit or focus is TextEdit):
+		draft = focus.text
+	var caret: int = focus.caret_column if focus is LineEdit else (focus.get_caret_column() if focus is TextEdit else -1)
+	var line: int = focus.get_caret_line() if focus is TextEdit else 0
+	var scroll := parm_vbox.get_parent() as ScrollContainer
+	var offset := scroll.scroll_vertical
+	_rendering_parameters = true
+	for child in container.get_children():
+		container.remove_child(child)
+		child.queue_free()
+	_render_parameters(data, container, asset)
+	_rendering_parameters = false
+	if restore_focus:
+		for control in container.find_children("*", "Control", true, false):
+			if control.get_meta("hego_parm_name", "") == name and control.get_meta("hego_parm_component", -1) == component and control.is_visible_in_tree():
+				if control is SpinBox:
+					control = control.get_line_edit()
+				if (control is LineEdit or control is TextEdit) and not control.editable:
+					break
+				control.grab_focus()
+				if draft != null and (control is LineEdit or control is TextEdit):
+					control.text = draft
+					control.set_meta("hego_draft", true)
+				if control is LineEdit and caret >= 0:
+					control.caret_column = caret
+				elif control is TextEdit and caret >= 0:
+					control.set_caret_line(line)
+					control.set_caret_column(caret)
+				break
+	scroll.set_deferred("scroll_vertical", offset)
+
 
 func _on_input_changed():
 	# The per-input settings dictionary belongs to the node, not to this panel. Building a
@@ -602,7 +701,11 @@ func _stash_cooked_parameters(selected_node: Node) -> void:
 func create_preset_file(preset_name: String) -> void:
 	print("[HEGo]: Creating preset")
 	if hego_asset_node and hego_tool_node.has_method("hego_get_asset_name"):
-		var preset = await _await_task(hego_asset_node.get_preset())
+		var host := hego_tool_node
+		var asset := hego_asset_node
+		var preset = await _await_task(asset.get_preset())
+		if hego_tool_node != host or hego_asset_node != asset:
+			return
 		if preset:
 			var res_path = get_preset_res_path()
 			
@@ -635,6 +738,7 @@ func create_preset_file(preset_name: String) -> void:
 				presets_res.presets = {} # Initialize the presets dictionary
 			# Add the new preset to the presets dictionary
 			presets_res.presets[preset_name] = preset
+			presets_res.parameter_links[preset_name] = ParameterLinks.saved(host, ParameterLinks.asset_key(host, asset))
 			# Save the resource to the specified path
 			var error = ResourceSaver.save(presets_res, res_path)
 			if error == OK:
@@ -652,11 +756,21 @@ func create_preset_file(preset_name: String) -> void:
 	
 
 func get_preset_res_path():
-	var asset_name : String = hego_tool_node.hego_get_asset_name()
-	if asset_name.begins_with("Sop/"):
-		asset_name = asset_name.split("/")[1]
-	var res_path = "res://hego/presets/" + asset_name + ".tres"
-	return res_path
+	var operator: String = hego_tool_node.hego_get_asset_name()
+	var name := operator.trim_prefix("Sop/")
+	var directory := "res://hego/presets/"
+	var legacy := directory + name + ".tres"
+	for part in name.split("/"):
+		var stem := part.get_slice(".", 0).to_upper()
+		var device := stem in ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"] or (
+				stem.length() == 4 and stem.left(3) in ["COM", "LPT"] and stem.right(1) in "123456789¹²³")
+		if part in [".", ".."] or not part.is_valid_filename() or device:
+			# Existing Linux users can still load their namespaced library file.
+			if OS.get_name() != "Windows" and not name.contains("/") and FileAccess.file_exists(legacy):
+				return legacy
+			# A separate directory avoids collisions with existing valid operator names.
+			return directory + "encoded/" + name.sha256_text() + ".tres"
+	return legacy
 	
 func update_preset_dropdown():
 	if hego_tool_node and hego_tool_node.has_method("hego_get_asset_name"):
@@ -713,15 +827,38 @@ func _on_load_preset_button_pressed():
 		push_error("[HEGo]: Selected preset '", preset_name, "' not found in resource")
 		return
 	
-	# Load and apply the preset
-	_notify_inputs_changed()
-	await _await_task(hego_asset_node.set_preset(presets_res.presets[preset_name]))
-	print("[HEGo]: Loaded preset: ", preset_name)
-	await update_ui()
-	
-	# Reselect the loaded preset in the dropdown
-	_select_preset_in_dropdown(preset_name)
-		
+	var host := hego_tool_node
+	var asset := hego_asset_node
+	var key := ParameterLinks.asset_key(host, asset)
+	var links: Dictionary = presets_res.parameter_links.get(preset_name, {})
+	var old_links := ParameterLinks.saved(host, key)
+	var previous = await _await_task(asset.get_preset())
+	if previous == null or hego_tool_node != host or hego_asset_node != asset:
+		return
+	var result := await HEGoNodeUtil.checked_task(self, asset.set_preset(presets_res.presets[preset_name]))
+	if not is_instance_valid(host):
+		return
+	var applied: bool = result.ok
+	if applied:
+		applied = await ParameterLinks.restore(host, asset, links)
+	else:
+		HEGoLog.get_singleton().error("parm", result.message)
+	if not applied:
+		# HAPI can apply part of a preset before it reports an error.
+		if await _await_task(asset.set_preset(previous)) != null:
+			await ParameterLinks.restore(host, asset, old_links)
+	else:
+		ParameterLinks.store(host, key, links)
+		if host.has_method("hego_set_parm_stash"):
+			host.hego_set_parm_stash(presets_res.presets[preset_name])
+		if host.has_method("hego_notify_cook_inputs_changed"):
+			host.hego_notify_cook_inputs_changed()
+		_mark_scene_changed(host)
+	if host == hego_tool_node:
+		await update_ui()
+		_select_preset_in_dropdown(preset_name)
+
+
 func _on_save_preset_button_pressed():
 	print("save preset")
 	
@@ -738,7 +875,11 @@ func _on_save_preset_button_pressed():
 	var preset_name = preset_dropdown.get_item_text(selected_index)
 	var res_path = get_preset_res_path()
 	
-	var preset = await _await_task(hego_asset_node.get_preset())
+	var host := hego_tool_node
+	var asset := hego_asset_node
+	var preset = await _await_task(asset.get_preset())
+	if hego_tool_node != host or hego_asset_node != asset:
+		return
 	if not preset:
 		push_error("[HEGo]: Failed to retrieve parms from Houdini - Perhaps the node is not instantiated correctly?")
 		return
@@ -758,6 +899,7 @@ func _on_save_preset_button_pressed():
 	
 	# Save the preset
 	presets_res.presets[preset_name] = preset
+	presets_res.parameter_links[preset_name] = ParameterLinks.saved(host, ParameterLinks.asset_key(host, asset))
 	var error = ResourceSaver.save(presets_res, res_path)
 	if error != OK:
 		push_error("[HEGo]: Failed to save preset '", preset_name, "'. Error code: ", error)

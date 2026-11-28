@@ -183,6 +183,54 @@ godot::Ref<HEGoTask> HEGoAPI::open_hip_file()
 	});
 }
 
+godot::Ref<HEGoTask> HEGoAPI::load_hda_library(const godot::String &path)
+{
+	const godot::String description = "Load HDA library";
+	if (!is_session_active())
+		return Util::Task::make_failed("Start a Houdini session before loading a library.", description);
+	const godot::String absolute = godot::ProjectSettings::get_singleton()->globalize_path(path).simplify_path();
+	if (path.is_empty() || !absolute.is_absolute_path() || !godot::FileAccess::file_exists(absolute))
+		return Util::Task::make_failed("HDA library file does not exist: " + path, description);
+
+	const HAPI_Session expected = *session_mgr.get_session();
+	return Util::Task::submit_failable(description, -1, [absolute, expected](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		const HAPI_Session *session = mgr->get_session();
+		if (!session || session->id != expected.id || session->type != expected.type)
+		{
+			Util::Task::fail(task, "The Houdini session changed before the library was loaded.");
+			return {};
+		}
+		// Reusing the same file should preserve existing instances and the session's
+		// preferred definitions. Rebuild is the explicit operation that reloads a library.
+		int count = 0;
+		if (HoudiniApi::GetLoadedAssetLibraryCount(session, &count) == HAPI_RESULT_SUCCESS && count > 0)
+		{
+			std::vector<HAPI_AssetLibraryId> ids(count);
+			if (HoudiniApi::GetAssetLibraryIds(session, ids.data(), 0, count) == HAPI_RESULT_SUCCESS)
+			{
+				for (auto id : ids)
+				{
+					HAPI_StringHandle handle;
+					if (HoudiniApi::GetAssetLibraryFilePath(session, id, &handle) != HAPI_RESULT_SUCCESS) continue;
+					const godot::String loaded = Util::Hapi::get_godot_string(session, handle).simplify_path();
+#ifdef _WIN32
+					if (loaded.nocasecmp_to(absolute) == 0) return id;
+#else
+					if (loaded == absolute) return id;
+#endif
+				}
+			}
+		}
+		HAPI_AssetLibraryId library = -1;
+		if (HoudiniApi::LoadAssetLibraryFromFile(session, absolute.utf8().get_data(), false, &library) != HAPI_RESULT_SUCCESS)
+		{
+			Util::Task::fail(task, "Could not load " + absolute + ": " + godot::String::utf8(Util::Hapi::get_last_error(session).c_str()));
+			return {};
+		}
+		return library;
+	});
+}
+
 HEGoSessionManager *HEGoAPI::get_session_manager() { return &session_mgr; }
 
 void HEGoAPI::set_houdini_installation_path(const godot::String &path)
@@ -348,6 +396,7 @@ void HEGoAPI::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_houdini_installation_path", "path"), &HEGoAPI::set_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_houdini_installation_path"), &HEGoAPI::get_houdini_installation_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_hda_libraries"), &HEGoAPI::get_hda_libraries);
+	godot::ClassDB::bind_method(godot::D_METHOD("load_hda_library", "path"), &HEGoAPI::load_hda_library);
 
 	// Task scheduler
 	godot::ClassDB::bind_method(godot::D_METHOD("submit_task", "task"), &HEGoAPI::submit_task);

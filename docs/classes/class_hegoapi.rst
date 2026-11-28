@@ -62,6 +62,8 @@ Methods
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | ``bool``                        | :ref:`is_session_active<class_HEGoAPI_method_is_session_active>`\ (\ )                                                  |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`load_hda_library<class_HEGoAPI_method_load_hda_library>`\ (\ path\: ``String``\ )                                 |
+   +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`open_hip_file<class_HEGoAPI_method_open_hip_file>`\ (\ )                                                          |
    +---------------------------------+-------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`save_hip_file<class_HEGoAPI_method_save_hip_file>`\ (\ path\: ``String``\ )                                       |
@@ -270,6 +272,18 @@ This count does not include the currently running task.
 ``bool`` **is_session_active**\ (\ ) :ref:`🔗<class_HEGoAPI_method_is_session_active>`
 
 Returns ``true`` when the Houdini Engine session is currently active.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAPI_method_load_hda_library:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **load_hda_library**\ (\ path\: ``String``\ ) :ref:`🔗<class_HEGoAPI_method_load_hda_library>`
+
+Loads an HDA library into the active Houdini session. ``path`` accepts a local absolute path or a Godot project or user path. The Houdini server must be able to read the resolved file. The successful task returns its HAPI library ID. Reusing a library loaded from the same path returns its existing ID. If a different library already supplies the definition, the load fails and preserves that definition. Use :ref:`HEGoAssetNode.reload_definition()<class_HEGoAssetNode_method_reload_definition>` to reload the library selected by a live asset.
 
 .. rst-class:: classref-item-separator
 

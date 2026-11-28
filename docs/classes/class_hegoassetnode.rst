@@ -79,7 +79,11 @@ Methods
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_heightfield_layers<class_HEGoAssetNode_method_get_heightfield_layers>`\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray()\ )                                                                                                                  |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_help_page<class_HEGoAssetNode_method_get_help_page>`\ (\ )                                                                                                                                                                                                     |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_input_names<class_HEGoAssetNode_method_get_input_names>`\ (\ )                                                                                                                                                                                                 |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_node_parm_candidates<class_HEGoAssetNode_method_get_node_parm_candidates>`\ (\ parm_name\: ``String``, candidates\: ``Array``\ )                                                                                                                               |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`get_parms_dict<class_HEGoAssetNode_method_get_parms_dict>`\ (\ )                                                                                                                                                                                                   |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -90,6 +94,8 @@ Methods
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`instantiate<class_HEGoAssetNode_method_instantiate>`\ (\ )                                                                                                                                                                                                         |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`remove_multiparm_instance<class_HEGoAssetNode_method_remove_multiparm_instance>`\ (\ parm_id\: ``int``, index\: ``int``\ )                                                                                                                                         |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_node_parm<class_HEGoAssetNode_method_set_node_parm>`\ (\ parm_name\: ``String``, source\: :ref:`HEGoBaseNode<class_HEGoBaseNode>` = null\ )                                                                                                                    |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`set_parm<class_HEGoAssetNode_method_set_parm>`\ (\ parm_name\: ``String``, value\: ``Variant``\ )                                                                                                                                                                  |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -417,6 +423,18 @@ The task result is an ``Array`` where each entry is a ``Dictionary`` containing 
 
 ----
 
+.. _class_HEGoAssetNode_method_get_help_page:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **get_help_page**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_help_page>`
+
+Reads the live Houdini operator's help. The result is a ``Dictionary`` with ``text`` (the complete authored help markup), ``url`` (the operator's help URL) and ``op_name`` (the full operator name including category). Each missing text or URL is an empty ``String``. The task fails if the live operator or its help metadata cannot be read.
+
+.. rst-class:: classref-item-separator
+
+----
+
 .. _class_HEGoAssetNode_method_get_input_names:
 
 .. rst-class:: classref-method
@@ -433,17 +451,37 @@ The task result is a ``PackedStringArray`` of input names. This is useful for ma
 
 ----
 
+.. _class_HEGoAssetNode_method_get_node_parm_candidates:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **get_node_parm_candidates**\ (\ parm_name\: ``String``, candidates\: ``Array``\ ) :ref:`🔗<class_HEGoAssetNode_method_get_node_parm_candidates>`
+
+Checks the supplied live :ref:`HEGoBaseNode<class_HEGoBaseNode>` sources against the Houdini node type and flags accepted by ``parm_name``. The result is an ``Array`` containing one ``bool`` per candidate in the original order. Empty, reset, incompatible and self references yield ``false``. The task fails if the owner or its single-node parameter is unavailable.
+
+.. rst-class:: classref-item-separator
+
+----
+
 .. _class_HEGoAssetNode_method_get_parms_dict:
 
 .. rst-class:: classref-method
 
 :ref:`HEGoTask<class_HEGoTask>` **get_parms_dict**\ (\ ) :ref:`🔗<class_HEGoAssetNode_method_get_parms_dict>`
 
-Submits a task to return a dictionary describing the current parameter values.
+Reads the live Houdini interface. The task returns a ``Dictionary`` keyed by visible top-level parameter name. Folder contents are under ``children``. Each ``instances`` entry holds the child descriptors of one multiparm or ramp key.
 
 
 
-The task result is a ``Dictionary`` intended for inspection and tooling workflows, mirroring parameter state read from HAPI.
+Each descriptor includes ``type``, ``script_type``, ``size``, ``visible``, ``disabled``, UI and hard range flags and bounds. ``values`` holds evaluated components. String and path controls also expose authored ``raw_values``. Menus supply ``choice_list_type``, ``use_menu_item_token_as_value`` and, when populated, ``choices`` with each option's label and token.
+
+
+
+The ``help`` string contains the first paragraph of the matching entry in the asset's embedded parameter documentation. Houdini wiki entries match by ``#id``, including multiparm template names. An entry without an ID can match a unique parameter label. If no entry matches, the string contains the parameter template's explicit help, which can be empty. See :ref:`get_help_page()<class_HEGoAssetNode_method_get_help_page>` for the complete document.
+
+
+
+A folder list identifies its consecutive sibling folders with ``folder_ids``. Radio selection is the single integer in ``values``. Ordinary multiparms expose ``multiparm_style``, ramps expose ``ramp_type``, and instance children expose ``template_name``. For node parameters ``node_id`` is the current session's resolved target or ``-1``. Read the descriptors again after a structural edit, parameter callback, cook or asset rebuild. A HAPI read error fails the task.
 
 .. rst-class:: classref-item-separator
 
@@ -471,11 +509,7 @@ The task result is a ``PackedByteArray``. Use together with :ref:`set_preset()<c
 
 :ref:`HEGoTask<class_HEGoTask>` **insert_multiparm_instance**\ (\ parm_id\: ``int``, index\: ``int``\ ) :ref:`🔗<class_HEGoAssetNode_method_insert_multiparm_instance>`
 
-Submits a task to insert one multiparm instance at ``index`` for the parameter id.
-
-
-
-Use this to grow multiparm blocks before setting values on newly created entries.
+Inserts an instance before ``index`` in the multiparm with ``parm_id``. The first position is ``instance_start_offset``. To append, use that offset plus ``instance_count``. Await completion and read :ref:`get_parms_dict()<class_HEGoAssetNode_method_get_parms_dict>` again before editing the new instance. A stale owner, invalid position or HAPI error fails the task.
 
 .. rst-class:: classref-item-separator
 
@@ -507,11 +541,19 @@ On success, the created node id is stored and this wrapper is registered in the 
 
 :ref:`HEGoTask<class_HEGoTask>` **remove_multiparm_instance**\ (\ parm_id\: ``int``, index\: ``int``\ ) :ref:`🔗<class_HEGoAssetNode_method_remove_multiparm_instance>`
 
-Submits a task to remove one multiparm instance at ``index`` for the parameter id.
+Removes the instance at ``index`` in the multiparm with ``parm_id``. Valid positions begin at ``instance_start_offset``. Refresh :ref:`get_parms_dict()<class_HEGoAssetNode_method_get_parms_dict>` after completion to obtain the updated instance identities and indices. A stale owner, invalid position or HAPI error fails the task.
 
+.. rst-class:: classref-item-separator
 
+----
 
-Indices follow Houdini multiparm ordering.
+.. _class_HEGoAssetNode_method_set_node_parm:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **set_node_parm**\ (\ parm_name\: ``String``, source\: :ref:`HEGoBaseNode<class_HEGoBaseNode>` = null\ ) :ref:`🔗<class_HEGoAssetNode_method_set_node_parm>`
+
+Binds a compatible, instantiated ``source`` to a single Houdini node-reference parameter. Pass ``null`` to clear the reference. A successful task returns ``0``. Setting the current binding again skips the write. An incompatible source, stale session or rejected operation fails the task. Reapply a durable source reference after an asset or session rebuild. Operator-path lists use the text form of :ref:`set_parm()<class_HEGoAssetNode_method_set_parm>`.
 
 .. rst-class:: classref-item-separator
 
@@ -523,15 +565,20 @@ Indices follow Houdini multiparm ordering.
 
 :ref:`HEGoTask<class_HEGoTask>` **set_parm**\ (\ parm_name\: ``String``, value\: ``Variant``\ ) :ref:`🔗<class_HEGoAssetNode_method_set_parm>`
 
-Submits a task to set a parameter by name.
+Sets a parameter by its Houdini name. Use a number for a scalar, a matching Godot vector for numeric tuples of two to four components, or a typed packed numeric array for any numeric tuple. The element count must match the declared tuple. Floats must be finite, integers must fit int32, and integer inputs to float storage must be exactly representable. Houdini's hard limits apply.
 
 
 
-The ``Variant`` value type is converted to the matching Houdini parameter storage type when possible.
+Toggles also accept a ``bool``. RGB and RGBA controls accept ``Color`` or a matching vector. RGB uses the first three channels. Use a ``String`` for a scalar string, authored file path or literal Houdini node path, and a ``PackedStringArray`` for a string tuple. To select a radio folder, pass its zero-based tab index. Integer writes to a button invoke its callback.
 
 
 
-Call after :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNode_method_instantiate>`. Invalid node state causes the task to fail.
+::
+
+    await agent.task(asset.set_parm("rgb", Color(2.0, 0.5, 0.1)))
+    await agent.task(asset.set_parm("words", PackedStringArray(["east", "west"])))
+
+A successful task returns ``0``. Await the task before cooking or saving the result.
 
 .. rst-class:: classref-item-separator
 
@@ -543,11 +590,7 @@ Call after :ref:`HEGoBaseNode.instantiate()<class_HEGoBaseNode_method_instantiat
 
 :ref:`HEGoTask<class_HEGoTask>` **set_parms_batch**\ (\ parms\: ``Dictionary``\ ) :ref:`🔗<class_HEGoAssetNode_method_set_parms_batch>`
 
-Submits a single task to set multiple parameters at once.
-
-
-
-\ ``parms`` is a ``Dictionary`` mapping parameter names (``String``) to values (``Variant``). All parameters are set in one HAPI round-trip, which is more efficient than calling :ref:`set_parm()<class_HEGoAssetNode_method_set_parm>` repeatedly.
+Submits one scheduled task for the parameter names and values in ``parms``. Keys may be ``String`` or ``StringName``. Value rules match :ref:`set_parm()<class_HEGoAssetNode_method_set_parm>`. The task captures the input, validates the whole batch, then resolves each live parameter again before writing it. Invalid input fails before the first write. If Houdini rejects a later write or a callback changes the layout, earlier writes may have taken effect. Read :ref:`get_parms_dict()<class_HEGoAssetNode_method_get_parms_dict>` before retrying.
 
 .. rst-class:: classref-item-separator
 

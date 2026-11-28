@@ -37,6 +37,7 @@ extends RefCounted
 
 ## Category this file logs under, shown in the session panel filter.
 const LOG_CATEGORY := "cook"
+const ParameterLinks := preload("res://addons/hego/core/parameter_links.gd")
 
 ## Operator table assumed when an operator name does not name one.
 const DEFAULT_OPERATOR_TABLE := "Sop"
@@ -117,32 +118,36 @@ func asset(operator_name: String, label := "") -> HEGoAssetNode:
 ## an id of -1 rather than by failing. An unknown operator name is not caught here, because
 ## Houdini hands back a valid id for one; the cook is what rejects it.
 ##
-## With [param strict], a failed transform or parameter restore also returns false, rather
-## than carrying on with an asset that is not in the state the stash describes.
+## A failed preset restore releases the new instance so the next cook can retry the
+## saved parameters. With [param strict], a failed transform also stops instantiation.
 func instantiate(asset: HEGoAssetNode, stashed_parameters := PackedByteArray(), strict := false) -> bool:
 	var existed := asset.get_id() != UNINSTANTIATED_NODE_ID
-	if strict:
-		var created := await HEGoNodeUtil.checked_task(owner_node, asset.instantiate())
-		if not created.ok or asset.get_id() == UNINSTANTIATED_NODE_ID: return false
-		if owner_node is Node3D:
-			var placed := await HEGoNodeUtil.checked_task(owner_node, asset.set_transform(owner_node.global_transform))
-			if not placed.ok: return false
-		if not existed and stashed_parameters.size() > 0:
-			var restored := await HEGoNodeUtil.checked_task(owner_node, asset.set_preset(stashed_parameters))
-			if not restored.ok: return false
-		return true
-
-	await task(asset.instantiate())
-	if owner_node is Node3D:
-		await task(asset.set_transform(owner_node.global_transform))
-
-	if asset.get_id() == UNINSTANTIATED_NODE_ID:
-		HEGoLog.get_singleton().error(LOG_CATEGORY, "Could not instantiate " + asset.op_name)
+	var created := await HEGoNodeUtil.checked_task(owner_node, asset.instantiate())
+	if not created.ok or asset.get_id() == UNINSTANTIATED_NODE_ID:
+		HEGoLog.get_singleton().error(LOG_CATEGORY, created.get("message", "Could not instantiate " + asset.op_name))
 		return false
+	if owner_node is Node3D:
+		var placed := await HEGoNodeUtil.checked_task(owner_node, asset.set_transform(owner_node.global_transform))
+		if not placed.ok:
+			HEGoLog.get_singleton().error(LOG_CATEGORY, placed.message)
+			if strict:
+				if not existed:
+					await _delete(asset)
+				return false
+	if not existed and not stashed_parameters.is_empty():
+		var restored := await HEGoNodeUtil.checked_task(owner_node, asset.set_preset(stashed_parameters))
+		if not restored.ok:
+			HEGoLog.get_singleton().error(LOG_CATEGORY, restored.message)
+			await _delete(asset)
+			return false
+	return await _restore_parameter_sources(asset)
 
-	if not existed and stashed_parameters.size() > 0:
-		await task(asset.set_preset(stashed_parameters))
-	return true
+
+func _restore_parameter_sources(asset: HEGoAssetNode) -> bool:
+	if not owner_node.has_meta(ParameterLinks.STORAGE):
+		return true
+	var key := ParameterLinks.asset_key(owner_node, asset)
+	return await ParameterLinks.restore(owner_node, asset, ParameterLinks.saved(owner_node, key))
 
 
 ## The asset's current parameters, as a blob to store on the node so they survive a session
@@ -187,6 +192,10 @@ func rebuild_asset(previous: HEGoAssetNode, stashed_parameters := PackedByteArra
 		await _delete(replacement)
 		if not live:
 			await _delete(previous)
+		return false
+	var key := ParameterLinks.asset_key(owner_node, previous)
+	if not await ParameterLinks.restore(owner_node, replacement, ParameterLinks.saved(owner_node, key)):
+		await _delete(replacement)
 		return false
 	if assets.get(label) != previous or not await _delete(previous):
 		await _delete(replacement)

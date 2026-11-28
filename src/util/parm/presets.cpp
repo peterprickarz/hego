@@ -1,5 +1,9 @@
 #include "presets.h"
 #include "util/log/log.h"
+#include "util/hego_util.h"
+
+#include <algorithm>
+#include <vector>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 
 namespace HEGo
@@ -31,6 +35,28 @@ bool read_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, godot::Pa
 	return true;
 }
 
+namespace
+{
+using MultiparmLayout = std::vector<std::pair<godot::String, int>>;
+
+bool read_multiparm_layout(const HAPI_Session *session, HAPI_NodeId node, MultiparmLayout &layout)
+{
+	HAPI_NodeInfo info = HoudiniApi::NodeInfo_Create();
+	if (HoudiniApi::GetNodeInfo(session, node, &info) != HAPI_RESULT_SUCCESS || info.parmCount < 0) return false;
+	if (info.parmCount == 0) return true;
+	std::vector<HAPI_ParmInfo> parms(info.parmCount);
+	if (HoudiniApi::GetParameters(session, node, parms.data(), 0, info.parmCount) != HAPI_RESULT_SUCCESS) return false;
+	for (const auto &parm : parms)
+	{
+		if (parm.type != HAPI_PARMTYPE_MULTIPARMLIST) continue;
+		const godot::String name = Hapi::get_godot_string(session, parm.nameSH);
+		if (name.is_empty() || parm.instanceCount < 0) return false;
+		layout.emplace_back(name, parm.instanceCount);
+	}
+	return true;
+}
+}
+
 bool write_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const godot::PackedByteArray &preset, godot::String &error)
 {
 	HAPI_Session *session = session_mgr ? session_mgr->get_session() : nullptr;
@@ -38,11 +64,26 @@ bool write_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id, const go
 		error = "Cannot apply an empty/oversized preset or use an invalid node/session.";
 		return false;
 	}
-	if (HoudiniApi::SetPreset(session, node_id, HAPI_PRESETTYPE_BINARY, nullptr, reinterpret_cast<const char *>(preset.ptr()), preset.size()) != HAPI_RESULT_SUCCESS) {
-		error = "HAPI rejected the preset.";
-		return false;
+	// HAPI 22.0.429 and .511 can shrink a nested multiparm, then fail to find a
+	// removed row while finishing this same preset. Reapply only after the specific
+	// SDK error and an observed layout change. A successful or unrelated write runs once.
+	MultiparmLayout first;
+	std::vector<MultiparmLayout> visited;
+	if (read_multiparm_layout(session, node_id, first) && !first.empty()) visited.push_back(std::move(first));
+	for (;;)
+	{
+		const auto result = HoudiniApi::SetPreset(session, node_id, HAPI_PRESETTYPE_BINARY, nullptr, reinterpret_cast<const char *>(preset.ptr()), preset.size());
+		if (result == HAPI_RESULT_SUCCESS) return true;
+		const std::string detail = Hapi::get_last_error(session);
+		error = "HAPI rejected the preset (code " + godot::String::num_int64(result) + "): " + godot::String::utf8(detail.c_str());
+		if (result != HAPI_RESULT_FAILURE || detail.find("Unable to find key in unordered_map") == std::string::npos || visited.empty() || visited.size() >= 4)
+			return false;
+		MultiparmLayout current;
+		if (!read_multiparm_layout(session, node_id, current) || std::find(visited.begin(), visited.end(), current) != visited.end())
+			return false;
+		visited.push_back(std::move(current));
+		error = godot::String();
 	}
-	return true;
 }
 
 godot::PackedByteArray get_preset(HEGoSessionManager *session_mgr, HAPI_NodeId node_id)

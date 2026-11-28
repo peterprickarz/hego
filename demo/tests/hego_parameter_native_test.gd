@@ -40,7 +40,10 @@ func read(asset: HEGoAssetNode) -> Dictionary:
 	return out
 
 func finish() -> void:
-	if api != null and api.is_session_active(): api.stop_session()
+	if api != null:
+		if api.is_session_active():
+			api.stop_session()
+		api.clear_completed_task_history()
 	if failures.is_empty(): print("HEGO_PARAMETER_NATIVE_PASS")
 	else: push_error("Native parameter regression failures: " + str(failures))
 	quit(0 if failures.is_empty() else 1)
@@ -51,7 +54,7 @@ func run() -> void:
 		if argument.begins_with("--island-hda="): island_hda = argument.trim_prefix("--island-hda=")
 	if not island_hda.is_empty():
 		check(FileAccess.file_exists(island_hda), "Optional island HDA exists")
-		OS.set_environment("HOUDINI_OTLSCAN_PATH", island_hda.get_base_dir() + ":&")
+		OS.set_environment("HOUDINI_OTLSCAN_PATH", island_hda.get_base_dir() + (";&" if OS.get_name() == "Windows" else ":&"))
 	api = HEGoAPI.get_singleton()
 	if not api.start_session(HEGoAPI.SESSION_NAMED_PIPE, "hego_parameter_%d" % OS.get_process_id()):
 		check(false, "Private Houdini parameter session started"); finish(); return
@@ -73,6 +76,10 @@ func run() -> void:
 		{"scale": 16777217}, {"t": Vector2.ONE}, {"t": 2.0},
 		{"t": Vector3(NAN, 0, 0)}, {"t": [1.0, 2.0, 3.0]},
 		{"xOrd": "2"}, {"scale": 7.0, 9: 1.0},
+		{"scale": 7.0, "t": PackedFloat64Array([0.0, 0.0, INF])},
+		{"scale": 7.0, "t": PackedInt64Array([0, 0, 1152921504606846977])},
+		{"scale": 7.0, "t": PackedFloat32Array([1.0, 2.0])},
+		{"scale": true}, {"t": Color.RED},
 	]:
 		await wait_task(asset.set_parms_batch(invalid), false)
 		check((await read(asset)) == before, "Rejected batch leaves all parameter values unchanged: " + str(invalid))

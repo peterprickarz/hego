@@ -14,7 +14,7 @@ namespace Util
 namespace Hapi
 {
 
-std::string get_last_error(HAPI_Session *session = nullptr);
+std::string get_last_error(const HAPI_Session *session = nullptr);
 std::string get_last_cook_error(HAPI_Session *session = nullptr);
 std::string get_last_cook_status(HAPI_Session *session);
 std::string get_connection_error();

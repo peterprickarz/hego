@@ -12,20 +12,18 @@ HEGoHDAPreset
 
 **Inherits:** ``Resource``
 
-Saved parameter presets for one HDA, as the bottom panel's preset list stores them.
+Named parameter presets for one Houdini operator in the HEGo bottom panel.
 
 .. rst-class:: classref-introduction-group
 
 Description
 -----------
 
-One resource per operator, written to ``res://hego/presets/<operator>.tres``. A preset is the
+The panel stores one resource per operator under ``res://hego/presets/``. For example, ``Sop/sample`` uses ``sample.tres``.
 
- blob :ref:`HEGoAssetNode.get_preset()<class_HEGoAssetNode_method_get_preset>` returns, which is also what a node's
+ Names that require encoding for Windows, such as ``acme::sample::2.0``, use ``encoded/<SHA-256>.tres``. Existing namespaced preset files on Linux retain their original paths.
 
- ``parm_stash`` holds, so a preset and a stashed parameter set are the same thing
-
- saved in two places.
+ Loading a named preset restores the Houdini parameter values and resolves its saved scene-node references in the current session.
 
 .. rst-class:: classref-reftable-group
 
@@ -35,9 +33,11 @@ Properties
 .. table::
    :widths: auto
 
-   +----------------+------------------------------------------------------+
-   | ``Dictionary`` | :ref:`presets<class_HEGoHDAPreset_property_presets>` |
-   +----------------+------------------------------------------------------+
+   +----------------+----------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`presets<class_HEGoHDAPreset_property_presets>`                 |
+   +----------------+----------------------------------------------------------------------+
+   | ``Dictionary`` | :ref:`parameter_links<class_HEGoHDAPreset_property_parameter_links>` |
+   +----------------+----------------------------------------------------------------------+
 
 .. rst-class:: classref-section-separator
 
@@ -54,7 +54,19 @@ Property Descriptions
 
 ``Dictionary`` **presets** :ref:`🔗<class_HEGoHDAPreset_property_presets>`
 
-Preset name to the parameter blob saved under it.
+Maps each preset name to the binary ``PackedByteArray`` returned by :ref:`HEGoAssetNode.get_preset()<class_HEGoAssetNode_method_get_preset>`.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoHDAPreset_property_parameter_links:
+
+.. rst-class:: classref-property
+
+``Dictionary`` **parameter_links** :ref:`🔗<class_HEGoHDAPreset_property_parameter_links>`
+
+Maps each preset name to its Houdini node-reference parameters. Each binding records the source host's relative scene path, operator name and asset label so the panel can reconnect the source after a session restart.
 
 .. |virtual| replace:: :abbr:`virtual (This method should typically be overridden by the user to have any effect.)`
 .. |required| replace:: :abbr:`required (This method is required to be overridden when extending its base class.)`

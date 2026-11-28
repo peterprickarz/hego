@@ -4,9 +4,7 @@ extends VBoxContainer
 
 ## One collapsible block of parameters in the bottom panel, for one HDA.
 ##
-## A node that puts several HDAs in the panel gets one of these per HDA. A node with a
-## single HDA gets its parameters directly and no header, so the common case looks exactly
-## as it did.
+## Each HDA in a multi-asset node gets a section with its own Help button.
 
 ## Emitted when the user opens or closes the section, so the panel can remember it.
 signal open_changed(asset_label: String, is_open: bool)
@@ -14,6 +12,8 @@ signal open_changed(asset_label: String, is_open: bool)
 ## The label the node gave this HDA. The panel remembers the open state by it.
 var asset_label: String
 
+## Opens this section's HDA documentation even when its parameters are collapsed.
+var help_button: Button
 var _header: Button
 var _body: VBoxContainer
 
@@ -22,15 +22,21 @@ var _body: VBoxContainer
 func setup(p_asset_label: String, operator_name: String, is_open: bool) -> void:
 	asset_label = p_asset_label
 
+	var actions := HBoxContainer.new()
+	add_child(actions)
 	_header = Button.new()
 	_header.toggle_mode = true
 	_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_header.text = "%s  (%s)" % [asset_label, operator_name]
 	# Assigning button_pressed would emit toggled, which calls back into the panel and
 	# rebuilds the section that is still being built. set_pressed_no_signal does not.
 	_header.set_pressed_no_signal(is_open)
 	_header.toggled.connect(_on_header_toggled)
-	add_child(_header)
+	actions.add_child(_header)
+	help_button = Button.new()
+	help_button.text = "Help"
+	actions.add_child(help_button)
 
 	_body = VBoxContainer.new()
 	_body.visible = is_open

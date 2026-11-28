@@ -12,7 +12,7 @@ What HEGo saves to disk.
    * - :ref:`HDAResource<class_HDAResource>`
      - An imported ``.hda`` file, as Godot's importer sees it.
    * - :ref:`HEGoHDAPreset<class_HEGoHDAPreset>`
-     - Saved parameter presets for one HDA, as the bottom panel's preset list stores them.
+     - Named parameter presets for one Houdini operator in the HEGo bottom panel.
    * - :ref:`HEGoFetchPointsConfig<class_HEGoFetchPointsConfig>`
      - Attributes, filters and splits for a point fetch, saved as a resource.
    * - :ref:`HEGoFetchSurfacesConfig<class_HEGoFetchSurfacesConfig>`

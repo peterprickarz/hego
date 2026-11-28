@@ -4,6 +4,7 @@
 #include "hego_nodes/hego_base_node.h"
 #include "hego_task.h"
 
+#include <functional>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/resource.hpp>
@@ -27,6 +28,9 @@ private:
 	godot::String definition_path;
 	godot::String definition_name;
 	bool refresh_definition_source(const HAPI_Session *session, HAPI_NodeId id);
+	using AssetWork = std::function<godot::Variant(HEGoSessionManager *, HAPI_NodeId, godot::String &)>;
+	godot::Ref<HEGoTask> asset_task(const godot::String &description, AssetWork work);
+
 
 public:
 	HEGoAssetNode();
@@ -38,11 +42,14 @@ public:
 	godot::Ref<HEGoTask> cook();
 	godot::Ref<HEGoTask> set_parm(godot::String parm_name, godot::Variant value);
 	godot::Ref<HEGoTask> set_parms_batch(godot::Dictionary parms);
+	godot::Ref<HEGoTask> set_node_parm(godot::String name, godot::Ref<HEGoBaseNode> source = {});
+	godot::Ref<HEGoTask> get_node_parm_candidates(godot::String name, godot::Array candidates);
 	godot::Ref<HEGoTask> set_preset(godot::PackedByteArray preset);
 	godot::Ref<HEGoTask> get_preset();
 	godot::Ref<HEGoTask> insert_multiparm_instance(int parm_id, int index);
 	godot::Ref<HEGoTask> remove_multiparm_instance(int parm_id, int index);
 	godot::Ref<HEGoTask> get_parms_dict();
+	godot::Ref<HEGoTask> get_help_page();
 	godot::Ref<HEGoTask> get_input_names();
 	// The cooked output, for reading and splitting it from GDScript in code rather
 	// than through a fetch config. Optionally loads attributes up front, so a handler

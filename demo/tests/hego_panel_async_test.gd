@@ -8,19 +8,37 @@ class Reply extends RefCounted:
 
 class DelayedTab extends "res://addons/hego/ui/hda_tab.gd":
 	var replies: Array = []
+	var help_requests: Array = []
+	var help_replies: Array = []
+	var opened_pages: Array = []
+	var render_reply: Reply
+	var open_result := OK
 	func _panel_assets() -> Array:
-		return [{"asset": hego_tool_node.asset}] if is_instance_valid(hego_tool_node) else []
+		return [{"asset": hego_tool_node.asset}] + hego_tool_node.additional if is_instance_valid(hego_tool_node) else []
 	func _await_task(_task: HEGoTask) -> Variant:
 		var reply := Reply.new()
 		replies.append(reply)
 		return await reply.ready
-	func add_parm_ui(data: Dictionary, parent: Control, _asset: HEGoAssetNode):
+	func _render_parameters(data: Dictionary, parent: Control, _asset: HEGoAssetNode) -> void:
 		var label := Label.new()
-		label.text = data.marker
+		label.text = data.p.marker
 		parent.add_child(label)
+	func _load_asset_help(asset: HEGoAssetNode) -> Dictionary:
+		help_requests.append(asset)
+		var reply := Reply.new()
+		help_replies.append(reply)
+		return await reply.ready
+	func _open_asset_help_page(page: Dictionary, can_open: Callable) -> Error:
+		if render_reply != null:
+			await render_reply.ready
+		if not can_open.call():
+			return ERR_SKIP
+		opened_pages.append(page)
+		return open_result
 
 class ToolNode extends Node:
 	var asset := HEGoAssetNode.new()
+	var additional := []
 	func hego_get_input_stash() -> Array: return []
 
 func check(condition: bool, message: String) -> void:
@@ -62,7 +80,68 @@ func run() -> void:
 	root.remove_child(panel)
 	tab.replies[5].ready.emit({"p": {"marker": "detached panel"}})
 	check(tab.parm_vbox.get_child_count() == 0, "detached panel rejects a pending reply")
+	root.add_child(panel)
+	check_help(tab, a)
 	panel.free()
 	a.free()
 	print("panel async failures: ", failures)
 	quit(1 if failures else 0)
+
+
+func check_help(tab: DelayedTab, host: ToolNode) -> void:
+	tab.set_selected_node(null)
+	check(not tab.asset_help_button.visible, "an empty selection has no Help action")
+	host.asset.op_name = "Sop/first"
+	tab.set_selected_node(host)
+	var single := tab.asset_help_button
+	check(single.visible and single.tooltip_text.contains("Sop/first"), "single-asset Help identifies the displayed HDA")
+	var first := {"text": "= First =", "url": "", "op_name": host.asset.op_name}
+	single.pressed.emit()
+	single.pressed.emit()
+	check(tab.help_requests == [host.asset] and single.disabled, "one Help click queues one read for the displayed asset")
+	tab.help_replies.back().ready.emit({"ok": true, "value": first})
+	check(tab.opened_pages == [first] and not single.disabled, "the embedded page is handed to the browser opener")
+
+	# Simulate switching hosts while a second Help request is still queued.
+	single.pressed.emit()
+	tab.set_selected_node(null)
+	tab.help_replies.back().ready.emit({"ok": true, "value": first})
+	check(tab.opened_pages == [first], "a late Help reply cannot open the prior selection")
+
+	tab.set_selected_node(host)
+	tab.render_reply = Reply.new()
+	single.pressed.emit()
+	tab.help_replies.back().ready.emit({"ok": true, "value": first})
+	var request_count := tab.help_requests.size()
+	single.pressed.emit()
+	check(single.disabled and tab.help_requests.size() == request_count, "double clicking while rendering does not launch a duplicate")
+	tab.set_selected_node(null)
+	tab.set_selected_node(host)
+	tab.render_reply.ready.emit(null)
+	tab.render_reply = null
+	check(tab.opened_pages == [first] and not single.disabled, "returning to the same asset while rendering still cancels the obsolete launch")
+	tab.set_selected_node(null)
+
+	var other := HEGoAssetNode.new()
+	other.op_name = "Sop/second"
+	host.additional.append({"asset": other, "label": "Second stage"})
+	tab.set_selected_node(host)
+	tab.replies.back().ready.emit({"p": {"marker": "First stage"}})
+	var sections := tab.parm_vbox.get_children()
+	check(sections.size() == 2 and not single.visible, "a multi-HDA host has a Help action per section")
+	if sections.size() != 2: return
+	sections[1]._header.button_pressed = false
+	var second_button: Button = sections[1].help_button
+	check(second_button.is_visible_in_tree() and second_button.tooltip_text.contains("Sop/second"), "the second stage can open its own help while folded")
+	var second := {"text": "", "url": "https://example.org/second", "op_name": other.op_name}
+	second_button.pressed.emit()
+	tab.help_replies.back().ready.emit({"ok": true, "value": second})
+	check(tab.help_requests.back() == other and tab.opened_pages == [first, second], "the second stage opens its own authored URL")
+	tab.open_result = ERR_UNAVAILABLE
+	second_button.pressed.emit()
+	tab.help_replies.back().ready.emit({"ok": true, "value": {"text": "", "url": "", "op_name": other.op_name}})
+	check(tab.help_notice.visible and tab.help_notice.dialog_text.contains("Sop/second has no help page"), "missing documentation gives feedback for the requested HDA")
+	tab.help_notice.hide()
+	second_button.pressed.emit()
+	tab.help_replies.back().ready.emit({"ok": false, "message": "Session closed"})
+	check(tab.help_notice.visible and tab.help_notice.dialog_text.contains("Session closed") and not second_button.disabled, "failed reads can be retried from the same Help action")

@@ -47,6 +47,7 @@ public:
 
 	// Get dictionary of all loaded HDA libraries with their assets
 	godot::Dictionary get_hda_libraries();
+	godot::Ref<HEGoTask> load_hda_library(const godot::String &path);
 
 	// Task scheduler
 	godot::Ref<HEGoTask> submit_task(godot::Ref<HEGoTask> task);

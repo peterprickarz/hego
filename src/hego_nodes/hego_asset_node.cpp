@@ -13,6 +13,7 @@
 #include "util/log/log.h"
 #include "util/node/create_nodes.h"
 #include "util/parm/get_parms.h"
+#include "util/parm/multiparm_styles.h"
 #include "util/parm/presets.h"
 #include "util/parm/set_parms.h"
 #include "util/hego_enums.h"
@@ -167,7 +168,11 @@ godot::Ref<HEGoTask> HEGoAssetNode::reload_definition()
 				for (const auto name : names)
 				{
 					const godot::String available = Util::Hapi::get_godot_string(session, name);
-					if (available == full_name || available == op) return path;
+					if (available == full_name || available == op)
+					{
+						Util::Parm::invalidate_multiparm_styles(path);
+						return path;
+					}
 				}
 			}
 		}
@@ -176,51 +181,115 @@ godot::Ref<HEGoTask> HEGoAssetNode::reload_definition()
 	});
 }
 
-godot::Ref<HEGoTask> HEGoAssetNode::set_parm(godot::String parm_name, godot::Variant value)
+godot::Ref<HEGoTask> HEGoAssetNode::asset_task(const godot::String &description, AssetWork work)
 {
-	if (get_id() < 0)
-	{
-		return make_failed("Cannot set parameter - HDA not instantiated or license issue", "Set parm");
-	}
-
-	const HAPI_NodeId nid = node_id;
+	const HAPI_NodeId id = get_id();
+	if (id < 0) return make_failed("Instantiate the asset before this operation.", description);
 	HEGoSessionManager *manager = get_session_manager();
-	if (!manager || !manager->get_session()) return make_failed("No Houdini session is available.", "Set parm", nid);
+	if (!manager || !manager->get_session()) return make_failed("No Houdini session is available.", description, id);
 	const HAPI_Session expected = *manager->get_session();
 	const uint64_t generation = get_generation();
 	godot::Ref<HEGoAssetNode> self = this;
-	return submit_failable("Set parm " + parm_name, nid, [self, nid, parm_name, value, expected, generation](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+	return submit_failable(description, id, [self, id, expected, generation, work](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
 		const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
-		godot::String error;
-		if (!session || session->id != expected.id || session->type != expected.type || self->get_id() != nid || self->get_generation() != generation || !HEGo::Util::Parm::set_parm(mgr, nid, parm_name, value, error)) {
-			fail(task, error.is_empty() ? godot::String("Node or session changed before setting the parameter.") : error);
-			return godot::Variant();
+		if (!session || session->id != expected.id || session->type != expected.type || self->get_generation() != generation || self->get_id() != id ||
+			HoudiniApi::IsSessionValid(session) != HAPI_RESULT_SUCCESS)
+		{
+			fail(task, "Asset or session changed before the operation.");
+			return {};
 		}
+		godot::String error;
+		godot::Variant result = work(mgr, id, error);
+		if (!error.is_empty()) { fail(task, error); return {}; }
+		return result;
+	});
+}
+
+godot::Ref<HEGoTask> HEGoAssetNode::set_parm(godot::String name, godot::Variant value)
+{
+	return asset_task("Set parm " + name, [name, value](HEGoSessionManager *mgr, HAPI_NodeId id, godot::String &error) {
+		Util::Parm::set_parm(mgr, id, name, value, error);
 		return 0;
 	});
 }
 
 godot::Ref<HEGoTask> HEGoAssetNode::set_parms_batch(godot::Dictionary parms)
 {
-	if (get_id() < 0)
-	{
-		return make_failed("Cannot set parameters - HDA not instantiated or license issue", "Set parms batch");
-	}
-
-	const HAPI_NodeId nid = node_id;
-	HEGoSessionManager *manager = get_session_manager();
-	if (!manager || !manager->get_session()) return make_failed("No Houdini session is available.", "Set parms batch", nid);
-	const HAPI_Session expected = *manager->get_session();
-	const uint64_t generation = get_generation();
-	godot::Ref<HEGoAssetNode> self = this;
 	const godot::Dictionary captured = parms.duplicate(true);
-	return submit_failable("Set parms batch", nid, [self, nid, captured, expected, generation](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
-		const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
-		godot::String error;
-		if (!session || session->id != expected.id || session->type != expected.type || self->get_id() != nid || self->get_generation() != generation || !HEGo::Util::Parm::set_parms(mgr, nid, captured, error)) {
-			fail(task, error.is_empty() ? godot::String("Node or session changed before setting parameters.") : error);
-			return godot::Variant();
+	return asset_task("Set parms batch", [captured](HEGoSessionManager *mgr, HAPI_NodeId id, godot::String &error) {
+		Util::Parm::set_parms(mgr, id, captured, error);
+		return 0;
+	});
+}
+
+namespace
+{
+struct ParameterSource
+{
+	godot::Ref<HEGoBaseNode> node;
+	HAPI_NodeId id;
+	uint64_t generation;
+
+	explicit ParameterSource(godot::Ref<HEGoBaseNode> source) : node(source), id(source.is_valid() ? source->get_id() : -1),
+			generation(source.is_valid() ? source->get_generation() : 0) {}
+
+	bool compatible(const HAPI_Session *session, const HAPI_ParmInfo &parm, HAPI_NodeId owner) const
+	{
+		return node.is_valid() && id != owner && node->get_generation() == generation && node->get_id() == id && Util::Parm::accepts_node(session, parm, id);
+	}
+};
+}
+
+godot::Ref<HEGoTask> HEGoAssetNode::get_node_parm_candidates(godot::String name, godot::Array candidates)
+{
+	std::vector<ParameterSource> sources;
+	for (int i = 0; i < candidates.size(); ++i) sources.emplace_back(godot::Ref<HEGoBaseNode>(candidates[i]));
+	return asset_task("Filter sources for " + name, [name, sources](HEGoSessionManager *mgr, HAPI_NodeId id, godot::String &error) {
+		godot::Array result;
+		HAPI_ParmInfo parm;
+		const HAPI_Session *session = mgr->get_session();
+		if (Util::Parm::get_node_parm_info(session, id, name, parm, error))
+			for (const auto &source : sources) result.append(source.compatible(session, parm, id));
+		return result;
+	});
+}
+
+godot::Ref<HEGoTask> HEGoAssetNode::set_node_parm(godot::String name, godot::Ref<HEGoBaseNode> source)
+{
+	const ParameterSource selected(source);
+	return asset_task("Set node parm " + name, [name, selected](HEGoSessionManager *mgr, HAPI_NodeId id, godot::String &error) {
+		const HAPI_Session *session = mgr->get_session();
+		HAPI_ParmInfo parm;
+		if (!Util::Parm::get_node_parm_info(session, id, name, parm, error)) return 0;
+		if (selected.node.is_valid() && !selected.compatible(session, parm, id))
+		{
+			error = "Source node is unavailable or incompatible with parameter '" + name + "'.";
+			return 0;
 		}
+		const godot::CharString parm_name = name.utf8();
+		HAPI_NodeId current;
+		if (HoudiniApi::GetParmNodeValue(session, id, parm_name.get_data(), &current) != HAPI_RESULT_SUCCESS)
+		{
+			error = "Could not read node reference '" + name + "'.";
+			return 0;
+		}
+		if (current == selected.id)
+		{
+			if (current >= 0) return 0;
+			// An unresolved literal path also resolves to -1. Clear the actual text in that case.
+			HAPI_StringHandle raw;
+			int length = 0;
+			if (HoudiniApi::GetParmStringValue(session, id, parm_name.get_data(), 0, false, &raw) != HAPI_RESULT_SUCCESS ||
+				HoudiniApi::GetStringBufLength(session, raw, &length) != HAPI_RESULT_SUCCESS || length < 1)
+			{
+				error = "Could not read the existing path for node reference '" + name + "'.";
+				return 0;
+			}
+			if (length == 1) return 0;
+		}
+		if (HoudiniApi::SetParmNodeValue(session, id, parm_name.get_data(), selected.id) != HAPI_RESULT_SUCCESS ||
+			HoudiniApi::GetParmNodeValue(session, id, parm_name.get_data(), &current) != HAPI_RESULT_SUCCESS || current != selected.id)
+			error = "HAPI could not apply node reference '" + name + "'.";
 		return 0;
 	});
 }
@@ -251,20 +320,16 @@ godot::Ref<HEGoTask> HEGoAssetNode::set_preset(godot::PackedByteArray preset)
 
 godot::Ref<HEGoTask> HEGoAssetNode::insert_multiparm_instance(int parm_id, int index)
 {
-	HAPI_NodeId nid = node_id;
-
-	return submit("Insert multiparm", nid, [nid, parm_id, index](HEGoSessionManager *mgr) -> godot::Variant {
-		HEGo::Util::Parm::insert_multiparm_instance(mgr, nid, parm_id, index);
+	return asset_task("Insert multiparm", [parm_id, index](HEGoSessionManager *mgr, HAPI_NodeId node, godot::String &error) {
+		Util::Parm::change_multiparm(mgr, node, parm_id, index, true, error);
 		return 0;
 	});
 }
 
 godot::Ref<HEGoTask> HEGoAssetNode::remove_multiparm_instance(int parm_id, int index)
 {
-	HAPI_NodeId nid = node_id;
-
-	return submit("Remove multiparm", nid, [nid, parm_id, index](HEGoSessionManager *mgr) -> godot::Variant {
-		HEGo::Util::Parm::remove_multiparm_instance(mgr, nid, parm_id, index);
+	return asset_task("Remove multiparm", [parm_id, index](HEGoSessionManager *mgr, HAPI_NodeId node, godot::String &error) {
+		Util::Parm::change_multiparm(mgr, node, parm_id, index, false, error);
 		return 0;
 	});
 }
@@ -296,15 +361,19 @@ godot::Ref<HEGoTask> HEGoAssetNode::get_preset()
 
 godot::Ref<HEGoTask> HEGoAssetNode::get_parms_dict()
 {
-	if (get_id() < 0)
-	{
-		return make_failed("Cannot get parameters - HDA not instantiated or license issue", "Get parms dict");
-	}
+	return asset_task("Get parms dict", [](HEGoSessionManager *mgr, HAPI_NodeId node, godot::String &error) {
+		godot::Dictionary result;
+		Util::Parm::get_parm_dict(mgr, node, result, error);
+		return result;
+	});
+}
 
-	HAPI_NodeId nid = node_id;
-
-	return submit("Get parms dict", nid, [nid](HEGoSessionManager *mgr) -> godot::Variant {
-		return HEGo::Util::Parm::get_parm_dict(mgr, nid);
+godot::Ref<HEGoTask> HEGoAssetNode::get_help_page()
+{
+	return asset_task("Get asset help", [](HEGoSessionManager *mgr, HAPI_NodeId node, godot::String &error) {
+		godot::Dictionary result;
+		Util::Parm::get_help_page(mgr->get_session(), node, result, error);
+		return result;
 	});
 }
 
@@ -598,12 +667,15 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("reload_definition"), &HEGoAssetNode::reload_definition);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_parm", "parm_name", "value"), &HEGoAssetNode::set_parm);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_parms_batch", "parms"), &HEGoAssetNode::set_parms_batch);
+	godot::ClassDB::bind_method(godot::D_METHOD("set_node_parm", "parm_name", "source"), &HEGoAssetNode::set_node_parm, DEFVAL(godot::Variant()));
+	godot::ClassDB::bind_method(godot::D_METHOD("get_node_parm_candidates", "parm_name", "candidates"), &HEGoAssetNode::get_node_parm_candidates);
 	godot::ClassDB::bind_method(godot::D_METHOD("insert_multiparm_instance", "parm_id", "index"), &HEGoAssetNode::insert_multiparm_instance);
 	godot::ClassDB::bind_method(godot::D_METHOD("remove_multiparm_instance", "parm_id", "index"), &HEGoAssetNode::remove_multiparm_instance);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_preset"), &HEGoAssetNode::get_preset);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_preset", "preset"), &HEGoAssetNode::set_preset);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_id"), &HEGoAssetNode::get_id);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_input_names"), &HEGoAssetNode::get_input_names);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_help_page"), &HEGoAssetNode::get_help_page);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_parms_dict"), &HEGoAssetNode::get_parms_dict);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_op_name", "name"), &HEGoAssetNode::set_op_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_op_name"), &HEGoAssetNode::get_op_name);

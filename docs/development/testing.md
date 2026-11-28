@@ -42,6 +42,14 @@ The rebuild and HIP export regression uses two temporary versions of a two-input
 in a private session. It changes the definition on disk, presses Rebuild, and reopens
 the saved HIP to verify the inputs, parameters, and cooked geometry.
 
+### HDA parameter coverage
+
+Open the [dedicated parameter scene](../../demo/tests/fixtures/parameters/parameter_types.tscn) for interactive checks. Its two artificial HDAs cover the 17 concrete HAPI parameter types and emit zero points and primitives. The [fixture guide](../../demo/tests/fixtures/parameters/README.md) includes Houdini regeneration and verification commands.
+
+The Godot group exercises parameter widgets and help buttons. `hego_asset_help_test` checks browser destinations and local page rendering without opening a browser. To exercise Houdini's wiki renderer too, pass `-- --hfs=<Houdini installation directory>` to that test.
+
+The licensed Houdini group runs `hego_parameter_native_test`, `hego_parameter_fixtures_test` and `hego_parameter_scene_test`. The fixtures cover hints from embedded documentation, explicit parameter Help and repeated multiparm labels. The scene test uses private sessions and temporary scene and preset files.
+
 ### Where tests stage projects
 
 Scripts that copy the demo project or its addons into a disposable project stage it under

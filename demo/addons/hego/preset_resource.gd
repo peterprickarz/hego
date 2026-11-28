@@ -1,14 +1,16 @@
-## Saved parameter presets for one HDA, as the bottom panel's preset list stores them.
+## Named parameter presets for one Houdini operator in the HEGo bottom panel.
 ##
-## One resource per operator, written to [code]res://hego/presets/<operator>.tres[/code]. A preset is the
-## blob [method HEGoAssetNode.get_preset] returns, which is also what a node's
-## [code]parm_stash[/code] holds, so a preset and a stashed parameter set are the same thing
-## saved in two places.
+## The panel stores one resource per operator under [code]res://hego/presets/[/code]. For example, [code]Sop/sample[/code] uses [code]sample.tres[/code].
+## Names that require encoding for Windows, such as [code]acme::sample::2.0[/code], use [code]encoded/<SHA-256>.tres[/code]. Existing namespaced preset files on Linux retain their original paths.
+## Loading a named preset restores the Houdini parameter values and resolves its saved scene-node references in the current session.
 extends Resource
 class_name HEGoHDAPreset
 
-## Preset name to the parameter blob saved under it.
+## Maps each preset name to the binary [PackedByteArray] returned by [method HEGoAssetNode.get_preset].
 @export var presets: Dictionary
 
 func _init():
 	presets = Dictionary()
+
+## Maps each preset name to its Houdini node-reference parameters. Each binding records the source host's relative scene path, operator name and asset label so the panel can reconnect the source after a session restart.
+@export_storage var parameter_links: Dictionary

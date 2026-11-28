@@ -41,12 +41,31 @@ func run() -> void:
 	check(not OS.has_environment("HOUDINI_OTLSCAN_PATH"), "regression must not inherit the headless launcher search path")
 	check(not OS.has_environment("HOUDINI_PACKAGE_DIR"), "regression relies on the installed user package, not a package-directory environment injection")
 	var api := HEGoAPI.get_singleton()
-	check(not api.has_method("load_hda_library"), "original native library has no dynamic registration implementation")
 	var pipe := "hego_panel_regression_%d" % OS.get_process_id()
 	var started := api.start_session(HEGoAPI.SESSION_NAMED_PIPE, pipe)
 	check(started, "private session starts (a license failure here requires coordination, not touching the editor session)")
 	if not started: await finish(); return
 	check(installed_operators().has("Sop/HEGo_IslandErosion"), "Houdini startup discovers the coarse operator before any asset creation")
+	var materials := HEGoAssetNode.new()
+	materials.op_name = "Sop/HEGo_MaterialDistribution"
+	if (await completed(materials.instantiate())).ok:
+		var page := await completed(materials.get_help_page())
+		var text := str(page.value.text) if page.ok else ""
+		var sections := text.split("#id: prior_materials", true, 1)
+		check(sections.size() == 2, "startup package supplies Material Distribution's embedded help page")
+		var parameters := await completed(materials.get_parms_dict())
+		var pending: Array = parameters.value.values() if parameters.ok else []
+		var hint := ""
+		while not pending.is_empty():
+			var row: Dictionary = pending.pop_back()
+			if row.name == "prior_materials":
+				hint = row.help
+				break
+			pending.append_array(row.get("children", []))
+		check(not hint.is_empty() and sections.size() == 2 and sections[1].strip_edges().begins_with(hint),
+				"Prior Stage Materials shows the description from the production HDA help page")
+	else:
+		check(false, "startup package instantiates Material Distribution for the help check")
 	world = Node3D.new(); root.add_child(world)
 	var terrain := StrataTerrain3D.new(); terrain.name = "Terrain"; terrain.base_bounds = Rect2(-2048, -2048, 4096, 4096); world.add_child(terrain)
 	# The saved island's own rough base and coarse-cook preset, read from its storage files
@@ -88,7 +107,8 @@ func run() -> void:
 	var valid := HEGoAssetNode.new(); valid.op_name = "Sop/null"
 	check((await completed(valid.instantiate())).ok and valid.get_id() >= 0, "create valid ID for failed-cook preset guard")
 	var failed := FailedWithValidAsset.new(); world.add_child(failed)
-	panel.hego_tool_node = failed; panel.hego_asset_node = valid
+	await panel.set_selected_node(failed)
+	panel.hego_asset_node = valid
 	var history_before := api.get_completed_task_history().size()
 	await panel.recook()
 	check(failed.writes == 0 and failed.stash == PackedByteArray([7, 8, 9]) and api.get_completed_task_history().size() == history_before, "a failed cook with a valid ID performs no preset task and never overwrites stash")

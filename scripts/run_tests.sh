@@ -43,10 +43,10 @@ fi
 # (addon split and runtime runners).
 GODOT_TESTS=(
     brush_radius_test displacement_refinement_settings_test pixel_sampling_test surface_cache_pages_test
-    hego_asset_agent_test hego_await_task_test hego_extension_points_test hego_geo_output_test
+    hego_asset_agent_test hego_asset_help_test hego_await_task_test hego_extension_points_test hego_geo_output_test
     hego_graph_input_test hego_graph_output_test hego_input_children_test hego_input_ui_test hego_log_test
     hego_mesh_copy_lod_test hego_mesh_output_test hego_output_skip_test hego_panel_async_test
-    hego_panel_contract_test hego_point_util_test hego_terrain3d_bridge_test
+    hego_panel_contract_test hego_parameter_widgets_test hego_point_util_test hego_terrain3d_bridge_test
     island_transition_test material_binding_test material_brush_test material_distribution_test material_tiling_test
     material_preview_cutoff_test material_region_refresh_test material_resource_test native_data_test
     procedural_transaction_test region_geometry_test region_streamer_test stage_material_persistence_test stage_material_transport_test
@@ -62,7 +62,7 @@ ISLAND_DATA_TESTS=(island_storage_test terrain_demo_scene_test)
 # startup, so HOUDINI_OTLSCAN_PATH and HOUDINI_PACKAGE_DIR must not be inherited.
 HOUDINI_GODOT_TESTS=(
     editor_hda_package_test hego_graph_native_test hego_heightfield_fields_native_test
-    hego_input_children_native_test hego_parameter_native_test hego_surface_preload_test
+    hego_input_children_native_test hego_parameter_native_test hego_parameter_fixtures_test hego_parameter_scene_test hego_surface_preload_test
     hego_custom_channels_test hego_point_split_test hego_copia_roundtrip_test
 )
 HYTHON_TESTS=(test_hda_package_graphs test_island_stage_materials test_material_distribution test_material_tiling test_terrain_tint test_island_transition)

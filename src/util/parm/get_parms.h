@@ -1,20 +1,13 @@
-#ifndef GET_PARMS_H
-#define GET_PARMS_H
+#ifndef HEGO_GET_PARMS_H
+#define HEGO_GET_PARMS_H
 
 #include "hego_session_manager.h"
 #include <godot_cpp/variant/dictionary.hpp>
-#include <godot_cpp/variant/variant.hpp>
 
-namespace HEGo
+namespace HEGo::Util::Parm
 {
-namespace Util
-{
-namespace Parm
-{
-godot::Dictionary get_parm_dict(HEGoSessionManager *session_mgr, HAPI_NodeId node_id);
+bool get_help_page(const HAPI_Session *session, HAPI_NodeId node, godot::Dictionary &result, godot::String &error);
+bool get_parm_dict(HEGoSessionManager *manager, HAPI_NodeId node, godot::Dictionary &result, godot::String &error);
+}
 
-} // namespace Parm
-} // namespace Util
-} // namespace HEGo
-
-#endif // GET_PARMS_H
+#endif

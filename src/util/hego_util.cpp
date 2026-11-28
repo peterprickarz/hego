@@ -31,7 +31,7 @@ template <typename Reader> std::string read_hapi_string(int buffer_length, Reade
 }
 } // namespace
 
-std::string get_last_error(HAPI_Session *session)
+std::string get_last_error(const HAPI_Session *session)
 {
 	int buffer_length = 0;
 	if (HoudiniApi::GetStatusStringBufLength(session, HAPI_STATUS_CALL_RESULT, HAPI_STATUSVERBOSITY_ERRORS, &buffer_length) != HAPI_RESULT_SUCCESS)

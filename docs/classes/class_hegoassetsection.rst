@@ -23,11 +23,7 @@ One collapsible block of parameters in the bottom panel, for one HDA.
 Description
 -----------
 
-A node that puts several HDAs in the panel gets one of these per HDA. A node with a
-
- single HDA gets its parameters directly and no header, so the common case looks exactly
-
- as it did.
+Each HDA in a multi-asset node gets a section with its own Help button.
 
 .. rst-class:: classref-reftable-group
 
@@ -39,6 +35,8 @@ Properties
 
    +------------+-----------------------------------------------------------------+
    | ``String`` | :ref:`asset_label<class_HEGoAssetSection_property_asset_label>` |
+   +------------+-----------------------------------------------------------------+
+   | ``Button`` | :ref:`help_button<class_HEGoAssetSection_property_help_button>` |
    +------------+-----------------------------------------------------------------+
 
 .. rst-class:: classref-reftable-group
@@ -92,6 +90,18 @@ Property Descriptions
 ``String`` **asset_label** :ref:`🔗<class_HEGoAssetSection_property_asset_label>`
 
 The label the node gave this HDA. The panel remembers the open state by it.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetSection_property_help_button:
+
+.. rst-class:: classref-property
+
+``Button`` **help_button** :ref:`🔗<class_HEGoAssetSection_property_help_button>`
+
+Opens this section's HDA documentation even when its parameters are collapsed.
 
 .. rst-class:: classref-section-separator
 

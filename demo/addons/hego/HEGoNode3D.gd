@@ -95,7 +95,9 @@ func cook() -> void:
 	timings.end_phase("input_setup")
 
 	timings.begin_phase()
-	parm_stash = await agent.save_parameters(asset)
+	var snapshot := await agent.save_parameters(asset)
+	if not snapshot.is_empty():
+		parm_stash = snapshot
 	cook_state.parm_stash = parm_stash
 	timings.end_phase("parm_stash")
 	for extension in extensions:
@@ -365,9 +367,10 @@ func _on_asset_selected(selected_asset: String) -> void:
 ## Forgets everything tied to the previous HDA: the Houdini node, its parameters, its inputs
 ## and its output nodes.
 func _clear_hda_data() -> void:
+	var previous := agent
 	for existing in agent.assets.values():
-		existing.reset_node_id()
-	agent.assets.clear()
+		HEGoAssetAgent.ParameterLinks.store(self, HEGoAssetAgent.ParameterLinks.asset_key(self, existing), {})
+	agent = HEGoAssetAgent.new(self)
 
 	parm_stash = PackedByteArray()
 	input_stash.clear()
@@ -376,4 +379,5 @@ func _clear_hda_data() -> void:
 	if outputs_node:
 		outputs_node.queue_free()
 
-	HEGoLog.get_singleton().debug(LOG_CATEGORY, "Cleared old HDA data and reset node ID")
+	if HEGoAPI.get_singleton().is_session_active():
+		await previous.release()

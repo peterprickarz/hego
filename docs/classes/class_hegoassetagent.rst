@@ -134,6 +134,18 @@ Constants
 
 Category this file logs under, shown in the session panel filter.
 
+.. _class_HEGoAssetAgent_constant_ParameterLinks:
+
+.. rst-class:: classref-constant
+
+**ParameterLinks** = ``<Object>`` :ref:`🔗<class_HEGoAssetAgent_constant_ParameterLinks>`
+
+.. container:: contribute
+
+	There is currently no description for this constant. Please help us by `contributing one <https://contributing.godotengine.org/en/latest/documentation/class_reference.html>`__!
+
+
+
 .. _class_HEGoAssetAgent_constant_DEFAULT_OPERATOR_TABLE:
 
 .. rst-class:: classref-constant
@@ -286,9 +298,9 @@ Makes ``asset`` exist in Houdini. False when it could not be created.
 
  
 
- With ``strict``, a failed transform or parameter restore also returns false, rather
+ A failed preset restore releases the new instance so the next cook can retry the
 
- than carrying on with an asset that is not in the state the stash describes.
+ saved parameters. With ``strict``, a failed transform also stops instantiation.
 
 .. rst-class:: classref-item-separator
 

@@ -80,8 +80,8 @@ func cook() -&gt; void:
  an id of -1 rather than by failing. An unknown operator name is not caught here, because
  Houdini hands back a valid id for one; the cook is what rejects it.
  
- With [param strict], a failed transform or parameter restore also returns false, rather
- than carrying on with an asset that is not in the state the stash describes.
+ A failed preset restore releases the new instance so the next cook can retry the
+ saved parameters. With [param strict], a failed transform also stops instantiation.
 			</description>
 		</method>
 		<method name="save_parameters">
@@ -223,6 +223,8 @@ func cook() -&gt; void:
 	<constants>
 		<constant name="LOG_CATEGORY" value="&quot;cook&quot;">
 			Category this file logs under, shown in the session panel filter.
+		</constant>
+		<constant name="ParameterLinks" value="&lt;Object&gt;">
 		</constant>
 		<constant name="DEFAULT_OPERATOR_TABLE" value="&quot;Sop&quot;">
 			Operator table assumed when an operator name does not name one.

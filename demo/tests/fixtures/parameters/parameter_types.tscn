@@ -1,0 +1,18 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/fixtures/parameters/parameter_fixture_host.gd" id="1_host"]
+
+[node name="ParameterTestFixtures" type="Node3D"]
+editor_description = "HEGo parameter editing test fixtures. Select either child and click Recook in the HEGo bottom panel. The HDAs cook empty geometry."
+
+[node name="ValuesFixture" type="Node3D" parent="."]
+editor_description = "Test fixture for menus, conditions, the action button, colors, paths and tuple fields. Cook this first to make it available as a Houdini reference."
+script = ExtResource("1_host")
+asset_name = "Sop/hego_test_parameter_values"
+fixture_library = "res://tests/fixtures/parameters/hego_test_parameter_values.hda"
+
+[node name="StructureFixture" type="Node3D" parent="."]
+editor_description = "Test fixture for folders, multiparms, ramps, Houdini references and read-only data. Use ValuesFixture for the Source SOP control."
+script = ExtResource("1_host")
+asset_name = "Sop/hego_test_parameter_structure"
+fixture_library = "res://tests/fixtures/parameters/hego_test_parameter_structure.hda"
