@@ -139,8 +139,11 @@ const _WriterPass := preload("res://addons/strata/strata_surface_writer_pass.gd"
 ## material helper (STRATA_WRITER_TERRAIN_MATERIALS in strata_surface_writer.gdshaderinc).
 const _WRITER_MATERIAL_UNIFORMS := ["color_maps", "normal_maps", "ormh_maps", "uv_scales", "top_texture_slots", "top_uv_scales", "material_displacement", "top_material_displacement", "material_roughness_scales", "material_roughness_biases"]
 const _HOOK_MARKER := "STRATA_MATERIAL_HOOK_FUNCTIONS"
-## Seconds of editor idle time after a custom_fragment_code edit before the
-## shader is regenerated, so typing does not compile every keystroke.
+const _LIGHT_MARKER := "STRATA_CUSTOM_LIGHT_INCLUDE"
+## Seconds of editor idle time after an edit of a material's custom_fragment_code
+## or of the render settings' custom_light_include before the shader is
+## regenerated, so typing does not compile every keystroke. Outside the editor
+## both apply at once.
 const _HOOK_REBUILD_DELAY := 0.5
 const _RESERVED_HOOK_NAMES := ["s", "c", "bool", "int", "uint", "float", "vec2", "vec3", "vec4", "ivec2", "ivec3", "ivec4", "uvec2", "uvec3", "uvec4", "bvec2", "bvec3", "bvec4", "mat2", "mat3", "mat4", "void", "true", "false", "if", "else", "for", "while", "do", "switch", "case", "default", "break", "continue", "return", "discard", "in", "out", "inout", "const", "uniform", "varying", "struct", "flat", "smooth", "lowp", "mediump", "highp", "instance", "global", "precision"]
 # Generated surface shaders by complete source, shared by every renderer
@@ -190,6 +193,12 @@ var _hook_spec_applied: Array = []
 var _hook_key_applied := ""
 var _hook_spec_bound: Array = []
 var _hook_rebuild_serial := 0
+# StrataRenderSettings.custom_light_include code that shaders are generated from ("" for
+# none), whether or not it compiled. It follows the include at configuration and, in the
+# editor, _HOOK_REBUILD_DELAY after an edit (_schedule_light_rebuild), so a variant change
+# in between never picks up half-typed code.
+var _light_code_applied := ""
+var _light_rebuild_serial := 0
 var _materials: Array[StrataMaterial] = []
 var _watched_materials: Array[StrataMaterial] = []
 var _material_refresh_queued := false
@@ -403,7 +412,7 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 		_stats.refinement_status = "Native refinement unavailable: rebuild the terrain extension or disable Displacement Refinement Enabled."
 		push_error(_stats.refinement_status)
 		return false
-	var previous := {"active_crease_variant": _active_crease_variant, "active_shader_key": _active_shader_key, "hook_spec_applied": _hook_spec_applied, "hook_key_applied": _hook_key_applied, "hook_spec_bound": _hook_spec_bound, "source": _source, "runtime_mode": _runtime_mode, "runtime_bounds": _runtime_bounds, "spacing": _height_spacing, "materials": _materials, "mesher": _mesher, "shader": _shader_material, "bound_multiplier": _bound_displacement_multiplier, "compiled": _compiled_input, "stats": _stats.duplicate(true), "hole_image": _hole_image, "macro_image": _macro_image, "macro_bounds": _macro_bounds, "holes_enabled": _holes_enabled, "macro_enabled": _macro_enabled, "control_ids": _control_ids, "control_weights": _control_weights}
+	var previous := {"active_crease_variant": _active_crease_variant, "active_shader_key": _active_shader_key, "hook_spec_applied": _hook_spec_applied, "hook_key_applied": _hook_key_applied, "hook_spec_bound": _hook_spec_bound, "light_code_applied": _light_code_applied, "source": _source, "runtime_mode": _runtime_mode, "runtime_bounds": _runtime_bounds, "spacing": _height_spacing, "materials": _materials, "mesher": _mesher, "shader": _shader_material, "bound_multiplier": _bound_displacement_multiplier, "compiled": _compiled_input, "stats": _stats.duplicate(true), "hole_image": _hole_image, "macro_image": _macro_image, "macro_bounds": _macro_bounds, "holes_enabled": _holes_enabled, "macro_enabled": _macro_enabled, "control_ids": _control_ids, "control_weights": _control_weights}
 	_source = source
 	_runtime_mode = runtime_mode
 	_runtime_bounds = bounds
@@ -416,6 +425,8 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 	_active_crease_variant = false
 	_active_shader_key = "smooth|"
 	_hook_spec_bound = []
+	# The first shader of a configuration already has the include, without the edit delay.
+	_light_code_applied = _custom_light_code()
 	_shader_material.set_shader_parameter("field_origin", bounds.position)
 	_shader_material.set_shader_parameter("field_size", bounds.size)
 	# A new material starts without holes or terrain macro; the maps are set again after it.
@@ -447,6 +458,7 @@ func _configure(source: Node3D, materials: Array[StrataMaterial], height_spacing
 		_hook_spec_applied = previous.hook_spec_applied
 		_hook_key_applied = previous.hook_key_applied
 		_hook_spec_bound = previous.hook_spec_bound
+		_light_code_applied = previous.light_code_applied
 		_bound_displacement_multiplier = previous.bound_multiplier
 		_compiled_input = previous.compiled
 		_stats = previous.stats
@@ -933,7 +945,8 @@ static func _solid_texture(color: Color) -> ImageTexture:
 func _update_shading_variant() -> void:
 	var wants_creases := smooth_shading and crease_angle_degrees < 180.0
 	var wants_cache := _surface_cache_wanted()
-	var key := ("creases|" if wants_creases else "smooth|") + ("pixel|" if pixel_sampling else "") + ("cache|" if wants_cache else "") + _hook_key_applied
+	var light := _light_code_applied
+	var key := ("creases|" if wants_creases else "smooth|") + ("pixel|" if pixel_sampling else "") + ("cache|" if wants_cache else "") + ("" if light.is_empty() else "light%x|" % light.hash()) + _hook_key_applied
 	if key == _active_shader_key: return
 	var target := _surface_shader(wants_creases)
 	# Rebinding happens only on explicit variant or custom-code changes, never
@@ -956,47 +969,85 @@ func _update_shading_variant() -> void:
 	_update_cache_shading_settings()
 
 ## The plain shader file, its cached crease variant, or a shader generated for
-## the applied custom fragment code. Code that does not compile is reported per
-## material and left out; if nothing compiles the plain shader is used.
+## the applied custom fragment code and custom light include. Fragment code that
+## does not compile is reported per material and left out; if nothing compiles
+## the plain shader is used. A light include that does not compile is reported
+## and left out, so the terrain keeps Godot's built-in light model.
 func _surface_shader(creases: bool) -> Shader:
 	_hook_spec_bound = []
 	var failed_ids := PackedInt32Array()
 	_stats.custom_shader_material_ids = PackedInt32Array()
 	_stats.custom_shader_failed_ids = failed_ids
+	_stats.custom_light_active = false
+	_stats.custom_light_failed = false
+	var light := _light_code_applied
+	# The light include is first compiled without material hooks, in the variant used then.
+	var light_shader: Shader = null
+	if not light.is_empty():
+		light_shader = _compiled_shader(_with_custom_light(_variant_defines(creases, pixel_sampling, _surface_cache_wanted()) + _plain_shader_code(), light))
+		if light_shader == null:
+			push_error("custom_light_include does not compile, so the terrain uses Godot's built-in light model. The SHADER ERROR printed above (when this code was first compiled) gives the reason.")
+			_stats.custom_light_failed = true
+			light = ""
 	if not _hook_spec_applied.is_empty():
 		var entries := _hook_spec_applied
-		var shader := _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_wanted()))
+		var shader := _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_wanted(), light))
 		if shader == null:
 			entries = []
 			for entry: Dictionary in _hook_spec_applied:
-				if _compiled_shader(_hook_shader_code([entry], creases, pixel_sampling, _surface_cache_wanted())) != null:
+				if _compiled_shader(_hook_shader_code([entry], creases, pixel_sampling, _surface_cache_wanted(), light)) != null:
 					entries.append(entry)
 				else:
 					failed_ids.append(entry.id)
 					push_error("%s: custom_fragment_code does not compile, so this material renders without it. The SHADER ERROR printed above (when this code was first compiled) gives the reason." % entry.label)
 			_stats.custom_shader_failed_ids = failed_ids
 			if not entries.is_empty():
-				shader = _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_wanted()))
+				shader = _compiled_shader(_hook_shader_code(entries, creases, pixel_sampling, _surface_cache_wanted(), light))
 				if shader == null:
 					push_error("The custom_fragment_code of materials %s compiles separately but not together; the terrain uses its plain shader." % ", ".join(entries.map(func(entry: Dictionary) -> String: return entry.label)))
 		if shader != null:
 			_hook_spec_bound = entries
 			_stats.custom_shader_material_ids = PackedInt32Array(entries.map(func(entry: Dictionary) -> int: return entry.id))
+			_stats.custom_light_active = not light.is_empty()
 			return shader
+	# The light variant stays in the size-limited _generated_shaders cache, so edits of
+	# the include do not accumulate shaders in _variant_shaders.
+	if not light.is_empty():
+		_stats.custom_light_active = true
+		return light_shader
 	var cache := _surface_cache_wanted()
 	if not creases and not pixel_sampling and not cache:
 		return load(SURFACE_SHADER_PATH)
 	var defines := _variant_defines(creases, pixel_sampling, cache)
 	if not _variant_shaders.has(defines):
 		var variant := Shader.new()
-		var base_shader: Shader = load(SURFACE_SHADER_PATH)
-		var code := base_shader.code
-		# A generated wrapper shares the entire source. Absolute include paths
-		# are required because this cached Shader has no separate source file.
-		code = code.replace('#include "', '#include "res://addons/strata/shaders/')
-		variant.code = defines + code
+		variant.code = defines + _plain_shader_code()
 		_variant_shaders[defines] = variant
 	return _variant_shaders[defines]
+
+## The plain shader source with absolute include paths, which a generated shader
+## needs because it has no source file of its own. Code inserted afterwards (the
+## custom light include) is not rewritten.
+static func _plain_shader_code() -> String:
+	var base_shader: Shader = load(SURFACE_SHADER_PATH)
+	return base_shader.code.replace('#include "', '#include "res://addons/strata/shaders/')
+
+## The current code of StrataRenderSettings.custom_light_include, or "" when there is
+## none. Shaders are generated from _light_code_applied, which follows it.
+func _custom_light_code() -> String:
+	if render_settings == null or render_settings.custom_light_include == null: return ""
+	return render_settings.custom_light_include.code.strip_edges()
+
+## [param code] with STRATA_CUSTOM_LIGHT defined and its marker line replaced by
+## [param light]; unchanged when [param light] is empty.
+static func _with_custom_light(code: String, light: String) -> String:
+	if light.is_empty() or code.is_empty(): return code
+	var marker := code.find("\n" + _LIGHT_MARKER + "\n")
+	if marker < 0:
+		push_error("terrain_surface.gdshader has no %s line; custom_light_include is ignored." % _LIGHT_MARKER)
+		return code
+	code = code.substr(0, marker + 1) + "// StrataRenderSettings.custom_light_include\n" + light + code.substr(marker + 1 + _LIGHT_MARKER.length())
+	return "#define STRATA_CUSTOM_LIGHT\n" + code
 
 ## Compile-time switches in front of the shader source. Pixel sampling changes
 ## sampler filter hints, which cannot be toggled by a uniform; the surface cache variant adds
@@ -1017,10 +1068,10 @@ static func _compiled_shader(code: String) -> Shader:
 
 ## The plain shader source with STRATA_MATERIAL_HOOKS defined and its marker
 ## replaced by one function per material plus constant-ID dispatch, in the
-## style of terrain_texture_dispatch.gdshaderinc.
-static func _hook_shader_code(entries: Array, creases: bool, pixel := false, cache := false) -> String:
-	var base_shader: Shader = load(SURFACE_SHADER_PATH)
-	var code := base_shader.code.replace('#include "', '#include "res://addons/strata/shaders/')
+## style of terrain_texture_dispatch.gdshaderinc. A non-empty [param light] is
+## inserted as the custom light include (_with_custom_light).
+static func _hook_shader_code(entries: Array, creases: bool, pixel := false, cache := false, light := "") -> String:
+	var code := _plain_shader_code()
 	var marker := code.find("\n" + _HOOK_MARKER + "\n")
 	if marker < 0:
 		push_error("terrain_surface.gdshader has no %s line; custom fragment code is ignored." % _HOOK_MARKER)
@@ -1042,7 +1093,7 @@ static func _hook_shader_code(entries: Array, creases: bool, pixel := false, cac
 	block.append("bool strata_material_has_hook(int id) {\n\tswitch (id) {\n%s\t}\n\treturn false;\n}" % has_cases)
 	block.append("void strata_material_hook(int id, inout StrataSurface s, in StrataContext c) {\n\tswitch (id) {\n%s\t}\n}" % call_cases)
 	code = code.substr(0, marker + 1) + "\n".join(block) + code.substr(marker + 1 + _HOOK_MARKER.length())
-	return "#define STRATA_MATERIAL_HOOKS\n" + _variant_defines(creases, pixel, cache) + code
+	return _with_custom_light("#define STRATA_MATERIAL_HOOKS\n" + _variant_defines(creases, pixel, cache) + code, light)
 
 ## The custom fragment code of the current materials, by material ID. Invalid
 ## parameter entries are reported and left out.
@@ -1098,6 +1149,21 @@ func _rebuild_hooks_after_edit(serial: int) -> void:
 	if serial != _hook_rebuild_serial or _shader_material == null: return
 	_apply_hook_spec()
 	_update_material_settings()
+
+## Regenerates the shader for an edited custom light include: in the editor after
+## _HOOK_REBUILD_DELAY without further edits, otherwise (or outside the tree, where
+## no timer can run) at once.
+func _schedule_light_rebuild() -> void:
+	_light_rebuild_serial += 1
+	if Engine.is_editor_hint() and is_inside_tree():
+		get_tree().create_timer(_HOOK_REBUILD_DELAY).timeout.connect(_rebuild_light_after_edit.bind(_light_rebuild_serial))
+	else:
+		_rebuild_light_after_edit(_light_rebuild_serial)
+
+func _rebuild_light_after_edit(serial: int) -> void:
+	if serial != _light_rebuild_serial or _shader_material == null: return
+	_light_code_applied = _custom_light_code()
+	_update_shading_variant()
 
 ## Uploads custom parameter values for the code compiled into the current
 ## shader. A value whose type changed waits for the regenerated shader.
@@ -1340,13 +1406,17 @@ func set_macro_map(image: Image, bounds: Rect2) -> bool:
 ## albedo_strength), and its roughness moves towards 1 by (1 - overlay) * roughness_strength;
 ## the overlay fades to 1 between fade_start and fade_end metres from the camera.
 ## [param settings]: ao_strength (default 1), albedo_strength (0), roughness_strength (0),
-## fade_start (40), fade_end (60). Update the textures in place (Texture2DArray.update_layer,
-## ImageTexture.update) to stream tiles; call again only to replace them or change the
-## settings. Returns false, leaving the overlay off, for invalid arguments.
-func set_ao_overlay(layers: Texture2DArray, table: Texture2D, origin: Vector2, tile_size: Vector2, settings := {}) -> bool:
+## fade_start (40), fade_end (60), mip_scale (1: the overlay's texture gradients are multiplied
+## by it, so 2, 4 or 8 sample one, two or three mip levels coarser, to judge a lower bake
+## resolution without rebaking). [param layers] is any 2D-array TextureLayered: a
+## Texture2DArray, or a Texture2DArrayRD filled on the GPU. Update the textures in place
+## (Texture2DArray.update_layer, ImageTexture.update) to stream tiles; call again only to
+## replace them or change the settings. Returns false, leaving the overlay off, for invalid
+## arguments.
+func set_ao_overlay(layers: TextureLayered, table: Texture2D, origin: Vector2, tile_size: Vector2, settings := {}) -> bool:
 	var fade_start := float(settings.get("fade_start", 40.0))
 	var fade_end := float(settings.get("fade_end", 60.0))
-	if layers == null or table == null or not origin.is_finite() or not tile_size.is_finite() or tile_size.x <= 0.0 or tile_size.y <= 0.0 or not is_finite(fade_start) or not is_finite(fade_end):
+	if layers == null or layers.get_layered_type() != TextureLayered.LAYERED_TYPE_2D_ARRAY or table == null or not origin.is_finite() or not tile_size.is_finite() or tile_size.x <= 0.0 or tile_size.y <= 0.0 or not is_finite(fade_start) or not is_finite(fade_end):
 		push_warning("Invalid AO overlay; the overlay is off.")
 		clear_ao_overlay()
 		return false
@@ -1354,7 +1424,8 @@ func set_ao_overlay(layers: Texture2DArray, table: Texture2D, origin: Vector2, t
 		"ao_strength": clampf(float(settings.get("ao_strength", 1.0)), 0.0, 1.0),
 		"albedo_strength": clampf(float(settings.get("albedo_strength", 0.0)), 0.0, 1.0),
 		"roughness_strength": clampf(float(settings.get("roughness_strength", 0.0)), 0.0, 1.0),
-		"fade_start": maxf(fade_start, 0.0), "fade_end": maxf(fade_end, maxf(fade_start, 0.0) + 0.01)}
+		"fade_start": maxf(fade_start, 0.0), "fade_end": maxf(fade_end, maxf(fade_start, 0.0) + 0.01),
+		"mip_scale": maxf(float(settings.get("mip_scale", 1.0)), 1.0)}
 	_apply_ao_overlay()
 	return true
 
@@ -1380,6 +1451,7 @@ func _apply_ao_overlay() -> void:
 	_shader_material.set_shader_parameter("ao_overlay_roughness_strength", _ao_overlay.roughness_strength)
 	_shader_material.set_shader_parameter("ao_overlay_fade_start", _ao_overlay.fade_start)
 	_shader_material.set_shader_parameter("ao_overlay_fade_end", _ao_overlay.fade_end)
+	_shader_material.set_shader_parameter("ao_overlay_mip_scale", _ao_overlay.get("mip_scale", 1.0))
 
 func set_channel_preview(image: Image, bounds: Rect2, enabled: bool) -> bool:
 	if _shader_material == null: return false
@@ -1595,7 +1667,10 @@ func _validate_lod_parameters(bounds: Rect2) -> bool:
 	return true
 
 func _quality_changed() -> void:
-	if render_settings == null: return
+	if render_settings == null:
+		# Clearing the settings removes an applied custom light include as well.
+		if _shader_material != null and _custom_light_code() != _light_code_applied: _schedule_light_rebuild()
+		return
 	var values := render_settings.parameters()
 	var requested_cells := int(values.cells)
 	if requested_cells < 4 or requested_cells > 64 or (requested_cells & (requested_cells - 1)) != 0 or not is_finite(float(values.minimum)) or float(values.minimum) <= 0 or not is_finite(float(values.ratio)) or float(values.ratio) <= 0 or int(values.budget) < 1 or int(values.budget) > 4096:
@@ -1617,10 +1692,11 @@ func _quality_changed() -> void:
 	displacement_vertex_spacing = render_settings.displacement_vertex_spacing
 	displacement_refinement_radius = render_settings.displacement_refinement_radius
 	displacement_refinement_budget = render_settings.displacement_refinement_budget
-	if pixel_sampling != render_settings.pixel_sampling:
-		pixel_sampling = render_settings.pixel_sampling
-		if _shader_material != null: _update_shading_variant()
-	if _shader_material != null and _surface_cache_variant != _surface_cache_wanted():
+	var pixel_changed := pixel_sampling != render_settings.pixel_sampling
+	pixel_sampling = render_settings.pixel_sampling
+	if _shader_material != null and _custom_light_code() != _light_code_applied:
+		_schedule_light_rebuild()
+	if _shader_material != null and (pixel_changed or _surface_cache_variant != _surface_cache_wanted()):
 		_update_shading_variant()
 	_update_parallax_settings()
 	_update_cache_shading_settings()

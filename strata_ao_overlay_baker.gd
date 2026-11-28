@@ -18,6 +18,9 @@ extends RefCounted
 ##    then the mesh path;
 ## 3. options.default (a rule Dictionary), when set; otherwise the node is skipped.
 ##
+## Content without nodes can be supplied per tile by options.blob_source (world blobs) and
+## options.raw_source (packed instance transforms with per-object rules; see bake()).
+##
 ## Tiles are owned: a tile's map takes the instances whose blob centre lies inside it, plus the
 ## blobs of neighbouring tiles' edge bands, read from their edge files (instances within
 ## 2 * max_radius of a tile edge). After a tile is baked, the edge bands of its already-baked
@@ -40,6 +43,10 @@ const DEFAULT_OPTIONS := {
 	# Only MultiMeshes and meshes drawn no farther than this (visibility_range_end, 0 = no
 	# limit) contribute; the overlay fades out at a similar distance.
 	"max_range": 0.0,
+	# Optional Callable(rect: Rect2) -> Dictionary of packed instance transforms and per-object
+	# rules ({transforms, objects, rules, count, key_names}, see bake()), so instance stores can
+	# be baked without building temporary MultiMeshInstance3D nodes.
+	"raw_source": null,
 }
 const _FIXED := 65536.0
 const _GLSL := """
@@ -47,14 +54,19 @@ const _GLSL := """
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 layout(set = 0, binding = 0, std430) restrict readonly buffer Data { float d[]; };
 layout(set = 0, binding = 1, std430) restrict readonly buffer GroupOf { uint group_of[]; };
-// Per group, 6 vec4: node transform rows (3), AABB centre + half extent, radius/footprint/strength,
-// first instance / float offset / stride.
+// Mode 0: per group, 6 vec4 (node transform rows (3), AABB centre + half extent,
+//         radius/footprint/strength, first instance / float offset / stride).
+// Mode 3: d holds 12 floats per instance (basis columns x, y, z, then origin), group_of its
+//         object k; groups[0] = vec4(origin.xyz, 0) added to every instance origin;
+//         groups[1 + 2k] = vec4(aabb_centre.xyz, half_ext),
+//         groups[2 + 2k] = vec4(radius, footprint, strength, key_index).
 layout(set = 0, binding = 2, std430) restrict readonly buffer Groups { vec4 groups[]; };
 layout(set = 0, binding = 3, std430) restrict readonly buffer Blobs { vec4 blobs[]; };
 layout(set = 0, binding = 4, std430) restrict buffer Density { uint density[]; };
 layout(set = 0, binding = 5, std430) restrict buffer Edges { uint edge_count; uint edge_capacity; uint pad0; uint pad1; vec4 edges[]; };
 layout(set = 0, binding = 6, std430) restrict writeonly buffer Packed { uint packed_out[]; };
 layout(set = 0, binding = 7, std430) restrict buffer Histogram { uint histogram[]; };
+layout(set = 0, binding = 8, std430) restrict buffer KeyCounts { uint key_counts[]; };
 layout(push_constant, std430) uniform Params {
 	vec2 origin; float texel; float max_radius;
 	uint res; uint count; uint mode; float band;
@@ -103,6 +115,28 @@ void main() {
 		// Owned instances only: neighbours contribute through their edge files.
 		if (local.x < 0.0 || local.y < 0.0 || local.x >= p.size.x || local.y >= p.size.y) { return; }
 		splat(centre.xz, r, rule.z);
+		if (p.band > 0.0 && (local.x < p.band || local.y < p.band || local.x >= p.size.x - p.band || local.y >= p.size.y - p.band)) {
+			uint k = atomicAdd(edge_count, 1u);
+			if (k < edge_capacity) { edges[k] = vec4(centre.xz, min(max(r, p.texel), p.max_radius), rule.z); }
+		}
+	} else if (p.mode == 3u) {
+		uint obj = group_of[i];
+		vec4 bounds = groups[1u + obj * 2u];
+		vec4 rule = groups[2u + obj * 2u];
+		if (rule.z <= 0.0) { return; }
+		uint b = i * 12u;
+		vec3 bx = vec3(d[b], d[b + 1u], d[b + 2u]);
+		vec3 by = vec3(d[b + 3u], d[b + 4u], d[b + 5u]);
+		vec3 bz = vec3(d[b + 6u], d[b + 7u], d[b + 8u]);
+		vec3 org = vec3(d[b + 9u], d[b + 10u], d[b + 11u]);
+		vec3 centre = groups[0].xyz + org + bx * bounds.x + by * bounds.y + bz * bounds.z;
+		float scale = max(length(bx.xz), length(bz.xz));
+		float r = (rule.x > 0.0 ? rule.x : rule.y * bounds.w) * scale;
+		vec2 local = centre.xz - p.origin;
+		if (local.x < 0.0 || local.y < 0.0 || local.x >= p.size.x || local.y >= p.size.y) { return; }
+		splat(centre.xz, r, rule.z);
+		uint key_idx = uint(rule.w);
+		atomicAdd(key_counts[key_idx], 1u);
 		if (p.band > 0.0 && (local.x < p.band || local.y < p.band || local.x >= p.size.x - p.band || local.y >= p.size.y - p.band)) {
 			uint k = atomicAdd(edge_count, 1u);
 			if (k < edge_capacity) { edges[k] = vec4(centre.xz, min(max(r, p.texel), p.max_radius), rule.z); }
@@ -306,11 +340,25 @@ static func _push(rect: Rect2, texel: float, resolution: int, count: int, mode: 
 	return bytes
 
 
-## Rasterizes [param collected] (from collect(); only instances inside [param rect]) and the
-## world blobs [param blobs] (x, z, radius, strength per blob) into a [param resolution]² R8
-## image over [param rect]. With [param edge_band] > 0, also returns the collected blobs within
-## that distance of the rect's edges. Returns {ok, image, edges, histogram, gpu_ms}.
-static func bake(rect: Rect2, resolution: int, collected: Dictionary, blobs: PackedFloat32Array, options: Dictionary, edge_band := 0.0) -> Dictionary:
+## Rasterizes [param collected] (from collect()), [param raw_collected] (from options.raw_source)
+## and the world blobs [param blobs] (x, z, radius, strength per blob) into a
+## [param resolution]² R8 image over [param rect]. Instances count only when their blob centre
+## lies inside [param rect]. With [param edge_band] > 0, also returns the blobs of those
+## instances within that distance of the rect's edges.
+##
+## [param raw_collected] supplies instances as packed data:
+## [code]transforms[/code] (PackedFloat32Array, 12 floats per instance: basis columns x, y and z,
+## then the origin, each xyz), [code]objects[/code] (PackedInt32Array, the object index k of each
+## instance), [code]rules[/code] (PackedFloat32Array: an origin x, y, z, 0 added to every
+## instance origin, then 8 floats per object k: AABB centre x, y, z, half the larger horizontal
+## AABB side, radius, footprint, strength, key index), [code]count[/code] (instances) and
+## [code]key_names[/code] (PackedStringArray, one name per key index). An object with strength 0
+## is skipped.
+##
+## A tile coarser than 0.25 m per texel is rasterized at twice, four times ... its resolution
+## until it reaches 0.25 m per texel or 1024², then box-filtered down to [param resolution]. Returns {ok, image, edges, histogram, raw_owned, raw_by_key, gpu_ms};
+## image is null when there is nothing to bake (the histogram is then all unoccluded).
+static func bake(rect: Rect2, resolution: int, collected: Dictionary, blobs: PackedFloat32Array, options: Dictionary, edge_band := 0.0, raw_collected: Dictionary = {}) -> Dictionary:
 	options = options_with_defaults(options)
 	if not _device():
 		return {"ok": false, "message": "no rendering device (headless or Compatibility renderer)"}
@@ -318,11 +366,34 @@ static func bake(rect: Rect2, resolution: int, collected: Dictionary, blobs: Pac
 		return {"ok": false, "message": "invalid rect or resolution"}
 	var started := Time.get_ticks_usec()
 	var instances := int(collected.get("instances", 0))
+	var raw_instances := int(raw_collected.get("count", 0))
 	var blob_count := blobs.size() / 4
-	var texels := resolution * resolution
+	var out_texels := resolution * resolution
+	if instances == 0 and raw_instances == 0 and blob_count == 0:
+		var empty_hist := PackedInt32Array()
+		empty_hist.resize(256)
+		empty_hist[255] = out_texels
+		return {"ok": true, "image": null, "edges": PackedFloat32Array(), "histogram": empty_hist,
+			"raw_owned": 0, "raw_by_key": {}, "gpu_ms": (Time.get_ticks_usec() - started) / 1000.0}
+	if raw_instances > 0:
+		var problem := _raw_problem(raw_collected)
+		if not problem.is_empty():
+			return {"ok": false, "message": "raw_source: " + problem}
+	# Coarse tiles (for example 256 texels over 256 m) are rasterized finer and box-filtered
+	# down, so sub-metre sources keep their area-weighted occlusion instead of having their
+	# blob radius raised to one texel.
+	var bake_res := resolution
+	var mip_steps := 0
+	while rect.size.x / float(bake_res) > 0.25 and bake_res * 2 <= 1024:
+		bake_res *= 2
+		mip_steps += 1
+	var texels := bake_res * bake_res
+	var edge_cap := maxi(instances + raw_instances, 1)
 	var edge_header := PackedByteArray()
-	edge_header.resize(16 + 16 * maxi(instances, 1))
-	edge_header.encode_u32(4, instances)
+	edge_header.resize(16 + 16 * edge_cap)
+	edge_header.encode_u32(4, edge_cap)
+	var key_names: PackedStringArray = raw_collected.get("key_names", PackedStringArray())
+	var key_buf_bytes := maxi(key_names.size(), 1) * 4
 	var buffers := [
 		_storage((collected.get("data", PackedFloat32Array()) as PackedFloat32Array).to_byte_array()),
 		_storage((collected.get("group_of", PackedInt32Array()) as PackedInt32Array).to_byte_array()),
@@ -332,43 +403,111 @@ static func bake(rect: Rect2, resolution: int, collected: Dictionary, blobs: Pac
 		_rd.storage_buffer_create(edge_header.size(), edge_header),
 		_rd.storage_buffer_create(texels),
 		_rd.storage_buffer_create(256 * 4),
+		_rd.storage_buffer_create(key_buf_bytes),
 	]
 	_rd.buffer_clear(buffers[4], 0, texels * 4)
 	_rd.buffer_clear(buffers[7], 0, 256 * 4)
+	_rd.buffer_clear(buffers[8], 0, key_buf_bytes)
 	var uniforms: Array[RDUniform] = []
 	for i in buffers.size(): uniforms.append(_uniform(i, buffers[i]))
 	var uniform_set := _rd.uniform_set_create(uniforms, _shader, 0)
-	var texel := rect.size.x / resolution
+	var raw_buffers: Array[RID] = []
+	var raw_set := RID()
+	if raw_instances > 0:
+		raw_buffers = [
+			_storage((raw_collected.get("transforms", PackedFloat32Array()) as PackedFloat32Array).to_byte_array()),
+			_storage((raw_collected.get("objects", PackedInt32Array()) as PackedInt32Array).to_byte_array()),
+			_storage((raw_collected.get("rules", PackedFloat32Array()) as PackedFloat32Array).to_byte_array()),
+		]
+		var raw_uniforms: Array[RDUniform] = [
+			_uniform(0, raw_buffers[0]),
+			_uniform(1, raw_buffers[1]),
+			_uniform(2, raw_buffers[2]),
+		]
+		for i in range(3, buffers.size()): raw_uniforms.append(_uniform(i, buffers[i]))
+		raw_set = _rd.uniform_set_create(raw_uniforms, _shader, 0)
+	var texel := rect.size.x / bake_res
 	var list := _rd.compute_list_begin()
 	_rd.compute_list_bind_compute_pipeline(list, _pipeline)
 	_rd.compute_list_bind_uniform_set(list, uniform_set, 0)
 	if instances > 0:
-		var push := _push(rect, texel, resolution, instances, 0, edge_band, options)
+		var push := _push(rect, texel, bake_res, instances, 0, edge_band, options)
 		_rd.compute_list_set_push_constant(list, push, push.size())
 		_rd.compute_list_dispatch(list, ceili(instances / 64.0), 1, 1)
+	if raw_instances > 0:
+		if instances > 0: _rd.compute_list_add_barrier(list)
+		_rd.compute_list_bind_uniform_set(list, raw_set, 0)
+		var push := _push(rect, texel, bake_res, raw_instances, 3, edge_band, options)
+		_rd.compute_list_set_push_constant(list, push, push.size())
+		_rd.compute_list_dispatch(list, ceili(raw_instances / 64.0), 1, 1)
+		_rd.compute_list_bind_uniform_set(list, uniform_set, 0)
 	if blob_count > 0:
-		_rd.compute_list_add_barrier(list)
-		var push := _push(rect, texel, resolution, blob_count, 1, 0.0, options)
+		if instances > 0 or raw_instances > 0: _rd.compute_list_add_barrier(list)
+		var push := _push(rect, texel, bake_res, blob_count, 1, 0.0, options)
 		_rd.compute_list_set_push_constant(list, push, push.size())
 		_rd.compute_list_dispatch(list, ceili(blob_count / 64.0), 1, 1)
 	_rd.compute_list_add_barrier(list)
-	var finish := _push(rect, texel, resolution, texels / 4, 2, 0.0, options)
+	var finish := _push(rect, texel, bake_res, texels / 4, 2, 0.0, options)
 	_rd.compute_list_set_push_constant(list, finish, finish.size())
 	_rd.compute_list_dispatch(list, ceili(texels / 4 / 64.0), 1, 1)
 	_rd.compute_list_end()
 	_rd.submit()
 	_rd.sync()
-	var image := Image.create_from_data(resolution, resolution, false, Image.FORMAT_R8, _rd.buffer_get_data(buffers[6]))
+	var image := Image.create_from_data(bake_res, bake_res, false, Image.FORMAT_R8, _rd.buffer_get_data(buffers[6]))
 	var histogram := _rd.buffer_get_data(buffers[7]).to_int32_array()
+	if mip_steps > 0:
+		image.generate_mipmaps()
+		var off := image.get_mipmap_offset(mip_steps)
+		var down_bytes := image.get_data().slice(off, off + out_texels)
+		image = Image.create_from_data(resolution, resolution, false, Image.FORMAT_R8, down_bytes)
+		histogram = PackedInt32Array()
+		histogram.resize(256)
+		for b in down_bytes:
+			histogram[b] += 1
+	var raw_by_key := {}
+	var raw_owned := 0
+	if raw_instances > 0 and not key_names.is_empty():
+		var kcounts := _rd.buffer_get_data(buffers[8]).to_int32_array()
+		for k in mini(key_names.size(), kcounts.size()):
+			var c := kcounts[k]
+			if c > 0:
+				raw_by_key[key_names[k]] = c
+				raw_owned += c
 	var edges := PackedFloat32Array()
-	if edge_band > 0.0 and instances > 0:
-		var found := mini(_rd.buffer_get_data(buffers[5], 0, 4).decode_u32(0), instances)
+	if edge_band > 0.0 and (instances > 0 or raw_instances > 0):
+		var found := mini(_rd.buffer_get_data(buffers[5], 0, 4).decode_u32(0), edge_cap)
 		if found > 0:
 			edges = _rd.buffer_get_data(buffers[5], 16, found * 16).to_float32_array()
+	if raw_set.is_valid(): _rd.free_rid(raw_set)
+	for rb: RID in raw_buffers: _rd.free_rid(rb)
 	_rd.free_rid(uniform_set)
 	for buffer: RID in buffers: _rd.free_rid(buffer)
 	return {"ok": true, "image": image, "edges": edges, "histogram": histogram,
+		"raw_owned": raw_owned, "raw_by_key": raw_by_key,
 		"gpu_ms": (Time.get_ticks_usec() - started) / 1000.0}
+
+
+## Why [param raw] (see bake()) cannot be baked, or "" when its arrays fit its count and every
+## object that contributes names a key. Object indices of instances are not checked.
+static func _raw_problem(raw: Dictionary) -> String:
+	var count := int(raw.get("count", 0))
+	var transforms: Variant = raw.get("transforms")
+	var objects: Variant = raw.get("objects")
+	var rules: Variant = raw.get("rules")
+	var key_names: Variant = raw.get("key_names", PackedStringArray())
+	if not (transforms is PackedFloat32Array and objects is PackedInt32Array and rules is PackedFloat32Array and key_names is PackedStringArray):
+		return "transforms, objects, rules and key_names must be PackedFloat32Array, PackedInt32Array, PackedFloat32Array and PackedStringArray"
+	if (transforms as PackedFloat32Array).size() < count * 12 or (objects as PackedInt32Array).size() < count:
+		return "transforms or objects hold fewer than count instances"
+	var packed := rules as PackedFloat32Array
+	if packed.size() < 4 or (packed.size() - 4) % 8 != 0:
+		return "rules must hold the origin and 8 floats per object"
+	var keys := (key_names as PackedStringArray).size()
+	for offset in range(4, packed.size(), 8):
+		var key := packed[offset + 7]
+		if packed[offset + 6] > 0.0 and (key < 0.0 or key >= keys or key != floorf(key)):
+			return "object %d has key index %s, outside key_names" % [(offset - 4) / 8, key]
+	return ""
 
 
 ## min, mean and the share of texels below 1 (occluded) from a bake histogram.
@@ -433,30 +572,58 @@ static func bake_tile(layout: Dictionary, tile: Vector2i, roots: Array, options:
 	var started := Time.get_ticks_usec()
 	var rect := tile_rect(layout, tile)
 	var resolution := int(layout.get("resolution", 2048))
-	var collected := collect(roots, options, rect)
+	var collected := collect(roots, options, rect) if not roots.is_empty() else {"data": PackedFloat32Array(), "group_of": PackedInt32Array(), "groups": PackedFloat32Array(), "instances": 0, "by_key": {}}
+	var raw_collected := {}
+	var raw_source: Variant = options.get("raw_source")
+	if raw_source is Callable and (raw_source as Callable).is_valid():
+		var supplied_raw: Variant = (raw_source as Callable).call(rect)
+		if supplied_raw is Dictionary: raw_collected = supplied_raw
 	# Optional procedural footprints use the same GPU splat and seam cache as
 	# ordinary mesh instances. The provider receives this tile's world rectangle.
 	var owned_blobs := PackedFloat32Array()
 	var owned_edges := PackedFloat32Array()
 	var blob_source: Variant = options.get("blob_source")
 	var band := 2.0 * float(options.max_radius)
+	var max_r := float(options.max_radius)
 	if blob_source is Callable and (blob_source as Callable).is_valid():
 		var supplied: PackedFloat32Array = blob_source.call(rect)
-		for i in range(0, supplied.size() - 3, 4):
-			var centre := Vector2(supplied[i], supplied[i + 1])
-			if not centre.is_finite() or not rect.has_point(centre): continue
-			var radius := supplied[i + 2]
-			var strength := supplied[i + 3]
-			if not is_finite(radius) or not is_finite(strength) or radius <= 0.0 or strength <= 0.0: continue
-			var blob := PackedFloat32Array([centre.x, centre.y, minf(radius, float(options.max_radius)), minf(strength, 0.95)])
-			owned_blobs.append_array(blob)
-			var local := centre - rect.position
-			if local.x < band or local.y < band or local.x >= rect.size.x - band or local.y >= rect.size.y - band:
-				owned_edges.append_array(blob)
+		var sn := supplied.size()
+		if sn >= 4:
+			owned_blobs.resize(sn)
+			owned_edges.resize(sn)
+			var bw := 0
+			var ew := 0
+			var rx0 := rect.position.x
+			var ry0 := rect.position.y
+			var rx1 := rx0 + rect.size.x
+			var ry1 := ry0 + rect.size.y
+			var bx0 := rx0 + band
+			var by0 := ry0 + band
+			var bx1 := rx1 - band
+			var by1 := ry1 - band
+			var i := 0
+			while i + 3 < sn:
+				var cx := supplied[i]
+				var cz := supplied[i + 1]
+				var radius := supplied[i + 2]
+				var strength := supplied[i + 3]
+				i += 4
+				if cx < rx0 or cz < ry0 or cx >= rx1 or cz >= ry1: continue
+				if not is_finite(cx) or not is_finite(cz) or not is_finite(radius) or not is_finite(strength): continue
+				if radius <= 0.0 or strength <= 0.0: continue
+				var cr := minf(radius, max_r)
+				var cs := minf(strength, 0.95)
+				owned_blobs[bw] = cx; owned_blobs[bw + 1] = cz; owned_blobs[bw + 2] = cr; owned_blobs[bw + 3] = cs
+				bw += 4
+				if cx < bx0 or cz < by0 or cx >= bx1 or cz >= by1:
+					owned_edges[ew] = cx; owned_edges[ew + 1] = cz; owned_edges[ew + 2] = cr; owned_edges[ew + 3] = cs
+					ew += 4
+			owned_blobs.resize(bw)
+			owned_edges.resize(ew)
 	var collect_ms := (Time.get_ticks_usec() - started) / 1000.0
 	var blobs := _neighbour_blobs(layout, tile)
 	blobs.append_array(owned_blobs)
-	var result := bake(rect, resolution, collected, blobs, options, band)
+	var result := bake(rect, resolution, collected, blobs, options, band, raw_collected)
 	if not result.ok:
 		return {"ok": false, "tile": tile, "message": "AO overlay bake: " + str(result.message)}
 	var stats := histogram_stats(result.histogram)
@@ -464,6 +631,7 @@ static func bake_tile(layout: Dictionary, tile: Vector2i, roots: Array, options:
 	var edges: PackedFloat32Array = result.edges
 	edges.append_array(owned_edges)
 	var edge_file := edges_path(layout, tile)
+	# Written even when empty: neighbour repairs find the tiles already baked by this file.
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(edge_file.get_base_dir()))
 	var file := FileAccess.open(edge_file, FileAccess.WRITE)
 	if file == null:
@@ -478,8 +646,13 @@ static func bake_tile(layout: Dictionary, tile: Vector2i, roots: Array, options:
 				if (dx != 0 or dz != 0) and FileAccess.file_exists(edges_path(layout, other)):
 					if rebake_tile_edges(layout, other, options):
 						neighbours.append(other)
+	var merged_by_key: Dictionary = collected.by_key.duplicate()
+	var raw_by_key: Dictionary = result.get("raw_by_key", {})
+	for k in raw_by_key:
+		merged_by_key[k] = int(merged_by_key.get(k, 0)) + int(raw_by_key[k])
+	var total_instances := int(collected.instances) + int(result.get("raw_owned", 0))
 	var report := {"ok": bytes >= 0, "tile": tile, "path": tile_path(layout, tile) if bytes > 0 else "",
-		"instances": collected.instances, "by_key": collected.by_key, "edge_blobs": edges.size() / 4,
+		"instances": total_instances, "by_key": merged_by_key, "edge_blobs": edges.size() / 4,
 		"procedural_blobs": owned_blobs.size() / 4,
 		"bytes": bytes, "collect_ms": collect_ms, "gpu_ms": result.gpu_ms, "neighbours_rebaked": neighbours,
 		"ms": (Time.get_ticks_usec() - started) / 1000.0}
@@ -511,7 +684,10 @@ static func rebake_tile_edges(layout: Dictionary, tile: Vector2i, options: Dicti
 	var width := mini(ceili(float(options.max_radius) / (rect.size.x / resolution)) + 1, resolution / 2)
 	for strip: Rect2i in [Rect2i(0, 0, resolution, width), Rect2i(0, resolution - width, resolution, width),
 			Rect2i(0, 0, width, resolution), Rect2i(resolution - width, 0, width, resolution)]:
-		image.blit_rect(fresh, strip, strip.position)
+		if fresh != null:
+			image.blit_rect(fresh, strip, strip.position)
+		else:
+			image.fill_rect(strip, Color(1, 1, 1))
 	# An existing map is kept; a tile without one gets one when the blobs reach it.
 	var occluded: bool = exists or histogram_stats(result.histogram).occluded_fraction > 0.0
 	return save_tile_image(layout, tile, image, occluded) >= 0

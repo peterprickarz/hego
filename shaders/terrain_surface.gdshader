@@ -104,6 +104,9 @@ uniform float ao_overlay_albedo_strength = 0.0;
 uniform float ao_overlay_roughness_strength = 0.0;
 uniform float ao_overlay_fade_start = 40.0;
 uniform float ao_overlay_fade_end = 60.0;
+// Multiplies the overlay's texture gradients: 1 samples it at its own resolution, 2, 4 and 8
+// one, two and three mip levels coarser (a preview of a lower bake resolution).
+uniform float ao_overlay_mip_scale = 1.0;
 uniform sampler2D channel_preview_field : filter_linear, repeat_disable;
 uniform bool show_channel_preview = false;
 uniform vec2 channel_preview_origin = vec2(0.0);
@@ -522,7 +525,8 @@ float terrain_ao_overlay(vec3 local_point, vec3 local_dx, vec3 local_dy, float v
 	if (layer < 0) { return 1.0; }
 	vec2 uv_dx = (mat3(model) * local_dx).xz / ao_overlay_tile_size;
 	vec2 uv_dy = (mat3(model) * local_dy).xz / ao_overlay_tile_size;
-	float occlusion = textureGrad(ao_overlay_layers, vec3(tile_position - vec2(tile), float(layer)), uv_dx, uv_dy).r;
+	float mip_scale = max(ao_overlay_mip_scale, 1.0);
+	float occlusion = textureGrad(ao_overlay_layers, vec3(tile_position - vec2(tile), float(layer)), uv_dx * mip_scale, uv_dy * mip_scale).r;
 	return mix(1.0, occlusion, fade);
 }
 
@@ -530,6 +534,17 @@ float terrain_ao_overlay(vec3 local_point, vec3 local_dx, vec3 local_dy, float v
 // StrataRenderer replaces the next line with terrain_material_hooks.gdshaderinc
 // and the functions generated from StrataMaterial.custom_fragment_code.
 STRATA_MATERIAL_HOOK_FUNCTIONS
+#endif
+
+// StrataRenderSettings.custom_light_include: the renderer defines STRATA_CUSTOM_LIGHT and
+// replaces the marker line below with the include's code, which defines light(). The plain
+// shader file never has it defined.
+#ifdef STRATA_CUSTOM_LIGHT
+// World-space position of the fragment.
+varying vec3 strata_world_position;
+// The SPECULAR the fragment wrote (terrain_specular, raised by wetness).
+varying float strata_specular;
+STRATA_CUSTOM_LIGHT_INCLUDE
 #endif
 
 void vertex() {
@@ -554,6 +569,9 @@ void vertex() {
 #endif
 	float offset = material_height_offset(vec3(terrain_position.x, height, terrain_position.y), direction);
 	VERTEX = vec3(terrain_position.x, height, terrain_position.y) + direction * offset;
+#ifdef STRATA_CUSTOM_LIGHT
+	strata_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+#endif
 	// Holes: a NaN position drops every triangle that uses this vertex (terrain_vertex_hole()).
 	// The fragment shader has no discard, so depth and shadow passes keep early depth testing.
 	if (has_holes && terrain_vertex_hole(terrain_position)) { VERTEX = vec3(uintBitsToFloat(0x7fc00000u)); }
@@ -780,6 +798,9 @@ void fragment() {
 	}
 	ROUGHNESS = clamp(orm.g, 0.04, 1.0); METALLIC = clamp(orm.b, 0.0, 1.0);
 	SPECULAR = mix(terrain_specular, max(terrain_specular, wet_specular), wet);
+#ifdef STRATA_CUSTOM_LIGHT
+	strata_specular = SPECULAR;
+#endif
 	AO = clamp(orm.r, 0.0, 1.0) * mix(1.0, terrain_macro.a, terrain_ao_strength);
 	// The cache's AO already includes the macro AO.
 	AO = mix(AO, writer_albedo.a, writer_cover);
