@@ -114,6 +114,24 @@ func parameters() -> Dictionary:
 		terrain_specular = value
 		emit_changed()
 
+@export_group("Custom lighting")
+## Shader code that replaces Godot's built-in light model for the terrain, for example to apply
+## a screen-space shadow mask or a stylised light response. The include is added to the terrain
+## shader as written and must define [code]light()[/code]; it may also declare uniforms, global
+## uniforms and helper functions. It can read two varyings: [code]strata_world_position[/code]
+## (world-space position of the fragment) and [code]strata_specular[/code] (the SPECULAR the
+## fragment wrote). Its code is pasted into a generated shader, so any [code]#include[/code]
+## inside it needs an absolute [code]res://[/code] path. An include that does not compile is
+## reported and the terrain keeps the built-in light model. Empty (the default) keeps the plain
+## terrain shader. See "Custom light code" in docs/strata/reference.md.
+@export var custom_light_include: ShaderInclude:
+	set(value):
+		if custom_light_include == value: return
+		if custom_light_include != null and custom_light_include.changed.is_connected(emit_changed): custom_light_include.changed.disconnect(emit_changed)
+		custom_light_include = value
+		if custom_light_include != null: custom_light_include.changed.connect(emit_changed)
+		emit_changed()
+
 @export_group("Near displacement geometry")
 ## Additional native quadtree leaves near the camera; base geometry settings
 ## above keep their independent budget and are never coarsened to pay for these.

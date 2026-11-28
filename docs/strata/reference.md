@@ -196,13 +196,17 @@ plants), baked per square world tile and streamed around the camera. Off by defa
 without an overlay node draws exactly as before (the shader tests one uniform bool).
 
 **Renderer.** `StrataRenderer.set_ao_overlay(layers, table, origin, tile_size, settings)` binds a
-`Texture2DArray` of single-channel occlusion maps (1 = unoccluded) and a lookup table (one R8
+2D-array `TextureLayered` of single-channel occlusion maps (1 = unoccluded; a `Texture2DArray`,
+or a `Texture2DArrayRD` whose layers are written on the GPU) and a lookup table (one R8
 texel per world tile: layer + 1, 0 = no map). World XZ is split into tiles of `tile_size` metres
 from `origin`. The terrain's AO is multiplied by `mix(1, overlay, ao_strength)` and its albedo by
 `mix(1, overlay, albedo_strength)`, and its roughness moves towards 1 by
 `(1 − overlay) × roughness_strength` (ground under cover is littered and sheltered, so it does not
 share the open ground's sheen); the overlay fades to 1 between `fade_start` and `fade_end`
-metres from the camera (defaults: AO 1, albedo 0, roughness 0, 40 to 60 m). `clear_ao_overlay()` turns it off;
+metres from the camera (defaults: AO 1, albedo 0, roughness 0, 40 to 60 m). The `mip_scale`
+setting (default 1, at least 1) multiplies the overlay's texture gradients, so 2, 4 and 8 sample
+it one, two and three mip levels coarser: a way to see how a lower bake resolution would look
+before rebaking at it. `clear_ao_overlay()` turns it off;
 it is runtime state and is not saved. Textures are updated in place to stream tiles.
 
 **Baker.** `StrataAOOverlayBaker` rasterizes blobs on the GPU (a local `RenderingDevice` compute
@@ -224,6 +228,38 @@ rebakes as mesh sources; `procedural_blobs` reports their count. The provider
 owns shape sampling, contact tests and any density normalization. This is useful
 for shader-deformed splines whose MultiMesh transforms are packed curve data.
 
+Instance stores that keep their transforms in packed arrays can set `options.raw_source` (or the
+overlay node's `raw_source`) to a `Callable(Rect2) -> Dictionary` instead of building temporary
+nodes. The baker passes the tile's world rectangle and splats the result on the GPU with the
+same blob shape as mesh sources. The dictionary holds:
+
+| Key | Contents |
+| --- | --- |
+| `transforms` | `PackedFloat32Array`, 12 floats per instance: the basis columns x, y and z, then the origin (each x, y, z) |
+| `objects` | `PackedInt32Array`, one object index `k` per instance, in the same order |
+| `rules` | `PackedFloat32Array`: first `origin.x, origin.y, origin.z, 0`, added to every instance origin (for example the store's world position), then 8 floats per object `k`: the mesh AABB centre x, y, z, half the larger horizontal AABB side, `radius`, `footprint`, `strength`, key index |
+| `count` | the number of instances |
+| `key_names` | `PackedStringArray`, the report name of each key index |
+
+An instance's blob centre is the origin entry plus its origin plus its basis applied to the
+object's AABB centre (the rotation and scale of the store itself are not applied). Its radius
+is `radius` when positive, otherwise `footprint` × the half side, times the larger horizontal
+length of the basis columns x and z, clamped to `max_radius`; the falloff is the mesh sources'.
+An object with strength 0 is skipped; every other object's key index must be an index into
+`key_names`. `rule_for()`, `max_range` and `classify` do not apply: the provider decides which
+objects contribute and with which rule. Only instances whose blob centre lies in the tile are
+drawn, so the provider may return everything near the rectangle. Those within
+`2 × max_radius` of an edge are written to the tile's edge file like mesh instances, and the
+tile report adds them to `instances` and, per key name, to `by_key`. `bake()` also returns
+them as `raw_owned` and `raw_by_key`. Arrays shorter than `count` or a key index outside
+`key_names` fail the bake with a message.
+
+A tile coarser than 0.25 m per texel is rasterized at twice, four times ... its resolution
+(until 0.25 m per texel or 1024²) and box-filtered down to its resolution, so sources smaller
+than a texel keep their share of occlusion instead of growing to one texel. `bake()` returns
+`image` null when there is nothing to bake (no instances and no blobs), with a histogram that
+counts every texel as unoccluded.
+
 **Tiles.** `bake_tile(layout, tile, roots, options)` writes `<directory>/tile_X_Z.res` (an R8
 `Image`, mip 0, compressed; none when nothing is occluded) and `edges/tile_X_Z.f32` (the blobs
 within `2 × max_radius` of the tile's edges). A tile owns the instances whose blob centre lies
@@ -237,7 +273,9 @@ worker thread, one layer upload per frame, about 0.5 ms), frees those beyond `un
 binds every `StrataRenderer` child and the editor preview (`editor_preview`). With
 `editor_from_layer` set to the stage the sources belong to, the editor preview draws the overlay
 only while it shows that layer or a later one. Each slot costs
-resolution² × 4/3 bytes of video memory (5.6 MB at 2048²). `rebake_tiles(tiles)` (and the
+resolution² × 4/3 bytes of video memory (5.6 MB at 2048²); changing `slots` while tiles are
+resident rebuilds the layer array and loads them again. `mip_scale` is passed to the renderers
+as the `mip_scale` setting. `rebake_tiles(tiles)` (and the
 inspector button **Rebake tiles near the camera**) bakes from the nodes in `source_group`
 (default `strata_ao_sources`; a group on a parent covers its subtree, hand-placed objects
 included) and from source providers: nodes in the group `strata_ao_source_providers` with
@@ -506,6 +544,56 @@ the terrain shader. When no material has code, the terrain uses its plain shader
 Code that does not compile is reported with the material's path and ID, and that material is
 drawn without it. The code runs in the pixel stage only: it cannot move vertices, change
 displacement or the height blend, discard pixels, or declare its own textures.
+
+## Custom light code
+
+`StrataRenderSettings.custom_light_include` is a `ShaderInclude` whose code supplies the
+terrain shader's `light()` function. It replaces Godot's built-in light model for the terrain,
+for example to apply a screen-space shadow mask or a stylised light response, while the
+project keeps its lighting code in its own file. The renderer adds the code to the terrain
+shader as written, ahead of `vertex()`:
+
+```glsl
+// A wrapped diffuse term and a simple highlight, dimmed below a fixed height.
+const float SHADE_HEIGHT = 0.0;
+
+void light() {
+    float lit = clamp(dot(NORMAL, LIGHT) * 0.5 + 0.5, 0.0, 1.0);
+    float below = 1.0 - smoothstep(SHADE_HEIGHT - 2.0, SHADE_HEIGHT, strata_world_position.y);
+    vec3 incoming = LIGHT_COLOR * ATTENUATION * mix(1.0, 0.5, below);
+    DIFFUSE_LIGHT += lit * lit * incoming / PI;
+    vec3 half_vector = normalize(VIEW + LIGHT);
+    float gloss = exp2(10.0 * (1.0 - ROUGHNESS) + 1.0);
+    SPECULAR_LIGHT += strata_specular * 0.08 * pow(clamp(dot(NORMAL, half_vector), 0.0, 1.0), gloss) * clamp(dot(NORMAL, LIGHT), 0.0, 1.0) * incoming;
+}
+```
+
+The code must define `light()` and may also declare uniforms, global uniforms, constants and
+helper functions. Everything Godot's `light()` stage offers (`NORMAL`, `VIEW`, `LIGHT`,
+`LIGHT_COLOR`, `ATTENUATION`, `ALBEDO`, `ROUGHNESS`, `METALLIC`, `SPECULAR_AMOUNT`,
+`DIFFUSE_LIGHT`, `SPECULAR_LIGHT` and the rest) is available, plus two varyings:
+
+| Varying | Meaning |
+| --- | --- |
+| `vec3 strata_world_position` | the rendered point in world space |
+| `float strata_specular` | the `SPECULAR` the terrain wrote: `terrain_specular`, raised towards the water film's value by rain wetness |
+
+The terrain's material is internal to the renderer, so a uniform declared in the include
+keeps its default value; values that change at run time belong in global uniforms. Strata's
+own shader uniforms are internal as well and may change between versions: do not rely on them.
+
+The code is pasted into a generated shader that has no source file of its own, so an
+`#include` inside it needs an absolute `res://` path. Changing the include's code regenerates
+the terrain shader: in the editor after half a second without further edits, so typing in the
+shader editor does not recompile the terrain at every change, and at once in a running game. A
+terrain that loads with an include uses it in its first shader. An include that does not compile is reported, together with Godot's
+SHADER ERROR, and the terrain keeps the built-in light model. When the property is empty (the
+default) the terrain uses its plain shader unchanged.
+
+The include replaces the built-in light model for the terrain only. Options of the built-in
+model that a `BaseMaterial3D` offers, such as clearcoat or rim, do not apply to it. The surface
+cache is unaffected: it holds the material, not its lighting, so it keeps its content when
+the include changes.
 
 ## Files
 

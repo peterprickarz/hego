@@ -69,7 +69,7 @@ HYTHON_TESTS=(test_hda_package_graphs test_island_stage_materials test_material_
 GPU_TESTS=(
     island_showcase_test material_preview_gpu_test render_material_test render_state_test terrain_height_blend_test
     terrain_shading_test terrain_normal_displacement_test terrain_triplanar_test terrain_appearance_test
-    terrain_material_hook_test residency_render_test
+    terrain_material_hook_test terrain_light_include_test residency_render_test ao_overlay_bake_test
 )
 
 mkdir -p "$ROOT_DIR/build/test-logs"
