@@ -1,7 +1,7 @@
 @tool
 extends RefCounted
 ## Discovers Copia authoring resources in the project without eagerly loading every mesh:
-## - [CopiaObject] and any subclass (e.g. game-specific subclasses like KellCopiaObject)
+## - [CopiaObject] and any project-specific subclass
 ## - [CopiaSpecies]
 ## - [CopiaBrushPalette]
 ## - [CopiaRenderSettings], [CopiaPhysicsSettings], [CopiaPlacementSettings]
