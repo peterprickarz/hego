@@ -2,6 +2,6 @@
   "format_version": 1,
   "package": "hego-copia",
   "addon_path": "addons/hego_copia",
-  "source_commit": "eb8bbd4d6a0782e5e1e8417a51b822fcc4bbc476",
-  "requires": [{"package": "hego", "branch": "release-next", "addon_path": "addons/hego", "source_commit": "eb8bbd4d6a0782e5e1e8417a51b822fcc4bbc476"}, {"package": "copia", "branch": "copia-release-next", "addon_path": "addons/copia", "source_commit": "eb8bbd4d6a0782e5e1e8417a51b822fcc4bbc476"}]
+  "source_commit": "eb37cce1921337eb7ebda560242b14eb9bc68992",
+  "requires": [{"package": "hego", "branch": "release-next", "addon_path": "addons/hego", "source_commit": "eb37cce1921337eb7ebda560242b14eb9bc68992"}, {"package": "copia", "branch": "copia-release-next", "addon_path": "addons/copia", "source_commit": "eb37cce1921337eb7ebda560242b14eb9bc68992"}]
 }
