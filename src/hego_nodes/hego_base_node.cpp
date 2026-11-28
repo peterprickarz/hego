@@ -21,6 +21,7 @@ HEGoBaseNode::HEGoBaseNode() : node_id(-1) {}
 HEGoBaseNode::~HEGoBaseNode() {}
 
 HAPI_NodeId HEGoBaseNode::get_id() const { return node_id; }
+HAPI_NodeId HEGoBaseNode::get_connection_node_id(HAPI_NodeType) const { return node_id; }
 uint64_t HEGoBaseNode::get_generation() const { return node_generation.load(std::memory_order_acquire); }
 
 void HEGoBaseNode::reset_node_id()
@@ -41,6 +42,13 @@ bool live_node(HEGoSessionManager *mgr, HAPI_NodeId id, HAPI_NodeInfo *result = 
 	if (HoudiniApi::GetNodeInfo(mgr->get_session(), id, &info) != HAPI_RESULT_SUCCESS) return false;
 	if (result) *result = info;
 	return true;
+}
+
+bool connection_endpoints(HEGoSessionManager *manager, HAPI_NodeId target, const HEGoBaseNode &source, HAPI_NodeId expected_source,
+		HAPI_NodeInfo &target_info, HAPI_NodeInfo &source_info)
+{
+	return source.get_id() == expected_source && live_node(manager, target, &target_info) &&
+			live_node(manager, source.get_connection_node_id(target_info.type), &source_info);
 }
 }
 
@@ -76,12 +84,8 @@ godot::Ref<HEGoTask> HEGoBaseNode::instantiate()
 	return task;
 }
 
-namespace
-{
-// The node to delete for [param node_id]: the top-level object under /obj that holds it.
-// HEGo creates every node it owns with parent -1, so Houdini wraps it in an object node of
-// its own; deleting only the SOP would leave that object, and its cook caches, behind.
-HAPI_NodeId owning_object(const HAPI_Session *session, HAPI_NodeId node_id)
+// The default SOP and asset wrappers own the top-level container created with their node.
+HAPI_NodeId HEGoBaseNode::get_owned_node_id(const HAPI_Session *session, HAPI_NodeId node_id) const
 {
 	HAPI_NodeId obj_manager = -1;
 	if (HoudiniApi::GetManagerNodeId(session, HAPI_NODETYPE_OBJ, &obj_manager) != HAPI_RESULT_SUCCESS) return node_id;
@@ -98,7 +102,6 @@ HAPI_NodeId owning_object(const HAPI_Session *session, HAPI_NodeId node_id)
 	}
 	return node_id;
 }
-} // namespace
 
 godot::Ref<HEGoTask> HEGoBaseNode::delete_node()
 {
@@ -132,15 +135,20 @@ godot::Ref<HEGoTask> HEGoBaseNode::delete_node()
 			fail(task, "Node was re-instantiated or reset before it could be deleted");
 			return godot::Variant();
 		}
-		const HAPI_NodeId target = owning_object(session, nid);
+		const HAPI_NodeId target = self->get_owned_node_id(session, nid);
+		if (target < 0)
+		{
+			fail(task, "Could not verify ownership of the Houdini node to delete.");
+			return {};
+		}
 		const HAPI_Result result = HoudiniApi::DeleteNode(session, target);
-		HEGo::Util::Geo::GeoCache::invalidate(nid);
-		self->reset_node_id();
 		if (result != HAPI_RESULT_SUCCESS)
 		{
 			fail(task, "HAPI could not delete node " + godot::String::num_int64(target));
 			return godot::Variant();
 		}
+		HEGo::Util::Geo::GeoCache::invalidate(nid);
+		self->reset_node_id();
 		return target;
 	});
 }
@@ -189,7 +197,8 @@ godot::Ref<HEGoTask> HEGoInputReceiverNode::connect_input(const HEGoBaseNode *ot
 	return submit_failable("Connect input", target_nid, [self, source, target_nid, input_index, wanted, generation, force](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
 		HAPI_NodeInfo target_info = HoudiniApi::NodeInfo_Create();
 		HAPI_NodeInfo source_info = HoudiniApi::NodeInfo_Create();
-		if (self->get_generation() != generation || source->get_generation() != wanted.source_generation || !live_node(mgr, target_nid, &target_info) || !live_node(mgr, wanted.source_node_id, &source_info))
+		if (self->get_generation() != generation || source->get_generation() != wanted.source_generation ||
+				!connection_endpoints(mgr, target_nid, *source.ptr(), wanted.source_node_id, target_info, source_info))
 		{
 			fail(task, "Connection source/target was reset or is no longer live"); return {};
 		}
@@ -210,7 +219,7 @@ godot::Ref<HEGoTask> HEGoInputReceiverNode::connect_input(const HEGoBaseNode *ot
 			}
 			self->cached_connections.erase(input_index);
 		}
-		if (!HEGo::Util::Geo::connect_node_input(mgr, target_nid, input_index, wanted.source_node_id, wanted.output_index))
+		if (!HEGo::Util::Geo::connect_node_input(mgr, target_nid, input_index, source_info.id, wanted.output_index))
 		{
 			fail(task, "HAPI failed to connect the requested input"); return {};
 		}
@@ -345,7 +354,8 @@ godot::Ref<HEGoTask> HEGoTransformableInputReceiverNode::connect_input(const HEG
 	return submit_failable("Connect input", target_nid, [self, source, target_nid, input_index, wanted, generation, force](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
 		HAPI_NodeInfo target_info = HoudiniApi::NodeInfo_Create();
 		HAPI_NodeInfo source_info = HoudiniApi::NodeInfo_Create();
-		if (self->get_generation() != generation || source->get_generation() != wanted.source_generation || !live_node(mgr, target_nid, &target_info) || !live_node(mgr, wanted.source_node_id, &source_info))
+		if (self->get_generation() != generation || source->get_generation() != wanted.source_generation ||
+				!connection_endpoints(mgr, target_nid, *source.ptr(), wanted.source_node_id, target_info, source_info))
 		{
 			fail(task, "Connection source/target was reset or is no longer live"); return {};
 		}
@@ -366,7 +376,7 @@ godot::Ref<HEGoTask> HEGoTransformableInputReceiverNode::connect_input(const HEG
 			}
 			self->cached_connections.erase(input_index);
 		}
-		if (!HEGo::Util::Geo::connect_node_input(mgr, target_nid, input_index, wanted.source_node_id, wanted.output_index))
+		if (!HEGo::Util::Geo::connect_node_input(mgr, target_nid, input_index, source_info.id, wanted.output_index))
 		{
 			fail(task, "HAPI failed to connect the requested input"); return {};
 		}

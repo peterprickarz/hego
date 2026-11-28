@@ -344,7 +344,7 @@ Reloads the library that supplies ``previous``, replaces its instance and clears
 
 ``bool`` **sync_inputs**\ (\ asset\: :ref:`HEGoAssetNode<class_HEGoAssetNode>`, skip_indices\: ``Array`` = [], cook\: ``Dictionary`` = {}\ ) :ref:`🔗<class_HEGoAssetAgent_method_sync_inputs>`
 
-Feeds ``asset`` the Godot nodes stored in the owner's input stash.
+Feeds ``asset`` the scene nodes and textures stored in the owner's input stash.
 
  
 
@@ -378,9 +378,15 @@ Feeds ``asset`` the Godot nodes stored in the owner's input stash.
 
 |void| **set_input**\ (\ index\: ``int``, sources\: ``Variant``\ ) :ref:`🔗<class_HEGoAssetAgent_method_set_input>`
 
-Points HDA input ``index`` at ``sources``, which may be a ``Node``, a ``NodePath``, a
+Points SOP input ``index`` at ``sources``. Accepts a ``Node``, ``NodePath``,
 
- path string, or an array of any of those.
+ path string, ``Texture2D``, or an array combining them. A texture uses linear encoding
+
+ by default. For sRGB color, pass ``{"texture": texture, "encoding": HEGoTextureInputNode.ENCODING_SRGB}``.
+
+ Each texture contributes one point with the string attribute
+
+ ``hego_cop_path``. Texture points follow scene inputs in the order supplied.
 
  
 

@@ -63,6 +63,8 @@ Methods
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`cook<class_HEGoAssetNode_method_cook>`\ (\ )                                                                                                                                                                                                                       |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+   | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_cop_image<class_HEGoAssetNode_method_fetch_cop_image>`\ (\ cop_path\: ``String`` = "", output_name\: ``String`` = ""\ )                                                                                                                                      |
+   +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_curves<class_HEGoAssetNode_method_fetch_curves>`\ (\ read_prim_attribs\: ``PackedStringArray`` = PackedStringArray(), read_point_attribs\: ``PackedStringArray`` = PackedStringArray()\ )                                                                    |
    +---------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
    | :ref:`HEGoTask<class_HEGoTask>` | :ref:`fetch_heightfield_layer_image<class_HEGoAssetNode_method_fetch_heightfield_layer_image>`\ (\ part_id\: ``int``\ )                                                                                                                                                  |
@@ -162,6 +164,22 @@ Returns an :ref:`HEGoTask<class_HEGoTask>` that completes with ``0`` once the co
 
 
 A cook that finishes with non-fatal errors succeeds: Houdini reports those as warnings and the geometry is still usable.
+
+.. rst-class:: classref-item-separator
+
+----
+
+.. _class_HEGoAssetNode_method_fetch_cop_image:
+
+.. rst-class:: classref-method
+
+:ref:`HEGoTask<class_HEGoTask>` **fetch_cop_image**\ (\ cop_path\: ``String`` = "", output_name\: ``String`` = ""\ ) :ref:`🔗<class_HEGoAssetNode_method_fetch_cop_image>`
+
+Renders a Copernicus layer and returns its pixels as an ``Image``. A relative ``cop_path`` starts at this HDA instance. An absolute Houdini node path starts at the session root. An empty path selects the asset itself and is valid for a COP HDA. Pass the output connector's name in ``output_name``, or leave it empty to select connector zero.
+
+
+
+The task evaluates the requested COP branch independently of SOP output geometry. It returns a top-origin, linear float32 image in ``FORMAT_RF``, ``FORMAT_RGF``, ``FORMAT_RGBF``, or ``FORMAT_RGBAF`` according to channel count. Integer ID layers fail because float32 cannot preserve all IDs. Invalid paths, output names, and non-image outputs also fail the task.
 
 .. rst-class:: classref-item-separator
 

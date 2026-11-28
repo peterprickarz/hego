@@ -1,8 +1,9 @@
 Inputs
 ======
 
-These pages describe what ``HEGoNode3D`` sends into Houdini when you connect different Godot
-node types as HDA inputs. Drawing a graph in the viewport is
+These pages describe what ``HEGoNode3D`` sends into Houdini when you connect Godot
+nodes or texture resources to an HDA input. For a one-point texture reference and a
+Fetch COP authoring example, see :doc:`/api/copernicus`. Drawing a graph in the viewport is
 :doc:`/node_reference/hego_graph_input_3d`.
 
 Bridge addons add additional input types without coupling them to HEGo (see

@@ -50,6 +50,8 @@ public:
 	// Metadata for UI display
 	godot::String description;
 	HAPI_NodeId node_id = -1;
+	// Large image results belong to the caller. History can retain just the operation metadata.
+	bool keep_history_result = true;
 
 	// The work function — a lambda capturing the data it needs
 	std::function<godot::Variant(HEGoSessionManager *)> work_fn;

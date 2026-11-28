@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="HEGoTextureInputNode" inherits="HEGoBaseNode" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+<brief_description>
+Uploads a Godot [Image] or [Texture2D] as a Houdini Copernicus layer.
+</brief_description>
+<description>
+Call [method set_image] or [method set_texture] in an active session to create the input and upload its pixels. Keep this object while the HDA uses it. Updating the same object preserves its Houdini output connection.
+
+Connect the texture with [method HEGoTransformableInputReceiverNode.connect_input]. A SOP input receives one point at the origin with a string attribute named [code]hego_cop_path[/code]. Read that attribute in the COP Path of a Fetch COP inside the HDA. A compatible COP HDA input receives the image layer directly. Use [method HEGoMergeNode.connect_inputs] to send several texture points to a SOP socket. HDAs with an explicit COP node-reference parameter can also use [method HEGoAssetNode.set_node_parm].
+
+The upload uses the base mip level and preserves one to four channels. Choose the encoding of the actual pixel values. A luminance-alpha image is transferred as two components in luminance, alpha order.
+</description>
+<tutorials>
+</tutorials>
+<methods>
+<method name="set_image">
+<return type="HEGoTask" />
+<param index="0" name="image" type="Image" />
+<param index="1" name="encoding" type="int" enum="HEGoTextureInputNode.ImageEncoding" default="0" />
+<param index="2" name="force" type="bool" default="false" />
+<description>
+Captures [param image] when called and uploads its finite samples as linear floats. The task returns the Houdini output node ID. Repeating the same image and encoding reuses the existing upload. Pass [param force] to upload again. An empty image, an unsupported image format, or a compressed format Godot cannot decode fails the task.
+</description>
+</method>
+<method name="set_texture">
+<return type="HEGoTask" />
+<param index="0" name="texture" type="Texture2D" />
+<param index="1" name="encoding" type="int" enum="HEGoTextureInputNode.ImageEncoding" default="0" />
+<param index="2" name="force" type="bool" default="false" />
+<description>
+Reads the current base-level image with [method Texture2D.get_image] and submits it through [method set_image]. Reading a GPU texture can incur a readback. Use [method set_image] when CPU pixels are already available. The task fails if [param texture] cannot supply an image.
+</description>
+</method>
+</methods>
+<constants>
+<constant name="ENCODING_LINEAR" value="0" enum="ImageEncoding">
+Upload samples with their existing linear values. Use for masks, roughness, normal vectors, or color that is already linear.
+</constant>
+<constant name="ENCODING_SRGB" value="1" enum="ImageEncoding">
+Decode sRGB-encoded color components to linear values before upload. Alpha retains its original linear value.
+</constant>
+</constants>
+</class>

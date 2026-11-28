@@ -11,6 +11,7 @@ and the rest of this section fills in the parts of it:
 
 - :doc:`task_pattern` -- why every call into Houdini returns a task, and how to wait for one.
 - :doc:`geo_output` -- reading the points and surfaces a cook produced.
+- :doc:`copernicus` -- passing Godot images into an HDA and reading Copernicus layers.
 - :doc:`node3d_modules` -- the output handlers, and writing one of your own.
 - :doc:`logging` -- getting your messages into the same place HEGo's go.
 
@@ -22,5 +23,6 @@ Each class is documented individually in the :doc:`/classes/index`.
    custom_nodes/index
    task_pattern
    geo_output
+   copernicus
    node3d_modules
    logging

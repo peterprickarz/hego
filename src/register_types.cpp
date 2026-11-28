@@ -12,6 +12,7 @@
 #include "hego_nodes/hego_heightfield_input_node.h"
 #include "hego_nodes/hego_input_node.h"
 #include "hego_nodes/hego_merge_node.h"
+#include "hego_nodes/hego_texture_input_node.h"
 #include "hego_nodes/hego_trackable_node.h"
 
 #include <gdextension_interface.h>
@@ -61,6 +62,7 @@ void initialize_hego_module(ModuleInitializationLevel p_level)
 	ClassDB::register_class<HEGo::HEGoInputNode>();
 	ClassDB::register_class<HEGo::HEGoCurveInputNode>();
 	ClassDB::register_class<HEGo::HEGoHeightfieldInputNode>();
+	ClassDB::register_class<HEGo::HEGoTextureInputNode>();
 }
 
 void uninitialize_hego_module(ModuleInitializationLevel p_level)

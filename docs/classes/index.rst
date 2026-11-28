@@ -16,6 +16,7 @@ One Godot object per node in the Houdini session. Everything a cook does is a me
 - :ref:`HEGoInputNode<class_HEGoInputNode>`
 - :ref:`HEGoCurveInputNode<class_HEGoCurveInputNode>`
 - :ref:`HEGoHeightfieldInputNode<class_HEGoHeightfieldInputNode>`
+- :ref:`HEGoTextureInputNode<class_HEGoTextureInputNode>`
 
 Node base classes
 -----------------

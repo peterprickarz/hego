@@ -142,8 +142,16 @@ void HEGoTaskScheduler::worker_loop()
 
 		// Add to completed history
 		{
+			godot::Ref<HEGoTask> history_entry = task;
+			if (!failed && !task->keep_history_result)
+			{
+				history_entry.instantiate();
+				history_entry->description = task->description;
+				history_entry->node_id = task->node_id;
+				history_entry->status.store(HEGoTask::COMPLETED, std::memory_order_release);
+			}
 			std::lock_guard<std::mutex> lock(history_mutex);
-			completed_history.push_back(task);
+			completed_history.push_back(history_entry);
 			while (static_cast<int>(completed_history.size()) > MAX_HISTORY)
 			{
 				completed_history.pop_front();

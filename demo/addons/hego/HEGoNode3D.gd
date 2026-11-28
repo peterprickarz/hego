@@ -22,7 +22,7 @@ class_name HEGoNode3D
 @export var asset_name: String
 ## The HDA's parameters as a blob, so they survive a session restart and a scene reload.
 @export var parm_stash: PackedByteArray
-## References to the Godot nodes wired into the HDA's inputs, one entry per input.
+## Scene node paths and texture resources wired into the HDA, one entry per input.
 @export var input_stash: Array
 
 ## Emitted by [method hego_notify_cook_inputs_changed]: this node's inputs or parameters
@@ -301,8 +301,8 @@ func hego_get_input_stash() -> Array:
 
 ## Stores the input references the bottom panel collected.
 ##
-## Each HDA input can combine several Godot nodes, so [param input_array] holds one entry per
-## HDA input, each with its own list of node paths and its settings.
+## Each row holds scene node paths in [code]inputs[/code], per-input [code]settings[/code],
+## and an optional [code]textures[/code] array of texture resources with their encoding.
 func hego_set_input_stash(input_array: Array) -> void:
 	var result := []
 	for input in input_array:
@@ -310,10 +310,16 @@ func hego_set_input_stash(input_array: Array) -> void:
 		for ref in input["inputs"]:
 			if ref != "":
 				ref_array.append(ref)
-		result.append({
+		var row := {
 			"inputs": ref_array,
 			"settings": input["settings"],
-		})
+		}
+		var textures: Variant = input.get("textures", [])
+		if not textures is Array:
+			row["textures"] = textures
+		elif not textures.is_empty():
+			row["textures"] = textures.duplicate(true)
+		result.append(row)
 	input_stash = result
 	hego_notify_cook_inputs_changed()
 

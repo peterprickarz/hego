@@ -24,6 +24,7 @@ var _rebuild_generation := 0
 ## Whether a cook started from this panel is still running. Recook is disabled meanwhile, so
 ## a second cook cannot be fired into a node that is already cooking.
 var _cooking: bool = false
+var _pending_input_recook: Node
 ## Which asset sections the user has open, keyed by label. Kept here rather than on the node
 ## because it is the user's choice about this panel, not part of what the node cooks.
 var _open_sections: Dictionary = {}
@@ -326,12 +327,14 @@ func _build_input_rows(asset: HEGoAssetNode, selected_node: Node, generation: in
 		input_vbox.add_child(input_node)
 		var inputs = PackedStringArray()
 		var settings := {}
+		var textures: Variant = []
 		if selected_node.has_method("hego_get_input_stash"):
 			var input_stash = selected_node.hego_get_input_stash()
 			if input_stash.size() > i:
 				inputs = input_stash[i]["inputs"]
 				settings = input_stash[i].get("settings", {})
-		input_node.setup(input_names[i], inputs, settings, selected_node, input_visibility_undo_redo)
+				textures = input_stash[i].get("textures", [])
+		input_node.setup(input_names[i], inputs, settings, selected_node, input_visibility_undo_redo, textures if textures is Array else [])
 		input_node.inputs_changed.connect(_on_input_changed)
 		input_nodes.append(input_node)
 
@@ -602,14 +605,22 @@ func _on_input_changed():
 		settings["include_children"] = input_nodes[i].include_children.button_pressed
 		# Settings an extension input handler edits in this row, see HEGoInputHandler.
 		settings.merge(input_nodes[i].get_extension_settings(), true)
-		inputs.append({
+		var row := {
 			"inputs": input_nodes[i].get_inputs(),
 			"settings": settings,
-		})
+		}
+		var textures: Array = input_nodes[i].get_textures()
+		if not textures.is_empty():
+			row["textures"] = textures
+		inputs.append(row)
 	if hego_tool_node.has_method("hego_set_input_stash"):
 		hego_tool_node.hego_set_input_stash(inputs)
+		_mark_scene_changed(hego_tool_node)
 	if auto_recook_toggle.button_pressed and not _requires_explicit_recook():
-		await recook()
+		if _cooking:
+			_pending_input_recook = hego_tool_node
+		else:
+			await recook()
 
 
 ## Whether the selected node or one of its inputs asks to be recooked only on request,
@@ -680,6 +691,10 @@ func recook(rebuild_asset := false):
 		await _stash_cooked_parameters(selected_node)
 	_cooking = false
 	_set_buttons_disabled(not is_instance_valid(hego_tool_node))
+	var pending := _pending_input_recook
+	_pending_input_recook = null
+	if is_instance_valid(pending) and pending == hego_tool_node and auto_recook_toggle.button_pressed and not _requires_explicit_recook():
+		await recook()
 
 
 func _stash_cooked_parameters(selected_node: Node) -> void:

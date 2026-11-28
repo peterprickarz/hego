@@ -29,7 +29,7 @@ private:
 	godot::String definition_name;
 	bool refresh_definition_source(const HAPI_Session *session, HAPI_NodeId id);
 	using AssetWork = std::function<godot::Variant(HEGoSessionManager *, HAPI_NodeId, godot::String &)>;
-	godot::Ref<HEGoTask> asset_task(const godot::String &description, AssetWork work);
+	godot::Ref<HEGoTask> asset_task(const godot::String &description, AssetWork work, bool keep_history_result = true);
 
 
 public:
@@ -51,6 +51,7 @@ public:
 	godot::Ref<HEGoTask> get_parms_dict();
 	godot::Ref<HEGoTask> get_help_page();
 	godot::Ref<HEGoTask> get_input_names();
+	godot::Ref<HEGoTask> fetch_cop_image(const godot::String &cop_path = {}, const godot::String &output_name = {});
 	// The cooked output, for reading and splitting it from GDScript in code rather
 	// than through a fetch config. Optionally loads attributes up front, so a handler
 	// can do its whole job with one await.

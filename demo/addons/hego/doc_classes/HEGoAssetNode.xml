@@ -35,6 +35,16 @@ Returns an [HEGoTask] that completes with [code]0[/code] once the cook has finis
 A cook that finishes with non-fatal errors succeeds: Houdini reports those as warnings and the geometry is still usable.
 </description>
 </method>
+<method name="fetch_cop_image">
+<return type="HEGoTask" />
+<param index="0" name="cop_path" type="String" default="&quot;&quot;" />
+<param index="1" name="output_name" type="String" default="&quot;&quot;" />
+<description>
+Renders a Copernicus layer and returns its pixels as an [Image]. A relative [param cop_path] starts at this HDA instance. An absolute Houdini node path starts at the session root. An empty path selects the asset itself and is valid for a COP HDA. Pass the output connector's name in [param output_name], or leave it empty to select connector zero.
+
+The task evaluates the requested COP branch independently of SOP output geometry. It returns a top-origin, linear float32 image in [code]FORMAT_RF[/code], [code]FORMAT_RGF[/code], [code]FORMAT_RGBF[/code], or [code]FORMAT_RGBAF[/code] according to channel count. Integer ID layers fail because float32 cannot preserve all IDs. Invalid paths, output names, and non-image outputs also fail the task.
+</description>
+</method>
 <method name="fetch_curves">
 <return type="HEGoTask" />
 <param index="0" name="read_prim_attribs" type="PackedStringArray" default="PackedStringArray()" />

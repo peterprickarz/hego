@@ -19,6 +19,8 @@ One Godot object per node in the Houdini session. Everything a cook does is a me
      - Creates Houdini curve input geometry from a ``Path3D``.
    * - :ref:`HEGoHeightfieldInputNode<class_HEGoHeightfieldInputNode>`
      - Builds Houdini HeightField input layers from Godot images.
+   * - :ref:`HEGoTextureInputNode<class_HEGoTextureInputNode>`
+     - Uploads a Godot ``Image`` or ``Texture2D`` as a Houdini Copernicus layer.
 
 .. toctree::
    :maxdepth: 1
@@ -29,3 +31,4 @@ One Godot object per node in the Houdini session. Everything a cook does is a me
    class_hegoinputnode
    class_hegocurveinputnode
    class_hegoheightfieldinputnode
+   class_hegotextureinputnode

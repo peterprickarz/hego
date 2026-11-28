@@ -63,7 +63,7 @@ ISLAND_DATA_TESTS=(island_storage_test terrain_demo_scene_test)
 HOUDINI_GODOT_TESTS=(
     editor_hda_package_test hego_graph_native_test hego_heightfield_fields_native_test
     hego_input_children_native_test hego_parameter_native_test hego_parameter_fixtures_test hego_parameter_scene_test hego_surface_preload_test
-    hego_custom_channels_test hego_point_split_test hego_copia_roundtrip_test
+    hego_custom_channels_test hego_point_split_test hego_copia_roundtrip_test hego_cop_texture_test hego_texture_input_scene_test
 )
 HYTHON_TESTS=(test_hda_package_graphs test_island_stage_materials test_material_distribution test_material_tiling test_terrain_tint test_island_transition)
 # Forward+ on a real display.

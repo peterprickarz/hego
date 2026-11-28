@@ -1,5 +1,7 @@
 #include "hego_session_manager.h"
 #include "util/hego_util.h"
+#include <HAPI/HAPI_Version.h>
+#include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include "hapi/hego_platform.h"
@@ -75,6 +77,7 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	server_options.timeoutMs = 3000.0f;
 
 	my_session_type = session_type;
+	fixed_shared_memory_bytes = 0;
 	my_owns_server = false;
 	my_named_pipe = named_pipe;
 	my_tcp_port = tcp_port;
@@ -119,6 +122,16 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 	}
 	else if (session_type == SessionType::InProcess)
 	{
+		HAPI_SessionInfo session_info = HoudiniApi::SessionInfo_Create();
+		if (godot::ProjectSettings::get_singleton()->get_setting(SHARED_MEMORY_RING_SETTING, false))
+		{
+			server_options.sharedMemoryBufferType = HAPI_THRIFT_SHARED_MEMORY_RING_BUFFER;
+			session_info.sharedMemoryBufferType = HAPI_THRIFT_SHARED_MEMORY_RING_BUFFER;
+		}
+		else
+		{
+			fixed_shared_memory_bytes = server_options.sharedMemoryBufferSize * 1000000LL;
+		}
 		// InProcess is served by a shared memory server: it is in-process from the
 		// user's point of view (Houdini is started by HEGo and closes with it), but
 		// it is not HAPI's in-process session type.
@@ -128,7 +141,6 @@ bool HEGoSessionManager::start_session(SessionType session_type, const std::stri
 		HOUDINI_CHECK_ERROR_GET(&server_result, HoudiniApi::StartThriftSharedMemoryServer(&server_options, my_named_pipe.c_str(), &process_id, nullptr));
 		my_owns_server = server_result == HAPI_RESULT_SUCCESS;
 		HEGo::Util::Log::debug(HEGo::Util::Log::Category::SESSION, "Connecting to shared memory session...");
-		HAPI_SessionInfo session_info = HoudiniApi::SessionInfo_Create();
 		session_result = HoudiniApi::CreateThriftSharedMemorySession(&my_session, my_named_pipe.c_str(), &session_info);
 	}
 	else
@@ -297,6 +309,26 @@ HAPI_Session *HEGoSessionManager::get_session() { return &my_session; }
 bool HEGoSessionManager::is_session_active() { return HAPI_RESULT_SUCCESS == HoudiniApi::IsSessionValid(&my_session); }
 
 HAPI_CookOptions *HEGoSessionManager::get_cook_options() { return &my_cook_options; }
+
+bool HEGoSessionManager::validate_cop_transfer(godot::String &error, int64_t bytes) const
+{
+	int major = 0;
+	// HAPI 8 exported the same CreateCOPImage symbol with a different signature.
+	if (!HoudiniApi::GetEnvInt || HoudiniApi::GetEnvInt(HAPI_ENVINT_VERSION_HOUDINI_ENGINE_MAJOR, &major) != HAPI_RESULT_SUCCESS ||
+			major != HAPI_VERSION_HOUDINI_ENGINE_MAJOR || !HoudiniApi::CreateCOPImage || !HoudiniApi::RenderCOPOutputToImage ||
+			!HoudiniApi::GetImageInfo || !HoudiniApi::SetImageInfo || !HoudiniApi::ExtractImageToMemory || !HoudiniApi::GetImageMemoryBuffer)
+	{
+		error = "COP image transfer requires the Houdini Engine runtime matching HEGo's HAPI bindings.";
+		return false;
+	}
+	// Fixed shared memory must contain the complete RPC message, including its envelope.
+	if (fixed_shared_memory_bytes && bytes > fixed_shared_memory_bytes - 4096)
+	{
+		error = "Image exceeds the fixed shared-memory buffer. Enable hego/session/shared_memory_ring_buffer and restart the session.";
+		return false;
+	}
+	return true;
+}
 
 void HEGoSessionManager::register_node(HEGo::HEGoTrackableNode *node)
 {

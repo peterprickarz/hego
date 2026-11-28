@@ -33,6 +33,7 @@ GROUPS = [
             "HEGoInputNode",
             "HEGoCurveInputNode",
             "HEGoHeightfieldInputNode",
+            "HEGoTextureInputNode",
         ],
     ),
     (
@@ -199,6 +200,9 @@ INHERITED_METHODS = {
         ("HEGoBaseInputNode", ["set_prim_attr"]),
         ("HEGoTransformableNode", ["set_transform"]),
         ("HEGoBaseNode", ["get_id", "instantiate", "reset_node_id"]),
+    ],
+    "HEGoTextureInputNode": [
+        ("HEGoBaseNode", ["get_id", "instantiate", "delete_node"]),
     ],
     "HEGoMergeNode": [
         ("HEGoInputReceiverNode", ["connect_input"]),

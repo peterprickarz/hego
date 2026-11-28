@@ -3,6 +3,8 @@
 
 #include "hapi/houdini_api.h"
 #include "hego_nodes/hego_trackable_node.h"
+#include <cstdint>
+#include <godot_cpp/variant/string.hpp>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -25,6 +27,7 @@
 class HEGoSessionManager
 {
 public:
+	static constexpr const char *SHARED_MEMORY_RING_SETTING = "hego/session/shared_memory_ring_buffer";
 	// How HEGo connects to Houdini Engine. NewNamedPipe first tries to attach,
 	// then starts a server if needed. Other New* types start the server.
 	// The Existing* enum values are reserved and not exposed to GDScript.
@@ -80,6 +83,7 @@ public:
 
 	// Get the cook options used to initialize the HAPI session
 	HAPI_CookOptions *get_cook_options();
+	bool validate_cop_transfer(godot::String &error, int64_t bytes = 0) const;
 
 	void register_node(HEGo::HEGoTrackableNode *node);
 	void unregister_node(HEGo::HEGoTrackableNode *node);
@@ -90,6 +94,7 @@ private:
 	HAPI_Session my_session;
 	HAPI_CookOptions my_cook_options;
 	SessionType my_session_type = InProcess;
+	int64_t fixed_shared_memory_bytes = 0;
 	// Only a server we started may be cleaned up or shut down on disconnect.
 	bool my_owns_server = false;
 	std::string my_named_pipe = DEFAULT_NAMED_PIPE;

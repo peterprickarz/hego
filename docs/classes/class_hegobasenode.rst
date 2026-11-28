@@ -12,7 +12,7 @@ HEGoBaseNode
 
 **Inherits:** :ref:`HEGoTrackableNode<class_HEGoTrackableNode>` **<** ``RefCounted``
 
-**Inherited By:** :ref:`HEGoInputReceiverNode<class_HEGoInputReceiverNode>`, :ref:`HEGoTransformableNode<class_HEGoTransformableNode>`
+**Inherited By:** :ref:`HEGoInputReceiverNode<class_HEGoInputReceiverNode>`, :ref:`HEGoTextureInputNode<class_HEGoTextureInputNode>`, :ref:`HEGoTransformableNode<class_HEGoTransformableNode>`
 
 Virtual base class for all HEGo node wrappers.
 
@@ -68,7 +68,7 @@ Submits a task that deletes this node from the Houdini session and resets the st
 
 
 
-HEGo creates every node with no parent, so Houdini wraps it in an object node of its own under ``/obj``; that object is what gets deleted, together with the node's cook caches and HEGo's cached copy of its output geometry. Nodes a session no longer holds are only forgotten. Call it once the node's output has been read, for example through :ref:`HEGoAssetAgent.release()<class_HEGoAssetAgent_method_release>`, to keep a long editor session from accumulating Houdini memory. A later :ref:`instantiate()<class_HEGoBaseNode_method_instantiate>` creates the node again.
+HEGo deletes the Houdini network that the wrapper owns, including any uploaded image data for a :ref:`HEGoTextureInputNode<class_HEGoTextureInputNode>`. This releases its cook caches and clears HEGo's cached output geometry. Nodes a session no longer holds are only forgotten. Call this once consumers have finished using the node, for example through :ref:`HEGoAssetAgent.release()<class_HEGoAssetAgent_method_release>`. A later :ref:`instantiate()<class_HEGoBaseNode_method_instantiate>` creates the node again.
 
 
 

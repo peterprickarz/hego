@@ -107,12 +107,17 @@ godot::Ref<HEGoTask> HEGoMergeNode::connect_inputs(godot::Array inputs, bool for
 		}
 		const int target_unique_id = info.uniqueHoudiniNodeId;
 		std::vector<int> source_unique_ids;
+		godot::PackedInt32Array connection_ids;
+		connection_ids.resize(source_ids.size());
 		for (size_t i = 0; i < source_refs.size(); ++i)
 		{
-			if (source_refs[i]->get_generation() != source_generations[i] || HoudiniApi::GetNodeInfo(mgr->get_session(), source_ids[i], &info) != HAPI_RESULT_SUCCESS)
+			const HAPI_NodeId output = source_refs[i]->get_connection_node_id(HAPI_NODETYPE_SOP);
+			if (source_refs[i]->get_generation() != source_generations[i] || source_refs[i]->get_id() != source_ids[i] ||
+					output < 0 || HoudiniApi::GetNodeInfo(mgr->get_session(), output, &info) != HAPI_RESULT_SUCCESS)
 			{
 				fail(task, "A merge source was reset or no longer exists"); return {};
 			}
+			connection_ids.set(i, output);
 			source_unique_ids.push_back(info.uniqueHoudiniNodeId);
 		}
 		{
@@ -138,7 +143,7 @@ godot::Ref<HEGoTask> HEGoMergeNode::connect_inputs(godot::Array inputs, bool for
 			// No previous source list remains a valid cache hit after this point.
 			self->has_cached_sources = false;
 		}
-		if (!HEGo::Util::Geo::connect_to_merge(mgr, nid, source_ids))
+		if (!HEGo::Util::Geo::connect_to_merge(mgr, nid, connection_ids))
 		{
 			fail(task, "HAPI failed to rebuild merge connections"); return {};
 		}

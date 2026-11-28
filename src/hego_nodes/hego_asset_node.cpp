@@ -2,6 +2,7 @@
 
 #include "hego_api.h"
 #include "hego_asset_node.h"
+#include "util/cop/cop_image_output.h"
 #include "util/geo/fetch_curves.h"
 #include "util/geo/fetch_heightfields.h"
 #include "util/geo/fetch_points.h"
@@ -181,7 +182,7 @@ godot::Ref<HEGoTask> HEGoAssetNode::reload_definition()
 	});
 }
 
-godot::Ref<HEGoTask> HEGoAssetNode::asset_task(const godot::String &description, AssetWork work)
+godot::Ref<HEGoTask> HEGoAssetNode::asset_task(const godot::String &description, AssetWork work, bool keep_history_result)
 {
 	const HAPI_NodeId id = get_id();
 	if (id < 0) return make_failed("Instantiate the asset before this operation.", description);
@@ -190,7 +191,8 @@ godot::Ref<HEGoTask> HEGoAssetNode::asset_task(const godot::String &description,
 	const HAPI_Session expected = *manager->get_session();
 	const uint64_t generation = get_generation();
 	godot::Ref<HEGoAssetNode> self = this;
-	return submit_failable(description, id, [self, id, expected, generation, work](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+	return submit_failable(description, id, [self, id, expected, generation, work, keep_history_result](HEGoSessionManager *mgr, HEGoTask *task) -> godot::Variant {
+		task->keep_history_result = keep_history_result;
 		const HAPI_Session *session = mgr ? mgr->get_session() : nullptr;
 		if (!session || session->id != expected.id || session->type != expected.type || self->get_generation() != generation || self->get_id() != id ||
 			HoudiniApi::IsSessionValid(session) != HAPI_RESULT_SUCCESS)
@@ -203,6 +205,13 @@ godot::Ref<HEGoTask> HEGoAssetNode::asset_task(const godot::String &description,
 		if (!error.is_empty()) { fail(task, error); return {}; }
 		return result;
 	});
+}
+
+godot::Ref<HEGoTask> HEGoAssetNode::fetch_cop_image(const godot::String &cop_path, const godot::String &output_name)
+{
+	return asset_task("Fetch COP image " + cop_path, [cop_path, output_name](HEGoSessionManager *mgr, HAPI_NodeId id, godot::String &error) {
+		return Util::Cop::fetch_image(mgr, id, cop_path, output_name, error);
+	}, false);
 }
 
 godot::Ref<HEGoTask> HEGoAssetNode::set_parm(godot::String name, godot::Variant value)
@@ -675,6 +684,8 @@ void HEGoAssetNode::_bind_methods()
 	godot::ClassDB::bind_method(godot::D_METHOD("set_preset", "preset"), &HEGoAssetNode::set_preset);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_id"), &HEGoAssetNode::get_id);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_input_names"), &HEGoAssetNode::get_input_names);
+	godot::ClassDB::bind_method(godot::D_METHOD("fetch_cop_image", "cop_path", "output_name"), &HEGoAssetNode::fetch_cop_image,
+			DEFVAL(godot::String()), DEFVAL(godot::String()));
 	godot::ClassDB::bind_method(godot::D_METHOD("get_help_page"), &HEGoAssetNode::get_help_page);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_parms_dict"), &HEGoAssetNode::get_parms_dict);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_op_name", "name"), &HEGoAssetNode::set_op_name);

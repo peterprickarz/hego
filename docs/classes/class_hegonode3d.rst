@@ -190,7 +190,7 @@ The HDA's parameters as a blob, so they survive a session restart and a scene re
 
 ``Array`` **input_stash** :ref:`🔗<class_HEGoNode3D_property_input_stash>`
 
-References to the Godot nodes wired into the HDA's inputs, one entry per input.
+Scene node paths and texture resources wired into the HDA, one entry per input.
 
 .. rst-class:: classref-item-separator
 
@@ -421,9 +421,9 @@ Stores the input references the bottom panel collected.
 
  
 
- Each HDA input can combine several Godot nodes, so ``input_array`` holds one entry per
+ Each row holds scene node paths in ``inputs``, per-input ``settings``,
 
- HDA input, each with its own list of node paths and its settings.
+ and an optional ``textures`` array of texture resources with their encoding.
 
 .. rst-class:: classref-item-separator
 

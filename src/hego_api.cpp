@@ -63,6 +63,11 @@ HEGoAPI::HEGoAPI() : session_mgr()
 	// Resolve $HFS before seeding the setting, so an installation selected in the
 	// launching shell is not shadowed by this platform's default.
 	godot::ProjectSettings *project_settings = godot::ProjectSettings::get_singleton();
+	if (!project_settings->has_setting(HEGoSessionManager::SHARED_MEMORY_RING_SETTING))
+	{
+		project_settings->set_setting(HEGoSessionManager::SHARED_MEMORY_RING_SETTING, false);
+		project_settings->set_initial_value(HEGoSessionManager::SHARED_MEMORY_RING_SETTING, false);
+	}
 	if (!project_settings->has_setting(HOUDINI_PATH_SETTING))
 	{
 		project_settings->set_setting(HOUDINI_PATH_SETTING, HEGoPlatform::get_houdini_path());

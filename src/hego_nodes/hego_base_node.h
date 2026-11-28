@@ -27,6 +27,7 @@ protected:
 	std::atomic<uint64_t> node_generation{0};
 
 	HEGoSessionManager *get_session_manager();
+	virtual HAPI_NodeId get_owned_node_id(const HAPI_Session *session, HAPI_NodeId node) const;
 	// The current session's identity, for cache checks on the main thread.
 	bool current_session(int64_t &session_id, int &session_type);
 
@@ -35,6 +36,9 @@ public:
 	~HEGoBaseNode();
 
 	HAPI_NodeId get_id() const;
+	// Called on the session worker. A texture supplies geometry to SOP sockets
+	// while its primary id continues to identify the image in COPs.
+	virtual HAPI_NodeId get_connection_node_id(HAPI_NodeType receiver_type) const;
 	uint64_t get_generation() const;
 
 	void reset_node_id() override;

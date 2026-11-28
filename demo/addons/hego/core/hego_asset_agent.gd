@@ -204,7 +204,7 @@ func rebuild_asset(previous: HEGoAssetNode, stashed_parameters := PackedByteArra
 	return await _release_inputs(label)
 
 
-## Feeds [param asset] the Godot nodes stored in the owner's input stash.
+## Feeds [param asset] the scene nodes and textures stored in the owner's input stash.
 ##
 ## Every HDA input goes through a merge node, because one Houdini input can combine several
 ## Godot nodes, and the input nodes are kept between cooks so unchanged geometry is not
@@ -234,6 +234,11 @@ func sync_inputs(asset: HEGoAssetNode, skip_indices := [], cook: Dictionary = {}
 						errors.append("A configured input exceeds this HDA's %d inputs" % names.size())
 						HEGoLog.get_singleton().error(LOG_CATEGORY, errors[-1])
 						return false
+				var extras: Variant = rows[index].get("textures", [])
+				if not extras is Array or not extras.is_empty():
+					errors.append("A configured texture exceeds this HDA's %d inputs" % names.size())
+					HEGoLog.get_singleton().error(LOG_CATEGORY, errors[-1])
+					return false
 	var label := _label_of(asset)
 	if not _input_nodes.has(label):
 		_input_nodes[label] = {}
@@ -244,14 +249,20 @@ func sync_inputs(asset: HEGoAssetNode, skip_indices := [], cook: Dictionary = {}
 			continue
 
 		var paths := []
+		var textures: Variant = []
 		var settings := {}
 		if index < rows.size() and rows[index] is Dictionary:
 			paths = Array(rows[index].get("inputs", []))
+			textures = rows[index].get("textures", [])
 			settings = rows[index].get("settings", {})
 		settings = settings.duplicate()
 		settings["_cook"] = cook
 		settings["_errors"] = errors
 		settings["_strict"] = strict
+		if not textures is Array:
+			errors.append("Textures on HDA input %d must be an array." % index)
+			HEGoLog.get_singleton().error(LOG_CATEGORY, errors[-1])
+			return false
 		if strict:
 			for path in paths:
 				if String(path).is_empty(): continue
@@ -261,31 +272,42 @@ func sync_inputs(asset: HEGoAssetNode, skip_indices := [], cook: Dictionary = {}
 					HEGoLog.get_singleton().error(LOG_CATEGORY, errors[-1])
 					return false
 		paths = HEGoInputNodes.resolve_paths(owner_node, paths, settings)
-
-		if chains.has(index):
-			if not await _update_chain(asset, chains, index, paths, settings): return false
-		elif not paths.is_empty():
-			if not await _create_chain(asset, chains, index, paths, settings): return false
+		if chains.has(index) or not paths.is_empty() or not textures.is_empty():
+			if not await _sync_chain(asset, chains, index, paths, textures, settings): return false
 	return errors.is_empty()
 
 
-## Points HDA input [param index] at [param sources], which may be a [Node], a [NodePath], a
-## path string, or an array of any of those.
+## Points SOP input [param index] at [param sources]. Accepts a [Node], [NodePath],
+## path string, [Texture2D], or an array combining them. A texture uses linear encoding
+## by default. For sRGB color, pass [code]{"texture": texture, "encoding": HEGoTextureInputNode.ENCODING_SRGB}[/code].
+## Each texture contributes one point with the string attribute
+## [code]hego_cop_path[/code]. Texture points follow scene inputs in the order supplied.
 ##
 ## Writes to the same stash the panel's Inputs pane writes to, so an exported property and
 ## the panel agree rather than fighting.
 func set_input(index: int, sources: Variant) -> void:
+	if index < 0:
+		push_error("An HDA input index must be nonnegative.")
+		return
 	var list: Array = sources if sources is Array else [sources]
 	var paths := []
+	var textures := []
 	for source in list:
 		if source == null:
 			continue
-		paths.append(str(_scene_relative_path(source)) if source is Node else str(source))
+		if source is Texture2D:
+			textures.append({"texture": source, "encoding": HEGoTextureInputNode.ENCODING_LINEAR})
+		elif source is Dictionary and source.has("texture"):
+			textures.append(source.duplicate())
+		else:
+			paths.append(str(_scene_relative_path(source)) if source is Node else str(source))
 
-	var rows := _input_rows()
+	var rows := _input_rows().duplicate()
 	while rows.size() <= index:
 		rows.append({"inputs": [], "settings": {}})
 	rows[index] = {"inputs": paths, "settings": rows[index].get("settings", {})}
+	if not textures.is_empty():
+		rows[index]["textures"] = textures
 
 	if owner_node.has_method("hego_set_input_stash"):
 		owner_node.hego_set_input_stash(rows)
@@ -404,38 +426,79 @@ func _scene_relative_path(node: Node) -> NodePath:
 	return owner_node.get_path_to(node)
 
 
-func _create_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: Array, settings: Dictionary) -> bool:
-	var merge_node := HEGoMergeNode.new()
-	if not await _chain_task(merge_node.instantiate(), settings): return false
+func _sync_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: Array, textures: Array, settings: Dictionary) -> bool:
+	var chain: Dictionary = chains.get(index, {})
+	var merge: HEGoMergeNode = chain.get("merge")
+	if merge == null:
+		merge = HEGoMergeNode.new()
+	if not await _chain_task(merge.instantiate(), settings): return false
 
-	var input_array := []
-	for path in paths:
-		input_array.append(await HEGoInputNodes.sync(owner_node, null, path, settings))
-	if settings.get("_strict", false) and (input_array.has(null) or not settings.get("_errors", []).is_empty()): return false
+	var previous: Array = chain.get("inputs", [])
+	var sources := paths + textures
+	# Children appearing or disappearing in a scene input must leave the texture
+	# sources on this socket bound to the same COPs.
+	var scene_count: int = chain.get("scene_count", previous.size())
+	var reusable := previous.slice(0, scene_count)
+	reusable.resize(paths.size())
+	reusable.append_array(previous.slice(scene_count))
+	reusable.resize(sources.size())
+	var current := []
+	for i in sources.size():
+		var existing: Variant = reusable[i]
+		var input: Variant
+		if i >= paths.size():
+			input = await _texture_input(existing, sources[i], settings)
+		else:
+			if existing is HEGoTextureInputNode:
+				existing = null
+			input = await HEGoInputNodes.sync(owner_node, existing, sources[i], settings)
+		current.append(input)
+		if input == null and settings["_strict"] and settings["_errors"].is_empty():
+			settings["_errors"].append("A required source on HDA input %d could not be sent." % index)
+		if not settings["_errors"].is_empty():
+			break
 
-	if not await _chain_task(merge_node.connect_inputs(input_array), settings): return false
-	if not await _chain_task(asset.connect_input(merge_node, index), settings): return false
-	chains[index] = {"merge": merge_node, "inputs": input_array}
-	return true
+	var ok: bool = settings["_errors"].is_empty()
+	if ok:
+		ok = await _chain_task(merge.connect_inputs(current.filter(func(input): return input != null)), settings)
+	if ok:
+		ok = await _chain_task(asset.connect_input(merge, index), settings)
+	if not ok:
+		await _release_removed_inputs(current, previous)
+		if chain.is_empty():
+			await _delete(merge)
+		return false
+	chains[index] = {"merge": merge, "inputs": current, "scene_count": paths.size()}
+	return await _release_removed_inputs(previous, current)
 
 
-func _update_chain(asset: HEGoAssetNode, chains: Dictionary, index: int, paths: Array, settings: Dictionary) -> bool:
-	var chain: Dictionary = chains[index]
-	var merge_node: HEGoMergeNode = chain["merge"]
-	if not await _chain_task(merge_node.instantiate(), settings): return false
+func _texture_input(existing: Variant, source: Variant, settings: Dictionary) -> HEGoTextureInputNode:
+	var error := ""
+	var encoding: Variant = HEGoTextureInputNode.ENCODING_LINEAR
+	if not source is Dictionary or not source.get("texture") is Texture2D:
+		error = "A texture input is missing its Texture2D resource."
+	else:
+		encoding = source.get("encoding", HEGoTextureInputNode.ENCODING_LINEAR)
+		if typeof(encoding) != TYPE_INT or encoding not in [HEGoTextureInputNode.ENCODING_LINEAR, HEGoTextureInputNode.ENCODING_SRGB]:
+			error = "A texture input's encoding must be ENCODING_LINEAR or ENCODING_SRGB."
+	if not error.is_empty():
+		settings["_errors"].append(error)
+		HEGoLog.get_singleton().error(LOG_CATEGORY, error)
+		return null
+	var input := existing as HEGoTextureInputNode
+	if input == null:
+		input = HEGoTextureInputNode.new()
+	if not await _chain_task(input.set_texture(source.texture, encoding), settings):
+		return null
+	return input
 
-	# Resizing first drops the input nodes whose source is gone and pads with nulls, and
-	# sync() creates a node wherever it finds one.
-	var input_array: Array = chain["inputs"].duplicate()
-	input_array.resize(paths.size())
-	for i in range(paths.size()):
-		input_array[i] = await HEGoInputNodes.sync(owner_node, input_array[i], paths[i], settings)
-	if settings.get("_strict", false) and (input_array.has(null) or not settings.get("_errors", []).is_empty()): return false
 
-	if not await _chain_task(merge_node.connect_inputs(input_array), settings): return false
-	if not await _chain_task(asset.connect_input(merge_node, index), settings): return false
-	chain["inputs"] = input_array
-	return true
+func _release_removed_inputs(before: Array, after: Array) -> bool:
+	var ok := true
+	for input in before:
+		if input is HEGoBaseNode and not after.has(input):
+			ok = await _delete(input) and ok
+	return ok
 
 func _release_inputs(label: String) -> bool:
 	var ok := true
@@ -451,8 +514,6 @@ func _release_inputs(label: String) -> bool:
 
 
 func _delete(node: HEGoBaseNode) -> bool:
-	if node.get_id() == UNINSTANTIATED_NODE_ID:
-		return true
 	var deleted := await HEGoNodeUtil.checked_task(owner_node, node.call(&"delete_node"))
 	if not deleted.ok:
 		HEGoLog.get_singleton().warning(LOG_CATEGORY, "Could not release a Houdini node: " + str(deleted.message))
@@ -460,10 +521,8 @@ func _delete(node: HEGoBaseNode) -> bool:
 
 
 func _chain_task(native_task: HEGoTask, settings: Dictionary) -> bool:
-	if settings.get("_strict", false):
-		var result := await HEGoNodeUtil.checked_task(owner_node, native_task)
-		if not result.ok:
-			settings["_errors"].append(result.message)
-		return result.ok
-	await task(native_task)
-	return true
+	var result := await HEGoNodeUtil.checked_task(owner_node, native_task)
+	if not result.ok:
+		settings["_errors"].append(result.message)
+		HEGoLog.get_singleton().error(LOG_CATEGORY, result.message)
+	return result.ok
