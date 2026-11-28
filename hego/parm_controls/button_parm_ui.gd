@@ -40,11 +40,5 @@ func _on_button_pressed():
 		push_error("ButtonParmUI: Button node is null. Cannot process press.")
 		return
 	
-	# Button parameters are not wired through to Houdini yet. Pressing one used to look up
-	# a scene node named "HEGoAssetNode" and call pressButton() on it. Neither can exist:
-	# HEGoAssetNode is RefCounted and never enters the scene tree, and no HEGo class binds
-	# pressButton. So every rendered button logged a warning and every press an error.
-	push_warning("HEGo: button parameter '%s' is not supported yet." % param.get("label", param.get("name", "")))
-
-	# Emitted for consistency with the other parm widgets; the value is ignored.
+	# A single integer write invokes the Houdini callback, regardless of its value.
 	value_changed.emit(param.get("name", ""), 0)

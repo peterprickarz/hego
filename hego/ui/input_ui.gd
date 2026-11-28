@@ -3,8 +3,11 @@ extends VBoxContainer
 
 signal inputs_changed()
 
+const TextureLine := preload("res://addons/hego/ui/texture_input_line.gd")
+
 @onready var spin_box = $HBoxContainer/SpinBox
 @onready var input_container = $InputContainer
+@onready var texture_container: VBoxContainer = $TextureContainer
 @onready var label = $HBoxContainer/Label
 @onready var include_children: CheckBox = $InputOptions/IncludeChildren
 @onready var input_visible: CheckBox = $InputOptions/InputVisible
@@ -22,12 +25,13 @@ var _active_handlers: Dictionary = {}
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	spin_box.value_changed.connect(_on_spin_box_value_changed)
+	$HBoxContainer/AddTexture.pressed.connect(add_texture)
 	include_children.toggled.connect(func(_enabled: bool): _on_input_line_value_changed())
 	input_visible.toggled.connect(_on_visibility_toggled)
 
 
 ## Shows [param in_label] with one line per entry in [param inputs].
-func setup(in_label: String, inputs: PackedStringArray, settings: Dictionary = {}, host: Node = null, undo_manager: Object = null):
+func setup(in_label: String, inputs: PackedStringArray, settings: Dictionary = {}, host: Node = null, undo_manager: Object = null, textures: Array = []):
 	_updating = true
 	_input_host = host
 	_visibility_undo = undo_manager
@@ -40,6 +44,12 @@ func setup(in_label: String, inputs: PackedStringArray, settings: Dictionary = {
 	var input_lines := input_container.get_children()
 	for i in range(mini(inputs.size(), input_lines.size())):
 		input_lines[i].text = inputs[i]
+	for line in texture_container.get_children():
+		line.free()
+	for source in textures:
+		var resource: Variant = source.get("texture") if source is Dictionary else null
+		var encoding: Variant = source.get("encoding") if source is Dictionary else null
+		add_texture(resource if resource is Texture2D else null, encoding if typeof(encoding) == TYPE_INT else HEGoTextureInputNode.ENCODING_LINEAR)
 	include_children.set_pressed_no_signal(bool(settings.get("include_children", false)))
 	_stored_settings = settings.duplicate(true)
 	_active_handlers.clear()
@@ -78,6 +88,29 @@ func get_inputs():
 	for child in input_container.get_children():
 		inputs.append(child.text)
 	return inputs
+
+
+func add_texture(texture: Texture2D = null, encoding := HEGoTextureInputNode.ENCODING_LINEAR) -> void:
+	var line := TextureLine.new()
+	texture_container.add_child(line)
+	line.setup(texture, encoding)
+	line.changed.connect(_on_input_line_value_changed)
+	line.remove_requested.connect(func():
+		texture_container.remove_child(line)
+		line.queue_free()
+		if line.texture:
+			_on_input_line_value_changed()
+	)
+	if texture:
+		_on_input_line_value_changed()
+
+
+func get_textures() -> Array:
+	var textures := []
+	for line in texture_container.get_children():
+		if line.texture:
+			textures.append({"texture": line.texture, "encoding": line.encoding.get_selected_id()})
+	return textures
 
 
 # Reflect scene-tree visibility edits and undo/redo without rebuilding the HDA UI.

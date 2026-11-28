@@ -35,6 +35,16 @@ Returns an [HEGoTask] that completes with [code]0[/code] once the cook has finis
 A cook that finishes with non-fatal errors succeeds: Houdini reports those as warnings and the geometry is still usable.
 </description>
 </method>
+<method name="fetch_cop_image">
+<return type="HEGoTask" />
+<param index="0" name="cop_path" type="String" default="&quot;&quot;" />
+<param index="1" name="output_name" type="String" default="&quot;&quot;" />
+<description>
+Renders a Copernicus layer and returns its pixels as an [Image]. A relative [param cop_path] starts at this HDA instance. An absolute Houdini node path starts at the session root. An empty path selects the asset itself and is valid for a COP HDA. Pass the output connector's name in [param output_name], or leave it empty to select connector zero.
+
+The task evaluates the requested COP branch independently of SOP output geometry. It returns a top-origin, linear float32 image in [code]FORMAT_RF[/code], [code]FORMAT_RGF[/code], [code]FORMAT_RGBF[/code], or [code]FORMAT_RGBAF[/code] according to channel count. Integer ID layers fail because float32 cannot preserve all IDs. Invalid paths, output names, and non-image outputs also fail the task.
+</description>
+</method>
 <method name="fetch_curves">
 <return type="HEGoTask" />
 <param index="0" name="read_prim_attribs" type="PackedStringArray" default="PackedStringArray()" />
@@ -175,6 +185,12 @@ Use [code]read_prim_attribs[/code] to request primitive attributes that should b
 The task result is an [Array] where each entry is a [Dictionary] containing layer metadata such as part id, layer name, voxel dimensions, scale, and transform information.
 </description>
 </method>
+<method name="get_help_page">
+<return type="HEGoTask" />
+<description>
+Reads the live Houdini operator's help. The result is a [Dictionary] with [code]text[/code] (the complete authored help markup), [code]url[/code] (the operator's help URL) and [code]op_name[/code] (the full operator name including category). Each missing text or URL is an empty [String]. The task fails if the live operator or its help metadata cannot be read.
+</description>
+</method>
 <method name="get_input_names">
 <return type="HEGoTask" />
 <description>
@@ -183,12 +199,24 @@ Submits a task to return the input names defined on this HDA node.
 The task result is a [PackedStringArray] of input names. This is useful for mapping script-side inputs to operator input slots.
 </description>
 </method>
+<method name="get_node_parm_candidates">
+<return type="HEGoTask" />
+<param index="0" name="parm_name" type="String" />
+<param index="1" name="candidates" type="Array" />
+<description>
+Checks the supplied live [HEGoBaseNode] sources against the Houdini node type and flags accepted by [param parm_name]. The result is an [Array] containing one [bool] per candidate in the original order. Empty, reset, incompatible and self references yield [code]false[/code]. The task fails if the owner or its single-node parameter is unavailable.
+</description>
+</method>
 <method name="get_parms_dict">
 <return type="HEGoTask" />
 <description>
-Submits a task to return a dictionary describing the current parameter values.
+Reads the live Houdini interface. The task returns a [Dictionary] keyed by visible top-level parameter name. Folder contents are under [code]children[/code]. Each [code]instances[/code] entry holds the child descriptors of one multiparm or ramp key.
 
-The task result is a [Dictionary] intended for inspection and tooling workflows, mirroring parameter state read from HAPI.
+Each descriptor includes [code]type[/code], [code]script_type[/code], [code]size[/code], [code]visible[/code], [code]disabled[/code], UI and hard range flags and bounds. [code]values[/code] holds evaluated components. String and path controls also expose authored [code]raw_values[/code]. Menus supply [code]choice_list_type[/code], [code]use_menu_item_token_as_value[/code] and, when populated, [code]choices[/code] with each option's label and token.
+
+The [code]help[/code] string contains the first paragraph of the matching entry in the asset's embedded parameter documentation. Houdini wiki entries match by [code]#id[/code], including multiparm template names. An entry without an ID can match a unique parameter label. If no entry matches, the string contains the parameter template's explicit help, which can be empty. See [method get_help_page] for the complete document.
+
+A folder list identifies its consecutive sibling folders with [code]folder_ids[/code]. Radio selection is the single integer in [code]values[/code]. Ordinary multiparms expose [code]multiparm_style[/code], ramps expose [code]ramp_type[/code], and instance children expose [code]template_name[/code]. For node parameters [code]node_id[/code] is the current session's resolved target or [code]-1[/code]. Read the descriptors again after a structural edit, parameter callback, cook or asset rebuild. A HAPI read error fails the task.
 </description>
 </method>
 <method name="get_preset">
@@ -204,9 +232,7 @@ The task result is a [PackedByteArray]. Use together with [method set_preset] to
 <param index="0" name="parm_id" type="int" />
 <param index="1" name="index" type="int" />
 <description>
-Submits a task to insert one multiparm instance at [code]index[/code] for the parameter id.
-
-Use this to grow multiparm blocks before setting values on newly created entries.
+Inserts an instance before [param index] in the multiparm with [param parm_id]. The first position is [code]instance_start_offset[/code]. To append, use that offset plus [code]instance_count[/code]. Await completion and read [method get_parms_dict] again before editing the new instance. A stale owner, invalid position or HAPI error fails the task.
 </description>
 </method>
 <method name="instantiate">
@@ -224,9 +250,15 @@ On success, the created node id is stored and this wrapper is registered in the 
 <param index="0" name="parm_id" type="int" />
 <param index="1" name="index" type="int" />
 <description>
-Submits a task to remove one multiparm instance at [code]index[/code] for the parameter id.
-
-Indices follow Houdini multiparm ordering.
+Removes the instance at [param index] in the multiparm with [param parm_id]. Valid positions begin at [code]instance_start_offset[/code]. Refresh [method get_parms_dict] after completion to obtain the updated instance identities and indices. A stale owner, invalid position or HAPI error fails the task.
+</description>
+</method>
+<method name="set_node_parm">
+<return type="HEGoTask" />
+<param index="0" name="parm_name" type="String" />
+<param index="1" name="source" type="HEGoBaseNode" default="null" />
+<description>
+Binds a compatible, instantiated [param source] to a single Houdini node-reference parameter. Pass [code]null[/code] to clear the reference. A successful task returns [code]0[/code]. Setting the current binding again skips the write. An incompatible source, stale session or rejected operation fails the task. Reapply a durable source reference after an asset or session rebuild. Operator-path lists use the text form of [method set_parm].
 </description>
 </method>
 <method name="set_parm">
@@ -234,20 +266,22 @@ Indices follow Houdini multiparm ordering.
 <param index="0" name="parm_name" type="String" />
 <param index="1" name="value" type="Variant" />
 <description>
-Submits a task to set a parameter by name.
+Sets a parameter by its Houdini name. Use a number for a scalar, a matching Godot vector for numeric tuples of two to four components, or a typed packed numeric array for any numeric tuple. The element count must match the declared tuple. Floats must be finite, integers must fit int32, and integer inputs to float storage must be exactly representable. Houdini's hard limits apply.
 
-The [Variant] value type is converted to the matching Houdini parameter storage type when possible.
+Toggles also accept a [bool]. RGB and RGBA controls accept [Color] or a matching vector. RGB uses the first three channels. Use a [String] for a scalar string, authored file path or literal Houdini node path, and a [PackedStringArray] for a string tuple. To select a radio folder, pass its zero-based tab index. Integer writes to a button invoke its callback.
 
-Call after [method HEGoBaseNode.instantiate]. Invalid node state causes the task to fail.
+[codeblock]
+await agent.task(asset.set_parm("rgb", Color(2.0, 0.5, 0.1)))
+await agent.task(asset.set_parm("words", PackedStringArray(["east", "west"])))
+[/codeblock]
+A successful task returns [code]0[/code]. Await the task before cooking or saving the result.
 </description>
 </method>
 <method name="set_parms_batch">
 <return type="HEGoTask" />
 <param index="0" name="parms" type="Dictionary" />
 <description>
-Submits a single task to set multiple parameters at once.
-
-[code]parms[/code] is a [Dictionary] mapping parameter names ([String]) to values ([Variant]). All parameters are set in one HAPI round-trip, which is more efficient than calling [method set_parm] repeatedly.
+Submits one scheduled task for the parameter names and values in [param parms]. Keys may be [String] or [StringName]. Value rules match [method set_parm]. The task captures the input, validates the whole batch, then resolves each live parameter again before writing it. Invalid input fails before the first write. If Houdini rejects a later write or a callback changes the layout, earlier writes may have taken effect. Read [method get_parms_dict] before retrying.
 </description>
 </method>
 <method name="set_preset">

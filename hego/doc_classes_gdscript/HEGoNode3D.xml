@@ -123,8 +123,8 @@
 			<description>
 				Stores the input references the bottom panel collected.
  
- Each HDA input can combine several Godot nodes, so [param input_array] holds one entry per
- HDA input, each with its own list of node paths and its settings.
+ Each row holds scene node paths in [code]inputs[/code], per-input [code]settings[/code],
+ and an optional [code]textures[/code] array of texture resources with their encoding.
 			</description>
 		</method>
 		<method name="hego_set_asset_name">
@@ -149,7 +149,7 @@
 			The HDA's parameters as a blob, so they survive a session restart and a scene reload.
 		</member>
 		<member name="input_stash" type="Array" setter="" getter="">
-			References to the Godot nodes wired into the HDA's inputs, one entry per input.
+			Scene node paths and texture resources wired into the HDA, one entry per input.
 		</member>
 		<member name="agent" type="HEGoAssetAgent" setter="" getter="" default="&lt;unknown&gt;">
 			The tedious parts of driving an HDA. Everything it does is an ordinary call on

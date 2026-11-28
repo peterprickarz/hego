@@ -75,7 +75,7 @@ text = "Save HIP File…"
 [node name="OpenHIP" type="Button" parent="Vbox/SessionFiles"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "Save a temporary copy of this session and open it in Houdini."
+tooltip_text = "Open a temporary copy of this session in Houdini. The window stays open after Godot closes."
 disabled = true
 text = "Open HIP File"
 

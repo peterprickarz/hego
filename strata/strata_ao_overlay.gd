@@ -59,6 +59,12 @@ const PROVIDER_GROUP := &"strata_ao_source_providers"
 	set(value):
 		fade_end = value
 		_bound.clear()
+## Samples the overlay this many times coarser (1: its own resolution; 2, 4, 8: one, two,
+## three mip levels coarser), to judge a lower bake resolution without rebaking.
+@export_range(1.0, 16.0, 1.0) var mip_scale := 1.0:
+	set(value):
+		mip_scale = maxf(value, 1.0)
+		_bound.clear()
 
 @export_group("Streaming")
 @export var enabled := true:
@@ -69,7 +75,23 @@ const PROVIDER_GROUP := &"strata_ao_source_providers"
 @export var load_radius := 96.0
 @export var unload_radius := 128.0
 ## Texture array layers (resident tiles). Each costs resolution² × 4/3 bytes of video memory.
-@export_range(1, 64) var slots := 6
+## A change while tiles are resident rebuilds the array, and the tiles load again.
+@export_range(1, 64) var slots := 6:
+	set(value):
+		var clamped := clampi(value, 1, 64)
+		if slots == clamped:
+			return
+		slots = clamped
+		if _layers != null:
+			_unbind()
+			_layers = null
+			_resident.clear()
+			_slot_tiles.clear()
+			if _table_image != null:
+				_table_image.fill(Color8(0, 0, 0))
+				if _table_texture != null:
+					_table_texture.update(_table_image)
+			_elapsed = update_interval
 @export var update_interval := 0.25
 ## Also stream and draw in the editor, around the editor camera.
 @export var editor_preview := true:
@@ -98,6 +120,9 @@ const PROVIDER_GROUP := &"strata_ao_source_providers"
 var classify: Callable
 ## Optional procedural world footprints, callable(Rect2) -> packed x,z,radius,strength.
 var blob_source: Callable
+## Optional packed instance source, callable(Rect2) -> Dictionary of instance transforms and
+## per-object rules (options.raw_source; the layout is described at StrataAOOverlayBaker.bake()).
+var raw_source: Callable
 
 var _layers: Texture2DArray
 var _table_image: Image
@@ -324,7 +349,7 @@ func renderers() -> Array[StrataRenderer]:
 func _bind() -> void:
 	if _layers == null or _table_texture == null:
 		return
-	var settings := {"ao_strength": ao_strength, "albedo_strength": albedo_strength, "roughness_strength": roughness_strength, "fade_start": fade_start, "fade_end": fade_end}
+	var settings := {"ao_strength": ao_strength, "albedo_strength": albedo_strength, "roughness_strength": roughness_strength, "fade_start": fade_start, "fade_end": fade_end, "mip_scale": mip_scale}
 	var origin := tile_origin + Vector2(_table_range.position) * tile_size
 	for renderer in renderers():
 		var current := renderer.get_ao_overlay()
@@ -390,7 +415,8 @@ func layout() -> Dictionary:
 func bake_options() -> Dictionary:
 	return {"rules": rules, "default": default_rule if not default_rule.is_empty() else null,
 		"classify": classify if classify.is_valid() else null, "max_radius": max_radius,
-		"floor": floor_value, "max_range": max_range, "blob_source": blob_source}
+		"floor": floor_value, "max_range": max_range, "blob_source": blob_source,
+		"raw_source": raw_source if raw_source.is_valid() else null}
 
 
 ## Source roots for [param rect]: the [member source_group] nodes (filtered by bounds in the

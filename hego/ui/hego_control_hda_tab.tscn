@@ -221,11 +221,25 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_luq18")
 [node name="VBoxContainer" type="VBoxContainer" parent="HSplitContainer2/HSplitContainer3/Parameters/PanelContainer"]
 layout_mode = 2
 
-[node name="Label" type="Label" parent="HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer"]
+[node name="ParameterHeader" type="HBoxContainer" parent="HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/ParameterHeader"]
 clip_contents = true
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Parameters:"
 horizontal_alignment = 1
+
+[node name="AssetHelpButton" type="Button" parent="HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer/ParameterHeader"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "Help"
+
+[node name="HelpNotice" type="AcceptDialog" parent="."]
+unique_name_in_owner = true
+title = "HDA Help"
 
 [node name="HSeparator" type="HSeparator" parent="HSplitContainer2/HSplitContainer3/Parameters/PanelContainer/VBoxContainer"]
 layout_mode = 2
