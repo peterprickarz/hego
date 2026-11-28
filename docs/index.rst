@@ -73,6 +73,7 @@ later; while they live in HEGo's ``next`` branch, their full documentation is ho
 
    development/testing
    development/packaging
+   development/hda_parameter_support_plan
    development/copia_design
    development/godot_mcp
    development/strata_regions_plan

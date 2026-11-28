@@ -53,7 +53,7 @@ Run it from PowerShell 7.4 or later with an imported demo and a licensed Houdini
 
 ### HDA parameter coverage
 
-Open the [dedicated parameter scene](../../demo/tests/fixtures/parameters/parameter_types.tscn) for interactive checks. Its two artificial HDAs cover the 17 concrete HAPI parameter types and emit zero points and primitives. The [fixture guide](../../demo/tests/fixtures/parameters/README.md) includes Houdini regeneration and verification commands.
+Open `demo/tests/fixtures/parameters/parameter_types.tscn` for interactive checks. Its two artificial HDAs cover the 17 concrete HAPI parameter types and emit zero points and primitives. `demo/tests/fixtures/parameters/README.md` includes Houdini regeneration and verification commands.
 
 The Godot group exercises parameter widgets and help buttons. `hego_asset_help_test` checks browser destinations and local page rendering without opening a browser. To exercise Houdini's wiki renderer too, pass `-- --hfs=<Houdini installation directory>` to that test.
 
