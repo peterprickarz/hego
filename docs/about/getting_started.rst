@@ -121,7 +121,7 @@ Session Types
    * - **TCP Socket**
      - The same, over a socket. The connection data is the port number.
    * - **In Process**
-     - Backed by a shared memory server. Fastest, and Houdini closes with Godot.
+     - Backed by a shared memory server. Fastest, and the engine server closes with Godot.
 
 A session outlives a single cook, so cooking several HDAs reuses it. Stopping the
 session resets every HEGo node's Houdini state; the next cook re-instantiates from the
@@ -137,9 +137,8 @@ The **Session** tab offers two file actions while a session is running.
 - **Save HIP File…** opens a file chooser. Pick a location to save the entire
   Houdini Engine scene, including the other assets in the session.
 - **Open HIP File** writes the scene to a fresh temporary directory and launches
-  Houdini with that copy. You can inspect the nodes and inputs there while
-  continuing to work in Godot. Use **Save As** in Houdini to keep your edits
-  somewhere permanent.
+  Houdini with that copy. You can close Godot and keep working in Houdini.
+  Use **Save As** in Houdini to keep your edits somewhere permanent.
 
 Examples
 --------

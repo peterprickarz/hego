@@ -295,7 +295,7 @@ Loads an HDA library into the active Houdini session. ``path`` accepts a local a
 
 :ref:`HEGoTask<class_HEGoTask>` **open_hip_file**\ (\ ) :ref:`🔗<class_HEGoAPI_method_open_hip_file>`
 
-Saves the current Houdini Engine scene to a new temporary directory and launches the configured Houdini executable with that file. The temporary copy remains available after the Godot session closes. On success, the task result contains its absolute path.
+Saves the current Houdini Engine scene to a new temporary directory and launches the configured Houdini executable with that file. Houdini and the temporary copy remain available after Godot closes. On success, the task result contains the absolute path to the copy.
 
 .. rst-class:: classref-item-separator
 

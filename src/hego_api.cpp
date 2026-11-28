@@ -12,7 +12,6 @@
 
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
-#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <vector>
@@ -175,11 +174,7 @@ godot::Ref<HEGoTask> HEGoAPI::open_hip_file()
 			return {};
 		}
 
-		godot::PackedStringArray arguments;
-		if (extension == "hiplc")
-			arguments.push_back("-indie");
-		arguments.push_back(path);
-		if (!godot::FileAccess::file_exists(executable) || godot::OS::get_singleton()->create_process(executable, arguments) <= 0)
+		if (!godot::FileAccess::file_exists(executable) || !HEGoPlatform::open_hip_snapshot(executable, path, extension == "hiplc"))
 		{
 			Util::Task::fail(task, "Could not start Houdini at " + executable + ". The HIP file was saved to " + path + ".");
 			return {};

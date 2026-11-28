@@ -42,6 +42,15 @@ The rebuild and HIP export regression uses two temporary versions of a two-input
 in a private session. It changes the definition on disk, presses Rebuild, and reopens
 the saved HIP to verify the inputs, parameters, and cooked geometry.
 
+On Windows, the Open HIP File regression starts a private Engine session, presses the
+bottom-panel button, and quits Godot. It checks that the console launcher exits and
+that Houdini displays the exported snapshot, then closes the test's Houdini window.
+Run it from PowerShell 7.4 or later with an imported demo and a licensed Houdini desktop.
+
+```powershell
+./scripts/test_open_hip_windows.ps1 -GodotConsole "C:\Godot\Godot_v4.7.2-stable_win64_console.exe"
+```
+
 ### HDA parameter coverage
 
 Open the [dedicated parameter scene](../../demo/tests/fixtures/parameters/parameter_types.tscn) for interactive checks. Its two artificial HDAs cover the 17 concrete HAPI parameter types and emit zero points and primitives. The [fixture guide](../../demo/tests/fixtures/parameters/README.md) includes Houdini regeneration and verification commands.

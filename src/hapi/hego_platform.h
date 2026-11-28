@@ -1,10 +1,16 @@
 #ifndef HEGO_PLATFORM_H
 #define HEGO_PLATFORM_H
 
+namespace godot
+{
+class String;
+}
+
 class HEGoPlatform
 {
 public:
 	static void set_env_vars();
+	static bool open_hip_snapshot(const godot::String &executable, const godot::String &path, bool indie);
 	static void *initialize_hapi();
 	static bool free_lib_hapil(void *libHAPIL);
 	static void *get_dll_export(void *library_handle, const char *export_name);

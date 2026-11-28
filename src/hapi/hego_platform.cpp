@@ -7,15 +7,83 @@
 
 #ifdef _WIN32
 #include <tchar.h>
+#include <vector>
 #include <windows.h>
 
 #else
 #include <dlfcn.h>
+#include <godot_cpp/classes/os.hpp>
 #endif
 
 const char *HAPI_LIB_OBJECT_WINDOWS = "libHAPIL.dll";
 const char *HAPI_LIB_OBJECT_LINUX = "libHAPIL.so";
 const char *HAPI_LIB_OBJECT_MAC = "libHAPIL.dylib";
+
+#ifdef _WIN32
+namespace
+{
+DWORD start_houdini(const godot::String &executable, const godot::String &command, LPPROC_THREAD_ATTRIBUTE_LIST attributes)
+{
+	STARTUPINFOEXW startup{};
+	startup.StartupInfo.cb = attributes ? sizeof(startup) : sizeof(STARTUPINFOW);
+	startup.lpAttributeList = attributes;
+	const DWORD flags = CREATE_NO_WINDOW | (attributes ? EXTENDED_STARTUPINFO_PRESENT : CREATE_BREAKAWAY_FROM_JOB);
+	PROCESS_INFORMATION process{};
+	auto command_line = command.wide_string();
+	if (!CreateProcessW(executable.wide_string().get_data(), command_line.ptrw(), nullptr, nullptr, FALSE, flags,
+				nullptr, nullptr, &startup.StartupInfo, &process))
+		return GetLastError();
+
+	CloseHandle(process.hThread);
+	CloseHandle(process.hProcess);
+	return ERROR_SUCCESS;
+}
+} // namespace
+#endif
+
+bool HEGoPlatform::open_hip_snapshot(const godot::String &executable, const godot::String &path, bool indie)
+{
+#ifdef _WIN32
+	// Both quoted arguments are Windows filenames, and the snapshot always ends in a HIP extension.
+	const godot::String command = "\"" + executable + "\" " + (indie ? "-indie " : "") + "\"" + path + "\"";
+	const DWORD error = start_houdini(executable, command, nullptr);
+	if (error != ERROR_ACCESS_DENIED)
+		return error == ERROR_SUCCESS;
+
+	// Godot 4.7's console wrapper disallows breakaway. Use the desktop shell as the parent
+	// so Houdini inherits its job while keeping the editor's Houdini environment and working directory.
+	BOOL in_job = FALSE;
+	if (!IsProcessInJob(GetCurrentProcess(), nullptr, &in_job) || !in_job)
+		return false;
+	DWORD shell_pid = 0;
+	if (!GetWindowThreadProcessId(GetShellWindow(), &shell_pid))
+		return false;
+	SIZE_T size = 0;
+	InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
+	std::vector<char> storage(size);
+	auto attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(storage.data());
+	if (!size || !InitializeProcThreadAttributeList(attributes, 1, 0, &size))
+		return false;
+
+	bool started = false;
+	HANDLE shell = OpenProcess(PROCESS_CREATE_PROCESS, FALSE, shell_pid);
+	if (shell)
+	{
+		if (UpdateProcThreadAttribute(attributes, 0, PROC_THREAD_ATTRIBUTE_PARENT_PROCESS, &shell, sizeof(shell), nullptr, nullptr))
+			started = start_houdini(executable, command, attributes) == ERROR_SUCCESS;
+		CloseHandle(shell);
+	}
+	DeleteProcThreadAttributeList(attributes);
+	return started;
+#else
+	// Godot creates the child in a new POSIX session.
+	godot::PackedStringArray arguments;
+	if (indie)
+		arguments.push_back("-indie");
+	arguments.push_back(path);
+	return godot::OS::get_singleton()->create_process(executable, arguments) > 0;
+#endif
+}
 
 const char *HEGoPlatform::get_default_houdini_path()
 {

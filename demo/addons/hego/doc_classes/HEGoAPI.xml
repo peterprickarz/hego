@@ -101,7 +101,7 @@ Loads an HDA library into the active Houdini session. [param path] accepts a loc
 <method name="open_hip_file">
 <return type="HEGoTask" />
 <description>
-Saves the current Houdini Engine scene to a new temporary directory and launches the configured Houdini executable with that file. The temporary copy remains available after the Godot session closes. On success, the task result contains its absolute path.
+Saves the current Houdini Engine scene to a new temporary directory and launches the configured Houdini executable with that file. Houdini and the temporary copy remain available after Godot closes. On success, the task result contains the absolute path to the copy.
 </description>
 </method>
 <method name="save_hip_file">

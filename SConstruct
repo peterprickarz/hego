@@ -135,6 +135,7 @@ if env["platform"] == "windows":
     # Ensure Windows DLL names stay as hego.*.dll even when cross-compiling from Linux.
     env["SHLIBPREFIX"] = ""
     env["IMPLIBPREFIX"] = ""
+    env.Append(LIBS=["user32"])  # Desktop shell window for independent Houdini launches.
 
     if env.get("use_mingw", False):
         # MinGW/GCC path (Linux cross-compile, or MinGW on Windows)
