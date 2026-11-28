@@ -347,7 +347,10 @@ static func compose_regions(terrain: Object, through_layer: Object, spec: Dictio
 	var failed := [false]
 	var mutex := Mutex.new()
 	var task := func(index: int) -> void:
-		if failed[0]: return
+		mutex.lock()
+		var abort: bool = failed[0]
+		mutex.unlock()
+		if abort: return
 		var composed: Dictionary = script.call("compose", terrain, through_layer, xys[index], spec, local)
 		mutex.lock()
 		outcomes[index] = composed

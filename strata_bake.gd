@@ -260,7 +260,10 @@ static func compile(terrain: StrataTerrain3D, options: Dictionary = {}) -> Dicti
 			return _error(String(composed.message))
 		var batch: Dictionary = composed.regions
 		if mip_levels > 1:
-			var mip_task := func(index: int) -> void: StrataRegions.build_mips(batch[xys[index]], mip_levels)
+			var batch_regions: Array[StrataRegionData] = []
+			batch_regions.resize(xys.size())
+			for index in range(xys.size()): batch_regions[index] = batch[xys[index]]
+			var mip_task := func(index: int) -> void: StrataRegions.build_mips(batch_regions[index], mip_levels)
 			if OS.has_feature("threads") and xys.size() > 1:
 				var group := WorkerThreadPool.add_group_task(mip_task, xys.size(), -1, true, "StrataBake mips")
 				WorkerThreadPool.wait_for_group_task_completion(group)
@@ -393,8 +396,10 @@ static func _discard_stage(stage: String) -> void:
 	for file in DirAccess.get_files_at(folder): DirAccess.remove_absolute(folder.path_join(file))
 	DirAccess.remove_absolute(folder)
 
-## Writes one batch's full and lod files into [param stage], concurrently. Files are written
-## compressed like StrataStorage's. {ok, files, bytes}.
+## Writes one batch's full and lod files into [param stage] on the calling thread.
+## ResourceSaver.save() touches non-thread-safe Godot internals (ResourceUID, ResourceCache,
+## and editor save callbacks), so files are saved serially rather than on WorkerThreadPool.
+## Files are written compressed like StrataStorage's. {ok, files, bytes}.
 static func _write_batch(stage: String, batch: Dictionary, xys: Array[Vector2i], lod_level: int, mip_levels: int) -> Dictionary:
 	var jobs: Array = []
 	for xy in xys:
@@ -402,24 +407,13 @@ static func _write_batch(stage: String, batch: Dictionary, xys: Array[Vector2i],
 		jobs.append([region, stage.path_join(StrataRuntimeData.REGION_FILE % [xy.x, xy.y])])
 		var lod: StrataRegionData = region.partial_copy(lod_level) if lod_level > 0 and lod_level < mip_levels else null
 		if lod != null: jobs.append([lod, stage.path_join(StrataRuntimeData.LOD_REGION_FILE % [xy.x, xy.y])])
-	var errors: Array = []
-	errors.resize(jobs.size())
-	var sizes: Array = []
-	sizes.resize(jobs.size())
-	var task := func(index: int) -> void:
-		var path: String = jobs[index][1]
-		errors[index] = ResourceSaver.save(jobs[index][0], path, ResourceSaver.FLAG_COMPRESS)
-		var file := FileAccess.open(path, FileAccess.READ)
-		sizes[index] = file.get_length() if file != null else 0
-	if OS.has_feature("threads") and jobs.size() > 1:
-		var group := WorkerThreadPool.add_group_task(task, jobs.size(), -1, true, "StrataBake write")
-		WorkerThreadPool.wait_for_group_task_completion(group)
-	else:
-		for index in range(jobs.size()): task.call(index)
 	var bytes := 0
-	for index in range(jobs.size()):
-		if errors[index] != OK: return _error("Could not write %s (%s)" % [jobs[index][1], error_string(errors[index])])
-		bytes += int(sizes[index])
+	for job in jobs:
+		var path: String = job[1]
+		var error := ResourceSaver.save(job[0], path, ResourceSaver.FLAG_COMPRESS)
+		if error != OK: return _error("Could not write %s (%s)" % [path, error_string(error)])
+		var file := FileAccess.open(path, FileAccess.READ)
+		bytes += file.get_length() if file != null else 0
 	return {"ok": true, "files": jobs.size(), "bytes": bytes}
 
 ## Replaces the region files of [param directory] with the staged ones and removes the staging
