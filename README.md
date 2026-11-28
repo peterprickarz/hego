@@ -1,6 +1,6 @@
 # HEGo addon package
 
-This package is built from source commit eb8bbd4d6a0782e5e1e8417a51b822fcc4bbc476. It has no package dependencies.
+This package is built from source commit eb37cce1921337eb7ebda560242b14eb9bc68992. It has no package dependencies.
 To cook HDAs into Strata layers, also install the Strata package and
 the HEGo Strata package from the same source revision; for Terrain3D, install
 the HEGo Terrain3D package from the same revision and Terrain3D itself; to write
