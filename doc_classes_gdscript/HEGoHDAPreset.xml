@@ -1,19 +1,21 @@
 <?xml version='1.0' encoding='utf-8'?>
 <class xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="HEGoHDAPreset" inherits="Resource" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
 	<brief_description>
-		Saved parameter presets for one HDA, as the bottom panel's preset list stores them.
+		Named parameter presets for one Houdini operator in the HEGo bottom panel.
 	</brief_description>
 	<description>
-		One resource per operator, written to [code]res://hego/presets/&lt;operator&gt;.tres[/code]. A preset is the
- blob [method HEGoAssetNode.get_preset] returns, which is also what a node's
- [code]parm_stash[/code] holds, so a preset and a stashed parameter set are the same thing
- saved in two places.
+		The panel stores one resource per operator under [code]res://hego/presets/[/code]. For example, [code]Sop/sample[/code] uses [code]sample.tres[/code].
+ Names that require encoding for Windows, such as [code]acme::sample::2.0[/code], use [code]encoded/&lt;SHA-256&gt;.tres[/code]. Existing namespaced preset files on Linux retain their original paths.
+ Loading a named preset restores the Houdini parameter values and resolves its saved scene-node references in the current session.
 	</description>
 	<tutorials>
 	</tutorials>
 	<members>
 		<member name="presets" type="Dictionary" setter="" getter="">
-			Preset name to the parameter blob saved under it.
+			Maps each preset name to the binary [PackedByteArray] returned by [method HEGoAssetNode.get_preset].
+		</member>
+		<member name="parameter_links" type="Dictionary" setter="" getter="">
+			Maps each preset name to its Houdini node-reference parameters. Each binding records the source host's relative scene path, operator name and asset label so the panel can reconnect the source after a session restart.
 		</member>
 	</members>
 </class>

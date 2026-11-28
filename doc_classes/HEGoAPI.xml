@@ -91,10 +91,17 @@ This count does not include the currently running task.
 Returns [code]true[/code] when the Houdini Engine session is currently active.
 </description>
 </method>
+<method name="load_hda_library">
+<return type="HEGoTask" />
+<param index="0" name="path" type="String" />
+<description>
+Loads an HDA library into the active Houdini session. [param path] accepts a local absolute path or a Godot project or user path. The Houdini server must be able to read the resolved file. The successful task returns its HAPI library ID. Reusing a library loaded from the same path returns its existing ID. If a different library already supplies the definition, the load fails and preserves that definition. Use [method HEGoAssetNode.reload_definition] to reload the library selected by a live asset.
+</description>
+</method>
 <method name="open_hip_file">
 <return type="HEGoTask" />
 <description>
-Saves the current Houdini Engine scene to a new temporary directory and launches the configured Houdini executable with that file. The temporary copy remains available after the Godot session closes. On success, the task result contains its absolute path.
+Saves the current Houdini Engine scene to a new temporary directory and launches the configured Houdini executable with that file. Houdini and the temporary copy remain available after Godot closes. On success, the task result contains the absolute path to the copy.
 </description>
 </method>
 <method name="save_hip_file">
