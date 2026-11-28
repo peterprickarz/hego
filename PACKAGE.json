@@ -2,7 +2,7 @@
   "format_version": 1,
   "package": "copia",
   "addon_path": "addons/copia",
-  "source_commit": "eb37cce1921337eb7ebda560242b14eb9bc68992",
+  "source_commit": "89c85825fb9732c3648243f1bc2630659b6d6318",
   "requires": [],
   "build_requires": ["godot-cpp submodule"],
   "requires_hego": false,
