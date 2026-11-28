@@ -23,6 +23,400 @@ using namespace godot;
 namespace Copia {
 
 static const char *SET_EXTENSION = ".copiaset";
+static const char *MANIFEST_FILE = "manifest.json";
+
+struct SetMeta {
+    std::string kind = "generated";
+    bool locked = false;
+};
+
+static bool valid_set_kind(const std::string &p_kind) {
+    return p_kind == "generated" || p_kind == "authored";
+}
+
+static bool valid_intent(const std::string &p_intent) {
+    return p_intent == "any" || p_intent == "generated" || p_intent == "authored";
+}
+
+static String manifest_path(const String &p_directory) {
+    return p_directory.path_join("sets").path_join(MANIFEST_FILE);
+}
+
+static std::string escape_json_string(const std::string &p_value) {
+    std::string out;
+    out.reserve(p_value.size() + 2);
+    out.push_back('"');
+    for (unsigned char c : p_value) {
+        if (c == '"' || c == '\\') {
+            out.push_back('\\');
+            out.push_back(char(c));
+        } else if (c >= 0x20) {
+            out.push_back(char(c));
+        }
+    }
+    out.push_back('"');
+    return out;
+}
+
+// Minimal, thread-safe parser for sets/manifest.json:
+//   {"version": 1, "sets": {"name": {"kind": "authored", "locked": false}}}
+class ManifestParser {
+public:
+    ManifestParser(const char *p_data, size_t p_size) : data(p_data), size(p_size) {}
+
+    bool parse(std::map<std::string, SetMeta> &r_sets) {
+        skip_ws();
+        if (!consume('{')) {
+            return false;
+        }
+        skip_ws();
+        if (peek() == '}') {
+            pos++;
+            return true;
+        }
+        while (pos < size) {
+            std::string key;
+            if (!read_string(key)) {
+                return false;
+            }
+            skip_ws();
+            if (!consume(':')) {
+                return false;
+            }
+            skip_ws();
+            if (key == "sets") {
+                if (!parse_sets_object(r_sets)) {
+                    return false;
+                }
+            } else {
+                if (!skip_value()) {
+                    return false;
+                }
+            }
+            skip_ws();
+            if (consume(',')) {
+                skip_ws();
+                continue;
+            }
+            return consume('}');
+        }
+        return false;
+    }
+
+private:
+    const char *data;
+    size_t size;
+    size_t pos = 0;
+
+    char peek() const { return pos < size ? data[pos] : '\0'; }
+    void skip_ws() {
+        while (pos < size && (data[pos] == ' ' || data[pos] == '\t' || data[pos] == '\r' || data[pos] == '\n')) {
+            pos++;
+        }
+    }
+    bool consume(char p_ch) {
+        if (pos < size && data[pos] == p_ch) {
+            pos++;
+            return true;
+        }
+        return false;
+    }
+    bool read_string(std::string &r_out) {
+        r_out.clear();
+        if (!consume('"')) {
+            return false;
+        }
+        while (pos < size) {
+            char c = data[pos++];
+            if (c == '"') {
+                return true;
+            }
+            if (c == '\\') {
+                if (pos >= size) {
+                    return false;
+                }
+                char esc = data[pos++];
+                switch (esc) {
+                    case '"': r_out.push_back('"'); break;
+                    case '\\': r_out.push_back('\\'); break;
+                    case '/': r_out.push_back('/'); break;
+                    case 'b': r_out.push_back('\b'); break;
+                    case 'f': r_out.push_back('\f'); break;
+                    case 'n': r_out.push_back('\n'); break;
+                    case 'r': r_out.push_back('\r'); break;
+                    case 't': r_out.push_back('\t'); break;
+                    default: r_out.push_back(esc); break;
+                }
+            } else {
+                r_out.push_back(c);
+            }
+        }
+        return false;
+    }
+    bool read_bool(bool &r_out) {
+        if (pos + 4 <= size && std::memcmp(data + pos, "true", 4) == 0) {
+            pos += 4;
+            r_out = true;
+            return true;
+        }
+        if (pos + 5 <= size && std::memcmp(data + pos, "false", 5) == 0) {
+            pos += 5;
+            r_out = false;
+            return true;
+        }
+        return false;
+    }
+    bool skip_value() {
+        skip_ws();
+        char c = peek();
+        if (c == '"') {
+            std::string dummy;
+            return read_string(dummy);
+        }
+        if (c == '{') {
+            pos++;
+            skip_ws();
+            if (consume('}')) {
+                return true;
+            }
+            while (pos < size) {
+                std::string k;
+                if (!read_string(k)) {
+                    return false;
+                }
+                skip_ws();
+                if (!consume(':')) {
+                    return false;
+                }
+                if (!skip_value()) {
+                    return false;
+                }
+                skip_ws();
+                if (consume(',')) {
+                    skip_ws();
+                    continue;
+                }
+                return consume('}');
+            }
+            return false;
+        }
+        if (c == '[') {
+            pos++;
+            skip_ws();
+            if (consume(']')) {
+                return true;
+            }
+            while (pos < size) {
+                if (!skip_value()) {
+                    return false;
+                }
+                skip_ws();
+                if (consume(',')) {
+                    skip_ws();
+                    continue;
+                }
+                return consume(']');
+            }
+            return false;
+        }
+        size_t start = pos;
+        while (pos < size && data[pos] != ',' && data[pos] != '}' && data[pos] != ']' &&
+                data[pos] != ' ' && data[pos] != '\t' && data[pos] != '\r' && data[pos] != '\n') {
+            pos++;
+        }
+        return pos > start;
+    }
+    bool parse_sets_object(std::map<std::string, SetMeta> &r_sets) {
+        if (!consume('{')) {
+            return false;
+        }
+        skip_ws();
+        if (consume('}')) {
+            return true;
+        }
+        while (pos < size) {
+            std::string name;
+            if (!read_string(name)) {
+                return false;
+            }
+            skip_ws();
+            if (!consume(':')) {
+                return false;
+            }
+            skip_ws();
+            SetMeta meta;
+            if (!parse_set_meta(meta)) {
+                return false;
+            }
+            if (valid_set_name(name) && valid_set_kind(meta.kind)) {
+                r_sets[name] = meta;
+            }
+            skip_ws();
+            if (consume(',')) {
+                skip_ws();
+                continue;
+            }
+            return consume('}');
+        }
+        return false;
+    }
+    bool parse_set_meta(SetMeta &r_meta) {
+        if (!consume('{')) {
+            return false;
+        }
+        skip_ws();
+        if (consume('}')) {
+            return true;
+        }
+        while (pos < size) {
+            std::string key;
+            if (!read_string(key)) {
+                return false;
+            }
+            skip_ws();
+            if (!consume(':')) {
+                return false;
+            }
+            skip_ws();
+            if (key == "kind") {
+                std::string value;
+                if (!read_string(value)) {
+                    return false;
+                }
+                r_meta.kind = value;
+            } else if (key == "locked") {
+                bool value = false;
+                if (!read_bool(value)) {
+                    return false;
+                }
+                r_meta.locked = value;
+            } else if (!skip_value()) {
+                return false;
+            }
+            skip_ws();
+            if (consume(',')) {
+                skip_ws();
+                continue;
+            }
+            return consume('}');
+        }
+        return false;
+    }
+};
+
+// Must be called with index_mutex() held.
+static std::map<std::string, SetMeta> load_manifest_locked(const String &p_directory) {
+    std::map<std::string, SetMeta> sets;
+    String path = manifest_path(p_directory);
+    if (!file_exists(path)) {
+        return sets;
+    }
+    Bytes raw;
+    if (!read_file(path, raw) || raw.empty()) {
+        return sets;
+    }
+    ManifestParser parser(reinterpret_cast<const char *>(raw.data()), raw.size());
+    std::map<std::string, SetMeta> parsed;
+    if (parser.parse(parsed)) {
+        sets = std::move(parsed);
+    } else {
+        UtilityFunctions::push_warning("Copia: unreadable sets/manifest.json in ", p_directory);
+    }
+    return sets;
+}
+
+// Must be called with index_mutex() held.
+static bool save_manifest_locked(const String &p_directory, const std::map<std::string, SetMeta> &p_sets, std::string &r_error) {
+    std::string out = "{\n  \"version\": 1,\n  \"sets\": {\n";
+    bool first = true;
+    for (const auto &entry : p_sets) {
+        if (!first) {
+            out += ",\n";
+        }
+        first = false;
+        out += "    " + escape_json_string(entry.first) + ": {\"kind\": " + escape_json_string(entry.second.kind) +
+                ", \"locked\": " + (entry.second.locked ? "true" : "false") + "}";
+    }
+    out += "\n  }\n}\n";
+    Bytes bytes(out.begin(), out.end());
+    return write_file_atomic(manifest_path(p_directory), bytes, r_error);
+}
+
+// Validates access for a set of names against sets/manifest.json and on-disk sets.
+// When intent is "authored" and a target set is brand-new (absent from manifest and disk), records
+// it into r_auto_register so the caller persists it as authored after validation succeeds.
+static bool check_sets_access(const String &p_directory, const std::set<std::string> &p_target_sets,
+        const std::string &p_intent, std::vector<std::string> &r_auto_register, String &r_error) {
+    if (!valid_intent(p_intent)) {
+        r_error = "invalid write intent \"" + to_godot(p_intent) + "\" (use \"any\", \"generated\" or \"authored\")";
+        return false;
+    }
+    if (p_target_sets.empty()) {
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(index_mutex());
+    std::map<std::string, SetMeta> manifest = load_manifest_locked(p_directory);
+    std::set<std::string> on_disk;
+    for (const std::string &name : set_names_on_disk(p_directory)) {
+        on_disk.insert(name);
+    }
+    for (const std::string &name : p_target_sets) {
+        auto it = manifest.find(name);
+        bool known_in_manifest = it != manifest.end();
+        bool exists_on_disk = on_disk.count(name) > 0;
+        SetMeta meta = known_in_manifest ? it->second : SetMeta{};
+        if (meta.locked) {
+            r_error = "set \"" + to_godot(name) + "\" is locked";
+            return false;
+        }
+        if (p_intent == "generated") {
+            if (known_in_manifest && meta.kind == "authored") {
+                r_error = "set \"" + to_godot(name) + "\" is authored and cannot be modified by generated writes";
+                return false;
+            }
+        } else if (p_intent == "authored") {
+            if (known_in_manifest) {
+                if (meta.kind != "authored") {
+                    r_error = "set \"" + to_godot(name) + "\" is generated and cannot be modified by authored writes";
+                    return false;
+                }
+            } else if (exists_on_disk) {
+                r_error = "set \"" + to_godot(name) + "\" is generated (unregistered on disk) and cannot be modified by authored writes";
+                return false;
+            } else {
+                r_auto_register.push_back(name);
+            }
+        }
+    }
+    return true;
+}
+
+static bool register_authored_sets(const String &p_directory, const std::vector<std::string> &p_sets, String &r_error) {
+    if (p_sets.empty()) {
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(index_mutex());
+    std::map<std::string, SetMeta> manifest = load_manifest_locked(p_directory);
+    bool changed = false;
+    for (const std::string &name : p_sets) {
+        if (manifest.find(name) == manifest.end()) {
+            SetMeta meta;
+            meta.kind = "authored";
+            meta.locked = false;
+            manifest[name] = meta;
+            changed = true;
+        }
+    }
+    if (!changed) {
+        return true;
+    }
+    std::string io_error;
+    if (!save_manifest_locked(p_directory, manifest, io_error)) {
+        r_error = to_godot("manifest: " + io_error);
+        return false;
+    }
+    return true;
+}
 
 String set_file_path(const String &p_directory, const std::string &p_set, int32_t p_cx, int32_t p_cz) {
     return p_directory.path_join("sets").path_join(to_godot(p_set)).path_join(to_godot(cell_name(p_cx, p_cz) + SET_EXTENSION));
@@ -280,7 +674,7 @@ struct FileJob {
 
 } // namespace
 
-Dictionary CopiaSets::apply(const String &p_directory, double p_cell_size, const Array &p_clears, const Dictionary &p_points) {
+Dictionary CopiaSets::apply(const String &p_directory, double p_cell_size, const Array &p_clears, const Dictionary &p_points, const String &p_intent) {
     Dictionary result;
     result["ok"] = false;
     result["error"] = String();
@@ -299,8 +693,13 @@ Dictionary CopiaSets::apply(const String &p_directory, double p_cell_size, const
     if (p_directory.is_empty()) {
         return reject("directory is empty");
     }
+    const std::string intent = to_std(p_intent);
+    if (!valid_intent(intent)) {
+        return reject("invalid write intent \"" + p_intent + "\" (use \"any\", \"generated\" or \"authored\")");
+    }
 
     std::map<FileKey, FileJob> jobs;
+    std::set<std::string> touched_sets;
     for (int64_t i = 0; i < p_clears.size(); i++) {
         if (p_clears[i].get_type() != Variant::DICTIONARY) {
             return reject("clears must hold {set: String, cell: Vector2i} dictionaries");
@@ -315,6 +714,7 @@ Dictionary CopiaSets::apply(const String &p_directory, double p_cell_size, const
         if (!valid_set_name(name)) {
             return reject("invalid set name \"" + String(set) + "\" in clears");
         }
+        touched_sets.insert(name);
         Vector2i c = cell;
         FileKey key{ name, c.x, c.y };
         FileJob &job = jobs[key];
@@ -328,6 +728,21 @@ Dictionary CopiaSets::apply(const String &p_directory, double p_cell_size, const
         return reject(error);
     }
     const int64_t n = columns.count;
+    if (n > 0) {
+        if (columns.set) {
+            for (int64_t i = 0; i < n; i++) {
+                if (columns.set[i] >= 0 && size_t(columns.set[i]) < columns.set_id.size()) {
+                    touched_sets.insert(columns.sets[size_t(columns.set_id[size_t(columns.set[i])])]);
+                }
+            }
+        } else {
+            touched_sets.insert("default");
+        }
+    }
+    std::vector<std::string> auto_register;
+    if (!check_sets_access(p_directory, touched_sets, intent, auto_register, error)) {
+        return reject(error);
+    }
 
     // Validate every point and find its cell, in parallel chunks.
     std::vector<int32_t> point_cx(static_cast<size_t>(n)), point_cz(static_cast<size_t>(n));
@@ -602,6 +1017,12 @@ Dictionary CopiaSets::apply(const String &p_directory, double p_cell_size, const
         String folder = p_directory.path_join("sets").path_join(to_godot(set));
         if (DirAccess::get_files_at(folder).is_empty() && DirAccess::get_directories_at(folder).is_empty()) {
             DirAccess::remove_absolute(folder);
+        }
+    }
+    if (first_error.is_empty() && !auto_register.empty()) {
+        String reg_error;
+        if (!register_authored_sets(p_directory, auto_register, reg_error)) {
+            first_error = reg_error;
         }
     }
     Array cell_list;
@@ -952,12 +1373,814 @@ Dictionary CopiaSets::read_points(const String &p_directory, double p_cell_size,
     return result;
 }
 
-Array CopiaSets::remove_set(const String &p_directory, const String &p_set) {
-    Array cells;
+Dictionary CopiaSets::set_meta(const String &p_directory, const String &p_set, const String &p_kind, bool p_locked) {
+    Dictionary result;
+    result["ok"] = false;
+    result["error"] = String();
+    result["set"] = p_set;
+    result["kind"] = p_kind;
+    result["locked"] = p_locked;
+    if (p_directory.is_empty()) {
+        result["error"] = "directory is empty";
+        return result;
+    }
     std::string set = to_std(p_set);
     if (!valid_set_name(set)) {
-        return cells;
+        result["error"] = "invalid set name \"" + p_set + "\" (use 1 to 64 of a-z, 0-9, _)";
+        return result;
     }
+    std::string kind = to_std(p_kind);
+    if (!valid_set_kind(kind)) {
+        result["error"] = "invalid set kind \"" + p_kind + "\" (use \"generated\" or \"authored\")";
+        return result;
+    }
+    std::lock_guard<std::mutex> lock(index_mutex());
+    std::map<std::string, SetMeta> manifest = load_manifest_locked(p_directory);
+    SetMeta meta;
+    meta.kind = kind;
+    meta.locked = p_locked;
+    manifest[set] = meta;
+    std::string io_error;
+    if (!save_manifest_locked(p_directory, manifest, io_error)) {
+        result["error"] = to_godot("manifest: " + io_error);
+        return result;
+    }
+    result["ok"] = true;
+    return result;
+}
+
+Dictionary CopiaSets::get_sets_meta(const String &p_directory) {
+    Dictionary result;
+    if (p_directory.is_empty()) {
+        return result;
+    }
+    std::lock_guard<std::mutex> lock(index_mutex());
+    std::map<std::string, SetMeta> manifest = load_manifest_locked(p_directory);
+    for (const std::string &name : set_names_on_disk(p_directory)) {
+        if (manifest.find(name) == manifest.end()) {
+            manifest[name] = SetMeta{};
+        }
+    }
+    for (const auto &entry : manifest) {
+        Dictionary info;
+        info["kind"] = to_godot(entry.second.kind);
+        info["locked"] = entry.second.locked;
+        result[to_godot(entry.first)] = info;
+    }
+    return result;
+}
+
+Dictionary CopiaSets::edit_points(const String &p_directory, double p_cell_size, const String &p_set,
+        const Dictionary &p_removes, const Dictionary &p_adds, const String &p_intent) {
+    Dictionary result;
+    result["ok"] = false;
+    result["error"] = String();
+    result["written"] = PackedStringArray();
+    result["deleted"] = PackedStringArray();
+    result["unchanged"] = PackedStringArray();
+    result["cells"] = Array();
+    result["removed_count"] = 0;
+    result["added_count"] = 0;
+    auto reject = [&](const String &p_message) {
+        result["error"] = p_message;
+        return result;
+    };
+    if (!std::isfinite(p_cell_size) || p_cell_size <= 0.0) {
+        return reject("cell_size must be a positive number");
+    }
+    if (p_directory.is_empty()) {
+        return reject("directory is empty");
+    }
+    const std::string set_name = to_std(p_set);
+    if (!valid_set_name(set_name)) {
+        return reject("invalid set name \"" + p_set + "\" (use 1 to 64 of a-z, 0-9, _)");
+    }
+    const std::string intent = to_std(p_intent);
+    std::vector<std::string> auto_register;
+    String access_error;
+    if (!check_sets_access(p_directory, { set_name }, intent, auto_register, access_error)) {
+        return reject(access_error);
+    }
+
+    PointColumns removes;
+    PointColumns adds;
+    String error;
+    if (!parse_columns(p_removes, removes, error)) {
+        return reject("removes: " + error);
+    }
+    if (!parse_columns(p_adds, adds, error)) {
+        return reject("adds: " + error);
+    }
+    if (removes.count == 0 && adds.count == 0) {
+        result["ok"] = true;
+        return result;
+    }
+
+    struct EditCellJob {
+        int32_t cx = 0;
+        int32_t cz = 0;
+        std::vector<uint32_t> remove_indices;
+        std::vector<uint32_t> add_indices;
+        Outcome outcome = OUTCOME_NONE;
+        Bytes bytes;
+        std::string error;
+        SetSummary summary;
+        int64_t removed_count = 0;
+    };
+    std::map<std::pair<int32_t, int32_t>, EditCellJob> jobs;
+
+    for (int64_t i = 0; i < removes.count; i++) {
+        const float *t = removes.transform + i * 12;
+        for (int k = 0; k < 12; k++) {
+            if (!std::isfinite(t[k])) {
+                return reject("remove point " + String::num_int64(i) + ": transform is not finite");
+            }
+        }
+        int32_t obj = removes.object[i];
+        if (obj < 0 || obj >= removes.object_table_size || removes.paths[size_t(removes.path_id[size_t(obj)])].empty()) {
+            return reject("remove point " + String::num_int64(i) + ": invalid object index");
+        }
+        int32_t cx = 0, cz = 0;
+        if (!cell_index(double(t[9]), p_cell_size, cx) || !cell_index(double(t[11]), p_cell_size, cz)) {
+            return reject("remove point " + String::num_int64(i) + ": origin out of cell grid range");
+        }
+        EditCellJob &job = jobs[{ cx, cz }];
+        job.cx = cx;
+        job.cz = cz;
+        job.remove_indices.push_back(uint32_t(i));
+    }
+
+    for (int64_t i = 0; i < adds.count; i++) {
+        const float *t = adds.transform + i * 12;
+        for (int k = 0; k < 12; k++) {
+            if (!std::isfinite(t[k])) {
+                return reject("add point " + String::num_int64(i) + ": transform is not finite");
+            }
+        }
+        int32_t obj = adds.object[i];
+        if (obj < 0 || obj >= adds.object_table_size || adds.paths[size_t(adds.path_id[size_t(obj)])].empty()) {
+            return reject("add point " + String::num_int64(i) + ": invalid object index");
+        }
+        for (const float *data : { adds.color, adds.custom }) {
+            if (data && !std::isnan(data[i * 4])) {
+                for (int k = 0; k < 4; k++) {
+                    if (!std::isfinite(data[i * 4 + k])) {
+                        return reject("add point " + String::num_int64(i) + ": color or custom value is not finite");
+                    }
+                }
+            }
+        }
+        if (adds.keep && !std::isfinite(adds.keep[i])) {
+            return reject("add point " + String::num_int64(i) + ": keep is not finite");
+        }
+        int32_t cx = 0, cz = 0;
+        if (!cell_index(double(t[9]), p_cell_size, cx) || !cell_index(double(t[11]), p_cell_size, cz)) {
+            return reject("add point " + String::num_int64(i) + ": origin out of cell grid range");
+        }
+        EditCellJob &job = jobs[{ cx, cz }];
+        job.cx = cx;
+        job.cz = cz;
+        job.add_indices.push_back(uint32_t(i));
+    }
+
+    std::vector<EditCellJob *> job_list;
+    for (auto &entry : jobs) {
+        job_list.push_back(&entry.second);
+    }
+
+    const float cell_size_f = float(p_cell_size);
+    constexpr float MATCH_EPS = 1e-4f;
+    parallel_for(int64_t(job_list.size()), [&](int64_t index) {
+        EditCellJob &job = *job_list[size_t(index)];
+        String path = set_file_path(p_directory, set_name, job.cx, job.cz);
+        SetFile old;
+        bool have_old = false;
+        if (file_exists(path)) {
+            Bytes data;
+            std::string decode_error;
+            bool read = read_file(path, data);
+            if (!read || !decode_set_file(data, old, false, decode_error)) {
+                job.error = relative_set_path(set_name, job.cx, job.cz) + ": " + (read ? decode_error : "cannot read");
+                return;
+            }
+            if (old.cell_size != cell_size_f) {
+                job.error = relative_set_path(set_name, job.cx, job.cz) + ": stored cell size differs";
+                return;
+            }
+            have_old = true;
+        }
+        SetFile next;
+        next.cx = job.cx;
+        next.cz = job.cz;
+        next.cell_size = cell_size_f;
+        if (have_old) {
+            next.extras = old.extras;
+        }
+        if (!job.add_indices.empty()) {
+            for (const ExtraInput &input : adds.extras) {
+                auto found = std::find_if(next.extras.begin(), next.extras.end(),
+                        [&](const ExtraColumn &c) { return c.name == input.column.name; });
+                if (found == next.extras.end()) {
+                    next.extras.push_back(input.column);
+                } else if (!found->same_kind(input.column)) {
+                    job.error = relative_set_path(set_name, job.cx, job.cz) + ": extra column \"" + input.column.name + "\" type mismatch";
+                    return;
+                }
+            }
+            std::sort(next.extras.begin(), next.extras.end(), [](const ExtraColumn &a, const ExtraColumn &b) { return a.name < b.name; });
+        }
+
+        const size_t stride = row_stride(next.extras);
+        std::map<std::string, ObjectRows> merged;
+        if (have_old) {
+            // Group remove indices by object path for fast lookup.
+            std::unordered_map<std::string, std::vector<uint32_t>> removes_by_path;
+            for (uint32_t ri : job.remove_indices) {
+                const std::string &opath = removes.paths[size_t(removes.path_id[size_t(removes.object[ri])])];
+                removes_by_path[opath].push_back(ri);
+            }
+            const size_t old_stride = row_stride(old.extras);
+            const bool same_layout = old.extras.size() == next.extras.size() && old_stride == stride;
+            for (ObjectRows &object : old.objects) {
+                auto rit = removes_by_path.find(object.path);
+                if (rit == removes_by_path.end()) {
+                    ObjectRows &target = merged[object.path];
+                    target.path = object.path;
+                    target.rows = same_layout ? std::move(object.rows) : relayout_rows(object.rows, object.count, old.extras, next.extras);
+                    target.count = object.count;
+                    continue;
+                }
+                std::vector<char> drop(object.count, 0);
+                for (uint32_t ri : rit->second) {
+                    const float *rt = removes.transform + size_t(ri) * 12;
+                    int64_t best = -1;
+                    float best_err = MATCH_EPS + 1.0f;
+                    for (uint32_t r = 0; r < object.count; r++) {
+                        if (drop[r]) {
+                            continue;
+                        }
+                        const float *ot = reinterpret_cast<const float *>(object.rows.data() + size_t(r) * old_stride + ROW_TRANSFORM);
+                        if (std::memcmp(ot, rt, 48) == 0) {
+                            best = int64_t(r);
+                            best_err = 0.0f;
+                            break;
+                        }
+                        float max_diff = 0.0f;
+                        for (int k = 0; k < 12; k++) {
+                            float d = std::fabs(ot[k] - rt[k]);
+                            if (d > max_diff) {
+                                max_diff = d;
+                                if (max_diff > MATCH_EPS) {
+                                    break;
+                                }
+                            }
+                        }
+                        if (max_diff <= MATCH_EPS && max_diff < best_err) {
+                            best = int64_t(r);
+                            best_err = max_diff;
+                        }
+                    }
+                    if (best >= 0) {
+                        drop[size_t(best)] = 1;
+                        job.removed_count++;
+                    }
+                }
+                Bytes kept;
+                uint32_t kept_count = 0;
+                kept.reserve(object.rows.size());
+                for (uint32_t r = 0; r < object.count; r++) {
+                    if (!drop[r]) {
+                        const uint8_t *src = object.rows.data() + size_t(r) * old_stride;
+                        kept.insert(kept.end(), src, src + old_stride);
+                        kept_count++;
+                    }
+                }
+                if (kept_count > 0) {
+                    ObjectRows &target = merged[object.path];
+                    target.path = object.path;
+                    target.rows = same_layout ? std::move(kept) : relayout_rows(kept, kept_count, old.extras, next.extras);
+                    target.count = kept_count;
+                }
+            }
+        }
+
+        if (!job.add_indices.empty()) {
+            std::vector<int> source(next.extras.size(), -1);
+            std::vector<size_t> offset(next.extras.size());
+            size_t at = ROW_FIXED;
+            for (size_t e = 0; e < next.extras.size(); e++) {
+                offset[e] = at;
+                at += next.extras[e].bytes();
+                for (size_t s = 0; s < adds.extras.size(); s++) {
+                    if (adds.extras[s].column.name == next.extras[e].name) {
+                        source[e] = int(s);
+                    }
+                }
+            }
+            std::vector<ObjectRows *> by_path(adds.paths.size(), nullptr);
+            Bytes row(stride);
+            for (uint32_t i : job.add_indices) {
+                int32_t pid = adds.path_id[size_t(adds.object[i])];
+                ObjectRows *&target = by_path[size_t(pid)];
+                if (!target) {
+                    target = &merged[adds.paths[size_t(pid)]];
+                    target->path = adds.paths[size_t(pid)];
+                }
+                std::fill(row.begin(), row.end(), 0);
+                std::memcpy(row.data() + ROW_TRANSFORM, adds.transform + size_t(i) * 12, 48);
+                for (int k = 0; k < 2; k++) {
+                    const float *data = k == 0 ? adds.color : adds.custom;
+                    size_t offset_bytes = k == 0 ? ROW_COLOR : ROW_CUSTOM;
+                    if (data && !std::isnan(data[size_t(i) * 4])) {
+                        std::memcpy(row.data() + offset_bytes, data + size_t(i) * 4, 16);
+                    } else {
+                        for (int c = 0; c < 4; c++) {
+                            std::memcpy(row.data() + offset_bytes + c * 4, &NONE_BITS, 4);
+                        }
+                    }
+                }
+                float keep = adds.keep ? std::min(1.0f, std::max(0.0f, adds.keep[i])) : 1.0f;
+                std::memcpy(row.data() + ROW_KEEP, &keep, 4);
+                for (size_t e = 0; e < next.extras.size(); e++) {
+                    if (source[e] >= 0) {
+                        const ExtraInput &input = adds.extras[size_t(source[e])];
+                        std::memcpy(row.data() + offset[e], input.data + size_t(i) * input.column.bytes(), input.column.bytes());
+                    }
+                }
+                target->rows.insert(target->rows.end(), row.begin(), row.end());
+                target->count++;
+            }
+        }
+
+        for (auto &entry : merged) {
+            canonical_sort(entry.second.rows, entry.second.count, stride);
+            next.objects.push_back(std::move(entry.second));
+        }
+        if (next.objects.empty()) {
+            job.outcome = have_old ? OUTCOME_DELETE : OUTCOME_NONE;
+            return;
+        }
+        if (!encode_set_file(next, job.bytes)) {
+            job.error = relative_set_path(set_name, job.cx, job.cz) + ": compression failed";
+            return;
+        }
+        job.outcome = have_old && old.hash == next.hash ? OUTCOME_UNCHANGED : OUTCOME_WRITE;
+        job.summary.ok = true;
+        job.summary.cell_size = next.cell_size;
+        job.summary.point_count = next.point_count;
+        job.summary.hash = next.hash;
+        for (const ObjectRows &object : next.objects) {
+            job.summary.objects.push_back(object.path);
+        }
+        if (job.outcome == OUTCOME_UNCHANGED) {
+            job.bytes.clear();
+        }
+    });
+
+    for (EditCellJob *job : job_list) {
+        if (!job->error.empty()) {
+            return reject(to_godot(job->error));
+        }
+    }
+
+    std::vector<std::string> write_errors(job_list.size());
+    std::vector<char> done(job_list.size(), 0);
+    parallel_for(int64_t(job_list.size()), [&](int64_t index) {
+        EditCellJob &job = *job_list[size_t(index)];
+        String path = set_file_path(p_directory, set_name, job.cx, job.cz);
+        if (job.outcome == OUTCOME_WRITE) {
+            done[size_t(index)] = write_file_atomic(path, job.bytes, write_errors[size_t(index)]) ? 1 : 0;
+        } else if (job.outcome == OUTCOME_DELETE) {
+            done[size_t(index)] = remove_file(path) ? 1 : 0;
+            if (!done[size_t(index)]) {
+                write_errors[size_t(index)] = "cannot delete " + to_std(path);
+            }
+        }
+    });
+
+    PackedStringArray written, deleted, unchanged;
+    std::set<std::pair<int32_t, int32_t>> cells;
+    bool deleted_any = false;
+    int64_t removed_total = 0;
+    String first_error;
+    for (size_t i = 0; i < job_list.size(); i++) {
+        const EditCellJob &job = *job_list[i];
+        removed_total += job.removed_count;
+        String relative = to_godot(relative_set_path(set_name, job.cx, job.cz));
+        if (!write_errors[i].empty() && first_error.is_empty()) {
+            first_error = to_godot(write_errors[i]);
+        }
+        if (job.outcome == OUTCOME_UNCHANGED) {
+            unchanged.push_back(relative);
+        } else if (done[i] && job.outcome == OUTCOME_WRITE) {
+            written.push_back(relative);
+            cells.insert({ job.cx, job.cz });
+        } else if (done[i] && job.outcome == OUTCOME_DELETE) {
+            deleted.push_back(relative);
+            cells.insert({ job.cx, job.cz });
+            deleted_any = true;
+        }
+    }
+
+    if (!job_list.empty()) {
+        std::lock_guard<std::mutex> lock(index_mutex());
+        SetIndex index;
+        const bool decoded = decode_set_index_file(p_directory, index);
+        bool changed = !decoded;
+        for (size_t i = 0; i < job_list.size(); i++) {
+            const EditCellJob &job = *job_list[i];
+            SetKey key(set_name, job.cx, job.cz);
+            if ((job.outcome == OUTCOME_WRITE && done[i]) || job.outcome == OUTCOME_UNCHANGED) {
+                index.put(key, job.summary);
+                changed = changed || job.outcome == OUTCOME_WRITE;
+            } else if (job.outcome == OUTCOME_DELETE && done[i]) {
+                changed = index.entries.erase(key) > 0 || changed;
+            }
+        }
+        int64_t read = 0;
+        changed = reconcile_set_index(p_directory, index, false, false, read) || changed;
+        std::string index_error;
+        if (changed && !save_set_index(p_directory, index, index_error) && first_error.is_empty()) {
+            first_error = to_godot("index: " + index_error);
+        }
+    }
+    if (deleted_any) {
+        String folder = p_directory.path_join("sets").path_join(p_set);
+        if (DirAccess::dir_exists_absolute(folder) && DirAccess::get_files_at(folder).is_empty() && DirAccess::get_directories_at(folder).is_empty()) {
+            DirAccess::remove_absolute(folder);
+        }
+    }
+    if (first_error.is_empty() && !auto_register.empty() && adds.count > 0) {
+        String reg_error;
+        if (!register_authored_sets(p_directory, auto_register, reg_error)) {
+            first_error = reg_error;
+        }
+    }
+
+    Array cell_list;
+    for (const auto &cell : cells) {
+        cell_list.push_back(Vector2i(cell.first, cell.second));
+    }
+    result["written"] = written;
+    result["deleted"] = deleted;
+    result["unchanged"] = unchanged;
+    result["cells"] = cell_list;
+    result["removed_count"] = removed_total;
+    result["added_count"] = adds.count;
+    result["ok"] = first_error.is_empty();
+    result["error"] = first_error;
+    return result;
+}
+
+Dictionary CopiaSets::erase_in_sphere(const String &p_directory, double p_cell_size, const String &p_set,
+        const Vector3 &p_center, double p_radius, const PackedStringArray &p_object_filter, const String &p_intent) {
+    Dictionary result;
+    result["ok"] = false;
+    result["error"] = String();
+    result["cells"] = Array();
+    result["removed_count"] = 0;
+    result["removed_points"] = Dictionary();
+    auto reject = [&](const String &p_message) {
+        result["error"] = p_message;
+        return result;
+    };
+    if (!std::isfinite(p_cell_size) || p_cell_size <= 0.0) {
+        return reject("cell_size must be a positive number");
+    }
+    if (!std::isfinite(p_radius) || p_radius <= 0.0) {
+        return reject("radius must be a positive number");
+    }
+    if (!std::isfinite(p_center.x) || !std::isfinite(p_center.y) || !std::isfinite(p_center.z)) {
+        return reject("center is not finite");
+    }
+    if (p_directory.is_empty()) {
+        return reject("directory is empty");
+    }
+    const std::string set_name = to_std(p_set);
+    if (!valid_set_name(set_name)) {
+        return reject("invalid set name \"" + p_set + "\"");
+    }
+    std::vector<std::string> auto_register;
+    String access_error;
+    if (!check_sets_access(p_directory, { set_name }, to_std(p_intent), auto_register, access_error)) {
+        return reject(access_error);
+    }
+
+    std::set<std::string> filter;
+    for (int64_t i = 0; i < p_object_filter.size(); i++) {
+        filter.insert(to_std(p_object_filter[i]));
+    }
+    const double x0 = double(p_center.x) - p_radius, x1 = double(p_center.x) + p_radius;
+    const double z0 = double(p_center.z) - p_radius, z1 = double(p_center.z) + p_radius;
+    const double r2 = p_radius * p_radius;
+
+    struct SphereCellJob {
+        int32_t cx = 0;
+        int32_t cz = 0;
+        SetFile removed_file;
+        Outcome outcome = OUTCOME_NONE;
+        Bytes bytes;
+        std::string error;
+        SetSummary summary;
+    };
+    std::vector<SphereCellJob> jobs;
+    for (const auto &cell : set_cells_on_disk(p_directory, set_name)) {
+        double cx0 = double(cell.first) * p_cell_size, cz0 = double(cell.second) * p_cell_size;
+        if (cx0 <= x1 && cx0 + p_cell_size >= x0 && cz0 <= z1 && cz0 + p_cell_size >= z0) {
+            SphereCellJob job;
+            job.cx = cell.first;
+            job.cz = cell.second;
+            jobs.push_back(std::move(job));
+        }
+    }
+    if (jobs.empty()) {
+        result["ok"] = true;
+        return result;
+    }
+
+    const float cell_size_f = float(p_cell_size);
+    parallel_for(int64_t(jobs.size()), [&](int64_t index) {
+        SphereCellJob &job = jobs[size_t(index)];
+        String path = set_file_path(p_directory, set_name, job.cx, job.cz);
+        Bytes data;
+        std::string decode_error;
+        SetFile old;
+        if (!read_file(path, data) || !decode_set_file(data, old, false, decode_error)) {
+            job.error = relative_set_path(set_name, job.cx, job.cz) + ": " + (decode_error.empty() ? "cannot read" : decode_error);
+            return;
+        }
+        if (old.cell_size != cell_size_f) {
+            job.error = relative_set_path(set_name, job.cx, job.cz) + ": stored cell size differs";
+            return;
+        }
+        const size_t stride = row_stride(old.extras);
+        SetFile next;
+        next.cx = job.cx;
+        next.cz = job.cz;
+        next.cell_size = cell_size_f;
+        next.extras = old.extras;
+        job.removed_file.extras = old.extras;
+        job.removed_file.flags = old.flags;
+
+        bool removed_any = false;
+        for (const ObjectRows &object : old.objects) {
+            if (!filter.empty() && filter.count(object.path) == 0) {
+                next.objects.push_back(object);
+                continue;
+            }
+            ObjectRows kept, dropped;
+            kept.path = object.path;
+            dropped.path = object.path;
+            for (uint32_t r = 0; r < object.count; r++) {
+                const uint8_t *row = object.rows.data() + size_t(r) * stride;
+                const float *t = reinterpret_cast<const float *>(row + ROW_TRANSFORM);
+                double dx = double(t[9]) - double(p_center.x);
+                double dy = double(t[10]) - double(p_center.y);
+                double dz = double(t[11]) - double(p_center.z);
+                if (dx * dx + dy * dy + dz * dz <= r2) {
+                    dropped.rows.insert(dropped.rows.end(), row, row + stride);
+                    dropped.count++;
+                    removed_any = true;
+                } else {
+                    kept.rows.insert(kept.rows.end(), row, row + stride);
+                    kept.count++;
+                }
+            }
+            if (kept.count > 0) {
+                next.objects.push_back(std::move(kept));
+            }
+            if (dropped.count > 0) {
+                job.removed_file.point_count += dropped.count;
+                job.removed_file.objects.push_back(std::move(dropped));
+            }
+        }
+        if (!removed_any) {
+            job.outcome = OUTCOME_UNCHANGED;
+            return;
+        }
+        if (next.objects.empty()) {
+            job.outcome = OUTCOME_DELETE;
+            return;
+        }
+        if (!encode_set_file(next, job.bytes)) {
+            job.error = relative_set_path(set_name, job.cx, job.cz) + ": compression failed";
+            return;
+        }
+        job.outcome = OUTCOME_WRITE;
+        job.summary.ok = true;
+        job.summary.cell_size = next.cell_size;
+        job.summary.point_count = next.point_count;
+        job.summary.hash = next.hash;
+        for (const ObjectRows &object : next.objects) {
+            job.summary.objects.push_back(object.path);
+        }
+    });
+
+    for (const SphereCellJob &job : jobs) {
+        if (!job.error.empty()) {
+            return reject(to_godot(job.error));
+        }
+    }
+
+    std::vector<std::string> write_errors(jobs.size());
+    std::vector<char> done(jobs.size(), 0);
+    parallel_for(int64_t(jobs.size()), [&](int64_t index) {
+        const SphereCellJob &job = jobs[size_t(index)];
+        String path = set_file_path(p_directory, set_name, job.cx, job.cz);
+        if (job.outcome == OUTCOME_WRITE) {
+            done[size_t(index)] = write_file_atomic(path, job.bytes, write_errors[size_t(index)]) ? 1 : 0;
+        } else if (job.outcome == OUTCOME_DELETE) {
+            done[size_t(index)] = remove_file(path) ? 1 : 0;
+            if (!done[size_t(index)]) {
+                write_errors[size_t(index)] = "cannot delete " + to_std(path);
+            }
+        }
+    });
+
+    // Gather removed points for Undo and update index.
+    int64_t total_removed = 0;
+    std::set<std::string> removed_paths;
+    std::vector<ExtraColumn> removed_extras;
+    uint32_t removed_flags = 0;
+    Array cells;
+    bool deleted_any = false;
+    String first_error;
+    for (size_t i = 0; i < jobs.size(); i++) {
+        const SphereCellJob &job = jobs[i];
+        if (!write_errors[i].empty() && first_error.is_empty()) {
+            first_error = to_godot(write_errors[i]);
+        }
+        if ((job.outcome == OUTCOME_WRITE || job.outcome == OUTCOME_DELETE) && done[i]) {
+            cells.push_back(Vector2i(job.cx, job.cz));
+            if (job.outcome == OUTCOME_DELETE) {
+                deleted_any = true;
+            }
+            total_removed += int64_t(job.removed_file.point_count);
+            removed_flags |= job.removed_file.flags;
+            for (const ObjectRows &obj : job.removed_file.objects) {
+                removed_paths.insert(obj.path);
+            }
+            for (const ExtraColumn &col : job.removed_file.extras) {
+                auto it = std::find_if(removed_extras.begin(), removed_extras.end(),
+                        [&](const ExtraColumn &c) { return c.name == col.name; });
+                if (it == removed_extras.end()) {
+                    removed_extras.push_back(col);
+                }
+            }
+        }
+    }
+
+    if (!cells.is_empty()) {
+        std::lock_guard<std::mutex> lock(index_mutex());
+        SetIndex index;
+        const bool decoded = decode_set_index_file(p_directory, index);
+        bool changed = !decoded;
+        for (size_t i = 0; i < jobs.size(); i++) {
+            const SphereCellJob &job = jobs[i];
+            SetKey key(set_name, job.cx, job.cz);
+            if (job.outcome == OUTCOME_WRITE && done[i]) {
+                index.put(key, job.summary);
+                changed = true;
+            } else if (job.outcome == OUTCOME_DELETE && done[i]) {
+                changed = index.entries.erase(key) > 0 || changed;
+            }
+        }
+        int64_t read = 0;
+        changed = reconcile_set_index(p_directory, index, false, false, read) || changed;
+        std::string index_error;
+        if (changed && !save_set_index(p_directory, index, index_error) && first_error.is_empty()) {
+            first_error = to_godot("index: " + index_error);
+        }
+    }
+    if (deleted_any) {
+        String folder = p_directory.path_join("sets").path_join(p_set);
+        if (DirAccess::dir_exists_absolute(folder) && DirAccess::get_files_at(folder).is_empty() && DirAccess::get_directories_at(folder).is_empty()) {
+            DirAccess::remove_absolute(folder);
+        }
+    }
+
+    Dictionary removed_points;
+    if (total_removed > 0) {
+        std::sort(removed_extras.begin(), removed_extras.end(), [](const ExtraColumn &a, const ExtraColumn &b) { return a.name < b.name; });
+        std::vector<std::string> path_list(removed_paths.begin(), removed_paths.end());
+        PackedFloat32Array transform, color, custom, keep;
+        PackedInt32Array object;
+        transform.resize(total_removed * 12);
+        object.resize(total_removed);
+        if (removed_flags & COLUMN_COLOR) {
+            color.resize(total_removed * 4);
+        }
+        if (removed_flags & COLUMN_CUSTOM) {
+            custom.resize(total_removed * 4);
+        }
+        if (removed_flags & COLUMN_KEEP) {
+            keep.resize(total_removed);
+        }
+        std::vector<Bytes> extra_out(removed_extras.size());
+        for (size_t e = 0; e < removed_extras.size(); e++) {
+            extra_out[e].assign(size_t(total_removed) * removed_extras[e].bytes(), 0);
+        }
+        int64_t at = 0;
+        for (size_t i = 0; i < jobs.size(); i++) {
+            const SphereCellJob &job = jobs[i];
+            if (!((job.outcome == OUTCOME_WRITE || job.outcome == OUTCOME_DELETE) && done[i])) {
+                continue;
+            }
+            const size_t stride = row_stride(job.removed_file.extras);
+            std::vector<size_t> offsets(removed_extras.size(), SIZE_MAX);
+            size_t offset = ROW_FIXED;
+            for (const ExtraColumn &col : job.removed_file.extras) {
+                for (size_t e = 0; e < removed_extras.size(); e++) {
+                    if (removed_extras[e].name == col.name && removed_extras[e].same_kind(col)) {
+                        offsets[e] = offset;
+                    }
+                }
+                offset += col.bytes();
+            }
+            for (const ObjectRows &obj : job.removed_file.objects) {
+                int32_t oid = int32_t(std::lower_bound(path_list.begin(), path_list.end(), obj.path) - path_list.begin());
+                for (uint32_t r = 0; r < obj.count; r++) {
+                    const uint8_t *row = obj.rows.data() + size_t(r) * stride;
+                    std::memcpy(transform.ptrw() + at * 12, row + ROW_TRANSFORM, 48);
+                    object.set(at, oid);
+                    if (removed_flags & COLUMN_COLOR) {
+                        std::memcpy(color.ptrw() + at * 4, row + ROW_COLOR, 16);
+                    }
+                    if (removed_flags & COLUMN_CUSTOM) {
+                        std::memcpy(custom.ptrw() + at * 4, row + ROW_CUSTOM, 16);
+                    }
+                    if (removed_flags & COLUMN_KEEP) {
+                        std::memcpy(keep.ptrw() + at, row + ROW_KEEP, 4);
+                    }
+                    for (size_t e = 0; e < removed_extras.size(); e++) {
+                        if (offsets[e] != SIZE_MAX) {
+                            std::memcpy(extra_out[e].data() + size_t(at) * removed_extras[e].bytes(), row + offsets[e], removed_extras[e].bytes());
+                        }
+                    }
+                    at++;
+                }
+            }
+        }
+        PackedStringArray object_paths;
+        for (const std::string &p : path_list) {
+            object_paths.push_back(to_godot(p));
+        }
+        removed_points["transform"] = transform;
+        removed_points["object"] = object;
+        removed_points["object_paths"] = object_paths;
+        if (removed_flags & COLUMN_COLOR) {
+            removed_points["color"] = color;
+        }
+        if (removed_flags & COLUMN_CUSTOM) {
+            removed_points["custom"] = custom;
+        }
+        if (removed_flags & COLUMN_KEEP) {
+            removed_points["keep"] = keep;
+        }
+        if (!removed_extras.empty()) {
+            Dictionary extra;
+            for (size_t e = 0; e < removed_extras.size(); e++) {
+                if (removed_extras[e].type == EXTRA_INT32) {
+                    PackedInt32Array values;
+                    values.resize(total_removed);
+                    std::memcpy(values.ptrw(), extra_out[e].data(), extra_out[e].size());
+                    extra[to_godot(removed_extras[e].name)] = values;
+                } else {
+                    PackedFloat32Array values;
+                    values.resize(total_removed * removed_extras[e].width);
+                    std::memcpy(values.ptrw(), extra_out[e].data(), extra_out[e].size());
+                    extra[to_godot(removed_extras[e].name)] = values;
+                }
+            }
+            removed_points["extra"] = extra;
+        }
+    }
+
+    result["cells"] = cells;
+    result["removed_count"] = total_removed;
+    result["removed_points"] = removed_points;
+    result["ok"] = first_error.is_empty();
+    result["error"] = first_error;
+    return result;
+}
+
+Dictionary CopiaSets::remove_set_checked(const String &p_directory, const String &p_set, const String &p_intent, bool p_remove_meta) {
+    Dictionary result;
+    result["ok"] = false;
+    result["error"] = String();
+    result["cells"] = Array();
+    std::string set = to_std(p_set);
+    if (!valid_set_name(set)) {
+        result["error"] = "invalid set name \"" + p_set + "\"";
+        return result;
+    }
+    std::vector<std::string> auto_register;
+    String access_error;
+    if (!check_sets_access(p_directory, { set }, to_std(p_intent), auto_register, access_error)) {
+        result["error"] = access_error;
+        return result;
+    }
+    Array cells;
     std::lock_guard<std::mutex> lock(index_mutex());
     SetIndex index;
     const bool decoded = decode_set_index_file(p_directory, index);
@@ -981,12 +2204,38 @@ Array CopiaSets::remove_set(const String &p_directory, const String &p_set) {
         std::string error;
         save_set_index(p_directory, index, error);
     }
-    return cells;
+    if (p_remove_meta) {
+        std::map<std::string, SetMeta> manifest = load_manifest_locked(p_directory);
+        if (manifest.erase(set) > 0) {
+            std::string error;
+            save_manifest_locked(p_directory, manifest, error);
+        }
+    }
+    result["cells"] = cells;
+    result["ok"] = true;
+    return result;
+}
+
+Array CopiaSets::remove_set(const String &p_directory, const String &p_set) {
+    Dictionary res = remove_set_checked(p_directory, p_set, "any", false);
+    if (!bool(res["ok"])) {
+        UtilityFunctions::push_warning("CopiaSets.remove_set: ", String(res["error"]));
+        return Array();
+    }
+    return res["cells"];
 }
 
 void CopiaSets::_bind_methods() {
     using namespace godot;
-    ClassDB::bind_static_method("CopiaSets", D_METHOD("apply", "directory", "cell_size", "clears", "points"), &CopiaSets::apply);
+    ClassDB::bind_static_method("CopiaSets", D_METHOD("apply", "directory", "cell_size", "clears", "points", "intent"),
+            &CopiaSets::apply, DEFVAL(String("any")));
+    ClassDB::bind_static_method("CopiaSets", D_METHOD("set_meta", "directory", "set", "kind", "locked"),
+            &CopiaSets::set_meta, DEFVAL(false));
+    ClassDB::bind_static_method("CopiaSets", D_METHOD("get_sets_meta", "directory"), &CopiaSets::get_sets_meta);
+    ClassDB::bind_static_method("CopiaSets", D_METHOD("edit_points", "directory", "cell_size", "set", "removes", "adds", "intent"),
+            &CopiaSets::edit_points, DEFVAL(String("authored")));
+    ClassDB::bind_static_method("CopiaSets", D_METHOD("erase_in_sphere", "directory", "cell_size", "set", "center", "radius", "object_filter", "intent"),
+            &CopiaSets::erase_in_sphere, DEFVAL(PackedStringArray()), DEFVAL(String("authored")));
     ClassDB::bind_static_method("CopiaSets", D_METHOD("list_sets", "directory"), &CopiaSets::list_sets);
     ClassDB::bind_static_method("CopiaSets", D_METHOD("list_cells", "directory", "set", "verify"), &CopiaSets::list_cells, DEFVAL(false));
     ClassDB::bind_static_method("CopiaSets", D_METHOD("list_objects", "directory", "cells", "verify"), &CopiaSets::list_objects,
@@ -997,6 +2246,8 @@ void CopiaSets::_bind_methods() {
     ClassDB::bind_static_method("CopiaSets", D_METHOD("read_points", "directory", "cell_size", "rect", "sets", "exclude"),
             &CopiaSets::read_points, DEFVAL(PackedStringArray()), DEFVAL(PackedStringArray()));
     ClassDB::bind_static_method("CopiaSets", D_METHOD("remove_set", "directory", "set"), &CopiaSets::remove_set);
+    ClassDB::bind_static_method("CopiaSets", D_METHOD("remove_set_checked", "directory", "set", "intent", "remove_meta"),
+            &CopiaSets::remove_set_checked, DEFVAL(String("any")), DEFVAL(false));
 }
 
 } // namespace Copia

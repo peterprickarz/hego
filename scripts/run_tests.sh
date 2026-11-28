@@ -52,7 +52,8 @@ GODOT_TESTS=(
     procedural_transaction_test region_geometry_test region_streamer_test stage_material_persistence_test stage_material_transport_test
     terrain_bulk_test terrain_cell_mask_test terrain_material_soft_limit_test terrain_mesher_test terrain_refinement_test
     large_world_test physics_tracking_test terrain_runtime_intent_test terrain_setup_test terrain_transport_lifetime_test
-    copia_build_test copia_demo_test copia_drawer_test copia_points_test copia_resources_test copia_sets_test
+    copia_brush_test copia_build_test copia_demo_test copia_drawer_test copia_editor_smoke_test
+    copia_points_test copia_resources_test copia_sets_ownership_test copia_sets_test
     copia_sources_test copia_store_test copia_streamer_test hego_copia_bridge_test
 )
 # These read the saved island under demo/island/terrain (Git LFS).

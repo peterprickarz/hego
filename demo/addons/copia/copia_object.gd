@@ -17,6 +17,7 @@ signal build_inputs_changed
 # preload itself; its own class is reached with load() at call time (see _self_script).
 const RenderScript := preload("res://addons/copia/copia_render_settings.gd")
 const PhysicsScript := preload("res://addons/copia/copia_physics_settings.gd")
+const PlacementScript := preload("res://addons/copia/copia_placement_settings.gd")
 const SELF_PATH := "res://addons/copia/copia_object.gd"
 
 # Resolved objects by path.
@@ -70,6 +71,12 @@ var _surface_mesh_key := []
 		_swap(physics, value)
 		physics = value
 		_sub_resource_changed()
+## Editor placement and brush-painting rules for this object. Not a build input.
+@export var placement: PlacementScript:
+	set(value):
+		if placement == value: return
+		placement = value
+		emit_changed()
 ## Mesh drawn instead of [member mesh] beyond the near cells, in the far grid. Without one the
 ## object has no impostor.
 @export var impostor_mesh: Mesh:

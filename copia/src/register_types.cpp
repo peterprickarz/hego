@@ -1,9 +1,11 @@
 #include "register_types.h"
 
+#include "copia_brush.h"
 #include "copia_build.h"
 #include "copia_cells.h"
 #include "copia_colliders.h"
 #include "copia_drawer.h"
+#include "copia_edit_overlay.h"
 #include "copia_file.h"
 #include "copia_format.h"
 #include "copia_points.h"
@@ -30,6 +32,8 @@ void initialize_copia_module(ModuleInitializationLevel p_level) {
 	ClassDB::register_class<Copia::CopiaColliders>();
 	ClassDB::register_class<Copia::CopiaPoints>();
 	ClassDB::register_class<Copia::CopiaStreamer>();
+	ClassDB::register_class<Copia::CopiaBrush>();
+	ClassDB::register_class<Copia::CopiaEditOverlay>();
 	ClassDB::register_class<Copia::CopiaFile>();
 	ClassDB::register_class<Copia::CopiaFileLoader>();
 	copia_file_loader.instantiate();

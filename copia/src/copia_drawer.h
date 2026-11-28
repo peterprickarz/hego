@@ -93,6 +93,11 @@ public:
     void link_impostor(int64_t p_impostor_group, int64_t p_child_group, double p_swap_distance, const godot::Variant &p_batch);
     void unlink_impostor(int64_t p_impostor_group, int64_t p_child_group);
 
+    // Editor-only temporary suppression: hides instances matching store-local transforms (12 floats
+    // per instance) in the given live groups until clear_suppressions() or the group is replaced.
+    int64_t suppress_transforms(const godot::PackedInt64Array &p_groups, const godot::PackedFloat32Array &p_transforms);
+    void clear_suppressions();
+
 protected:
     static void _bind_methods();
 
@@ -180,6 +185,10 @@ private:
     std::unordered_map<uint64_t, int64_t> queued_by_sequence;
     std::deque<FreeUnit> free_queue;
     std::vector<WarmUp> warm_ups;
+    // Editor-only temporary suppressions: group_id -> list of hidden single indices, or
+    // group_id -> batch_index -> {instance_index -> original 12 row-major floats}.
+    std::unordered_map<int64_t, std::set<int32_t>> suppressed_singles;
+    std::unordered_map<int64_t, std::unordered_map<int32_t, std::unordered_map<int32_t, std::array<float, 12>>>> suppressed_multimesh;
     int64_t live_instances = 0; // RenderingServer instances (objects, twins, warm-up)
     int64_t live_multimeshes = 0;
     int64_t drawn_instances = 0; // sum of the groups' drawn counts
@@ -199,6 +208,7 @@ private:
     int32_t visible_count(const Group &p_group, int32_t p_index) const;
     bool in_shadow_range(const Group &p_group, int32_t p_index, bool p_current) const;
     void apply_shadow(const Group &p_group, Item &r_item, bool p_on);
+    bool is_single_suppressed(int64_t p_group_id, int32_t p_index) const;
     void evaluate_shadows(Group &p_group, bool p_force);
     void apply_density(Group &p_group);
     void free_unit(const FreeUnit &p_unit);

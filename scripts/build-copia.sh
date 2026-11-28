@@ -64,12 +64,17 @@ mkdir -p "$ROOT_DIR/copia/build"
 git -C "$ROOT_DIR/godot-cpp" ls-files > "$ROOT_DIR/copia/build/godot-cpp-files.txt"
 
 verify_linux_so() {
-    local so="$1" newest
-    readelf -h "$so" | grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64' \
+    local so="$1" headers symbols dynamic newest
+    # Capture readelf output before grep -q: under set -o pipefail, grep exiting on a
+    # match can trigger SIGPIPE on readelf for larger symbol tables.
+    headers="$(LC_ALL=C readelf -h "$so")"
+    grep -Eq 'Machine:[[:space:]]+Advanced Micro Devices X86-64' <<<"$headers" \
         || fail "$(basename "$so") is not an x86_64 library."
-    readelf --dyn-syms --wide "$so" | grep -Eq 'GLOBAL[[:space:]]+DEFAULT[[:space:]]+[0-9]+[[:space:]]+copia_library_init$' \
+    symbols="$(readelf --dyn-syms --wide "$so")"
+    grep -Eq 'GLOBAL[[:space:]]+DEFAULT[[:space:]]+[0-9]+[[:space:]]+copia_library_init$' <<<"$symbols" \
         || fail "$(basename "$so") does not export copia_library_init."
-    if readelf -d "$so" | grep -qiE 'libstdc\+\+|libgcc_s'; then
+    dynamic="$(readelf -d "$so")"
+    if grep -qiE 'libstdc\+\+|libgcc_s' <<<"$dynamic"; then
         fail "$(basename "$so") depends on a dynamic C++ runtime; it should be linked statically."
     fi
     newest="$(readelf -V "$so" 2>/dev/null | grep -oE 'GLIBC_[0-9]+\.[0-9]+(\.[0-9]+)?' \

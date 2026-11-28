@@ -156,6 +156,8 @@ void CopiaDrawer::free_everything() {
         return;
     }
     drawn_instances = 0;
+    suppressed_singles.clear();
+    suppressed_multimesh.clear();
     for (auto &entry : groups) {
         for (Item &item : entry.second.items) {
             if (item.instance.is_valid() || item.multimesh.is_valid()) {
@@ -503,6 +505,11 @@ int64_t CopiaDrawer::add_instance_group(const Dictionary &p_section, const Dicti
     return add_group(std::move(group));
 }
 
+bool CopiaDrawer::is_single_suppressed(int64_t p_group_id, int32_t p_index) const {
+    auto it = suppressed_singles.find(p_group_id);
+    return it != suppressed_singles.end() && it->second.count(p_index) > 0;
+}
+
 void CopiaDrawer::apply_shadow(const Group &p_group, Item &r_item, bool p_on) {
     RenderingServer *server = RenderingServer::get_singleton();
     r_item.shadow_on = p_on;
@@ -575,6 +582,14 @@ void CopiaDrawer::apply_item(const Group &p_group, int32_t p_index, Item &r_item
     apply_range(p_group, p_index, r_item);
     // A new object inside the hysteresis band starts without shadows: they turn on within range.
     apply_shadow(p_group, r_item, in_shadow_range(p_group, p_index, p_all ? false : r_item.shadow_on));
+    if (!p_group.multimesh && is_single_suppressed(p_group.id, p_index)) {
+        if (r_item.instance.is_valid()) {
+            server->instance_set_visible(r_item.instance, false);
+        }
+        if (r_item.twin.is_valid()) {
+            server->instance_set_visible(r_item.twin, false);
+        }
+    }
 }
 
 // Per-surface materials of a single instance. RenderingServer accepts them only on instances
@@ -1087,6 +1102,8 @@ void CopiaDrawer::remove_group(int64_t p_group) {
         free_queue.push_back({ item.instance, item.twin, item.multimesh });
     }
     drawn_instances -= removed.drawn;
+    suppressed_singles.erase(p_group);
+    suppressed_multimesh.erase(p_group);
     groups.erase(found);
 }
 
@@ -1125,6 +1142,9 @@ void CopiaDrawer::evaluate_shadows(Group &p_group, bool p_force) {
         return;
     }
     for (int32_t i = 0; i < p_group.created; i++) {
+        if (!p_group.multimesh && is_single_suppressed(p_group.id, i)) {
+            continue;
+        }
         Item &item = p_group.items[size_t(i)];
         bool on = target == SHADOW_MIXED ? in_shadow_range(p_group, i, item.shadow_on) : target == SHADOW_ALL_ON;
         if (on != item.shadow_on || p_force) {
@@ -1351,6 +1371,187 @@ void CopiaDrawer::warm_up(const RID &p_mesh, const RID &p_material, bool p_uses_
     warm_ups.push_back({ single, RID(), frame, process_frame });
 }
 
+int64_t CopiaDrawer::suppress_transforms(const PackedInt64Array &p_groups, const PackedFloat32Array &p_transforms) {
+    RenderingServer *server = RenderingServer::get_singleton();
+    if (p_groups.is_empty() || p_transforms.size() < 12 || p_transforms.size() % 12 != 0) {
+        return 0;
+    }
+    const int64_t tcount = p_transforms.size() / 12;
+    const float *tptr = p_transforms.ptr();
+    constexpr float EPS = 5e-3f;
+    int64_t suppressed = 0;
+
+    auto matches_any = [&](const float *p_cand) -> bool {
+        for (int64_t k = 0; k < tcount; k++) {
+            const float *rt = tptr + k * 12;
+            bool same = true;
+            for (int c = 0; c < 12; c++) {
+                if (std::fabs(p_cand[c] - rt[c]) > EPS) {
+                    same = false;
+                    break;
+                }
+            }
+            if (same) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    for (int64_t gi = 0; gi < p_groups.size(); gi++) {
+        int64_t gid = p_groups[gi];
+        auto git = groups.find(gid);
+        if (git == groups.end()) {
+            continue;
+        }
+        Group &group = git->second;
+        if (!group.multimesh) {
+            const float *gptr = group.transforms.ptr();
+            // Check both already-created and queued single instances.
+            for (int32_t i = 0; i < group.count; i++) {
+                const float *gt = gptr + size_t(i) * 12;
+                if (matches_any(gt)) {
+                    if (i < group.created && server) {
+                        const Item &item = group.items[size_t(i)];
+                        if (item.instance.is_valid()) {
+                            server->instance_set_visible(item.instance, false);
+                        }
+                        if (item.twin.is_valid()) {
+                            server->instance_set_visible(item.twin, false);
+                        }
+                    }
+                    if (suppressed_singles[gid].insert(i).second) {
+                        suppressed++;
+                    }
+                }
+            }
+            continue;
+        }
+        // MultiMesh group: inspect both already-created batches (GPU buffer) and queued batches
+        // (CPU buffers[b] before upload, so newly rebuilt cells are hidden before frame 0).
+        for (int32_t b = 0; b < group.count; b++) {
+            if (b >= int32_t(group.origins.size()) || b >= int32_t(group.instance_counts.size())) {
+                continue;
+            }
+            const Vector3 borigin = group.origins[size_t(b)];
+            const int32_t icount = group.instance_counts[size_t(b)];
+            if (icount <= 0) {
+                continue;
+            }
+            const bool created = b < group.created;
+            PackedFloat32Array buf;
+            if (created) {
+                const Item &item = group.items[size_t(b)];
+                if (!server || !item.multimesh.is_valid()) {
+                    continue;
+                }
+                buf = server->multimesh_get_buffer(item.multimesh);
+            } else {
+                buf = group.buffers[size_t(b)];
+            }
+            if (buf.size() < int64_t(icount) * FLOATS_PER_INSTANCE) {
+                continue;
+            }
+            float *bptr = buf.ptrw();
+            bool dirty = false;
+            for (int32_t idx = 0; idx < icount; idx++) {
+                float *row = bptr + int64_t(idx) * FLOATS_PER_INSTANCE;
+                float cand[12] = {
+                    row[0], row[4], row[8],
+                    row[1], row[5], row[9],
+                    row[2], row[6], row[10],
+                    row[3] + float(borigin.x), row[7] + float(borigin.y), row[11] + float(borigin.z),
+                };
+                if (matches_any(cand)) {
+                    auto &batch_map = suppressed_multimesh[gid][b];
+                    if (batch_map.find(idx) == batch_map.end()) {
+                        std::array<float, 12> saved{};
+                        std::memcpy(saved.data(), row, 48);
+                        batch_map.emplace(idx, saved);
+                        std::memset(row, 0, 48);
+                        dirty = true;
+                        suppressed++;
+                    }
+                }
+            }
+            if (dirty) {
+                if (created) {
+                    server->multimesh_set_buffer(group.items[size_t(b)].multimesh, buf);
+                } else {
+                    group.buffers[size_t(b)] = buf;
+                }
+            }
+        }
+    }
+    return suppressed;
+}
+
+void CopiaDrawer::clear_suppressions() {
+    RenderingServer *server = RenderingServer::get_singleton();
+    if (server) {
+        for (const auto &entry : suppressed_singles) {
+            auto git = groups.find(entry.first);
+            if (git == groups.end()) {
+                continue;
+            }
+            const Group &group = git->second;
+            for (int32_t idx : entry.second) {
+                if (idx >= 0 && idx < group.created) {
+                    const Item &item = group.items[size_t(idx)];
+                    if (item.instance.is_valid()) {
+                        server->instance_set_visible(item.instance, true);
+                    }
+                    if (item.twin.is_valid()) {
+                        server->instance_set_visible(item.twin, true);
+                    }
+                }
+            }
+        }
+        for (const auto &gentry : suppressed_multimesh) {
+            auto git = groups.find(gentry.first);
+            if (git == groups.end()) {
+                continue;
+            }
+            Group &group = git->second;
+            for (const auto &bentry : gentry.second) {
+                int32_t b = bentry.first;
+                if (b < 0 || b >= group.count) {
+                    continue;
+                }
+                const bool created = b < group.created;
+                PackedFloat32Array buf;
+                if (created) {
+                    const Item &item = group.items[size_t(b)];
+                    if (!item.multimesh.is_valid()) {
+                        continue;
+                    }
+                    buf = server->multimesh_get_buffer(item.multimesh);
+                } else {
+                    buf = group.buffers[size_t(b)];
+                }
+                float *bptr = buf.ptrw();
+                bool dirty = false;
+                for (const auto &ientry : bentry.second) {
+                    int64_t off = int64_t(ientry.first) * FLOATS_PER_INSTANCE;
+                    if (off + 12 <= buf.size()) {
+                        std::memcpy(bptr + off, ientry.second.data(), 48);
+                        dirty = true;
+                    }
+                }
+                if (dirty) {
+                    if (created) {
+                        server->multimesh_set_buffer(group.items[size_t(b)].multimesh, buf);
+                    } else {
+                        group.buffers[size_t(b)] = buf;
+                    }
+                }
+            }
+        }
+    }
+    suppressed_singles.clear();
+    suppressed_multimesh.clear();
+}
+
 void CopiaDrawer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_scenario", "scenario"), &CopiaDrawer::set_scenario);
     ClassDB::bind_method(D_METHOD("get_scenario"), &CopiaDrawer::get_scenario);
@@ -1377,6 +1578,8 @@ void CopiaDrawer::_bind_methods() {
     ClassDB::bind_method(D_METHOD("link_impostor", "impostor_group", "child_group", "swap_distance", "batch"),
             &CopiaDrawer::link_impostor, DEFVAL(0));
     ClassDB::bind_method(D_METHOD("unlink_impostor", "impostor_group", "child_group"), &CopiaDrawer::unlink_impostor);
+    ClassDB::bind_method(D_METHOD("suppress_transforms", "groups", "transforms"), &CopiaDrawer::suppress_transforms);
+    ClassDB::bind_method(D_METHOD("clear_suppressions"), &CopiaDrawer::clear_suppressions);
     ADD_PROPERTY(PropertyInfo(Variant::RID, "scenario"), "set_scenario", "get_scenario");
     ADD_PROPERTY(PropertyInfo(Variant::TRANSFORM3D, "transform"), "set_transform", "get_transform");
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "density"), "set_density", "get_density");

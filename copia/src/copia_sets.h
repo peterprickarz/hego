@@ -7,6 +7,7 @@
 #include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <godot_cpp/variant/vector3.hpp>
 
 #include "copia_format.h"
 
@@ -45,7 +46,25 @@ class CopiaSets : public godot::RefCounted {
 
 public:
     static godot::Dictionary apply(const godot::String &p_directory, double p_cell_size, const godot::Array &p_clears,
-            const godot::Dictionary &p_points);
+            const godot::Dictionary &p_points, const godot::String &p_intent = "any");
+    // Declares or updates a set's ownership metadata in sets/manifest.json ("generated" or
+    // "authored", plus optional locked flag). Survives reindex() and empty sets.
+    static godot::Dictionary set_meta(const godot::String &p_directory, const godot::String &p_set,
+            const godot::String &p_kind, bool p_locked = false);
+    // {set_name: {kind: String, locked: bool}} for every manifest entry and every set on disk
+    // (sets without a manifest entry default to generated, unlocked).
+    static godot::Dictionary get_sets_meta(const godot::String &p_directory);
+    // Atomically removes matching points and adds new points in p_set across all touched cells
+    // (including cross-cell moves). Enforces ownership/lock according to p_intent.
+    static godot::Dictionary edit_points(const godot::String &p_directory, double p_cell_size,
+            const godot::String &p_set, const godot::Dictionary &p_removes, const godot::Dictionary &p_adds,
+            const godot::String &p_intent = "authored");
+    // Removes points in p_set within p_radius of p_center (optionally filtered to p_object_filter).
+    // Returns {ok, error, cells, removed_count, removed_points} so Undo can re-add removed_points.
+    static godot::Dictionary erase_in_sphere(const godot::String &p_directory, double p_cell_size,
+            const godot::String &p_set, const godot::Vector3 &p_center, double p_radius,
+            const godot::PackedStringArray &p_object_filter = godot::PackedStringArray(),
+            const godot::String &p_intent = "authored");
     // Set names with at least one set file, sorted.
     static godot::PackedStringArray list_sets(const godot::String &p_directory);
     // [{cell: Vector2i, count: int, hash: String (64 hex digits)}] from the sets index, sorted by
@@ -70,6 +89,9 @@ public:
             const godot::PackedStringArray &p_exclude);
     // Deletes a set's files and directory; returns the cells (Vector2i) it had points in.
     static godot::Array remove_set(const godot::String &p_directory, const godot::String &p_set);
+    // Checked version of remove_set enforcing ownership/lock and returning {ok, error, cells}.
+    static godot::Dictionary remove_set_checked(const godot::String &p_directory, const godot::String &p_set,
+            const godot::String &p_intent = "any", bool p_remove_meta = false);
 
 protected:
     static void _bind_methods();

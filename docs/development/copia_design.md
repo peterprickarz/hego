@@ -837,6 +837,33 @@ that intersect `rect` (every cell when `rect` has no area) and the sets selected
 `set` (`PackedStringArray`), `count` (`PackedInt32Array`), `cell_min` and `cell_max`
 (`PackedVector3Array`, y 0).
 
+## Interactive authoring (set ownership, brush & edit overlay)
+
+- **Set ownership manifest (`sets/manifest.json`):** Plain UTF-8 JSON written atomically alongside
+  `sets/index.copiaindex`, recording each set's `kind` (`"generated"` or `"authored"`) and `locked`
+  boolean. Sets absent from the manifest default to `"generated"`, unlocked. Because the manifest is
+  source-of-truth (not derived data), it survives `CopiaSets.reindex()` and preserves empty authored
+  sets (such as `handplaced` before its first placement).
+- **Write intent enforcement:** `CopiaSets.apply(..., intent = "any")`, `edit_points(..., intent =
+  "authored")`, `erase_in_sphere(..., intent = "authored")` and `remove_set_checked(..., intent =
+  "any")` validate every touched set against the manifest before modifying any file. Procedural
+  writers (`HEGoCopiaOutput` via `CopiaStore3D.write_generated`) pass `"generated"` and are refused
+  on `"authored"` sets; editor authoring tools pass `"authored"` and are refused on `"generated"`
+  sets. Brand-new sets written with `"authored"` intent are auto-registered as `"authored"`.
+- **Atomic point edits:** `CopiaSets.edit_points` removes matching rows (exact transform match with
+  `1e-4` float fallback) and adds new rows across all touched cells in one call (handling cross-cell
+  moves). `CopiaSets.erase_in_sphere` removes matching points within a sphere and returns them as
+  apply-format columns for atomic Undo.
+- **`CopiaBrush` (native `RefCounted`):** Editor-side XZ spatial hash holding editable authored
+  points and optional read-only avoidance points. Provides `sample_dab` (min-spacing rejection,
+  slope limits, species radial-band selection, transform/keep/color generation preserving NaN
+  defaults), `pick_ray` (ray-vs-OBB authored instance picking without physics colliders) and
+  `query_sphere` (live erase queries).
+- **`CopiaEditOverlay` & `CopiaDrawer` suppression:** `CopiaEditOverlay` draws uncommitted brush
+  strokes via dynamic `RenderingServer` MultiMeshes and a single drag-drop ghost at 60 FPS.
+  `CopiaDrawer.suppress_transforms` / `clear_suppressions` temporarily hides moved or erased
+  instances in live draw groups until the post-commit rebuild replaces the cell.
+
 ## Not decided here
 
 - The `CopiaObject`, `CopiaRenderSettings` and `CopiaPhysicsSettings` properties (the node's side).
