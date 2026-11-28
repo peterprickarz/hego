@@ -118,7 +118,12 @@ static func build_points(store: Node, settings := {}) -> Dictionary:
 		result.error = "rect must be [min_x, min_z, max_x, max_z] with max above min"
 		return result
 	var area: Rect2 = limit
-	var cells: Dictionary = store.cell_points(area, PackedStringArray(_names(settings.get("sets", []))), PackedStringArray(_names(settings.get("exclude_sets", []))))
+	var exclude_list: Array = _names(settings.get("exclude_sets", []))
+	if bool(settings.get("exclude_authored", false)) and store.has_method("list_authored_sets"):
+		for authored_name: String in store.list_authored_sets():
+			if not exclude_list.has(authored_name):
+				exclude_list.append(authored_name)
+	var cells: Dictionary = store.cell_points(area, PackedStringArray(_names(settings.get("sets", []))), PackedStringArray(exclude_list))
 	if cells.is_empty() or not cells.has("P"):
 		result.error = "the store's cells could not be read"
 		return result

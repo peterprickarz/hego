@@ -238,7 +238,7 @@ static func write_attributes(attributes: Dictionary, store: Node, options := {})
 	if report.point_count == 0 and report.clear_count == 0:
 		report.ok = true
 		return report
-	var written: Dictionary = store.write(converted.clears, converted.points)
+	var written: Dictionary = store.write_generated(converted.clears, converted.points) if store.has_method("write_generated") else store.write(converted.clears, converted.points)
 	report.write = written
 	report.ok = bool(written.get("ok", false))
 	if not report.ok:
